@@ -24,8 +24,10 @@ impl TaskControlBlock {
         self.memory_set.token()
     }
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
+        println!("new app id: {} ========================", app_id);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        println!("memory_set: {:#x}, user_sp: {:#x}, entry_point: {:#x}", memory_set.token(), user_sp, entry_point);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
