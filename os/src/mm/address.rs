@@ -1,29 +1,31 @@
 //! Implementation of physical and virtual address and page number.
-
 use super::PageTableEntry;
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 
-/// physical address
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
 /// Definitions
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 
-/// virtual address
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+///virtual address
 pub struct VirtAddr(pub usize);
 
-/// physical page number
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+///phiscal page number
 pub struct PhysPageNum(pub usize);
 
-/// virtual page number
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+///virtual page number
 pub struct VirtPageNum(pub usize);
 
 /// Debugging
@@ -97,11 +99,13 @@ impl From<VirtPageNum> for usize {
         v.0
     }
 }
-
+///
 impl VirtAddr {
+    ///`VirtAddr`->`VirtPageNum`
     pub fn floor(&self) -> VirtPageNum {
         VirtPageNum(self.0 / PAGE_SIZE)
     }
+    ///`VirtAddr`->`VirtPageNum`
     pub fn ceil(&self) -> VirtPageNum {
         if self.0 == 0 {
             VirtPageNum(0)
@@ -109,9 +113,11 @@ impl VirtAddr {
             VirtPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
+    ///Get page offset
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
+    ///Check page aligned
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
@@ -128,9 +134,11 @@ impl From<VirtPageNum> for VirtAddr {
     }
 }
 impl PhysAddr {
+    ///`PhysAddr`->`PhysPageNum`
     pub fn floor(&self) -> PhysPageNum {
         PhysPageNum(self.0 / PAGE_SIZE)
     }
+    ///`PhysAddr`->`PhysPageNum`
     pub fn ceil(&self) -> PhysPageNum {
         if self.0 == 0 {
             PhysPageNum(0)
@@ -138,9 +146,11 @@ impl PhysAddr {
             PhysPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
+    ///Get page offset
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
+    ///Check page aligned
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
@@ -158,6 +168,7 @@ impl From<PhysPageNum> for PhysAddr {
 }
 
 impl VirtPageNum {
+    ///Return VPN 3 level index
     pub fn indexes(&self) -> [usize; 3] {
         let mut vpn = self.0;
         let mut idx = [0usize; 3];
@@ -169,25 +180,44 @@ impl VirtPageNum {
     }
 }
 
+impl PhysAddr {
+    ///Get reference to `PhysAddr` value
+    pub fn get_ref<T>(&self) -> &'static T {
+        unsafe { (self.0 as *const T).as_ref().unwrap() }
+    }
+    ///Get mutable reference to `PhysAddr` value
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+}
 impl PhysPageNum {
+    ///Get `PageTableEntry` on `PhysPageNum`
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
     }
+    ///Get u8 array on `PhysPageNum`
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
     }
+    ///Get Get mutable reference to `PhysAddr` value on `PhysPageNum`
     pub fn get_mut<T>(&self) -> &'static mut T {
         let pa: PhysAddr = (*self).into();
-        unsafe { (pa.0 as *mut T).as_mut().unwrap() }
+        pa.get_mut()
     }
 }
-
+///Add value by one
 pub trait StepByOne {
+    ///Add value by one
     fn step(&mut self);
 }
 impl StepByOne for VirtPageNum {
+    fn step(&mut self) {
+        self.0 += 1;
+    }
+}
+impl StepByOne for PhysPageNum {
     fn step(&mut self) {
         self.0 += 1;
     }
@@ -258,6 +288,5 @@ where
         }
     }
 }
-
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;

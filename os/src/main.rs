@@ -6,20 +6,23 @@
 //! - [`trap`]: Handles all cases of switching from userspace to the kernel
 //! - [`task`]: Task management
 //! - [`syscall`]: System call handling and implementation
+//! - [`mm`]: Address map using SV39
+//! - [`sync`]: Wrap a static data structure inside it so that we are able to access it without any `unsafe`.
+//! - [`fs`]: Separate user from file system with some structures
 //!
 //! The operating system also starts in this module. Kernel code starts
 //! executing from `entry.asm`, after which [`rust_main()`] is called to
 //! initialize various pieces of functionality. (See its source code for
 //! details.)
 //!
-//! We then call [`task::run_first_task()`] and for the first time go to
+//! We then call [`task::run_tasks()`] and for the first time go to
 //! userspace.
 
 #![deny(missing_docs)]
 #![deny(warnings)]
+#![allow(unused_imports)]
 #![no_std]
 #![no_main]
-#![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
 extern crate alloc;
@@ -35,20 +38,22 @@ mod board;
 #[macro_use]
 mod console;
 mod config;
-mod lang_items;
-mod loader;
+mod devices;
+mod drivers;
+pub mod fs;
+pub mod lang_items;
 mod logging;
-mod mm;
-mod sbi;
-mod sync;
+pub mod mm;
+pub mod sbi;
+pub mod sync;
 pub mod syscall;
 pub mod task;
-mod timer;
+pub mod timer;
 pub mod trap;
 
-core::arch::global_asm!(include_str!("entry.asm"));
-core::arch::global_asm!(include_str!("link_app.S"));
+use core::arch::global_asm;
 
+global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
 fn clear_bss() {
     extern "C" {
@@ -68,12 +73,12 @@ pub fn rust_main() -> ! {
     logging::init();
     info!("[kernel] Hello, world!");
     mm::init();
-    info!("[kernel] back to world!");
     mm::remap_test();
     trap::init();
-    //trap::enable_interrupt();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    task::run_first_task();
+    fs::list_apps();
+    task::add_initproc();
+    task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

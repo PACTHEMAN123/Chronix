@@ -1,9 +1,9 @@
 //! Implementation of [`TrapContext`]
-
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
-/// trap context structure containing sstatus, sepc and registers
+#[derive(Debug)]
+///trap context structure containing sstatus, sepc and registers
 pub struct TrapContext {
     /// general regs[0..31]
     pub x: [usize; 32],
@@ -20,11 +20,11 @@ pub struct TrapContext {
 }
 
 impl TrapContext {
-    /// set stack pointer to x_2 reg (sp)
+    ///set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {
         self.x[2] = sp;
     }
-    /// init app context
+    ///init app context
     pub fn app_init_context(
         entry: usize,
         sp: usize,
@@ -32,17 +32,18 @@ impl TrapContext {
         kernel_sp: usize,
         trap_handler: usize,
     ) -> Self {
-        let mut sstatus = sstatus::read(); // CSR sstatus
-        sstatus.set_spp(SPP::User); //previous privilege mode: user mode
+        let mut sstatus = sstatus::read();
+        // set CPU privilege to User after trapping back
+        sstatus.set_spp(SPP::User);
         let mut cx = Self {
             x: [0; 32],
             sstatus,
-            sepc: entry,  // entry point of app
-            kernel_satp,  // addr of page table
-            kernel_sp,    // kernel stack
-            trap_handler, // addr of trap_handler function
+            sepc: entry,
+            kernel_satp,
+            kernel_sp,
+            trap_handler,
         };
-        cx.set_sp(sp); // app's user stack pointer
-        cx // return initial Trap Context of app
+        cx.set_sp(sp);
+        cx
     }
 }

@@ -84,16 +84,11 @@ chronix/
 - `make run`: 运行内核
 - `make debug`: 启动调试会话
 - `make clean`: 清理构建产物
-- `make doc`: 生成文档
 
-## 贡献
 
-欢迎提交Issue和Pull Request！
+### todo
+- [] 移植文件系统
+- [] 调整内存分配
 
-## 许可证
 
-[您的许可证类型]
 
-## 致谢
-
-感谢所有为Chronix项目做出贡献的开发者。
