@@ -58,7 +58,6 @@ pub fn run_tasks() {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
-            info!("run next task");
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
@@ -88,7 +87,6 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 }
 ///Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    info!("into schedule into idle");
     let mut processor = PROCESSOR.exclusive_access();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);

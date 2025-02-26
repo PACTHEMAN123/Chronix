@@ -4,7 +4,7 @@ use crate::devices::BlockDevice;
 use crate::config::BLOCK_SIZE;
 use crate::mm::{
     frame_alloc, frame_dealloc, kernel_token, FrameTracker, PageTable, PhysAddr, PhysPageNum,
-    StepByOne, VirtAddr,
+    StepByOne, VirtAddr, KERNEL_SPACE
 };
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
@@ -106,7 +106,11 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         buffer: NonNull<[u8]>,
         _direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
-        PhysAddr::from(buffer.as_ptr() as *const u8 as usize).into()
+        // use kernel space pagetable to get the physical address
+        let page_table = PageTable::from_token(KERNEL_SPACE.exclusive_access().token());
+        let pa = page_table.translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
+        
+        pa.0
     }
 
     unsafe fn unshare(

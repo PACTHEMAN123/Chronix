@@ -98,6 +98,7 @@ impl Inode {
     }
 
     /// Find inode under current inode by name
+    #[allow(unused)]
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
         let file = self.0.borrow_mut();
         info!("find name: {} in {}", name, file.get_path().to_str().unwrap());
@@ -123,18 +124,33 @@ impl Inode {
         None
     }
 
+    /// Look up the node with given `name` in the directory
+    /// Return the node if found.
+    pub fn lookup(&self, name: &str) -> Option<Arc<Inode>> {
+        let mut file = self.0.borrow_mut();
+        
+        let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
+        
+        if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
+            info!("lookup {} success", name);
+            return Some(Arc::new(Inode::new(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE)));
+        }
+
+        // todo!: add support for directory
+
+        info!("lookup {} failed", name);
+        None
+    }
+
     /// list all files' name in the directory
     #[allow(unused)]
     pub fn ls(&self) -> Vec<String> {
-        info!("call ls");
         let file = self.0.borrow_mut();
 
         if file.get_type() != InodeTypes::EXT4_DE_DIR {
             info!("not a directory");
         }
 
-        let file_path = file.get_path();
-        info!("file_path: {}", file_path.to_str().unwrap());
         let (name, inode_type) = match file.lwext4_dir_entries() {
             Ok((name, inode_type)) => (name, inode_type),
             Err(e) => {
@@ -142,7 +158,6 @@ impl Inode {
             }
         };
 
-        info!("here!");
         let mut name_iter = name.iter();
         let  _inode_type_iter = inode_type.iter();
 
@@ -150,7 +165,6 @@ impl Inode {
         while let Some(iname) = name_iter.next() {
             names.push(String::from(core::str::from_utf8(iname).unwrap()));
         }
-        info!("return from ls");
         names
     }
 

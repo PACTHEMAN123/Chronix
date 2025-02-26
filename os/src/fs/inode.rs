@@ -146,9 +146,8 @@ impl OpenFlags {
 ///Open file with flags
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
-    info!("open_file name: {}", name);
     if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = ROOT_INODE.find(name) {
+        if let Some(inode) = ROOT_INODE.lookup(name) {
             // clear size
             inode.truncate(0).expect("Error when truncating inode");
             Some(Arc::new(OSInode::new(readable, writable, inode)))
@@ -159,7 +158,7 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
         }
     } else {
-        ROOT_INODE.find(name).map(|inode| {
+        ROOT_INODE.lookup(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
