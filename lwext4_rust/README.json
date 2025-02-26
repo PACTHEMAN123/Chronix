@@ -1,0 +1,11 @@
+{
+  "name": "lwext4_rust",
+  "description": "lwext4 in Rust supports the Ext4 file system.",
+  "authors": [{
+    "name": "Luoyuan Xiao",
+    "email": "xiaoluoyuan@163.com"
+  }],
+  "keywords": ["file system", "ext4", "ext3", "ext2"],
+  "repo": "elliott10/lwext4_rust",
+  "doc_url": "https://github.com/elliott10/lwext4_rust/blob/main/doc/rust-ext4-fs-support.md"
+}
