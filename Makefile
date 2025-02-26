@@ -29,7 +29,6 @@ USER_APPS_DIR := ./user/src/bin
 USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
 USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
 USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
-USER_BINS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%.bin, $(USER_APPS))
 
 TEST_DIR := ./test/
 
@@ -75,7 +74,6 @@ kernel:
 user:
 	@echo "building user..."
 	@cd user && make build MODE=$(MODE)
-	@$(foreach elf, $(USER_ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
 	@echo "building user finished"
 
 FS_IMG_DIR := .

@@ -117,7 +117,7 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         info!("trying to open initproc");
-        let inode = open_file("initproc\0", OpenFlags::RDONLY).unwrap();
+        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v = inode.read_all();
         TaskControlBlock::new(v.as_slice())
     });

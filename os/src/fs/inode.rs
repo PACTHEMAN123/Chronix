@@ -26,6 +26,9 @@ use alloc::sync::Arc;
 use bitflags::*;
 use lazy_static::*;
 
+use log::*;
+use crate::logging;
+
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
     offset: usize,
@@ -143,6 +146,7 @@ impl OpenFlags {
 ///Open file with flags
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
+    info!("open_file name: {}", name);
     if flags.contains(OpenFlags::CREATE) {
         if let Some(inode) = ROOT_INODE.find(name) {
             // clear size

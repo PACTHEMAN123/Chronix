@@ -100,17 +100,22 @@ impl Inode {
     /// Find inode under current inode by name
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
         let file = self.0.borrow_mut();
+        info!("find name: {} in {}", name, file.get_path().to_str().unwrap());
         let (names, inode_type) = file.lwext4_dir_entries().unwrap();
-
+        info!("out lwext4_dir_entries");
         let mut name_iter = names.iter();
         let mut inode_type_iter = inode_type.iter();
 
+        info!("into while");
         while let Some(iname) = name_iter.next() {
             let itypes = inode_type_iter.next();
             info!("iname: {}", core::str::from_utf8(iname).unwrap());
-            if core::str::from_utf8(iname).unwrap() == name {
+            if core::str::from_utf8(iname).unwrap().trim_end_matches('\0') == name {
                 info!("find {} success", name);
-                return Some(Arc::new(Inode::new(name, itypes.unwrap().clone())));
+
+                // lwext4 needs full path
+                let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
+                return Some(Arc::new(Inode::new(full_path.as_str(), itypes.unwrap().clone())));
             }
         }
 
@@ -279,7 +284,7 @@ impl Inode {
 impl Drop for Inode {
     fn drop(&mut self) {
         let mut file = self.0.borrow_mut();
-        debug!("Drop struct Inode {:?}", file.get_path());
+        info!("Drop struct Inode {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
         drop(file); // todo
     }

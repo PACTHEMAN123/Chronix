@@ -8,9 +8,12 @@ use user_lib::{exec, fork, wait, yield_};
 
 #[no_mangle]
 fn main() -> i32 {
+    println!("into user mode initproc");
     if fork() == 0 {
+        println!("into user mode initproc fork");
         exec("user_shell\0");
     } else {
+        println!("into user mode initproc wait");
         loop {
             let mut exit_code: i32 = 0;
             let pid = wait(&mut exit_code);

@@ -11,6 +11,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
 
+use log::*;
+use crate::logging;
+
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
@@ -107,6 +110,7 @@ impl TaskControlBlock {
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
+        info!("into task exec");
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
