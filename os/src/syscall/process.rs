@@ -1,5 +1,5 @@
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str};
+use crate::mm::{translated_refmut, translated_str, VmSpace};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
@@ -81,7 +81,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
         // ++++ release child PCB
-        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        *translated_refmut(inner.vm_space.token(), exit_code_ptr) = exit_code;
         found_pid as isize
     } else {
         -2

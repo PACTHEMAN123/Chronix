@@ -5,25 +5,25 @@
 //! map area and memory set, is implemented here.
 //!
 //! Every task or process has a memory_set to control its virtual memory.
+
 mod address;
 mod frame_allocator;
 mod heap_allocator;
-mod memory_set;
 mod page_table;
+mod vm_area;
+mod vm_space;
 
-use address::VPNRange;
-pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
-pub use memory_set::remap_test;
-pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-use page_table::PTEFlags;
-pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
-};
+pub use page_table::{translated_byte_buffer, PageTableEntry, translated_str, translated_ref, translated_refmut, UserBuffer};
+pub use page_table::{PTEFlags, PageTable};
+#[allow(unused)]
+pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
+pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test};
+
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.exclusive_access().activate();
+    KERNEL_SPACE.exclusive_access().enable();
 }
