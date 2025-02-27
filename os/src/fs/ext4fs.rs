@@ -143,7 +143,6 @@ impl Inode {
     }
 
     /// list all files' name in the directory
-    #[allow(unused)]
     pub fn ls(&self) -> Vec<String> {
         let file = self.0.borrow_mut();
 

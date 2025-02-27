@@ -24,7 +24,6 @@ pub struct Disk {
 impl Disk {
     /// Create a new disk.
     pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
-        
         Self {
             block_id: 0,
             offset: 0,
