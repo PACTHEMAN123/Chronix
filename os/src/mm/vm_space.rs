@@ -6,6 +6,7 @@ use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea}, PageTableEnt
 
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
+use log::info;
 
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space

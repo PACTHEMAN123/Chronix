@@ -5,7 +5,10 @@ use super::{PhysAddr, PhysPageNum};
 use crate::config::{KERNEL_ADDR_OFFSET, MEMORY_END};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
+use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
+use log::info;
 use core::fmt::{self, Debug, Formatter};
+use core::ops::Range;
 use lazy_static::*;
 
 /// manage a frame which has the same lifecycle as the tracker
@@ -14,14 +17,10 @@ pub struct FrameTracker {
     pub ppn: PhysPageNum,
 }
 
-#[allow(missing_docs)]
 impl FrameTracker {
+    /// new FrameTracker from a Physical Page Number
+    /// It is the caller's duty to clean the frame.
     pub fn new(ppn: PhysPageNum) -> Self {
-        // page cleaning
-        let bytes_array = ppn.get_bytes_array();
-        for i in bytes_array {
-            *i = 0;
-        }
         Self { ppn }
     }
 }
@@ -39,83 +38,87 @@ impl Drop for FrameTracker {
 }
 
 trait FrameAllocator {
-    fn new() -> Self;
-    fn alloc(&mut self) -> Option<PhysPageNum>;
-    fn dealloc(&mut self, ppn: PhysPageNum);
+    fn init(&mut self, range_pa: Range<PhysAddr>);
+    fn alloc(&mut self, size: usize) -> Option<PhysPageNum>;
+    fn dealloc(&mut self, ppn: PhysPageNum, size: usize) -> bool;
 }
 
-/// an implementation for frame allocator
-pub struct StackFrameAllocator {
-    current: usize,
-    end: usize,
-    recycled: Vec<usize>,
+pub struct BitMapFrameAllocator {
+    range: Range<PhysPageNum>,
+    inner: bitmap_allocator::BitAlloc16M,
 }
 
-impl StackFrameAllocator {
-    pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
-        self.current = l.0;
-        self.end = r.0;
-    }
-}
-impl FrameAllocator for StackFrameAllocator {
-    fn new() -> Self {
-        Self {
-            current: 0,
-            end: 0,
-            recycled: Vec::new(),
+impl BitMapFrameAllocator {
+    const fn new() -> Self {
+        BitMapFrameAllocator {
+            range: PhysPageNum(0)..PhysPageNum(1),
+            inner: bitmap_allocator::BitAlloc16M::DEFAULT
         }
     }
-    fn alloc(&mut self) -> Option<PhysPageNum> {
-        if let Some(ppn) = self.recycled.pop() {
-            Some(ppn.into())
-        } else if self.current == self.end {
-            None
-        } else {
-            self.current += 1;
-            Some((self.current - 1).into())
-        }
+}
+
+impl FrameAllocator for BitMapFrameAllocator {
+
+
+    fn alloc(&mut self, size: usize) -> Option<PhysPageNum> {
+        self.inner.alloc_contiguous(None, size, 0).map(|u| { PhysPageNum(self.range.start.0 + u) })
     }
-    fn dealloc(&mut self, ppn: PhysPageNum) {
-        let ppn = ppn.0;
-        // validity check
-        if ppn >= self.current || self.recycled.iter().any(|&v| v == ppn) {
-            panic!("Frame ppn={:#x} has not been allocated!", ppn);
-        }
-        // recycle
-        self.recycled.push(ppn);
+
+    fn dealloc(&mut self, ppn: PhysPageNum, size: usize) -> bool {
+        self.inner.dealloc_contiguous(ppn.0 - self.range.start.0, size)
+    }
+    
+    fn init(&mut self, range_pa: Range<PhysAddr>) {
+        self.range = range_pa.start.ceil()..range_pa.end.floor();
+        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.ceil().0));
     }
 }
 
-type FrameAllocatorImpl = StackFrameAllocator;
+pub static mut FRAME_ALLOCATOR: BitMapFrameAllocator = BitMapFrameAllocator::new();
 
-lazy_static! {
-    /// frame allocator instance through lazy_static!
-    pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
-        unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
-}
+// lazy_static! {
+//     /// frame allocator instance through lazy_static!
+//     pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
+//         unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
+// }
 
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    FRAME_ALLOCATOR.exclusive_access().init(
-        PhysAddr::from(ekernel as usize - KERNEL_ADDR_OFFSET).ceil(),
-        PhysAddr::from(MEMORY_END).floor(),
-    );
+    unsafe {
+        #[allow(static_mut_refs)]
+        FRAME_ALLOCATOR.init(
+            PhysAddr::from(ekernel as usize - KERNEL_ADDR_OFFSET)..PhysAddr::from(MEMORY_END),
+        );
+    }
 }
 
+#[allow(unused)]
 /// allocate a frame
 pub fn frame_alloc() -> Option<FrameTracker> {
-    FRAME_ALLOCATOR
-        .exclusive_access()
-        .alloc()
-        .map(FrameTracker::new)
+    unsafe {
+        #[allow(static_mut_refs)]
+        FRAME_ALLOCATOR
+            .alloc(1)
+            .map(FrameTracker::new)
+    }
 }
+
+#[allow(unused)]
+/// allocate a frame
+pub fn frame_alloc_clean() -> Option<FrameTracker> {
+    frame_alloc().map(|f| { f.ppn.get_bytes_array().fill(0); f })
+}
+
 
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
+    unsafe {
+        #[allow(static_mut_refs)]
+        FRAME_ALLOCATOR.dealloc(ppn, 1);
+    }
 }
 
 #[allow(unused)]
