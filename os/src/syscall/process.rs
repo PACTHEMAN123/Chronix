@@ -1,5 +1,5 @@
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str, VmSpace};
+use crate::mm::{translated_refmut, translated_str, VirtAddr, VmSpace};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
@@ -83,4 +83,10 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         -2
     }
     // ---- release current PCB automatically
+}
+
+#[allow(unused)]
+pub fn sys_brk(addr: VirtAddr) -> isize {
+    let task = current_task().unwrap();
+    0
 }
