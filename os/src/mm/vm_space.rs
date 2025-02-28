@@ -311,7 +311,7 @@ impl UserVmSpace {
         );
         (
             ret,
-            user_stack_top,
+            user_stack_top - 8, // reserve for argc
             elf.header.pt2.entry_point() as usize,
         )
     }
