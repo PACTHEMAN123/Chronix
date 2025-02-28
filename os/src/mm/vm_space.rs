@@ -6,6 +6,7 @@ use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea}, PageTableEnt
 
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
+use log::info;
 
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
@@ -311,7 +312,7 @@ impl UserVmSpace {
         );
         (
             ret,
-            user_stack_top,
+            user_stack_top - 8, // reserve for argc
             elf.header.pt2.entry_point() as usize,
         )
     }

@@ -32,7 +32,8 @@ pub fn init() {
     set_kernel_trap_entry();
 }
 
-fn set_kernel_trap_entry() {
+/// set the kernel trap entry
+pub fn set_kernel_trap_entry() {
     unsafe {
         stvec::write(trap_from_kernel as usize, TrapMode::Direct);
     }

@@ -12,14 +12,16 @@ mod heap_allocator;
 mod page_table;
 mod vm_area;
 mod vm_space;
+mod user_check;
 
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
-pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
+pub use frame_allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker};
 pub use page_table::{translated_byte_buffer, PageTableEntry, translated_str, translated_ref, translated_refmut, UserBuffer};
 pub use page_table::{PTEFlags, PageTable};
 #[allow(unused)]
 pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
 pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test};
+pub use user_check::UserCheck;
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
