@@ -3,7 +3,7 @@
 use crate::devices::BlockDevice;
 use crate::config::{BLOCK_SIZE, KERNEL_ADDR_OFFSET};
 use crate::mm::{
-    frame_alloc, frame_dealloc, FrameTracker, PageTable, PhysAddr, PhysPageNum, VirtAddr, VmSpace, KERNEL_SPACE
+    frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker, PageTable, PhysAddr, PhysPageNum, VirtAddr, VmSpace, KERNEL_SPACE
 };
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
@@ -75,7 +75,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         info!("dma_alloc");
         let mut ppn_base = PhysPageNum(0);
         for i in 0..pages {
-            let frame = frame_alloc().unwrap();
+            let frame = frame_alloc_clean().unwrap();
             if i == 0 {
                 ppn_base = frame.ppn;
             }

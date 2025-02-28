@@ -4,7 +4,7 @@ use alloc::collections::btree_map::{BTreeMap, Keys};
 
 use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE}};
 
-use super::{frame_alloc, page_table::{PTEFlags, PageTable}, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use bitflags::bitflags;
 
 bitflags! {
@@ -159,7 +159,7 @@ pub trait VmAreaFrameExt: VmArea {
     fn map_range_and_alloc_frames(&mut self, page_table: &mut PageTable, range: Range<VirtPageNum>) {
         range
         .for_each(|vpn| {
-            let frame = frame_alloc().unwrap();
+            let frame = frame_alloc_clean().unwrap();
             page_table.map(vpn, frame.ppn, (*self.perm()).into());
             self.add_allocated_frame(vpn, frame);
         });
