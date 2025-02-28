@@ -15,7 +15,7 @@ xmas-elf = "0.7.0"
 log = "0.4"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 virtio-drivers = { version = "0.7" }
-lwext4_rust = { path = "../lwext4_rust" }
+lwext4_rust = { path = "../vendor/lwext4_rust" }
 
 [profile.release]
 debug = true

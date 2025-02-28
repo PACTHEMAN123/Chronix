@@ -1,0 +1,3 @@
+[submodule "vendor/lwext4_rust"]
+	path = vendor/lwext4_rust
+	url = https://github.com/elliott10/lwext4_rust
