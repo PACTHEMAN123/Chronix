@@ -1,6 +1,6 @@
 //!Implementation of [`PidAllocator`]
-use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
-use crate::mm::{MapPermission, VirtAddr, KERNEL_SPACE};
+use crate::config::{KERNEL_MEMORY_SPACE, KERNEL_STACK_SIZE, PAGE_SIZE};
+use crate::mm::{KernelVmArea, KernelVmAreaType, MapPerm, VirtAddr, VmSpace, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -59,7 +59,7 @@ pub fn pid_alloc() -> PidHandle {
 
 /// Return (bottom, top) of a kernel stack in kernel space.
 pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
-    let top = TRAMPOLINE - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
+    let top = KERNEL_MEMORY_SPACE.1 - (app_id + 1) * (KERNEL_STACK_SIZE + PAGE_SIZE) + 1;
     let bottom = top - KERNEL_STACK_SIZE;
     (bottom, top)
 }
@@ -73,10 +73,14 @@ impl KernelStack {
     pub fn new(pid_handle: &PidHandle) -> Self {
         let pid = pid_handle.0;
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(pid);
-        KERNEL_SPACE.exclusive_access().insert_framed_area(
-            kernel_stack_bottom.into(),
-            kernel_stack_top.into(),
-            MapPermission::R | MapPermission::W,
+        println!("kernel_stack_bottom: {:#x}, kernel_stack_top: {:#x}", kernel_stack_bottom, kernel_stack_top);
+        KERNEL_SPACE.exclusive_access().push(
+            KernelVmArea::new(
+                kernel_stack_bottom.into()..kernel_stack_top.into(),
+                MapPerm::R | MapPerm::W,
+                KernelVmAreaType::KernelStack
+            ),
+            None
         );
         KernelStack { pid: pid_handle.0 }
     }

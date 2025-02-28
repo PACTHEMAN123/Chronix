@@ -1,10 +1,9 @@
 //! VirtIO block device driver
 
 use crate::devices::BlockDevice;
-use crate::config::BLOCK_SIZE;
+use crate::config::{BLOCK_SIZE, KERNEL_ADDR_OFFSET};
 use crate::mm::{
-    frame_alloc, frame_dealloc, kernel_token, FrameTracker, PageTable, PhysAddr, PhysPageNum,
-    StepByOne, VirtAddr, KERNEL_SPACE
+    frame_alloc, frame_dealloc, FrameTracker, PageTable, PhysAddr, PhysPageNum, VirtAddr, VmSpace, KERNEL_SPACE
 };
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
@@ -22,7 +21,7 @@ use log::*;
 use crate::logging;
 
 #[allow(unused)]
-const VIRTIO0: usize = 0x10001000;
+const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
 
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>);
 
@@ -93,7 +92,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         let mut ppn_base: PhysPageNum = pa.into();
         for _ in 0..pages {
             frame_dealloc(ppn_base);
-            ppn_base.step();
+            ppn_base += 1;
         }
         0
     }
