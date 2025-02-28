@@ -1,31 +1,29 @@
 //! Implementation of physical and virtual address and page number.
-use super::PageTableEntry;
-use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
-use core::fmt::{self, Debug, Formatter};
 
+use super::PageTableEntry;
+use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
+use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{AddAssign, SubAssign}};
+
+/// physical address
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
 /// Definitions
-#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 
-#[repr(C)]
+/// virtual address
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-///virtual address
 pub struct VirtAddr(pub usize);
 
-#[repr(C)]
+/// physical page number
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-///phiscal page number
 pub struct PhysPageNum(pub usize);
 
-#[repr(C)]
+/// virtual page number
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-///virtual page number
 pub struct VirtPageNum(pub usize);
 
 /// Debugging
@@ -99,13 +97,12 @@ impl From<VirtPageNum> for usize {
         v.0
     }
 }
-///
+
+#[allow(missing_docs)]
 impl VirtAddr {
-    ///`VirtAddr`->`VirtPageNum`
     pub fn floor(&self) -> VirtPageNum {
         VirtPageNum(self.0 / PAGE_SIZE)
     }
-    ///`VirtAddr`->`VirtPageNum`
     pub fn ceil(&self) -> VirtPageNum {
         if self.0 == 0 {
             VirtPageNum(0)
@@ -113,11 +110,9 @@ impl VirtAddr {
             VirtPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
-    ///Get page offset
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
-    ///Check page aligned
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
@@ -133,12 +128,11 @@ impl From<VirtPageNum> for VirtAddr {
         Self(v.0 << PAGE_SIZE_BITS)
     }
 }
+#[allow(missing_docs)]
 impl PhysAddr {
-    ///`PhysAddr`->`PhysPageNum`
     pub fn floor(&self) -> PhysPageNum {
         PhysPageNum(self.0 / PAGE_SIZE)
     }
-    ///`PhysAddr`->`PhysPageNum`
     pub fn ceil(&self) -> PhysPageNum {
         if self.0 == 0 {
             PhysPageNum(0)
@@ -146,11 +140,9 @@ impl PhysAddr {
             PhysPageNum((self.0 - 1 + PAGE_SIZE) / PAGE_SIZE)
         }
     }
-    ///Get page offset
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
-    ///Check page aligned
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
@@ -167,8 +159,8 @@ impl From<PhysPageNum> for PhysAddr {
     }
 }
 
+#[allow(missing_docs)]
 impl VirtPageNum {
-    ///Return VPN 3 level index
     pub fn indexes(&self) -> [usize; 3] {
         let mut vpn = self.0;
         let mut idx = [0usize; 3];
@@ -183,110 +175,129 @@ impl VirtPageNum {
 impl PhysAddr {
     ///Get reference to `PhysAddr` value
     pub fn get_ref<T>(&self) -> &'static T {
-        unsafe { (self.0 as *const T).as_ref().unwrap() }
+        unsafe { ((self.0 + KERNEL_ADDR_OFFSET) as *const T).as_ref().unwrap() }
     }
     ///Get mutable reference to `PhysAddr` value
     pub fn get_mut<T>(&self) -> &'static mut T {
-        unsafe { (self.0 as *mut T).as_mut().unwrap() }
-    }
-}
-impl PhysPageNum {
-    ///Get `PageTableEntry` on `PhysPageNum`
-    pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
-        let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
-    }
-    ///Get u8 array on `PhysPageNum`
-    pub fn get_bytes_array(&self) -> &'static mut [u8] {
-        let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
-    }
-    ///Get Get mutable reference to `PhysAddr` value on `PhysPageNum`
-    pub fn get_mut<T>(&self) -> &'static mut T {
-        let pa: PhysAddr = (*self).into();
-        pa.get_mut()
-    }
-}
-///Add value by one
-pub trait StepByOne {
-    ///Add value by one
-    fn step(&mut self);
-}
-impl StepByOne for VirtPageNum {
-    fn step(&mut self) {
-        self.0 += 1;
-    }
-}
-impl StepByOne for PhysPageNum {
-    fn step(&mut self) {
-        self.0 += 1;
+        unsafe { ((self.0 + KERNEL_ADDR_OFFSET) as *mut T).as_mut().unwrap() }
     }
 }
 
-#[derive(Copy, Clone)]
-/// a simple range structure for type T
-pub struct SimpleRange<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    l: T,
-    r: T,
-}
-impl<T> SimpleRange<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    pub fn new(start: T, end: T) -> Self {
-        assert!(start <= end, "start {:?} > end {:?}!", start, end);
-        Self { l: start, r: end }
+#[allow(missing_docs)]
+impl PhysPageNum {
+    pub fn get_pte_array(&self) -> &'static mut [PageTableEntry; 512] {
+        self.get_mut()
     }
-    pub fn get_start(&self) -> T {
-        self.l
+    pub fn get_bytes_array(&self) -> &'static mut [u8; 4096] {
+        self.get_mut()
     }
-    pub fn get_end(&self) -> T {
-        self.r
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        let kernel_va = VirtAddr((self.0 << 12) + KERNEL_ADDR_OFFSET);
+        unsafe { (kernel_va.0 as *mut T).as_mut().unwrap() }
     }
 }
-impl<T> IntoIterator for SimpleRange<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    type Item = T;
-    type IntoIter = SimpleRangeIterator<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        SimpleRangeIterator::new(self.l, self.r)
+
+impl Step for VirtAddr {
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        usize::steps_between(&start.0, &end.0)
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::forward_checked(start.0, count).map(|e| Self(e))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::backward_checked(start.0, count).map(|e| Self(e))
+    }
+} 
+
+impl Step for PhysAddr {
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        usize::steps_between(&start.0, &end.0)
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::forward_checked(start.0, count).map(|e| Self(e))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::backward_checked(start.0, count).map(|e| Self(e))
     }
 }
-/// iterator for the simple range structure
-pub struct SimpleRangeIterator<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    current: T,
-    end: T,
-}
-impl<T> SimpleRangeIterator<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    pub fn new(l: T, r: T) -> Self {
-        Self { current: l, end: r }
+
+
+impl Step for VirtPageNum {
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        usize::steps_between(&start.0, &end.0)
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::forward_checked(start.0, count).map(|e| Self(e))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::backward_checked(start.0, count).map(|e| Self(e))
+    }
+} 
+
+impl Step for PhysPageNum {
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        usize::steps_between(&start.0, &end.0)
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::forward_checked(start.0, count).map(|e| Self(e))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        usize::backward_checked(start.0, count).map(|e| Self(e))
     }
 }
-impl<T> Iterator for SimpleRangeIterator<T>
-where
-    T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
-{
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.end {
-            None
-        } else {
-            let t = self.current;
-            self.current.step();
-            Some(t)
-        }
+
+impl AddAssign<usize> for PhysAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
     }
 }
-/// a simple range structure for virtual page number
-pub type VPNRange = SimpleRange<VirtPageNum>;
+
+impl AddAssign<usize> for VirtAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
+}
+
+impl AddAssign<usize> for PhysPageNum {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
+}
+
+impl AddAssign<usize> for VirtPageNum {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
+}
+
+impl SubAssign<usize> for PhysAddr {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
+    }
+}
+
+impl SubAssign<usize> for VirtAddr {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
+    }
+}
+
+impl SubAssign<usize> for PhysPageNum {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
+    }
+}
+
+impl SubAssign<usize> for VirtPageNum {
+    fn sub_assign(&mut self, rhs: usize) {
+        self.0 -= rhs;
+    }
+}
