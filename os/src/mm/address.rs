@@ -2,7 +2,7 @@
 
 use super::PageTableEntry;
 use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
-use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{AddAssign, SubAssign}};
+use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
@@ -254,6 +254,38 @@ impl Step for PhysPageNum {
     }
 }
 
+impl Add<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        PhysAddr(self.0 + rhs)
+    }
+}
+
+impl Add<usize> for VirtAddr {
+    type Output = VirtAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        VirtAddr(self.0 + rhs)
+    }
+}
+
+impl Add<usize> for PhysPageNum {
+    type Output = PhysPageNum;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        PhysPageNum(self.0 + rhs)
+    }
+}
+
+impl Add<usize> for VirtPageNum {
+    type Output = VirtPageNum;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        VirtPageNum(self.0 + rhs)
+    }
+}
+
 impl AddAssign<usize> for PhysAddr {
     fn add_assign(&mut self, rhs: usize) {
         self.0 += rhs
@@ -275,6 +307,38 @@ impl AddAssign<usize> for PhysPageNum {
 impl AddAssign<usize> for VirtPageNum {
     fn add_assign(&mut self, rhs: usize) {
         self.0 += rhs
+    }
+}
+
+impl Sub<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        PhysAddr(self.0 + rhs)
+    }
+}
+
+impl Sub<usize> for VirtAddr {
+    type Output = VirtAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        VirtAddr(self.0 + rhs)
+    }
+}
+
+impl Sub<usize> for PhysPageNum {
+    type Output = PhysPageNum;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        PhysPageNum(self.0 + rhs)
+    }
+}
+
+impl Sub<usize> for VirtPageNum {
+    type Output = VirtPageNum;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        VirtPageNum(self.0 + rhs)
     }
 }
 
