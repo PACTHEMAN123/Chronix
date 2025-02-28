@@ -1,12 +1,13 @@
 use core::ops::{Deref, DerefMut};
 
-use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE}, mm::{vm_area::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, VirtAddr, VirtPageNum}, sync::UPSafeCell};
+use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE, USER_STACK_TOP}, mm::{vm_area::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, VirtAddr, VirtPageNum}, sync::UPSafeCell};
 
-use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea}, PageTableEntry};
+use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea, VmAreaPageFaultExt}, PageTableEntry};
 
-use alloc::vec::Vec;
+use alloc::{format, vec::Vec};
 use lazy_static::lazy_static;
 use log::info;
+use riscv::register::scause;
 
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
@@ -104,6 +105,17 @@ impl<V: VmArea> VmSpace for BaseVmSpace<V> {
         }
     }
 
+}
+
+impl<V: VmAreaPageFaultExt> BaseVmSpace<V> {
+    pub fn handle_page_fault(&mut self, 
+        va: VirtAddr,
+        access_type: PageFaultAccessType) -> Option<()> {
+        let area = self.areas.iter_mut().find(|area| {
+            area.range_va().contains(&va)
+        })?;
+        area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
+    }
 }
 
 pub struct KernelVmSpace {
@@ -277,36 +289,36 @@ impl UserVmSpace {
         
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.into();
-        let mut user_stack_bottom: usize = max_end_va.into();
-        // guard page
-        user_stack_bottom += PAGE_SIZE;
-        let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        let user_stack_top_extend = user_stack_top;
+        let user_heap_bottom: usize = max_end_va.into();
+        // used in brk
+        println!("user_heap_bottom: {:#x}", user_heap_bottom);
+        ret.push(
+            UserVmArea::new(
+                user_heap_bottom.into()..user_heap_bottom.into(),
+                MapPerm::R | MapPerm::W | MapPerm::U,
+                UserVmAreaType::Heap,
+            ),
+            None,
+        );
+        let user_stack_bottom = USER_STACK_TOP - USER_STACK_SIZE;
+        let user_stack_top = USER_STACK_TOP;
         println!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
         ret.push(
             UserVmArea::new(
-                user_stack_bottom.into()..user_stack_top_extend.into(),
+                user_stack_bottom.into()..USER_STACK_TOP.into(),
                 MapPerm::R | MapPerm::W | MapPerm::U,
-                UserVmAreaType::Elf
+                UserVmAreaType::Stack
             ),
             None,
         );
-        // used in sbrk
-        ret.push(
-            UserVmArea::new(
-                user_stack_top.into()..user_stack_top.into(),
-                MapPerm::R | MapPerm::W | MapPerm::U,
-                UserVmAreaType::Elf,
-            ),
-            None,
-        );
+        
         println!("trap_context: {:#x}", TRAP_CONTEXT);
         // map TrapContext
         ret.push(
             UserVmArea::new(
                 TRAP_CONTEXT.into()..(USER_MEMORY_SPACE.1).into(),
                 MapPerm::R | MapPerm::W,
-                UserVmAreaType::Elf
+                UserVmAreaType::TrapContext
             ),
             None,
         );
@@ -323,7 +335,13 @@ impl UserVmSpace {
             let new_area = area.clone();
             ret.push(new_area, None);
             for vpn in area.range_vpn() {
+                if user_space.page_table.find_pte(vpn).is_none() {
+                    continue;
+                }
                 let src_ppn = user_space.translate(vpn).unwrap().ppn();
+                if ret.page_table.find_pte(vpn).is_none() {
+                    ret.handle_page_fault(vpn.into(), PageFaultAccessType::WRITE);
+                }
                 let dst_ppn = ret.translate(vpn).unwrap().ppn();
                 dst_ppn
                     .get_bytes_array()
@@ -332,9 +350,42 @@ impl UserVmSpace {
         }
         ret
     }
-
 }
 
+bitflags! {
+    /// PageFaultAccessType
+    pub struct PageFaultAccessType: u8 {
+        /// Read
+        const READ = 1 << 0;
+        /// Write
+        const WRITE = 1 << 1;
+        /// Execute
+        const EXECUTE = 1 << 2;
+    }
+}
+
+#[allow(missing_docs)]
+impl PageFaultAccessType {
+
+    pub fn from_exception(e: scause::Exception) -> Self {
+        match e {
+            scause::Exception::InstructionPageFault => Self::EXECUTE,
+            scause::Exception::LoadPageFault => Self::READ,
+            scause::Exception::StorePageFault => Self::WRITE,
+            _ => panic!("unexcepted exception type for PageFaultAccessType"),
+        }
+    }
+
+    pub fn can_access(self, flag: MapPerm) -> bool {
+        if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
+            return false;
+        }
+        if self.contains(Self::EXECUTE) && !flag.contains(MapPerm::X) {
+            return false;
+        }
+        true
+    }
+}
 
 #[allow(missing_docs, unused)]
 pub fn remap_test() {
