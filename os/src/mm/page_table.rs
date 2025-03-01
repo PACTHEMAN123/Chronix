@@ -148,26 +148,58 @@ impl PageTable {
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.get_pte_array()[*idx];
+            if !pte.is_valid() {
+                return None;
+            }
             if pte.is_leaf() || i == 2 {
                 result = Some(pte);
                 break;
-            }
-            if !pte.is_valid() {
-                return None;
             }
             ppn = pte.ppn();
         }
         result
     }
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        match self.find_pte_create(vpn) {
+            Some(pte) if !pte.is_valid() => {
+                *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+            },
+            _ => {
+                panic!("vpn {:?} is mapped before mapping", vpn);
+            }
+        }
+    }
+    pub fn try_map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) -> Result<(), ()> {
+        match self.find_pte_create(vpn) {
+            Some(pte) if !pte.is_valid() => {
+                *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+                Ok(())
+            },
+            _ => {
+                Err(())
+            }
+        }
     }
     pub fn unmap(&mut self, vpn: VirtPageNum) {
-        let pte = self.find_pte(vpn).unwrap();
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
-        *pte = PageTableEntry::empty();
+        match self.find_pte(vpn) {
+            Some(pte ) if pte.is_valid()=> {
+                *pte = PageTableEntry::empty();
+            },
+            _ => {
+                panic!("vpn {:?} is invalid before unmapping", vpn);
+            }
+        }
+    }
+    pub fn try_unmap(&mut self, vpn: VirtPageNum) -> Result<(), ()> {
+        match self.find_pte(vpn) {
+            Some(pte ) if pte.is_valid()=> {
+                *pte = PageTableEntry::empty();
+                Ok(())
+            },
+            _ => {
+                Err(())
+            }
+        }
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)

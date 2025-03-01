@@ -1,7 +1,7 @@
 //! Constants used in rCore
 #[allow(unused)]
 
-pub const USER_STACK_SIZE: usize = 4096 * 2;
+pub const USER_STACK_SIZE: usize = 4096 * 16;   // it can be very large, because of lazy allocation
 pub const KERNEL_STACK_SIZE: usize = 4096 * 16;
 pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;

@@ -14,14 +14,15 @@
 mod context;
 
 use crate::config::TRAP_CONTEXT;
-use crate::mm::{PageFaultAccessType, VirtAddr};
+use crate::mm::{PageFaultAccessType, VirtAddr, VmSpacePageFaultExt};
 use crate::syscall::syscall;
 use crate::task::{
     current_task, current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
-use log::info;
+use alloc::task;
+use log::{info, warn};
 use riscv::register::sepc;
 use riscv::register::{
     mtvec::TrapMode,
@@ -90,21 +91,21 @@ pub fn trap_handler() -> ! {
                 _ => unreachable!(),
             };
 
-            let result = match current_task() {
-                None => None,
+           match current_task() {
+                None => {},
                 Some(task) => {
-                    task.inner_exclusive_access().vm_space.handle_page_fault(VirtAddr::from(stval), access_type)
+                    let res = task.inner_exclusive_access().vm_space.handle_page_fault(VirtAddr::from(stval), access_type);
+                    match res {
+                        Some(_) => {},
+                        None => {
+                            // todo: don't panic, kill the task
+                            panic!(
+                                "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                            );
+                        }
+                    }
                 }
             };
-  
-            match result {
-                Some(_) => {},
-                None => {
-                    panic!(
-                        "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
-                    );
-                }
-            }
 
         }
         Trap::Exception(Exception::StoreFault)

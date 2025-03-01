@@ -20,7 +20,7 @@ pub use page_table::{translated_byte_buffer, PageTableEntry, translated_str, tra
 pub use page_table::{PTEFlags, PageTable};
 #[allow(unused)]
 pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
-pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType};
+pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType, VmAreaContainer, VmSpacePageFaultExt, VmSpaceHeapExt};
 pub use user_check::UserCheck;
 
 /// initiate heap allocator, frame allocator and kernel space
