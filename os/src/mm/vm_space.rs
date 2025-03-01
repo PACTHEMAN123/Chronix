@@ -1,4 +1,4 @@
-use core::ops::{Deref, DerefMut};
+use core::{num::NonZeroUsize, ops::{Deref, DerefMut}};
 
 use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE, USER_STACK_TOP}, mm::{vm_area::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, VirtAddr, VirtPageNum}, sync::UPSafeCell};
 
@@ -16,11 +16,40 @@ lazy_static! {
 }
 
 #[allow(missing_docs)]
+pub trait VmAreaContainer<V: VmArea> {
+
+    fn remove_with_va(&mut self, va: VirtAddr) -> Option<V>;
+    fn find_with_va(&mut self, va: VirtAddr) -> Option<&V>;
+    fn find_mut_with_va(&mut self, va: VirtAddr) -> Option<&mut V>;
+
+    fn remove_with_vpn(&mut self, vpn: VirtPageNum) -> Option<V> {
+        self.remove_with_va(vpn.into())
+    }
+    fn find_with_vpn(&mut self, vpn: VirtPageNum) -> Option<&V> {
+        self.find_with_va(vpn.into())
+    }
+    fn find_mut_with_vpn(&mut self, vpn: VirtPageNum) -> Option<&mut V> {
+        self.find_mut_with_va(vpn.into())
+    }
+
+    fn clear(&mut self);
+    fn push(&mut self, area: V);
+}
+
+#[allow(missing_docs)]
 pub trait VmSpace {
     type VmAreaType: VmArea;
+    type VmAreaCntrType: VmAreaContainer<Self::VmAreaType>;
+
     fn get_page_table(&self) -> &PageTable;
 
     fn get_page_table_mut(&mut self) -> &mut PageTable;
+
+    fn get_areas(&self) -> &Self::VmAreaCntrType;
+
+    fn get_areas_mut(&mut self) -> &mut Self::VmAreaCntrType;
+
+    fn get_pgt_areas_mut(&mut self) -> (&mut PageTable, &mut Self::VmAreaCntrType);
 
     fn enable(&self) {
         unsafe { self.get_page_table().enable() };
@@ -34,48 +63,143 @@ pub trait VmSpace {
         self.get_page_table().translate(vpn)
     }
 
-    fn push(&mut self, map_area: Self::VmAreaType, data: Option<&[u8]>);
-
-    fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum);
-}
-
-pub struct BaseVmSpace<V: VmArea> {
-    pub page_table: PageTable,
-    areas: Vec<V>
-}
-
-impl<V: VmArea> BaseVmSpace<V> {
-    pub fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
-        if let Some(area) = self.areas
-            .iter_mut()
-            .find(|area| area.start_vpn() == start.floor())
-        {   
-            area.shrink_to( &mut self.page_table, new_end.ceil());
-            true
-        } else {
-            false
+    fn push(&mut self, mut map_area: Self::VmAreaType, data: Option<&[u8]>) {
+        map_area.map(self.get_page_table_mut());
+        if let Some(data) = data {
+            map_area.copy_data(&self.get_page_table_mut(), data);
         }
+        self.get_areas_mut().push(map_area);
     }
 
-    pub fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
-        if let Some(area) = self.areas
-            .iter_mut()
-            .find(|area| area.start_vpn() == start.floor())
+    fn remove_area_with_vpn(&mut self, vpn: VirtPageNum) {
+        let (pgt, areas) = self.get_pgt_areas_mut();
+        if let Some(mut area) = areas.remove_with_vpn(vpn)
         {
-            area.append_to(&mut self.page_table, new_end.ceil());
+            area.unmap(pgt);
+        }
+    }
+
+    fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
+        let (pgt, areas) = self.get_pgt_areas_mut();
+        if let Some(area) = areas.find_mut_with_vpn(start.floor())
+        {   
+            area.shrink_to( pgt, new_end.ceil());
             true
         } else {
             false
         }
     }
 
-    pub fn recycle_data_pages(&mut self) {
-        self.areas.clear();
+    fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
+        let (pgt, areas) = self.get_pgt_areas_mut();
+        if let Some(area) = areas.find_mut_with_vpn(start.floor())
+        {
+            area.append_to(pgt, new_end.ceil());
+            true
+        } else {
+            false
+        }
+    }
+
+    fn recycle_data_pages(&mut self) {
+        self.get_areas_mut().clear();
     }
 }
 
-impl<V: VmArea> VmSpace for BaseVmSpace<V> {
-    type VmAreaType = V;
+#[allow(missing_docs)]
+pub trait VmSpacePageFaultExt: VmSpace<VmAreaType: VmAreaPageFaultExt> {
+    fn handle_page_fault(&mut self, 
+        va: VirtAddr,
+        access_type: PageFaultAccessType) -> Option<()> {
+        let (pgt, areas) = self.get_pgt_areas_mut();
+        let area = areas.find_mut_with_va(va)?;
+        area.handle_page_fault(pgt, va.floor(), access_type)
+    }
+}
+
+impl<T: VmSpace<VmAreaType: VmAreaPageFaultExt>> VmSpacePageFaultExt for T {}
+
+#[allow(missing_docs, unused)]
+pub trait VmSpaceHeapExt: VmSpace {
+    fn get_heap_area(&self) -> Option<&Self::VmAreaType>;
+
+    fn get_heap_area_mut(&mut self) -> Option<&mut Self::VmAreaType>;
+
+    fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr {
+        let heap = self.get_heap_area_mut().unwrap();
+        let range = heap.range_va();
+        log::debug!("[MemorySpace::reset_heap_break] heap range: {range:?}, new_brk: {new_brk:?}");
+        if new_brk >= range.end {
+            *heap.range_va_mut() = range.start..new_brk;
+            new_brk
+        } else if new_brk > range.start {
+            let mut area = self.get_areas_mut().remove_with_va(new_brk).unwrap();
+            let mut right = area.split_off(new_brk.floor());
+            right.unmap(self.get_page_table_mut());
+            self.get_areas_mut().push(area);
+            new_brk
+        } else {
+            range.end
+        }
+    }
+}
+
+pub struct KernelVmSpace {
+    pub page_table: PageTable,
+    areas: Vec<KernelVmArea>
+}
+
+impl<V: VmArea> VmAreaContainer<V> for Vec<V> {
+
+    fn remove_with_vpn(&mut self, vpn: VirtPageNum) -> Option<V> {
+        let (idx, _) = self
+            .iter()
+            .enumerate()
+            .find(|(_, area)| { 
+                area.range_vpn().contains(&vpn) 
+            })?;
+        Some(self.swap_remove(idx))
+    }
+
+    fn find_mut_with_vpn(&mut self, vpn: VirtPageNum) -> Option<&mut V> {
+        self.iter_mut().find(|area| { area.range_vpn().contains(&vpn) })
+    }
+
+    fn clear(&mut self) {
+        self.clear();
+    }
+
+    fn push(&mut self, area: V) {
+        self.push(area);
+    }
+    
+    fn find_with_vpn(&mut self, vpn: VirtPageNum) -> Option<&V> {
+        self.iter().find(|area| { area.range_vpn().contains(&vpn) })
+    }
+    
+    fn remove_with_va(&mut self, va: VirtAddr) -> Option<V> {
+        let (idx, _) = self
+            .iter()
+            .enumerate()
+            .find(|(_, area)| { 
+                area.range_va().contains(&va) 
+            })?;
+        Some(self.swap_remove(idx))
+    }
+    
+    fn find_with_va(&mut self, va: VirtAddr) -> Option<&V> {
+        self.iter().find(|area| { area.range_va().contains(&va) })
+    }
+    
+    fn find_mut_with_va(&mut self, va: VirtAddr) -> Option<&mut V> {
+        self.iter_mut().find(|area| { area.range_va().contains(&va) })
+    }
+}
+
+impl VmSpace for KernelVmSpace {
+    type VmAreaType = KernelVmArea;
+
+    type VmAreaCntrType = Vec<KernelVmArea>;
 
     fn get_page_table(&self) -> &PageTable {
         &self.page_table
@@ -84,56 +208,19 @@ impl<V: VmArea> VmSpace for BaseVmSpace<V> {
     fn get_page_table_mut(&mut self) -> &mut PageTable {
         &mut self.page_table
     }
-    
-    fn push(&mut self, mut map_area: Self::VmAreaType, data: Option<&[u8]>) {
-        map_area.map(self.get_page_table_mut());
-        if let Some(data) = data {
-            map_area.copy_data(&self.get_page_table_mut(), data);
-        }
-        self.areas.push(map_area);
-    }
-    
-    fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
-        if let Some((idx, area)) = self
-            .areas
-            .iter_mut()
-            .enumerate()
-            .find(|(_, area)| area.start_vpn() == start_vpn)
-        {
-            area.unmap(&mut self.page_table);
-            self.areas.swap_remove(idx);
-        }
+
+    fn get_areas(&self) -> &Self::VmAreaCntrType {
+        &self.areas
     }
 
-}
-
-impl<V: VmAreaPageFaultExt> BaseVmSpace<V> {
-    pub fn handle_page_fault(&mut self, 
-        va: VirtAddr,
-        access_type: PageFaultAccessType) -> Option<()> {
-        let area = self.areas.iter_mut().find(|area| {
-            area.range_va().contains(&va)
-        })?;
-        area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
+    fn get_areas_mut(&mut self) -> &mut Self::VmAreaCntrType {
+        &mut self.areas
     }
-}
 
-pub struct KernelVmSpace {
-    base: BaseVmSpace<KernelVmArea>
-}
-
-impl Deref for KernelVmSpace {
-    type Target = BaseVmSpace<KernelVmArea>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.base
+    fn get_pgt_areas_mut(&mut self) -> (&mut PageTable, &mut Self::VmAreaCntrType) {
+        (&mut self.page_table, &mut self.areas)
     }
-}
 
-impl DerefMut for KernelVmSpace {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
 }
 
 impl KernelVmSpace {
@@ -152,10 +239,8 @@ impl KernelVmSpace {
         }
 
         let mut ret = Self {
-            base: BaseVmSpace {
-                page_table: PageTable::new(),
-                areas: Vec::new()
-            }
+            page_table: PageTable::new(),
+            areas: Vec::new()
         };
         ret.push(
             KernelVmArea::new(
@@ -221,20 +306,58 @@ impl KernelVmSpace {
 
 #[allow(missing_docs)]
 pub struct UserVmSpace {
-    base: BaseVmSpace<UserVmArea>
+    pub page_table: PageTable,
+    areas: Vec<UserVmArea>,
+    heap: usize
 }
 
-impl Deref for UserVmSpace {
-    type Target = BaseVmSpace<UserVmArea>;
+impl VmSpace for UserVmSpace {
+    type VmAreaType = UserVmArea;
 
-    fn deref(&self) -> &Self::Target {
-        & self.base
+    type VmAreaCntrType = Vec<Self::VmAreaType>;
+
+    fn get_page_table(&self) -> &PageTable {
+        &self.page_table
+    }
+
+    fn get_page_table_mut(&mut self) -> &mut PageTable {
+        &mut self.page_table
+    }
+
+    fn get_areas(&self) -> &Self::VmAreaCntrType {
+        &self.areas
+    }
+
+    fn get_areas_mut(&mut self) -> &mut Self::VmAreaCntrType {
+        &mut self.areas
+    }
+
+    fn get_pgt_areas_mut(&mut self) -> (&mut PageTable, &mut Self::VmAreaCntrType) {
+        (&mut self.page_table, &mut self.areas)
     }
 }
 
-impl DerefMut for UserVmSpace {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
+impl VmSpaceHeapExt for UserVmSpace {
+    fn get_heap_area(&self) -> Option<&Self::VmAreaType> {
+        if self.areas[self.heap].vma_type == UserVmAreaType::Heap {
+            Some(&self.areas[self.heap])
+        } else {
+            self.areas.iter().find(|area| { 
+                area.vma_type == UserVmAreaType::Heap    
+            })
+        }
+    }
+
+    fn get_heap_area_mut(&mut self) -> Option<&mut Self::VmAreaType> {
+        if self.areas[self.heap].vma_type == UserVmAreaType::Heap {
+            Some(&mut self.areas[self.heap])
+        } else {
+            let (idx, area) = self.areas.iter_mut().enumerate().find(|(_, area)| { 
+                area.vma_type == UserVmAreaType::Heap
+            })?;
+            self.heap = idx;
+            Some(area)
+        }
     }
 }
 
@@ -244,10 +367,9 @@ impl UserVmSpace {
         let page_table = PageTable::new();
         page_table.root_ppn.get_pte_array().copy_from_slice(&kernel_vm_space.page_table.root_ppn.get_pte_array()[..]);
         Self {
-            base: BaseVmSpace {
-                page_table,
-                areas: Vec::new()
-            }
+            page_table,
+            areas: Vec::new(),
+            heap: 0
         }
     }
 
@@ -292,6 +414,7 @@ impl UserVmSpace {
         let user_heap_bottom: usize = max_end_va.into();
         // used in brk
         println!("user_heap_bottom: {:#x}", user_heap_bottom);
+        ret.heap = ret.areas.len();
         ret.push(
             UserVmArea::new(
                 user_heap_bottom.into()..user_heap_bottom.into(),
