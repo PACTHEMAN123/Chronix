@@ -91,3 +91,6 @@ pub fn sleep(period_ms: usize) {
         sys_yield();
     }
 }
+pub fn brk(new_brk: usize) -> isize {
+    sys_brk(new_brk)
+}

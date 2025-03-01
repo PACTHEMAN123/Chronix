@@ -56,8 +56,10 @@ impl From<MapPerm> for PTEFlags {
 }
 
 #[allow(missing_docs)]
-pub trait VmArea
+pub trait VmArea: Sized
 {
+    fn split_off(&mut self, p: VirtPageNum) -> Self;
+
     fn range_va(&self) -> &Range<VirtAddr>;
 
     fn range_va_mut(&mut self) -> &mut Range<VirtAddr>;
@@ -145,6 +147,7 @@ pub trait VmArea
             }
         }
     }
+
 }
 
 #[allow(missing_docs)]
@@ -235,6 +238,7 @@ impl UserVmArea {
             vma_type
         }
     }
+
 }
 
 impl Clone for UserVmArea {
@@ -277,6 +281,18 @@ impl VmArea for UserVmArea {
     fn unmap_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>) {
         self.unmap_range_and_dealloc_frames(page_table, range_vpn);
     }
+
+    fn split_off(&mut self, p: VirtPageNum) -> Self {
+        debug_assert!(self.range_va.contains(&p.into()));
+        let ret = Self {
+            range_va: p.into()..self.end_va(),
+            pages: self.pages.split_off(&p),
+            map_perm: self.map_perm,
+            vma_type: self.vma_type
+        };
+        self.range_va = self.start_va()..p.into();
+        ret
+    }
 }
 
 impl VmAreaFrameExt for UserVmArea {
@@ -285,6 +301,26 @@ impl VmAreaFrameExt for UserVmArea {
     fn allocated_frames_iter<'a>(&'a self) -> Self::FrameIter<'a> {
         UserVmAreaFrameIter{
             inner: self.pages.keys()
+        }
+    }
+
+    fn unmap_range_and_dealloc_frames(&mut self, page_table: &mut PageTable, range: Range<VirtPageNum>) {
+        match self.vma_type {
+            UserVmAreaType::Heap
+            | UserVmAreaType::Stack => {
+                range
+                    .for_each(|vpn| {
+                        let _ = page_table.try_unmap(vpn);
+                        self.remove_allocated_frame(vpn);
+                    });
+            },
+            _ => {
+                range
+                    .for_each(|vpn| {
+                        page_table.unmap(vpn);
+                        self.remove_allocated_frame(vpn);
+                    });
+            }
         }
     }
     
@@ -429,6 +465,18 @@ impl VmArea for KernelVmArea {
             KernelVmAreaType::KernelStack => self.unmap_range_and_dealloc_frames(page_table, range_vpn),
         }
         
+    }
+
+    fn split_off(&mut self, p: VirtPageNum) -> Self {
+        debug_assert!(self.range_va.contains(&p.into()));
+        let ret = Self {
+            range_va: p.into()..self.end_va(),
+            pages: self.pages.split_off(&p),
+            map_perm: self.map_perm,
+            vma_type: self.vma_type
+        };
+        self.range_va = self.start_va()..p.into();
+        ret
     }
 }
 
