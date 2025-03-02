@@ -1,29 +1,33 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use super::frame_allocator::frame_alloc_clean;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use log::info;
 bitflags! {
     /// page table entry flags
-    pub struct PTEFlags: u8 {
-        #[allow(missing_docs)]
+    pub struct PTEFlags: u16 {
+        /// Valid
         const V = 1 << 0;
-        #[allow(missing_docs)]
+        /// Readable
         const R = 1 << 1;
-        #[allow(missing_docs)]
+        /// Writable
         const W = 1 << 2;
-        #[allow(missing_docs)]
+        /// Executable
         const X = 1 << 3;
-        #[allow(missing_docs)]
+        /// User-mode accessible
         const U = 1 << 4;
         #[allow(missing_docs)]
         const G = 1 << 5;
-        #[allow(missing_docs)]
+        /// Accessed
         const A = 1 << 6;
-        #[allow(missing_docs)]
+        /// Dirty
         const D = 1 << 7;
+        /// Copy On Write
+        const C = 1 << 8;
     }
 }
 
@@ -49,7 +53,7 @@ impl PageTableEntry {
         (self.bits >> 10 & ((1usize << 44) - 1)).into()
     }
     pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits(self.bits as u8).unwrap()
+        PTEFlags::from_bits((self.bits & ((1usize << 10) - 1)) as u16).unwrap()
     }
     pub fn is_valid(&self) -> bool {
         (self.flags() & PTEFlags::V) != PTEFlags::empty()
@@ -63,7 +67,7 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
-    // pte.is_leaf() == true, meaning this PTE points to the physical page, not to the next level of PTE.
+    /// pte.is_leaf() == true, meaning this PTE points to the physical page, not to the next level of PTE.
     pub fn is_leaf(&self) -> bool {
         (self.flags() & PTEFlags::V) != PTEFlags::empty() && 
         (
@@ -88,7 +92,7 @@ pub struct PageTable {
 #[allow(missing_docs)]
 impl PageTable {
     pub fn new() -> Self {
-        let frame = frame_alloc().unwrap();
+        let frame = frame_alloc_clean().unwrap();
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],
@@ -112,7 +116,7 @@ impl PageTable {
                 break;
             }
             if !pte.is_valid() {
-                let frame = frame_alloc().unwrap();
+                let frame = frame_alloc_clean().unwrap();
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
                 self.frames.push(frame);
             }
@@ -126,12 +130,12 @@ impl PageTable {
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.get_pte_array()[*idx];
+            if !pte.is_valid() {
+                return None;
+            }
             if i == 2 {
                 result = Some(pte);
                 break;
-            }
-            if !pte.is_valid() {
-                return None;
             }
             ppn = pte.ppn();
         }
@@ -144,28 +148,58 @@ impl PageTable {
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.get_pte_array()[*idx];
+            if !pte.is_valid() {
+                return None;
+            }
             if pte.is_leaf() || i == 2 {
                 result = Some(pte);
                 break;
-            }
-            if !pte.is_valid() {
-                return None;
             }
             ppn = pte.ppn();
         }
         result
     }
-    #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        match self.find_pte_create(vpn) {
+            Some(pte) if !pte.is_valid() => {
+                *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+            },
+            _ => {
+                panic!("vpn {:?} is mapped before mapping", vpn);
+            }
+        }
     }
-    #[allow(unused)]
+    pub fn try_map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) -> Result<(), ()> {
+        match self.find_pte_create(vpn) {
+            Some(pte) if !pte.is_valid() => {
+                *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+                Ok(())
+            },
+            _ => {
+                Err(())
+            }
+        }
+    }
     pub fn unmap(&mut self, vpn: VirtPageNum) {
-        let pte = self.find_pte(vpn).unwrap();
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
-        *pte = PageTableEntry::empty();
+        match self.find_pte(vpn) {
+            Some(pte ) if pte.is_valid()=> {
+                *pte = PageTableEntry::empty();
+            },
+            _ => {
+                panic!("vpn {:?} is invalid before unmapping", vpn);
+            }
+        }
+    }
+    pub fn try_unmap(&mut self, vpn: VirtPageNum) -> Result<(), ()> {
+        match self.find_pte(vpn) {
+            Some(pte ) if pte.is_valid()=> {
+                *pte = PageTableEntry::empty();
+                Ok(())
+            },
+            _ => {
+                Err(())
+            }
+        }
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)

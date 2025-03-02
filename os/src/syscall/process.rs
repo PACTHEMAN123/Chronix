@@ -1,9 +1,8 @@
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str, VmSpace};
+use crate::mm::{translated_refmut, translated_str, VirtAddr, VmSpace, VmSpaceHeapExt};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
 };
-use crate::timer::get_time_ms;
 use alloc::sync::Arc;
 
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -86,4 +85,9 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 pub fn sys_yield() -> isize {
     // todo : (implementation) crate::async_utils::yield_now().await;
     0
+}
+pub fn sys_brk(addr: VirtAddr) -> isize {
+    let task = current_task().unwrap();
+    let ret  = task.inner_exclusive_access().vm_space.reset_heap_break(addr).0 as isize;
+    ret
 }

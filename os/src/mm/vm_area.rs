@@ -1,43 +1,51 @@
 use core::ops::Range;
 
 use alloc::collections::btree_map::{BTreeMap, Keys};
+use log::info;
 
 use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE}};
 
-use super::{frame_alloc, page_table::{PTEFlags, PageTable}, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use bitflags::bitflags;
 
 bitflags! {
     /// map permission corresponding to that in pte: `R W X U`
-    pub struct MapPerm: u8 {
-        #[allow(missing_docs)]
+    pub struct MapPerm: u16 {
+        /// Readable
         const R = 1 << 1;
-        #[allow(missing_docs)]
+        /// Writable
         const W = 1 << 2;
-        #[allow(missing_docs)]
+        /// Executable
         const X = 1 << 3;
-        #[allow(missing_docs)]
+        /// User-mode accessible
         const U = 1 << 4;
+        /// Copy On Write
+        const C = 1 << 8;
 
-        #[allow(missing_docs)]
+        /// Read-write
         const RW = Self::R.bits() | Self::W.bits();
-        #[allow(missing_docs)]
+        /// Read-execute
         const RX = Self::R.bits() | Self::X.bits();
-        #[allow(missing_docs)]
+        /// Reserved
         const WX = Self::W.bits() | Self::X.bits();
-        #[allow(missing_docs)]
+        /// Read-write-execute
         const RWX = Self::R.bits() | Self::W.bits() | Self::X.bits();
 
-        #[allow(missing_docs)]
+        /// User Write-only
         const UW = Self::U.bits() | Self::W.bits();
-        #[allow(missing_docs)]
+        /// User Read-write
         const URW = Self::U.bits() | Self::RW.bits();
-        #[allow(missing_docs)]
+        /// Uer Read-execute
         const URX = Self::U.bits() | Self::RX.bits();
-        #[allow(missing_docs)]
+        /// Reserved
         const UWX = Self::U.bits() | Self::WX.bits();
-        #[allow(missing_docs)]
+        /// User Read-write-execute
         const URWX = Self::U.bits() | Self::RWX.bits();
+        
+        /// Read freely, copy on write
+        const RC = Self::R.bits() | Self::C.bits();
+        /// User Read-COW
+        const URC = Self::U.bits() | Self::RC.bits();
     }
 }
 
@@ -48,14 +56,10 @@ impl From<MapPerm> for PTEFlags {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UserVmAreaType {
-    Elf
-}
-
-#[allow(missing_docs)]
-pub trait VmArea
+pub trait VmArea: Sized
 {
+    fn split_off(&mut self, p: VirtPageNum) -> Self;
+
     fn range_va(&self) -> &Range<VirtAddr>;
 
     fn range_va_mut(&mut self) -> &mut Range<VirtAddr>;
@@ -143,8 +147,8 @@ pub trait VmArea
             }
         }
     }
-}
 
+}
 
 #[allow(missing_docs)]
 pub trait VmAreaFrameExt: VmArea {
@@ -159,7 +163,7 @@ pub trait VmAreaFrameExt: VmArea {
     fn map_range_and_alloc_frames(&mut self, page_table: &mut PageTable, range: Range<VirtPageNum>) {
         range
         .for_each(|vpn| {
-            let frame = frame_alloc().unwrap();
+            let frame = frame_alloc_clean().unwrap();
             page_table.map(vpn, frame.ppn, (*self.perm()).into());
             self.add_allocated_frame(vpn, frame);
         });
@@ -199,6 +203,20 @@ pub trait VmAreaFrameExt: VmArea {
     }
 }
 
+#[allow(missing_docs)]
+pub trait VmAreaPageFaultExt: VmArea {
+    fn handle_page_fault(&mut self, 
+        page_table: &mut PageTable, 
+        vpn: VirtPageNum,
+        access_type: PageFaultAccessType
+    ) -> Option<()>;
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserVmAreaType {
+    Elf, Stack, Heap, TrapContext
+}
 
 /// User's Virtual Memory Area
 #[allow(missing_docs)]
@@ -220,6 +238,7 @@ impl UserVmArea {
             vma_type
         }
     }
+
 }
 
 impl Clone for UserVmArea {
@@ -251,11 +270,28 @@ impl VmArea for UserVmArea {
     }
     
     fn map_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>) {
-        self.map_range_and_alloc_frames(page_table, range_vpn);
+        match self.vma_type {
+            UserVmAreaType::Elf
+            | UserVmAreaType::TrapContext => self.map_range_and_alloc_frames(page_table, range_vpn),
+            UserVmAreaType::Stack 
+            | UserVmAreaType::Heap => {}
+        }
     }
     
     fn unmap_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>) {
         self.unmap_range_and_dealloc_frames(page_table, range_vpn);
+    }
+
+    fn split_off(&mut self, p: VirtPageNum) -> Self {
+        debug_assert!(self.range_va.contains(&p.into()));
+        let ret = Self {
+            range_va: p.into()..self.end_va(),
+            pages: self.pages.split_off(&p),
+            map_perm: self.map_perm,
+            vma_type: self.vma_type
+        };
+        self.range_va = self.start_va()..p.into();
+        ret
     }
 }
 
@@ -265,6 +301,26 @@ impl VmAreaFrameExt for UserVmArea {
     fn allocated_frames_iter<'a>(&'a self) -> Self::FrameIter<'a> {
         UserVmAreaFrameIter{
             inner: self.pages.keys()
+        }
+    }
+
+    fn unmap_range_and_dealloc_frames(&mut self, page_table: &mut PageTable, range: Range<VirtPageNum>) {
+        match self.vma_type {
+            UserVmAreaType::Heap
+            | UserVmAreaType::Stack => {
+                range
+                    .for_each(|vpn| {
+                        let _ = page_table.try_unmap(vpn);
+                        self.remove_allocated_frame(vpn);
+                    });
+            },
+            _ => {
+                range
+                    .for_each(|vpn| {
+                        page_table.unmap(vpn);
+                        self.remove_allocated_frame(vpn);
+                    });
+            }
         }
     }
     
@@ -289,6 +345,36 @@ impl<'a> Iterator for UserVmAreaFrameIter<'a> {
     }
 }
 
+impl VmAreaPageFaultExt for UserVmArea {
+    fn handle_page_fault(&mut self, 
+        page_table: &mut PageTable, 
+        vpn: VirtPageNum,
+        access_type: PageFaultAccessType
+    ) -> Option<()>{
+        if !access_type.can_access(*self.perm()) {
+            log::warn!(
+                "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
+                self.perm()
+            );
+            return None;
+        }
+        let pte = page_table.find_pte(vpn);
+        if pte.is_none() || !pte.unwrap().is_valid() {
+            match self.vma_type {
+                UserVmAreaType::Elf => return None,
+                UserVmAreaType::Stack
+                | UserVmAreaType::Heap => {
+                    self.map_range_and_alloc_frames(page_table, vpn..vpn+1);
+                    unsafe { crate::arch::riscv64::sfence_vma_vaddr(vpn.into()) };
+                    return Some(());
+                },
+                UserVmAreaType::TrapContext => return None,
+            }
+        } else {
+            None
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -379,6 +465,18 @@ impl VmArea for KernelVmArea {
             KernelVmAreaType::KernelStack => self.unmap_range_and_dealloc_frames(page_table, range_vpn),
         }
         
+    }
+
+    fn split_off(&mut self, p: VirtPageNum) -> Self {
+        debug_assert!(self.range_va.contains(&p.into()));
+        let ret = Self {
+            range_va: p.into()..self.end_va(),
+            pages: self.pages.split_off(&p),
+            map_perm: self.map_perm,
+            vma_type: self.vma_type
+        };
+        self.range_va = self.start_va()..p.into();
+        ret
     }
 }
 

@@ -83,7 +83,6 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
-
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
@@ -137,8 +136,8 @@ impl TaskControlBlock {
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         info!("into task exec");
-        let (memory_set, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
+        let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
+        let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
@@ -146,7 +145,7 @@ impl TaskControlBlock {
         // **** access current TCB exclusively
         let mut inner = self.inner.exclusive_access();
         // substitute memory_set
-        inner.vm_space = memory_set;
+        inner.vm_space = vm_space;
         // update trap_cx ppn
         inner.trap_cx_ppn = trap_cx_ppn;
         // initialize trap_cx
@@ -159,17 +158,18 @@ impl TaskControlBlock {
         // **** release current PCB
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
-        // ---- hold parent PCB lock
-        let mut parent_inner = self.inner.exclusive_access();
-        // copy user space(include trap context)
-        let memory_set = UserVmSpace::from_existed(&parent_inner.vm_space);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
+        // ---- hold parent PCB lock
+        let mut parent_inner = self.inner_exclusive_access();
+        // copy user space(include trap context)
+        let vm_space = UserVmSpace::from_existed(&parent_inner.vm_space);
+        let trap_cx_ppn = vm_space
+            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
         let kernel_stack_top = kernel_stack.get_top();
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
@@ -188,7 +188,7 @@ impl TaskControlBlock {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
                     task_status: TaskStatus::Ready,
-                    vm_space: memory_set,
+                    vm_space,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     waker: None,

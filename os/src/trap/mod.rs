@@ -15,6 +15,7 @@ mod context;
 
 use crate::async_utils::yield_now;
 use crate::config::TRAP_CONTEXT;
+use crate::mm::{PageFaultAccessType, VirtAddr, VmSpacePageFaultExt};
 use crate::syscall::syscall;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
@@ -37,7 +38,8 @@ pub fn init() {
     set_kernel_trap_entry();
 }
 
-fn set_kernel_trap_entry() {
+/// set the kernel trap entry
+pub fn set_kernel_trap_entry() {
     unsafe {
         stvec::write(trap_from_kernel as usize, TrapMode::Direct);
     }
@@ -64,15 +66,8 @@ pub async fn trap_handler()  {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
-    info!(
-         "trap in, sepc {:#x}, user sp {:#x}, kernel sp {:#x}",
-         current_trap_cx().sepc,
-         current_trap_cx().x[2],
-         current_trap_cx().kernel_sp,
-    );
-    unsafe {
-        enable_interrupt();
-    }
+    let sepc = sepc::read();
+    let cause = scause.cause();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -84,14 +79,42 @@ pub async fn trap_handler()  {
             cx = current_trap_cx();
             cx.x[10] = result as usize;
         }
-        Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::StorePageFault)
-        | Trap::Exception(Exception::InstructionFault)
+        Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            info!(
-                "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+            log::info!(
+                "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+            );
+
+            let access_type = match scause.cause() {
+                Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::EXECUTE,
+                Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::READ,
+                Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::WRITE,
+                _ => unreachable!(),
+            };
+
+           match current_task() {
+                None => {},
+                Some(task) => {
+                    let res = task.inner_exclusive_access().vm_space.handle_page_fault(VirtAddr::from(stval), access_type);
+                    match res {
+                        Some(_) => {},
+                        None => {
+                            // todo: don't panic, kill the task
+                            panic!(
+                                "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                            );
+                        }
+                    }
+                }
+            };
+
+        }
+        Trap::Exception(Exception::StoreFault)
+        | Trap::Exception(Exception::InstructionFault)
+        | Trap::Exception(Exception::LoadFault) => {
+            println!(
+                "[trap_handler] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
                 stval,
                 current_trap_cx().sepc,
@@ -100,7 +123,7 @@ pub async fn trap_handler()  {
             exit_current_and_run_next(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            println!("[trap_handler] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
             exit_current_and_run_next(-3);
         }
@@ -111,7 +134,7 @@ pub async fn trap_handler()  {
         }
         _ => {
             panic!(
-                "Unsupported trap {:?}, stval = {:#x}!",
+                "[trap_handler] Unsupported trap {:?}, stval = {:#x}!",
                 scause.cause(),
                 stval
             );
