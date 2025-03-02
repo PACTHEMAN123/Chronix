@@ -1,7 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
 use super::frame_allocator::frame_alloc_clean;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -98,6 +98,7 @@ impl PageTable {
             frames: vec![frame],
         }
     }
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {

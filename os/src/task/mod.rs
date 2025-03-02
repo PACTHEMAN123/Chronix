@@ -33,7 +33,7 @@ use task::{TaskControlBlock, TaskStatus};
 use log::*;
 use crate::logging;
 
-pub use pid::{pid_alloc, KernelStack, PidAllocator, PidHandle};
+pub use pid::{pid_alloc, PidAllocator, PidHandle};
 pub use processor::{
     current_task,  current_user_token,  take_current_task,
     Processor,

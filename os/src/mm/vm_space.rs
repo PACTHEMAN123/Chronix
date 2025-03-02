@@ -234,6 +234,8 @@ impl KernelVmSpace {
             fn sdata();
             fn edata();
             fn sbss_with_stack();
+            fn kernel_stack_bottom();
+            fn kernel_stack_top();
             fn ebss();
             fn ekernel();
         }
@@ -275,6 +277,15 @@ impl KernelVmSpace {
                 (sbss_with_stack as usize).into()..(ebss as usize).into(), 
                 MapPerm::R | MapPerm::W, 
                 KernelVmAreaType::Bss
+            ),
+            None
+        );
+
+        ret.push(
+            KernelVmArea::new(
+                (kernel_stack_bottom as usize).into()..(kernel_stack_top as usize).into(), 
+                MapPerm::R | MapPerm::W, 
+                KernelVmAreaType::KernelStack
             ),
             None
         );

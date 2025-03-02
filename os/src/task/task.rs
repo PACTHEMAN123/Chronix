@@ -1,10 +1,10 @@
 //!Implementation of [`TaskControlBlock`]
-use super::{pid_alloc, schedule, KernelStack, PidHandle};
+use super::{pid_alloc, schedule, PidHandle};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
-use crate::sync::mutex::{MutexSupport, SpinNoIrqLock};
+use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -21,9 +21,8 @@ use crate::logging;
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
-    pub kernel_stack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    inner: SpinNoIrqLock<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
@@ -73,28 +72,24 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner>{
-        let inner = self.inner.exclusive_access();
+    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, TaskControlBlockInner,SpinNoIrq> {
+        let inner: MutexGuard<'_, TaskControlBlockInner, SpinNoIrq> = self.inner.lock();
         inner
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
-        let kernel_stack = KernelStack::new(&pid_handle);
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-        
-        let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Self {
             pid: pid_handle,
-            kernel_stack,
             inner: 
-                unsafe { UPSafeCell::new(TaskControlBlockInner {
+                SpinNoIrqLock::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: user_sp,
                     task_status: TaskStatus::Ready,
@@ -111,20 +106,19 @@ impl TaskControlBlock {
                         // 2 -> stderr
                         Some(Arc::new(Stdout)),
                     ],
-                }) }
-            ,
+                }) 
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            kernel_stack_top,
         );
         task_control_block
     }
     pub fn set_waker(&self, waker: Waker) {
-        self.inner.exclusive_access().waker = Some(waker);
+        //self.inner.exclusive_access().waker = Some(waker);
+        self.inner.lock().waker = Some(waker);
     }
     pub fn wake(&self){
         let inner = self.inner_exclusive_access();
@@ -142,7 +136,7 @@ impl TaskControlBlock {
             .ppn();
 
         // **** access current TCB exclusively
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner_exclusive_access();
         // substitute memory_set
         inner.vm_space = vm_space;
         // update trap_cx ppn
@@ -151,7 +145,6 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            self.kernel_stack.get_top(),
         );
         *inner.get_trap_cx() = trap_cx;
         // **** release current PCB
@@ -160,7 +153,6 @@ impl TaskControlBlock {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
-        let kernel_stack = KernelStack::new(&pid_handle);
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
@@ -169,7 +161,6 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-        let kernel_stack_top = kernel_stack.get_top();
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
         for fd in parent_inner.fd_table.iter() {
@@ -181,9 +172,7 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            kernel_stack,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
+            inner: SpinNoIrqLock::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
                     task_status: TaskStatus::Ready,
@@ -194,14 +183,12 @@ impl TaskControlBlock {
                     exit_code: 0,
                     fd_table: new_fd_table,
                 })
-            },
+            ,
         });
         // add child
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
         // return
         task_control_block
         // **** release child PCB

@@ -32,8 +32,10 @@ SECTIONS
     . = ALIGN(4K);
     edata = .;
     sbss_with_stack = .;
+    kernel_stack_bottom = .;
     .bss : {
         *(.bss.stack)
+        kernel_stack_top = .;
         sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)

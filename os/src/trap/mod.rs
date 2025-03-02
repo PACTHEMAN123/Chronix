@@ -154,18 +154,15 @@ pub fn trap_return() {
     info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
-    let user_satp = current_user_token();
+    //let user_satp = current_user_token();
     extern "C" {
         fn __restore();
     }
     unsafe {
         asm!(
-            //"fence.i",
-            "j __restore",
-            in("a0") trap_cx_ptr,      // a0 = virt addr of Trap Context
-            in("a1") user_satp,        // a1 = phy addr of usr page table
-            options(noreturn)
-        )
+            "call __restore",    
+            in("a0") trap_cx_ptr,        
+        );
     }
 }
 

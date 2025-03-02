@@ -75,11 +75,11 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
 ///Loop `fetch_task` to get the process that needs to run, and switch the process 
 pub async fn run_tasks(task: Arc<TaskControlBlock>) {  
     info!("into run_tasks");
-    (*task).set_waker(get_waker().await);
-    debug!(
+    task.set_waker(get_waker().await);
+    info!(
         "into thread loop, sepc {:#x}, trap cx addr {:#x}",
         current_task().unwrap().inner_exclusive_access().get_trap_cx().sepc,
-        current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize
+        current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );
     loop {
         trap_return();
