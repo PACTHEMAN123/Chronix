@@ -1,13 +1,15 @@
 //!Implementation of [`TaskControlBlock`]
 use super::TaskContext;
 use super::{pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT;
+use crate::config::{PAGE_SIZE_BITS, TRAP_CONTEXT};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE, translated_refmut, translated_str, VirtPageNum, VmSpacePageFaultExt, PageFaultAccessType};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::{sync::{Arc, Weak}, vec::*, string::String, vec};
+use virtio_drivers::PAGE_SIZE;
 use core::cell::RefMut;
+use core::ptr::slice_from_raw_parts_mut;
 
 use log::*;
 use crate::logging;
@@ -66,12 +68,17 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
+        let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-        
+
+        // set argc to zero
+        user_sp -= 8;
+        vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
+        *translated_refmut(vm_space.token(), user_sp as *mut usize) = 0;
+
         let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Self {
             pid: pid_handle,
@@ -104,9 +111,11 @@ impl TaskControlBlock {
             user_sp,
             kernel_stack_top,
         );
+        task_control_block.inner_exclusive_access().get_trap_cx().x[10] = user_sp; // set a0 to user_sp
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
+        const SIZE_OF_USIZE: usize = core::mem::size_of::<usize>();
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
@@ -114,31 +123,36 @@ impl TaskControlBlock {
             .unwrap()
             .ppn();
 
-        // push arguments into user stack (todo: no need to translate)
-        user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
-        vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
-        let argv_base = user_sp;
-        let mut argv: Vec<_> = (0..=args.len())
-            .map(|arg| {
-                translated_refmut(
-                    vm_space.token(),
-                    (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize,
-                )
-            })
-            .collect();
-        *argv[args.len()] = 0;
-        for i in 0..args.len() {
-            user_sp -= args[i].len() + 1;
-            *argv[i] = user_sp;
-            let mut p = user_sp;
-            for c in args[i].as_bytes() {
-                *translated_refmut(vm_space.token(), p as *mut u8) = *c;
-                p += 1;
-            }
-            *translated_refmut(vm_space.token(), p as *mut u8) = 0;
+        let tot_len: usize = args.iter().map(|s| s.len()+1).sum();
+        let new_user_sp = ((user_sp - tot_len) / SIZE_OF_USIZE) * SIZE_OF_USIZE - SIZE_OF_USIZE * (args.len() + 1);
+        let frames_num = ((user_sp - new_user_sp) + PAGE_SIZE - 1) / PAGE_SIZE;
+        
+        for i in 1..frames_num+1 {
+            vm_space.handle_page_fault(VirtAddr::from(user_sp - PAGE_SIZE * i), PageFaultAccessType::WRITE);
         }
-        user_sp -= user_sp % core::mem::size_of::<usize>();
+        let pa_user_sp = translated_refmut(vm_space.token(), (user_sp-1) as *mut u8) as *mut u8 as usize + 1;
+        let pa_new_user_sp = translated_refmut(vm_space.token(), new_user_sp as *mut u8) as *mut u8 as usize;
+        let mut va= user_sp;
+        let mut pa = pa_user_sp;
+        for (i, s) in args.iter().enumerate() {
+            pa -= s.len()+1;
+            va -= s.len()+1;
+            unsafe {
+                ((pa_new_user_sp + (i + 1) * SIZE_OF_USIZE) as *mut usize).write_volatile(va);
+            }
+            unsafe {
+                let dst = &mut *slice_from_raw_parts_mut(
+                    pa as *mut u8, s.len()
+                );
+                dst.clone_from_slice(s.as_bytes());
+                ((pa + s.len()) as *mut u8).write_volatile(0);
+            }
+        }
 
+        unsafe {
+            (pa_new_user_sp as *mut usize).write_volatile(args.len());
+        }
+        user_sp = new_user_sp;
         // **** access current TCB exclusively
         let mut inner = self.inner_exclusive_access();
         // substitute memory_set
@@ -146,11 +160,12 @@ impl TaskControlBlock {
         // update trap_cx ppn
         inner.trap_cx_ppn = trap_cx_ppn;
         // initialize trap_cx
-        let trap_cx = TrapContext::app_init_context(
+        let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
             self.kernel_stack.get_top(),
         );
+        trap_cx.x[10] = user_sp; // set a0 to user_sp
         *inner.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
