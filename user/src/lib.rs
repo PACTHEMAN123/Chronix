@@ -15,7 +15,6 @@ extern crate bitflags;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
-use core::arch::asm;
 
 const USER_HEAP_SIZE: usize = 32768;
 
@@ -31,22 +30,22 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 
 #[no_mangle]
 #[link_section = ".text.entry"]
-pub extern "C" fn _start() -> ! {
+pub extern "C" fn _start(p: *const usize) -> ! {
+
+    let argc = unsafe { p.read_volatile() };
+    let argv = unsafe { p.add(1) as usize };
+    
     unsafe {
         HEAP.lock()
             .init(HEAP_SPACE.as_ptr() as usize, USER_HEAP_SIZE);
     }
-    let mut sp: usize;
-    unsafe {
-        asm!("mv {}, sp", out(reg) sp);
-    }
-    let argc = unsafe { (sp as *const usize).read_volatile() };
-    let argv = sp + 8;
+    
     let mut v: Vec<&'static str> = Vec::new();
     for i in 0..argc {
         let str_start =
             unsafe {
-                ((argv + i * core::mem::size_of::<usize>()) as *const usize).read_volatile() };
+                ((argv + i * core::mem::size_of::<usize>()) as *const usize).read_volatile() 
+            };
         let len = (0usize..)
             .find(|i| unsafe { ((str_start + *i) as *const u8).read_volatile() == 0 })
             .unwrap();
@@ -57,12 +56,12 @@ pub extern "C" fn _start() -> ! {
             .unwrap(),
         );
     }
-    exit(main(argc, v.as_slice()));
+    exit(main(v.as_slice()));
 }
 
 #[linkage = "weak"]
 #[no_mangle]
-fn main(_argc: usize, _argv: &[&str]) -> i32 {
+fn main(_args: &[&str]) -> i32 {
     panic!("Cannot find main!");
 }
 

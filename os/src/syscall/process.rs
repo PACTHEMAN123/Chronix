@@ -4,7 +4,9 @@ use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
 };
+use crate::trap::TrapContext;
 use alloc::{sync::Arc, vec::Vec, string::String};
+use log::info;
 
 pub fn sys_exit(exit_code: i32) -> ! {
     exit_current_and_run_next(exit_code);
@@ -56,10 +58,13 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
-        let argc = args_vec.len();
+        
+        // let argc = args_vec.len();
         task.exec(all_data.as_slice(), args_vec);
-        // return argc because cx.x[10] will be covered with it later
-        argc as isize
+        
+        let p = task.inner_exclusive_access().trap_cx_ppn.to_kern().get_ref::<TrapContext>().x[2];
+        // return p because cx.x[10] will be covered with it later
+        p as isize
     } else {
         -1
     }
