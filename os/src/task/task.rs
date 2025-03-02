@@ -3,12 +3,10 @@ use super::TaskContext;
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
+use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE, translated_refmut, translated_str};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
-use alloc::sync::{Arc, Weak};
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{sync::{Arc, Weak}, vec::*, string::String, vec};
 use core::cell::RefMut;
 
 use log::*;
@@ -108,14 +106,39 @@ impl TaskControlBlock {
         );
         task_control_block
     }
-    pub fn exec(&self, elf_data: &[u8]) {
+    pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         info!("into task exec");
-        let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
+        let (vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
+
+        info!("try to push arguments into user stack, argc: {}", args.len());
+        // push arguments into user stack (todo: no need to translate)
+        user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
+        let argv_base = user_sp;
+        let mut argv: Vec<_> = (0..=args.len())
+            .map(|arg| {
+                translated_refmut(
+                    vm_space.token(),
+                    (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize,
+                )
+            })
+            .collect();
+        info!("try to push arguments into user stack, argv_base: {:x}", argv_base);
+        *argv[args.len()] = 0;
+        for i in 0..args.len() {
+            user_sp -= args[i].len() + 1;
+            *argv[i] = user_sp;
+            let mut p = user_sp;
+            for c in args[i].as_bytes() {
+                *translated_refmut(vm_space.token(), p as *mut u8) = *c;
+                p += 1;
+            }
+            *translated_refmut(vm_space.token(), p as *mut u8) = 0;
+        }
 
         // **** access current TCB exclusively
         let mut inner = self.inner_exclusive_access();
