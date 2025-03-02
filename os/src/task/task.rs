@@ -3,7 +3,7 @@ use super::TaskContext;
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE, translated_refmut, translated_str};
+use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE, translated_refmut, translated_str, VirtPageNum, VmSpacePageFaultExt, PageFaultAccessType};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::{sync::{Arc, Weak}, vec::*, string::String, vec};
@@ -108,16 +108,15 @@ impl TaskControlBlock {
     }
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        info!("into task exec");
-        let (vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
+        let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
 
-        info!("try to push arguments into user stack, argc: {}", args.len());
         // push arguments into user stack (todo: no need to translate)
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
+        vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
         let argv_base = user_sp;
         let mut argv: Vec<_> = (0..=args.len())
             .map(|arg| {
@@ -127,7 +126,6 @@ impl TaskControlBlock {
                 )
             })
             .collect();
-        info!("try to push arguments into user stack, argv_base: {:x}", argv_base);
         *argv[args.len()] = 0;
         for i in 0..args.len() {
             user_sp -= args[i].len() + 1;
@@ -139,6 +137,7 @@ impl TaskControlBlock {
             }
             *translated_refmut(vm_space.token(), p as *mut u8) = 0;
         }
+        user_sp -= user_sp % core::mem::size_of::<usize>();
 
         // **** access current TCB exclusively
         let mut inner = self.inner_exclusive_access();

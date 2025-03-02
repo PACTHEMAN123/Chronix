@@ -15,6 +15,7 @@ extern crate bitflags;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
+use core::arch::asm;
 
 const USER_HEAP_SIZE: usize = 32768;
 
@@ -30,15 +31,22 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 
 #[no_mangle]
 #[link_section = ".text.entry"]
-pub extern "C" fn _start(argc: usize, argv: usize) -> ! {
+pub extern "C" fn _start() -> ! {
     unsafe {
         HEAP.lock()
             .init(HEAP_SPACE.as_ptr() as usize, USER_HEAP_SIZE);
     }
+    let mut sp: usize;
+    unsafe {
+        asm!("mv {}, sp", out(reg) sp);
+    }
+    let argc = unsafe { (sp as *const usize).read_volatile() };
+    let argv = sp + 8;
     let mut v: Vec<&'static str> = Vec::new();
     for i in 0..argc {
         let str_start =
-            unsafe { ((argv + i * core::mem::size_of::<usize>()) as *const usize).read_volatile() };
+            unsafe {
+                ((argv + i * core::mem::size_of::<usize>()) as *const usize).read_volatile() };
         let len = (0usize..)
             .find(|i| unsafe { ((str_start + *i) as *const u8).read_volatile() == 0 })
             .unwrap();
