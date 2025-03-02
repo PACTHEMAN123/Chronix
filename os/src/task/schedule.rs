@@ -6,7 +6,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::{timer::get_time_duration, trap::{trap_handler, TrapContext}};
+use crate::trap::{trap_handler, TrapContext};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::async_utils::{get_waker,suspend_now};

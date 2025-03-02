@@ -18,7 +18,7 @@ use crate::config::TRAP_CONTEXT;
 use crate::mm::{PageFaultAccessType, VirtAddr, VmSpacePageFaultExt};
 use crate::syscall::syscall;
 use crate::task::{
-     current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+     current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
 };
 use crate::task::processor::current_trap_cx;
 use crate::timer::set_next_trigger;
@@ -28,7 +28,7 @@ use crate::arch::riscv64::interrupts::disable_interrupt;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec,
+    sie, stval, stvec, sepc,
 };
 use crate::arch::riscv64::interrupts::enable_interrupt;
 

@@ -10,9 +10,6 @@ pub fn sys_exit(exit_code: i32) -> ! {
     panic!("Unreachable in sys_exit!");
 }
 
-pub fn sys_get_time() -> isize {
-    get_time_ms() as isize
-}
 
 pub fn sys_getpid() -> isize {
     current_task().unwrap().pid.0 as isize
