@@ -1,4 +1,5 @@
 //! Implementation of [`TrapContext`]
+use log::info;
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
