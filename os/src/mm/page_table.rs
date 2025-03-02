@@ -291,7 +291,7 @@ pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
 ///Translate a generic through page table and return a mutable reference
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let page_table = PageTable::from_token(token);
-    let va = ptr as usize; info!("va: {:x}", va);
+    let va = ptr as usize;
     page_table
         .translate_va(VirtAddr::from(va))
         .unwrap()
