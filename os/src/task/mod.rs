@@ -17,7 +17,6 @@
 mod context;
 /// new task scheduler implementation
 pub mod schedule;
-mod manager;
 mod pid;
 pub mod processor;
 #[allow(clippy::module_inception)]
@@ -29,13 +28,11 @@ use crate::mm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
 use lazy_static::*;
-pub use manager::{fetch_task, TaskManager};
 use task::{TaskControlBlock, TaskStatus};
 
 use log::*;
 use crate::logging;
 
-pub use manager::add_task;
 pub use pid::{pid_alloc, KernelStack, PidAllocator, PidHandle};
 pub use processor::{
     current_task,  current_user_token,  take_current_task,
@@ -107,6 +104,10 @@ lazy_static! {
 }
 ///Add init process to the manager
 pub fn add_initproc() {
-    add_task(INITPROC.clone());
     schedule::spawn_user_task(INITPROC.clone());
+}
+
+/// init initproc and do nothing
+pub fn init_initproc() {
+    let _initproc = INITPROC.clone();
 }

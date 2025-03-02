@@ -83,6 +83,7 @@ pub fn rust_main() -> ! {
     mm::remap_test();
     trap::init();
     fs::list_apps();
+    task::init_initproc();
     executor::init();
     task::schedule::spawn_kernel_task(
         async move{

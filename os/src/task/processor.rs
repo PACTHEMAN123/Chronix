@@ -1,8 +1,7 @@
 //!Implementation of [`Processor`] and Intersection of control flow
-use super::{fetch_task, TaskStatus};
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
-use crate::task::{processor, context::EnvContext};
+use crate::task::context::EnvContext;
 use crate::mm::KERNEL_SPACE;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;

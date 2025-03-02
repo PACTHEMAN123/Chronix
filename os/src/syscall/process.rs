@@ -1,7 +1,7 @@
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_refmut, translated_str, VirtAddr, VmSpace, VmSpaceHeapExt};
 use crate::task::{
-    add_task, current_task, current_user_token, exit_current_and_run_next,
+    current_task, current_user_token, exit_current_and_run_next,
 };
 use alloc::sync::Arc;
 
@@ -15,6 +15,7 @@ pub fn sys_getpid() -> isize {
     current_task().unwrap().pid.0 as isize
 }
 
+// todo: add add_task
 pub fn sys_fork() -> isize {
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
@@ -25,7 +26,7 @@ pub fn sys_fork() -> isize {
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
     // add new task to scheduler
-    add_task(new_task);
+    //add_task(new_task);
     new_pid as isize
 }
 

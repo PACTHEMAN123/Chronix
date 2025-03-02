@@ -15,7 +15,7 @@ __alltraps:
     # save other general purpose registers
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
-    sd x3, 3*8(sp)
+    
     # save x3~x31 (x4 is tp)
     .set n, 3
     .rept 29
@@ -31,7 +31,6 @@ __alltraps:
     csrr t2, sscratch
     sd t2, 2*8(sp)
     # move to kernel_sp
-    ld sp, 34*8(sp)
     # Load callee-saved registers (s0-s11)
     ld ra, 35*8(sp)
     ld s0, 36*8(sp)
@@ -49,6 +48,7 @@ __alltraps:
 
     # Load kernel frame pointer (fp) and thread pointer (tp)
     ld fp, 48*8(sp)
+    ld sp, 34*8(sp)
     # jump to trap_handler
     ret 
 

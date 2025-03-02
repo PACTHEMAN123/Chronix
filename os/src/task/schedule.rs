@@ -44,6 +44,7 @@ impl <F:Future+Send+'static> Future for UserTaskFuture<F> {
         let this = unsafe {self.get_unchecked_mut()};
         switch_to_current_task(&mut this.task,&mut this.env);
         let ret = unsafe{Pin::new_unchecked(&mut this.future).poll(cx)};
+        info!("switch out current task");
         switch_out_current_task(&mut this.env);
         ret
     }

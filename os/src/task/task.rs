@@ -6,7 +6,6 @@ use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::task::manager::{TASK_MANAGER, TaskManager};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
