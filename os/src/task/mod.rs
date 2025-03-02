@@ -15,10 +15,11 @@
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
 mod context;
+/// new task scheduler implementation
+pub mod schedule;
 mod manager;
 mod pid;
-mod processor;
-mod switch;
+pub mod processor;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
@@ -26,10 +27,8 @@ mod task;
 use crate::fs::{open_file, OpenFlags};
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
-pub use context::TaskContext;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
-use switch::__switch;
 use task::{TaskControlBlock, TaskStatus};
 
 use log::*;
@@ -38,32 +37,18 @@ use crate::logging;
 pub use manager::add_task;
 pub use pid::{pid_alloc, KernelStack, PidAllocator, PidHandle};
 pub use processor::{
-    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
+    current_task,  current_user_token,  take_current_task,
     Processor,
 };
 /// Suspend the current 'Running' task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
-    // There must be an application running.
-    let task = take_current_task().unwrap();
-
-    // ---- access current TCB exclusively
-    let mut task_inner = task.inner_exclusive_access();
-    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-    // Change status to Ready
-    task_inner.task_status = TaskStatus::Ready;
-    drop(task_inner);
-    // ---- release current PCB
-
-    // push back to ready queue.
-    add_task(task);
-    // jump to scheduling cycle
-    schedule(task_cx_ptr);
+    // replace by yield_now in async_utils
 }
 
 /// pid of usertests app in make run TEST=1
 pub const IDLE_PID: usize = 0;
 
-/// Exit the current 'Running' task and run the next task in task list.
+/// Exit the current 'Running' task ////and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32) {
     // take from Processor
     let task = take_current_task().unwrap();
@@ -104,13 +89,10 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     inner.children.clear();
     // deallocate user space
     inner.vm_space.recycle_data_pages();
-    drop(inner);
+    let _ = inner;
     // **** release current PCB
     // drop task manually to maintain rc correctly
-    drop(task);
-    // we do not have to save task context
-    let mut _unused = TaskContext::zero_init();
-    schedule(&mut _unused as *mut _);
+    drop(inner);
 }
 
 lazy_static! {
@@ -125,4 +107,5 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+    schedule::spawn_user_task(INITPROC.clone());
 }

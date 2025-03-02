@@ -16,6 +16,7 @@ log = "0.4"
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 virtio-drivers = { version = "0.7" }
 lwext4_rust = { path = "../lwext4_rust" }
+async-task = { version = "4.7.1", default-features = false }
 
 [profile.release]
 debug = true

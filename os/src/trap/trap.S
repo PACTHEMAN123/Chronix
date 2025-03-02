@@ -16,10 +16,9 @@ __alltraps:
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
     sd x3, 3*8(sp)
-    # skip tp(x4), application does not use it
-    # save x5~x31
-    .set n, 5
-    .rept 27
+    # save x3~x31 (x4 is tp)
+    .set n, 3
+    .rept 29
         SAVE_GP %n
         .set n, n+1
     .endr
@@ -33,17 +32,47 @@ __alltraps:
     sd t2, 2*8(sp)
     # move to kernel_sp
     ld sp, 34*8(sp)
+    # Load callee-saved registers (s0-s11)
+    ld ra, 35*8(sp)
+    ld s0, 36*8(sp)
+    ld s1, 37*8(sp)
+    ld s2, 38*8(sp)
+    ld s3, 39*8(sp)
+    ld s4, 40*8(sp)
+    ld s5, 41*8(sp)
+    ld s6, 42*8(sp)
+    ld s7, 43*8(sp)
+    ld s8, 44*8(sp)
+    ld s9, 45*8(sp)
+    ld s10, 46*8(sp)
+    ld s11, 47*8(sp)
+
+    # Load kernel frame pointer (fp) and thread pointer (tp)
+    ld fp, 48*8(sp)
     # jump to trap_handler
-    call trap_handler
+    ret 
 
 __restore:
     # a0: *TrapContext in user space(Constant); a1: user space token
-    csrr t0, satp
-    bne t0, a1, __switch_user
-__restore_1:
     csrw sscratch, a0
+    # save kernel callee-saved regs
+    sd sp, 34*8(a0)
+    sd ra, 35*8(a0)
+    sd s0, 36*8(a0)
+    sd s1, 37*8(a0)
+    sd s2, 38*8(a0)
+    sd s3, 39*8(a0)
+    sd s4, 40*8(a0)
+    sd s5, 41*8(a0)
+    sd s6, 42*8(a0)
+    sd s7, 43*8(a0)
+    sd s8, 44*8(a0)
+    sd s9, 45*8(a0)
+    sd s10, 46*8(a0)
+    sd s11, 47*8(a0)
+    sd fp, 48*8(a0)
+
     mv sp, a0
-    # now sp points to TrapContext in user space, start restoring based on it
     # restore sstatus/sepc
     ld t0, 32*8(sp)
     ld t1, 33*8(sp)
@@ -51,18 +80,11 @@ __restore_1:
     csrw sepc, t1
     # restore general purpose registers except x0/sp/tp
     ld x1, 1*8(sp)
-    ld x3, 3*8(sp)
-    .set n, 5
-    .rept 27
+    .set n, 3
+    .rept 29
         LOAD_GP %n
         .set n, n+1
     .endr
     # back to user stack
     ld sp, 2*8(sp)
     sret
-
-__switch_user:
-    # switch to user space
-    csrw satp, a1
-    sfence.vma
-    j __restore_1

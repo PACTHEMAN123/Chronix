@@ -48,7 +48,7 @@ KERNEL_ENTRY_PA := 0x80200000
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
-GDB ?= riscv64-linux-gnu-gdb
+GDB ?= riscv64-unknown-elf-gdb
 
 # Disassembly
 DISASM ?= -x

@@ -25,6 +25,10 @@ impl TaskManager {
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.ready_queue.pop_front()
     }
+    ///Remove a task from `TaskManager`
+    pub fn remove(&mut self, _task: &Arc<TaskControlBlock>) {
+        //TODO: implement remove task from `TaskManager`
+    }
 }
 
 lazy_static! {

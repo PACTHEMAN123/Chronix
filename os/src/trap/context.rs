@@ -7,12 +7,21 @@ use riscv::register::sstatus::{self, Sstatus, SPP};
 pub struct TrapContext {
     /// general regs[0..31]
     pub x: [usize; 32],
-    /// CSR sstatus      
+    /// CSR sstatus      32
     pub sstatus: Sstatus,
     /// CSR sepc
-    pub sepc: usize,
+    pub sepc: usize,     //33
     /// kernel stack
-    pub kernel_sp: usize,
+    pub kernel_sp: usize,   //34
+    /// now move task_context to here
+    /// 35
+    pub kernel_ra: usize,
+    /// 36-47
+    pub kernel_s: [usize; 12],       
+    /// 48
+    pub kernel_fp: usize,            
+    // leave 49 for tp
+    // leave float regs
 }
 
 impl TrapContext {
@@ -34,6 +43,9 @@ impl TrapContext {
             sstatus,
             sepc: entry,
             kernel_sp,
+            kernel_ra: 0,
+            kernel_s: [0; 12],
+            kernel_fp: 0,
         };
         cx.set_sp(sp);
         cx

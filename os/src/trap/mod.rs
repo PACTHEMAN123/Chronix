@@ -13,18 +13,23 @@
 //! to [`syscall()`].
 mod context;
 
+use crate::async_utils::yield_now;
 use crate::config::TRAP_CONTEXT;
 use crate::syscall::syscall;
 use crate::task::{
-    current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+     current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
 };
+use crate::task::processor::current_trap_cx;
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
+use log::info;
+use crate::arch::riscv64::interrupts::disable_interrupt;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
     sie, stval, stvec,
 };
+use crate::arch::riscv64::interrupts::enable_interrupt;
 
 global_asm!(include_str!("trap.S"));
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -55,17 +60,26 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
-pub fn trap_handler() -> ! {
+pub async fn trap_handler()  {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
+    info!(
+         "trap in, sepc {:#x}, user sp {:#x}, kernel sp {:#x}",
+         current_trap_cx().sepc,
+         current_trap_cx().x[2],
+         current_trap_cx().kernel_sp,
+    );
+    unsafe {
+        enable_interrupt();
+    }
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
             // get system call return value
-            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
+            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]).await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             cx.x[10] = result as usize;
@@ -76,7 +90,7 @@ pub fn trap_handler() -> ! {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            println!(
+            info!(
                 "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
                 stval,
@@ -91,8 +105,9 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            info!("interrupt: supervisor timer");
             set_next_trigger();
-            suspend_current_and_run_next();
+            yield_now().await;
         }
         _ => {
             panic!(
@@ -103,14 +118,17 @@ pub fn trap_handler() -> ! {
         }
     }
     //println!("before trap_return");
-    trap_return();
 }
 
 #[no_mangle]
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return() -> ! {
+pub fn trap_return() {
+    unsafe{
+        disable_interrupt();
+    }
+    info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
     let user_satp = current_user_token();

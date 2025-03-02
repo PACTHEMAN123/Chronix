@@ -6,3 +6,4 @@ pub unsafe fn sfence_vma_all() {
 }
 
 pub mod entry;
+pub mod interrupts;

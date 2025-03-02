@@ -18,6 +18,7 @@
 //! We then call [`task::run_tasks()`] and for the first time go to
 //! userspace.
 
+#![feature(negative_impls)]
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![allow(unused_imports)]
@@ -38,7 +39,7 @@ use log::*;
 #[path = "boards/qemu.rs"]
 mod board;
 
-#[macro_use]
+#[macro_use] 
 mod console;
 mod config;
 mod devices;
@@ -54,6 +55,8 @@ pub mod task;
 pub mod timer;
 pub mod trap;
 mod arch;
+mod executor;
+mod async_utils;
 
 use core::arch::global_asm;
 
@@ -79,10 +82,18 @@ pub fn rust_main() -> ! {
     mm::init();
     mm::remap_test();
     trap::init();
+    fs::list_apps();
+    executor::init();
+    task::schedule::spawn_kernel_task(
+        async move{
+            task::add_initproc();
+        }
+    );
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    fs::list_apps();
-    task::add_initproc();
-    task::run_tasks();
-    panic!("Unreachable in rust_main!");
+    loop{
+        info!("now Idle loop");
+       executor::run_until_idle();
+    }
+    //panic!("Unreachable in rust_main!");
 }
