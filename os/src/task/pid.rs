@@ -73,7 +73,7 @@ impl KernelStack {
     pub fn new(pid_handle: &PidHandle) -> Self {
         let pid = pid_handle.0;
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(pid);
-        println!("kernel_stack_bottom: {:#x}, kernel_stack_top: {:#x}", kernel_stack_bottom, kernel_stack_top);
+        log::debug!("kernel_stack_bottom: {:#x}, kernel_stack_top: {:#x}", kernel_stack_bottom, kernel_stack_top);
         KERNEL_SPACE.exclusive_access().push(
             KernelVmArea::new(
                 kernel_stack_bottom.into()..kernel_stack_top.into(),
