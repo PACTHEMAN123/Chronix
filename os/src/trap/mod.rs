@@ -80,7 +80,7 @@ pub fn trap_handler() -> ! {
         Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            log::info!(
+            log::debug!(
                 "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
             );
 
@@ -92,7 +92,8 @@ pub fn trap_handler() -> ! {
             };
 
            match current_task() {
-                None => {},
+                None => {
+                },
                 Some(task) => {
                     let res = task.inner_exclusive_access().vm_space.handle_page_fault(VirtAddr::from(stval), access_type);
                     match res {
