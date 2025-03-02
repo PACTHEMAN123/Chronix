@@ -37,7 +37,7 @@ pub struct TaskControlBlockInner {
 
 impl TaskControlBlockInner {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        self.trap_cx_ppn.get_mut()
+        self.trap_cx_ppn.to_kern().get_mut()
     }
     pub fn get_user_token(&self) -> usize {
         self.vm_space.token()
@@ -140,7 +140,7 @@ impl TaskControlBlock {
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
-        let vm_space = UserVmSpace::from_existed(&parent_inner.vm_space);
+        let vm_space = UserVmSpace::from_existed(&mut parent_inner.vm_space);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()

@@ -14,7 +14,7 @@ mod vm_area;
 mod vm_space;
 mod user_check;
 
-pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernAddr, KernPageNum};
 pub use frame_allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker};
 pub use page_table::{translated_byte_buffer, PageTableEntry, translated_str, translated_ref, translated_refmut, UserBuffer};
 pub use page_table::{PTEFlags, PageTable};
