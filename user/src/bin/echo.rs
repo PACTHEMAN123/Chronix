@@ -2,7 +2,7 @@
 #![no_main]
 #![feature(str_from_raw_parts)]
 
-use core::{ffi::c_schar, str};
+use core::str;
 
 #[macro_use]
 extern crate user_lib;
