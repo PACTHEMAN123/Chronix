@@ -6,6 +6,7 @@ use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE, translated_refmut, translated_str, VirtPageNum, VmSpacePageFaultExt, PageFaultAccessType};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
+use alloc::slice;
 use alloc::{sync::{Arc, Weak}, vec::*, string::String, vec};
 use virtio_drivers::PAGE_SIZE;
 use core::cell::RefMut;
@@ -123,35 +124,58 @@ impl TaskControlBlock {
             .unwrap()
             .ppn();
 
-        let tot_len: usize = args.iter().map(|s| s.len()+1).sum();
+        let tot_len: usize = args.iter().map(|s| s.as_bytes().len()+1).sum();
         let new_user_sp = ((user_sp - tot_len) / SIZE_OF_USIZE) * SIZE_OF_USIZE - SIZE_OF_USIZE * (args.len() + 1);
         let frames_num = ((user_sp - new_user_sp) + PAGE_SIZE - 1) / PAGE_SIZE;
         
         for i in 1..frames_num+1 {
             vm_space.handle_page_fault(VirtAddr::from(user_sp - PAGE_SIZE * i), PageFaultAccessType::WRITE);
         }
-        let pa_user_sp = translated_refmut(vm_space.token(), (user_sp-1) as *mut u8) as *mut u8 as usize + 1;
-        let pa_new_user_sp = translated_refmut(vm_space.token(), new_user_sp as *mut u8) as *mut u8 as usize;
-        let mut va= user_sp;
-        let mut pa = pa_user_sp;
-        for (i, s) in args.iter().enumerate() {
-            pa -= s.len()+1;
-            va -= s.len()+1;
-            unsafe {
-                ((pa_new_user_sp + (i + 1) * SIZE_OF_USIZE) as *mut usize).write_volatile(va);
+
+        let mut meta_data = vec![0usize; args.len()+1];
+        meta_data[0] = args.len();
+
+        let mut data_va= user_sp;
+        for (i, s) in args.iter().map(|s| s.as_bytes()).enumerate() {
+            let mut last = s.len() + 1;
+            let step = core::cmp::min(last, (data_va - 1) % PAGE_SIZE + 1);
+            data_va -= step;
+            let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
+
+            unsafe { ((pa + last) as *mut u8).write_volatile(0); }
+            let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step - 1) };
+
+            dst.clone_from_slice(&s[last-step..last-1]);
+            last -= step;
+
+            while last > 0 {
+                let step = core::cmp::min(last, (data_va - 1) % PAGE_SIZE + 1);
+                data_va -= step;
+
+                let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
+
+                let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step) };
+                dst.clone_from_slice(&s[last-step..last]);
+                last -= step;
             }
-            unsafe {
-                let dst = &mut *slice_from_raw_parts_mut(
-                    pa as *mut u8, s.len()
-                );
-                dst.clone_from_slice(s.as_bytes());
-                ((pa + s.len()) as *mut u8).write_volatile(0);
+
+            meta_data[i+1] = data_va;
+        }
+
+        let mut meta_va = new_user_sp + meta_data.len() * SIZE_OF_USIZE;
+        {
+            let mut last = meta_data.len();
+            while last > 0 {
+                let step =  core::cmp::min(last * SIZE_OF_USIZE, (meta_va - 1) % PAGE_SIZE + 1);
+                meta_va -= step;
+                let len = step / SIZE_OF_USIZE;
+                let pa = translated_refmut(vm_space.token(), meta_va as *mut usize) as *mut usize as usize;
+                let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut usize, len) };
+                dst.clone_from_slice(&meta_data[last-len..last]);
+                last -= len;
             }
         }
 
-        unsafe {
-            (pa_new_user_sp as *mut usize).write_volatile(args.len());
-        }
         user_sp = new_user_sp;
         // **** access current TCB exclusively
         let mut inner = self.inner_exclusive_access();
