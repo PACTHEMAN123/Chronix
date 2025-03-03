@@ -142,10 +142,10 @@ impl TaskControlBlock {
             data_va -= step;
             let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
 
-            unsafe { ((pa + last) as *mut u8).write_volatile(0); }
-            let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step - 1) };
+            let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step) };
 
-            dst.clone_from_slice(&s[last-step..last-1]);
+            dst[0..step-1].copy_from_slice(&s[last-step..last-1]);
+            dst[step-1] = 0;
             last -= step;
 
             while last > 0 {
@@ -155,7 +155,7 @@ impl TaskControlBlock {
                 let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
 
                 let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step) };
-                dst.clone_from_slice(&s[last-step..last]);
+                dst.copy_from_slice(&s[last-step..last]);
                 last -= step;
             }
 
@@ -171,10 +171,11 @@ impl TaskControlBlock {
                 let len = step / SIZE_OF_USIZE;
                 let pa = translated_refmut(vm_space.token(), meta_va as *mut usize) as *mut usize as usize;
                 let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut usize, len) };
-                dst.clone_from_slice(&meta_data[last-len..last]);
+                dst.copy_from_slice(&meta_data[last-len..last]);
                 last -= len;
             }
         }
+        info!("{:#x}", *translated_refmut(vm_space.token(), (new_user_sp + 8) as *mut usize));
 
         user_sp = new_user_sp;
         // **** access current TCB exclusively
