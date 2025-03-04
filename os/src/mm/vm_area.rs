@@ -7,7 +7,7 @@ use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_STACK_BOTTOM, KERNE
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
 use crate::mm::PageTableEntry;
 
-use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use bitflags::bitflags;
 
 bitflags! {
@@ -239,7 +239,7 @@ pub enum UserVmAreaType {
 #[allow(missing_docs)]
 pub struct UserVmArea {
     range_va: Range<VirtAddr>,
-    pub pages: BTreeMap<VirtPageNum, Arc<FrameTracker>>,
+    pub pages: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     pub map_perm: MapPerm,
     pub vma_type: UserVmAreaType,
 }
@@ -374,7 +374,7 @@ impl VmAreaFrameExt for UserVmArea {
     }
     
     fn add_allocated_frame(&mut self, vpn: VirtPageNum, frame: FrameTracker) {
-        self.pages.insert(vpn, Arc::new(frame));
+        self.pages.insert(vpn, StrongArc::new(frame));
     }
     
     fn remove_allocated_frame(&mut self, vpn: VirtPageNum) {
@@ -383,7 +383,7 @@ impl VmAreaFrameExt for UserVmArea {
 }
 
 pub struct UserVmAreaFrameIter<'a> {
-    inner: Keys<'a, VirtPageNum, Arc<FrameTracker>>
+    inner: Keys<'a, VirtPageNum, StrongArc<FrameTracker>>
 }
 
 impl<'a> Iterator for UserVmAreaFrameIter<'a> {
@@ -411,14 +411,14 @@ impl VmAreaPageFaultExt for UserVmArea {
             Some(pte) if pte.is_valid() => {
                 // Cow
                 let frame = self.pages.get(&vpn)?;
-                if Arc::strong_count(frame) == 1 {
+                if frame.get_rc() == 1 {
                     self.perm_mut().remove(MapPerm::C);
                     self.perm_mut().insert(MapPerm::W);
                     pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
                     unsafe { sfence_vma_vaddr(vpn.into()) };
                     Some(())
                 } else {
-                    let new_frame = Arc::new(frame_alloc()?);
+                    let new_frame = StrongArc::new(frame_alloc_clean()?);
                     let new_ppn = new_frame.ppn;
 
                     let old_data = &frame.ppn.to_kern().get_bytes_array()[..];

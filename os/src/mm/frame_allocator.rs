@@ -86,12 +86,6 @@ impl FrameAllocator for BitMapFrameAllocator {
 
 pub static mut FRAME_ALLOCATOR: BitMapFrameAllocator = BitMapFrameAllocator::new();
 
-// lazy_static! {
-//     /// frame allocator instance through lazy_static!
-//     pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
-//         unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
-// }
-
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {
     extern "C" {

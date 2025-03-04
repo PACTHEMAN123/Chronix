@@ -13,6 +13,8 @@ mod page_table;
 mod vm_area;
 mod vm_space;
 mod user_check;
+mod slab;
+mod smart_pointer;
 
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernAddr, KernPageNum};
 pub use frame_allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker};
@@ -22,6 +24,7 @@ pub use page_table::{PTEFlags, PageTable};
 pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
 pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType, VmAreaContainer, VmSpacePageFaultExt, VmSpaceHeapExt};
 pub use user_check::UserCheck;
+pub use slab::{slab_alloc, slab_dealloc, SLAB_ALLOCATOR};
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
