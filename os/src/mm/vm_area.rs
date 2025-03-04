@@ -1,9 +1,11 @@
-use core::ops::Range;
+use core::ops::{DerefMut, Range};
 
-use alloc::collections::btree_map::{BTreeMap, Keys};
+use alloc::{collections::btree_map::{BTreeMap, Keys}, sync::Arc};
 use log::info;
 
-use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_BOTTOM, KERNEL_STACK_SIZE, KERNEL_STACK_TOP, PAGE_SIZE}};
+use crate::arch::riscv64::sfence_vma_vaddr; 
+use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
+use crate::mm::PageTableEntry;
 
 use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use bitflags::bitflags;
@@ -108,6 +110,15 @@ pub trait VmArea: Sized
         self.flush();
     }
 
+    fn map_range_to(&self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>, start_ppn: PhysPageNum) {
+        range_vpn
+        .enumerate()
+        .for_each(|(i, vpn)| {
+            let ppn = PhysPageNum(start_ppn.0 + i);
+            page_table.map(vpn, ppn, (*self.perm()).into());
+        });
+    }
+
     fn map_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>);
 
     fn unmap_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>);
@@ -139,6 +150,7 @@ pub trait VmArea: Sized
                 .translate(vpn)
                 .unwrap()
                 .ppn()
+                .to_kern()
                 .get_bytes_array()[..src.len()];
             dst.copy_from_slice(src);
             start += PAGE_SIZE;
@@ -213,6 +225,11 @@ pub trait VmAreaPageFaultExt: VmArea {
 }
 
 #[allow(missing_docs)]
+pub trait VmAreaCowExt: VmArea {
+    fn clone_cow(&mut self, page_table: &mut PageTable) -> Result<Self, Self>;
+}
+
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserVmAreaType {
     Elf, Stack, Heap, TrapContext
@@ -222,7 +239,7 @@ pub enum UserVmAreaType {
 #[allow(missing_docs)]
 pub struct UserVmArea {
     range_va: Range<VirtAddr>,
-    pub pages: BTreeMap<VirtPageNum, FrameTracker>,
+    pub pages: BTreeMap<VirtPageNum, Arc<FrameTracker>>,
     pub map_perm: MapPerm,
     pub vma_type: UserVmAreaType,
 }
@@ -239,6 +256,31 @@ impl UserVmArea {
         }
     }
 
+}
+
+impl VmAreaCowExt for UserVmArea {
+    fn clone_cow(&mut self, page_table: &mut PageTable) -> Result<Self, Self> {
+        // note: trap context cannot supprt COW
+        if self.vma_type == UserVmAreaType::TrapContext {
+            return Err(self.clone());
+        }
+        if self.perm().contains(MapPerm::W) {
+            self.perm_mut().insert(MapPerm::C);
+            self.perm_mut().remove(MapPerm::W);
+            for &vpn in self.allocated_frames_iter() {
+                page_table.update_perm(vpn, (*self.perm()).into());
+                unsafe { sfence_vma_vaddr(vpn.into()); }
+            }
+        } else {
+            self.perm_mut().insert(MapPerm::C);
+        }
+        Ok(Self {
+            range_va: self.range_va.clone(), 
+            pages: self.pages.clone(), 
+            map_perm: self.map_perm.clone(), 
+            vma_type: self.vma_type.clone() 
+        })
+    }
 }
 
 impl Clone for UserVmArea {
@@ -270,11 +312,17 @@ impl VmArea for UserVmArea {
     }
     
     fn map_range(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>) {
-        match self.vma_type {
-            UserVmAreaType::Elf
-            | UserVmAreaType::TrapContext => self.map_range_and_alloc_frames(page_table, range_vpn),
-            UserVmAreaType::Stack 
-            | UserVmAreaType::Heap => {}
+        if self.perm().contains(MapPerm::C) {
+            for (&vpn, frame) in self.pages.iter() {
+                self.map_range_to(page_table, vpn..vpn+1, frame.ppn);
+            }
+        } else {
+            match self.vma_type {
+                UserVmAreaType::Elf
+                | UserVmAreaType::TrapContext => self.map_range_and_alloc_frames(page_table, range_vpn),
+                UserVmAreaType::Stack 
+                | UserVmAreaType::Heap => {}
+            }
         }
     }
     
@@ -310,6 +358,7 @@ impl VmAreaFrameExt for UserVmArea {
             | UserVmAreaType::Stack => {
                 range
                     .for_each(|vpn| {
+                        // try_unmap, because of lazy allocation
                         let _ = page_table.try_unmap(vpn);
                         self.remove_allocated_frame(vpn);
                     });
@@ -325,7 +374,7 @@ impl VmAreaFrameExt for UserVmArea {
     }
     
     fn add_allocated_frame(&mut self, vpn: VirtPageNum, frame: FrameTracker) {
-        self.pages.insert(vpn, frame);
+        self.pages.insert(vpn, Arc::new(frame));
     }
     
     fn remove_allocated_frame(&mut self, vpn: VirtPageNum) {
@@ -334,7 +383,7 @@ impl VmAreaFrameExt for UserVmArea {
 }
 
 pub struct UserVmAreaFrameIter<'a> {
-    inner: Keys<'a, VirtPageNum, FrameTracker>
+    inner: Keys<'a, VirtPageNum, Arc<FrameTracker>>
 }
 
 impl<'a> Iterator for UserVmAreaFrameIter<'a> {
@@ -350,7 +399,7 @@ impl VmAreaPageFaultExt for UserVmArea {
         page_table: &mut PageTable, 
         vpn: VirtPageNum,
         access_type: PageFaultAccessType
-    ) -> Option<()>{
+    ) -> Option<()> {
         if !access_type.can_access(*self.perm()) {
             log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
@@ -358,20 +407,47 @@ impl VmAreaPageFaultExt for UserVmArea {
             );
             return None;
         }
-        let pte = page_table.find_pte(vpn);
-        if pte.is_none() || !pte.unwrap().is_valid() {
-            match self.vma_type {
-                UserVmAreaType::Elf => return None,
-                UserVmAreaType::Stack
-                | UserVmAreaType::Heap => {
-                    self.map_range_and_alloc_frames(page_table, vpn..vpn+1);
-                    unsafe { crate::arch::riscv64::sfence_vma_vaddr(vpn.into()) };
-                    return Some(());
-                },
-                UserVmAreaType::TrapContext => return None,
+        match page_table.find_pte(vpn) {
+            Some(pte) if pte.is_valid() => {
+                // Cow
+                let frame = self.pages.get(&vpn)?;
+                if Arc::strong_count(frame) == 1 {
+                    self.perm_mut().remove(MapPerm::C);
+                    self.perm_mut().insert(MapPerm::W);
+                    pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
+                    unsafe { sfence_vma_vaddr(vpn.into()) };
+                    Some(())
+                } else {
+                    let new_frame = Arc::new(frame_alloc()?);
+                    let new_ppn = new_frame.ppn;
+
+                    let old_data = &frame.ppn.to_kern().get_bytes_array()[..];
+                    new_ppn.to_kern().get_bytes_array().copy_from_slice(old_data);
+                    
+                    *self.pages.get_mut(&vpn)? = new_frame;
+
+                    self.perm_mut().remove(MapPerm::C);
+                    self.perm_mut().insert(MapPerm::W);
+                    *pte = PageTableEntry::new(new_ppn, PTEFlags::from(self.map_perm) | PTEFlags::V);
+                    
+                    unsafe { sfence_vma_vaddr(vpn.into()) };
+                    Some(())
+                }
             }
-        } else {
-            None
+            _ => {
+                match self.vma_type {
+                    UserVmAreaType::Elf
+                    | UserVmAreaType::TrapContext => {
+                        return None
+                    },
+                    UserVmAreaType::Stack
+                    | UserVmAreaType::Heap => {
+                        self.map_range_and_alloc_frames(page_table, vpn..vpn+1);
+                        unsafe { crate::arch::riscv64::sfence_vma_vaddr(vpn.into()) };
+                        return Some(());
+                    }
+                }
+            }
         }
     }
 }
@@ -405,17 +481,8 @@ impl KernelVmArea {
         }
     }
 
-    fn map_range_to(&self, page_table: &mut PageTable, ppn: PhysPageNum, range_vpn: Range<VirtPageNum>) {
-        range_vpn
-        .enumerate()
-        .for_each(|(i, vpn)| {
-            let ppn = PhysPageNum(ppn.0 + i);
-            page_table.map(vpn, ppn, (*self.perm()).into());
-        });
-    }
-
     pub fn map_range_highly(&mut self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>) {
-        self.map_range_to(page_table, PhysPageNum(self.start_vpn().0 & !(KERNEL_ADDR_OFFSET >> 12)), range_vpn);
+        self.map_range_to(page_table, range_vpn, PhysPageNum(self.start_vpn().0 & !(KERNEL_ADDR_OFFSET >> 12)));
     }
 }
 
@@ -445,7 +512,7 @@ impl VmArea for KernelVmArea {
             KernelVmAreaType::Rodata |
             KernelVmAreaType::Text => self.map_range_highly(page_table, range_vpn),
             KernelVmAreaType::KernelStack => {
-                self.map_range_to(page_table, PhysPageNum(self.start_vpn().0 & (KERNEL_ADDR_OFFSET >> 12)), VirtAddr(KERNEL_STACK_BOTTOM).ceil()..VirtAddr(KERNEL_STACK_TOP).floor());
+                self.map_range_and_alloc_frames(page_table, range_vpn);
             },
         }
     }

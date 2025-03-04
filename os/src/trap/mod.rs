@@ -23,14 +23,14 @@ use crate::task::{
 use crate::task::processor::current_trap_cx;
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
-use log::info;
 use crate::arch::riscv64::interrupts::disable_interrupt;
+use alloc::task;
+use log::{info, warn};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
     sie, stval, stvec, sepc,
 };
-use crate::arch::riscv64::interrupts::enable_interrupt;
 
 global_asm!(include_str!("trap.S"));
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -89,7 +89,7 @@ pub async fn trap_handler()  {
         Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            log::info!(
+            log::debug!(
                 "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
             );
 
