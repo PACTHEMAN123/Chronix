@@ -90,7 +90,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
             }
         }
         let pa: PhysAddr = ppn_base.into();
-        (pa.0, NonNull::new(pa.get_mut::<u8>()).unwrap())
+        (pa.0, NonNull::new(pa.to_kern().get_mut::<u8>()).unwrap())
     }
 
     unsafe fn dma_dealloc(paddr: virtio_drivers::PhysAddr, _vaddr: NonNull<u8>, pages: usize) -> i32 {
@@ -105,7 +105,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: virtio_drivers::PhysAddr, _size: usize) -> NonNull<u8> {
-        NonNull::new(PhysAddr::from(paddr).get_mut::<u8>()).unwrap()
+        NonNull::new(PhysAddr::from(paddr).to_kern().get_mut::<u8>()).unwrap()
     }
 
     unsafe fn share(

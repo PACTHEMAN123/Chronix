@@ -23,6 +23,13 @@ impl FrameTracker {
     pub fn new(ppn: PhysPageNum) -> Self {
         Self { ppn }
     }
+
+    /// leak
+    pub fn leak(mut self) -> PhysPageNum {
+        let ret = self.ppn;
+        self.ppn.0 = 0;
+        ret
+    }
 }
 
 impl Debug for FrameTracker {
@@ -33,6 +40,9 @@ impl Debug for FrameTracker {
 
 impl Drop for FrameTracker {
     fn drop(&mut self) {
+        if self.ppn.0 == 0 {
+            return;
+        }
         frame_dealloc(self.ppn);
     }
 }
@@ -109,7 +119,7 @@ pub fn frame_alloc() -> Option<FrameTracker> {
 #[allow(unused)]
 /// allocate a frame
 pub fn frame_alloc_clean() -> Option<FrameTracker> {
-    frame_alloc().map(|f| { f.ppn.get_bytes_array().fill(0); f })
+    frame_alloc().map(|f| { f.ppn.to_kern().get_bytes_array().fill(0); f })
 }
 
 

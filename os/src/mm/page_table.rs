@@ -111,7 +111,7 @@ impl PageTable {
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
-            let pte = &mut ppn.get_pte_array()[*idx];
+            let pte = &mut ppn.to_kern().get_pte_array()[*idx];
             if i == 2 {
                 result = Some(pte);
                 break;
@@ -130,7 +130,7 @@ impl PageTable {
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
-            let pte = &mut ppn.get_pte_array()[*idx];
+            let pte = &mut ppn.to_kern().get_pte_array()[*idx];
             if !pte.is_valid() {
                 return None;
             }
@@ -148,7 +148,7 @@ impl PageTable {
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
-            let pte = &mut ppn.get_pte_array()[*idx];
+            let pte = &mut ppn.to_kern().get_pte_array()[*idx];
             if !pte.is_valid() {
                 return None;
             }
@@ -167,6 +167,16 @@ impl PageTable {
             },
             _ => {
                 panic!("vpn {:?} is mapped before mapping", vpn);
+            }
+        }
+    }
+    pub fn update_perm(&mut self, vpn: VirtPageNum, flags: PTEFlags) {
+        match self.find_leaf_pte(vpn) {
+            Some(pte) if pte.is_valid() => {
+                pte.set_flags(flags | PTEFlags::V);
+            },
+            _ => {
+                panic!("vpn {:?} is invalid before updating", vpn);
             }
         }
     }
@@ -239,9 +249,9 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         let mut end_va: VirtAddr = vpn.into();
         end_va = end_va.min(VirtAddr::from(end));
         if end_va.page_offset() == 0 {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
+            v.push(&mut ppn.to_kern().get_bytes_array()[start_va.page_offset()..]);
         } else {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+            v.push(&mut ppn.to_kern().get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
         }
         start = end_va.into();
     }
@@ -257,6 +267,7 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
         let ch: u8 = *(page_table
             .translate_va(VirtAddr::from(va))
             .unwrap()
+            .to_kern()
             .get_mut());
         if ch == 0 {
             break;
@@ -275,6 +286,7 @@ pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
     page_table
         .translate_va(VirtAddr::from(ptr as usize))
         .unwrap()
+        .to_kern()
         .get_ref()
 }
 ///Translate a generic through page table and return a mutable reference
@@ -284,6 +296,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     page_table
         .translate_va(VirtAddr::from(va))
         .unwrap()
+        .to_kern()
         .get_mut()
 }
 

@@ -2,7 +2,7 @@ use core::{num::NonZeroUsize, ops::{Deref, DerefMut}};
 
 use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE, USER_STACK_TOP}, mm::{vm_area::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, VirtAddr, VirtPageNum}, sync::UPSafeCell};
 
-use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea, VmAreaPageFaultExt}, PageTableEntry};
+use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea, VmAreaCowExt, VmAreaPageFaultExt}, PageTableEntry};
 
 use alloc::{format, vec::Vec};
 use lazy_static::lazy_static;
@@ -376,7 +376,7 @@ impl VmSpaceHeapExt for UserVmSpace {
 impl UserVmSpace {
     pub fn from_kernel(kernel_vm_space: &KernelVmSpace) -> Self {
         let page_table = PageTable::new();
-        page_table.root_ppn.get_pte_array().copy_from_slice(&kernel_vm_space.page_table.root_ppn.get_pte_array()[..]);
+        page_table.root_ppn.to_kern().get_pte_array().copy_from_slice(&kernel_vm_space.page_table.root_ppn.to_kern().get_pte_array()[..]);
         Self {
             page_table,
             areas: Vec::new(),
@@ -460,29 +460,31 @@ impl UserVmSpace {
         );
         (
             ret,
-            user_stack_top - 8, // reserve for argc
+            user_stack_top,
             elf.header.pt2.entry_point() as usize,
         )
     }
 
-    pub fn from_existed(user_space: &UserVmSpace) -> Self {
+    pub fn from_existed(user_space: &mut UserVmSpace) -> Self {
         let mut ret = Self::from_kernel(unsafe{&KERNEL_SPACE.exclusive_access()});
-        for area in user_space.areas.iter() {
-            let new_area = area.clone();
-            ret.push(new_area, None);
-            for vpn in area.range_vpn() {
-                if user_space.page_table.find_pte(vpn).is_none() {
-                    continue;
+        for area in user_space.areas.iter_mut() {
+            match area.clone_cow(&mut user_space.page_table) {
+                Ok(new_area) => {
+                    ret.push(new_area, None);
+                },
+                Err(new_area) => {
+                    ret.push(new_area, None);
+                    for vpn in area.range_vpn() {
+                        let src_ppn = user_space.page_table.translate(vpn).unwrap().ppn();
+                        let dst_ppn = ret.translate(vpn).unwrap().ppn();
+                        dst_ppn
+                            .to_kern()
+                            .get_bytes_array()
+                            .copy_from_slice(src_ppn.to_kern().get_bytes_array());
+                    }
                 }
-                let src_ppn = user_space.translate(vpn).unwrap().ppn();
-                if ret.page_table.find_pte(vpn).is_none() {
-                    ret.handle_page_fault(vpn.into(), PageFaultAccessType::WRITE);
-                }
-                let dst_ppn = ret.translate(vpn).unwrap().ppn();
-                dst_ppn
-                    .get_bytes_array()
-                    .copy_from_slice(src_ppn.get_bytes_array());
             }
+            
         }
         ret
     }
@@ -513,7 +515,7 @@ impl PageFaultAccessType {
     }
 
     pub fn can_access(self, flag: MapPerm) -> bool {
-        if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
+        if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) && !flag.contains(MapPerm::C) {
             return false;
         }
         if self.contains(Self::EXECUTE) && !flag.contains(MapPerm::X) {

@@ -1,11 +1,12 @@
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str, VirtAddr, VmSpace, VmSpaceHeapExt};
+use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, VmSpace, VmSpaceHeapExt};
 use crate::task::processor::current_trap_cx;
 use crate::task::schedule::spawn_user_task;
 use crate::task::{
     current_task, current_user_token, exit_current_and_run_next,
 };
-use alloc::sync::Arc;
+use crate::trap::TrapContext;
+use alloc::{sync::Arc, vec::Vec, string::String};
 use log::info;
 
 pub fn sys_exit(exit_code: i32) -> isize {
@@ -37,15 +38,34 @@ pub fn sys_fork() -> isize {
     new_pid as isize
 }
 
-pub async fn sys_exec(path: usize) -> isize {
-    //info!("sys_exec: path = {:#x}", path);
+pub async fn sys_exec(path: usize, args: usize) -> isize {
+    let mut args = args as *const usize;
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
+
+    // parse arguments
+    let mut args_vec: Vec<String> = Vec::new();
+    loop {
+        let arg_str_ptr = *translated_ref(token, args as *const usize);
+        if arg_str_ptr == 0 {
+            break;
+        }
+        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
+        unsafe {
+            args = args.add(1);
+        }
+    }
+    // open file
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
-        task.exec(all_data.as_slice());
-        0
+        
+        // let argc = args_vec.len();
+        task.exec(all_data.as_slice(), args_vec);
+        
+        let p = task.inner_exclusive_access().trap_cx_ppn.to_kern().get_ref::<TrapContext>().x[2];
+        // return p because cx.x[10] will be covered with it later
+        p as isize
     } else {
         -1
     }

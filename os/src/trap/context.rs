@@ -1,7 +1,7 @@
 //! Implementation of [`TrapContext`]
 use riscv::register::sstatus::{self, Sstatus,FS, SPP};
+use log::info;
 
-use crate::config::KERNEL_STACK_TOP;
 
 ///trap context structure containing sstatus, sepc and registers
 /// Trap context structure containing sstatus, sepc and registers
