@@ -98,6 +98,7 @@ impl TaskControlBlock {
         user_sp -= 8;
         vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
         *translated_refmut(vm_space.token(), user_sp as *mut usize) = 0;
+
         let task_control_block = Self {
             pid: pid_handle,
             inner: 
@@ -202,8 +203,6 @@ impl TaskControlBlock {
                 last -= len;
             }
         }
-        info!("{:#x}", *translated_refmut(vm_space.token(), (new_user_sp + 8) as *mut usize));
-
         user_sp = new_user_sp;
         // **** access current TCB exclusively
         let inner = self.inner_exclusive_access();

@@ -3,7 +3,7 @@ use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub,
 
 use crate::{config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS}, mm::PageTableEntry};
 
-use super::{VA_WIDTH_SV39, VPN_WIDTH_SV39};
+use super::{PhysAddr, PhysPageNum, VA_WIDTH_SV39, VPN_WIDTH_SV39};
 
 /// kernel virtual address
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -30,6 +30,10 @@ impl KernPageNum {
     ///Get mutable reference to `PhysPageNum` value
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { ((self.0 << PAGE_SIZE_BITS) as *mut T).as_mut().unwrap() }
+    }
+    
+    pub fn to_phys(&self) -> PhysPageNum {
+        PhysPageNum(self.0 & (KERNEL_ADDR_OFFSET >> 12))
     }
 }
 
@@ -59,6 +63,11 @@ impl KernAddr {
             KernPageNum((self.0 + PAGE_SIZE - 1) >> PAGE_SIZE_BITS)
         }
     }
+
+    pub fn to_phys(&self) -> PhysAddr {
+        PhysAddr(self.0 - KERNEL_ADDR_OFFSET)
+    }
+
 }
 
 impl From<KernAddr> for KernPageNum {
