@@ -54,11 +54,11 @@ lazy_static! {
 
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().take_current()
+    unsafe{PROCESSOR.exclusive_access()}.take_current()
 }
 ///Get running task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().current()
+    unsafe{PROCESSOR.exclusive_access()}.current()
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
@@ -80,7 +80,7 @@ pub fn switch_to_current_task(task: &mut Arc<TaskControlBlock>, env: &mut EnvCon
     unsafe{disable_interrupt();}
     unsafe {env.auto_sum();}
     info!("already in switch");
-    let mut processor = PROCESSOR.exclusive_access();
+    let processor = unsafe{PROCESSOR.exclusive_access()};
     core::mem::swap(&mut processor.env, env);
     processor.current = Some(Arc::clone(task));
     let inner = task.inner_exclusive_access();
@@ -90,26 +90,25 @@ pub fn switch_to_current_task(task: &mut Arc<TaskControlBlock>, env: &mut EnvCon
     }
     info!("switch page table done");
     unsafe{enable_interrupt();}
-    info!("now_enter_user_task_switch");
 }
 
 /// Switch out current task,change page_table back to kernel_space
 pub fn switch_out_current_task(env: &mut EnvContext){
-    info!("switch_out_current_task");
     unsafe {disable_interrupt()};
     unsafe {env.auto_sum()};
     unsafe {
         KERNEL_SPACE.exclusive_access().page_table.enable();
     }
-    let mut processor = PROCESSOR.exclusive_access();
+    let processor = unsafe{PROCESSOR.exclusive_access()};
     core::mem::swap(processor.env_mut(), env);
     processor.current = None;
     unsafe {enable_interrupt()};
+    info!("switch_out_current_task done");
 }
 /// Switch to the kernel task,change sum bit temporarily
 pub fn switch_to_current_kernel(env: &mut EnvContext) {
     unsafe{disable_interrupt();}
-    let mut processor = PROCESSOR.exclusive_access();
+    let processor = unsafe{PROCESSOR.exclusive_access()};
     processor.change_env(env);
     core::mem::swap(processor.env_mut(), env);
     unsafe{enable_interrupt()};

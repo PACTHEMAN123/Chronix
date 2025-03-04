@@ -67,7 +67,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     }
 
     // **** access current TCB exclusively
-    let mut inner = task.inner_exclusive_access();
+    let inner = task.inner_exclusive_access();
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
     // Record exit code
@@ -76,7 +76,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
     // ++++++ access initproc TCB exclusively
     {
-        let mut initproc_inner = INITPROC.inner_exclusive_access();
+        let initproc_inner = INITPROC.inner_exclusive_access();
         for child in inner.children.iter() {
             child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
             initproc_inner.children.push(child.clone());
@@ -88,9 +88,9 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // deallocate user space
     inner.vm_space.recycle_data_pages();
     let _ = inner;
+    drop(task);
     // **** release current PCB
     // drop task manually to maintain rc correctly
-    drop(inner);
 }
 
 lazy_static! {

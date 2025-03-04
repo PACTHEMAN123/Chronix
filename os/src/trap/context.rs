@@ -1,5 +1,8 @@
 //! Implementation of [`TrapContext`]
 use riscv::register::sstatus::{self, Sstatus,FS, SPP};
+
+use crate::config::KERNEL_STACK_TOP;
+
 ///trap context structure containing sstatus, sepc and registers
 /// Trap context structure containing sstatus, sepc and registers
 #[derive(Clone, Copy, Debug)]
@@ -49,7 +52,7 @@ impl TrapContext {
             sstatus,
             sepc: entry,
             // saved in ___restore
-            kernel_sp: 0,
+            kernel_sp: KERNEL_STACK_TOP as usize,
             kernel_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,

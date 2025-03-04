@@ -6,7 +6,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::trap::{trap_handler, TrapContext};
+use crate::{task::exit_current_and_run_next, trap::{trap_handler, TrapContext}};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::async_utils::{get_waker,suspend_now};
@@ -77,7 +77,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
     info!("into run_tasks");
     task.set_waker(get_waker().await);
     info!(
-        "into thread loop, sepc {:#x}, trap cx addr {:#x}",
+        "into task loop, sepc {:#x}, trap cx addr {:#x}",
         current_task().unwrap().inner_exclusive_access().get_trap_cx().sepc,
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );
@@ -90,7 +90,9 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
             break;
         }
     }
-
+    // wehen the task is zombie, we should switch to the next task
+    info!("now exit run_tasks");
+    
 }
 
 /// spawn a new async user task

@@ -60,6 +60,7 @@ pub fn fork() -> isize {
     sys_fork()
 }
 pub fn exec(path: &str) -> isize {
+    println!("exec path: {}", path);
     sys_exec(path)
 }
 pub fn wait(exit_code: &mut i32) -> isize {

@@ -14,7 +14,7 @@ use log::info;
 /// `exclusive_access`.
 pub struct UPSafeCell<T> {
     /// inner data
-    inner: RefCell<T>,
+    inner: UnsafeCell<T>,
 }
 
 unsafe impl<T> Sync for UPSafeCell<T> {}
@@ -24,11 +24,15 @@ impl<T> UPSafeCell<T> {
     /// uniprocessor.
     pub unsafe fn new(value: T) -> Self {
         Self {
-            inner: RefCell::new(value),
+            inner: UnsafeCell::new(value),
         }
     }
     /// Panic if the data has been borrowed.
-    pub fn exclusive_access(&self) -> RefMut<'_, T> {
-        self.inner.borrow_mut()
+    pub unsafe fn exclusive_access(&self) -> &mut T {
+        &mut *self.inner.get()
+    }
+    /// get the inner data
+    pub unsafe fn get(&self) -> *mut T{
+        self.inner.get()
     }
 }

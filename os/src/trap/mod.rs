@@ -68,6 +68,11 @@ pub async fn trap_handler()  {
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
+    //unsafe { enable_interrupt() };
+    info!(
+        "[trap_handler] scause: {:?}, stval: {:#x}, sepc: {:#x}",
+        cause, stval, sepc
+    );
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -151,7 +156,7 @@ pub fn trap_return() {
     unsafe{
         disable_interrupt();
     }
-    info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
+    info!("trap return, user sp {:#x}, kernel sp {:#x},sepc:{}", current_trap_cx().x[2], current_trap_cx().kernel_sp,current_trap_cx().sepc);
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
     //let user_satp = current_user_token();

@@ -27,5 +27,5 @@ pub use user_check::UserCheck;
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.exclusive_access().enable();
+    unsafe{KERNEL_SPACE.exclusive_access().enable()};
 }

@@ -93,7 +93,9 @@ impl Inode {
 
         //Todo ? ../
         //注：lwext4创建文件必须提供文件path的绝对路径
-        let file = self.0.exclusive_access();
+        let file = unsafe {
+            self.0.exclusive_access()
+        };
         let path = file.get_path();
         let fpath = String::from(path.to_str().unwrap().trim_end_matches('/')) + "/" + p;
         info!("dealt with full path: {}", fpath.as_str());
@@ -103,7 +105,7 @@ impl Inode {
     /// Find inode under current inode by name
     #[allow(unused)]
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
-        let file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         info!("find name: {} in {}", name, file.get_path().to_str().unwrap());
         let (names, inode_type) = file.lwext4_dir_entries().unwrap();
         info!("out lwext4_dir_entries");
@@ -130,7 +132,7 @@ impl Inode {
     /// Look up the node with given `name` in the directory
     /// Return the node if found.
     pub fn lookup(&self, name: &str) -> Option<Arc<Inode>> {
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         
         let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
         
@@ -147,7 +149,7 @@ impl Inode {
 
     /// list all files' name in the directory
     pub fn ls(&self) -> Vec<String> {
-        let file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
 
         if file.get_type() != InodeTypes::EXT4_DE_DIR {
             info!("not a directory");
@@ -173,7 +175,7 @@ impl Inode {
     /// Read data from inode at offset
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
         debug!("To read_at {}, buf len={}", offset, buf.len());
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDONLY)?;
@@ -188,7 +190,7 @@ impl Inode {
     /// Write data to inode at offset
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32> {
         debug!("To write_at {}, buf len={}", offset, buf.len());
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR)?;
@@ -203,7 +205,7 @@ impl Inode {
     /// Truncate the inode to the given size
     pub fn truncate(&self, size: u64) -> Result<usize, i32> {
         info!("truncate file to size={}", size);
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR)?;
@@ -226,7 +228,7 @@ impl Inode {
 
         let types = ty;
 
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
 
         let result = if file.check_inode_exist(fpath, types.clone()) {
             info!("inode already exists");
@@ -262,7 +264,7 @@ impl Inode {
 
         assert!(!fpath.is_empty()); // already check at `root.rs`
 
-        let mut file = self.0.exclusive_access();
+        let mut file = unsafe{self.0.exclusive_access()};
         if file.check_inode_exist(fpath, InodeTypes::EXT4_DE_DIR) {
             // Recursive directory remove
             file.dir_rm(fpath)
@@ -275,7 +277,7 @@ impl Inode {
     /// Return `None` if the node is a file.
     #[allow(unused)]
     fn parent(&self) -> Option<Arc<Inode>> {
-        let file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         if file.get_type() == InodeTypes::EXT4_DE_DIR {
             let path = file.get_path();
             let path = path.to_str().unwrap();
@@ -292,16 +294,16 @@ impl Inode {
     #[allow(unused)]
     fn rename(&self, src_path: &str, dst_path: &str) -> Result<usize, i32> {
         info!("rename from {} to {}", src_path, dst_path);
-        let mut file = self.0.exclusive_access();
+        let mut file = unsafe{self.0.exclusive_access()};
         file.file_rename(src_path, dst_path)
     }
 }
 
 impl Drop for Inode {
     fn drop(&mut self) {
-        let mut file = self.0.exclusive_access();
+        let file = unsafe{self.0.exclusive_access()};
         info!("Drop struct Inode {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
-        drop(file); // todo
+        let _ = file; // todo
     }
 }

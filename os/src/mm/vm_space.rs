@@ -385,7 +385,9 @@ impl UserVmSpace {
     }
 
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        let mut ret = Self::from_kernel(&KERNEL_SPACE.exclusive_access());
+        let mut ret = Self::from_kernel(unsafe {
+            KERNEL_SPACE.exclusive_access()
+        });
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
@@ -464,7 +466,7 @@ impl UserVmSpace {
     }
 
     pub fn from_existed(user_space: &UserVmSpace) -> Self {
-        let mut ret = Self::from_kernel(&KERNEL_SPACE.exclusive_access());
+        let mut ret = Self::from_kernel(unsafe{&KERNEL_SPACE.exclusive_access()});
         for area in user_space.areas.iter() {
             let new_area = area.clone();
             ret.push(new_area, None);
@@ -532,7 +534,9 @@ pub fn remap_test() {
         fn edata();
     }
 
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let mut kernel_space = unsafe {
+        KERNEL_SPACE.exclusive_access()
+    };
     let mid_text: VirtAddr = (stext as usize + ((etext as usize - stext as usize) >> 1)).into();
     let mid_rodata: VirtAddr = (srodata as usize + ((erodata as usize - srodata as usize) >> 1)).into();
     let mid_data: VirtAddr = (sdata as usize + ((edata as usize - sdata as usize) >> 1)).into();

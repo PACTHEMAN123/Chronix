@@ -22,7 +22,7 @@ pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
     // mutable
-    inner: SpinNoIrqLock<TaskControlBlockInner>,
+    inner: UPSafeCell<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
@@ -72,9 +72,10 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> MutexGuard<'_, TaskControlBlockInner,SpinNoIrq> {
-        let inner: MutexGuard<'_, TaskControlBlockInner, SpinNoIrq> = self.inner.lock();
-        inner
+    pub fn inner_exclusive_access(&self) -> &mut TaskControlBlockInner {
+        unsafe {
+            self.inner.exclusive_access()
+        }
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // note: the kernel stack must be allocated before the user page table is created
@@ -89,7 +90,8 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             inner: 
-                SpinNoIrqLock::new(TaskControlBlockInner {
+            unsafe {
+                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: user_sp,
                     task_status: TaskStatus::Ready,
@@ -107,6 +109,7 @@ impl TaskControlBlock {
                         Some(Arc::new(Stdout)),
                     ],
                 }) 
+            } 
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -117,8 +120,9 @@ impl TaskControlBlock {
         task_control_block
     }
     pub fn set_waker(&self, waker: Waker) {
-        //self.inner.exclusive_access().waker = Some(waker);
-        self.inner.lock().waker = Some(waker);
+        unsafe{
+            (*self.inner.get()).waker = Some(waker);
+        }
     }
     pub fn wake(&self){
         let inner = self.inner_exclusive_access();
@@ -136,7 +140,7 @@ impl TaskControlBlock {
             .ppn();
 
         // **** access current TCB exclusively
-        let mut inner = self.inner_exclusive_access();
+        let inner = self.inner_exclusive_access();
         // substitute memory_set
         inner.vm_space = vm_space;
         // update trap_cx ppn
@@ -154,7 +158,7 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         // ---- hold parent PCB lock
-        let mut parent_inner = self.inner_exclusive_access();
+        let parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
         let vm_space = UserVmSpace::from_existed(&parent_inner.vm_space);
         let trap_cx_ppn = vm_space
@@ -172,7 +176,8 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            inner: SpinNoIrqLock::new(TaskControlBlockInner {
+            inner: unsafe{
+                UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
                     task_status: TaskStatus::Ready,
@@ -183,7 +188,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     fd_table: new_fd_table,
                 })
-            ,
+            },
         });
         // add child
         parent_inner.children.push(task_control_block.clone());
@@ -196,10 +201,6 @@ impl TaskControlBlock {
     }
     pub fn getpid(&self) -> usize {
         self.pid.0
-    }
-
-    pub fn handle_exit(self:&Arc<Self>){
-        
     }
 }
 

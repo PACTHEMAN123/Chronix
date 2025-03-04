@@ -49,11 +49,11 @@ pub struct PidHandle(pub usize);
 impl Drop for PidHandle {
     fn drop(&mut self) {
         //println!("drop pid {}", self.0);
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        unsafe{PID_ALLOCATOR.exclusive_access()}.dealloc(self.0);
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
 pub fn pid_alloc() -> PidHandle {
-    PID_ALLOCATOR.exclusive_access().alloc()
+    unsafe{PID_ALLOCATOR.exclusive_access()}.alloc()
 }
 
