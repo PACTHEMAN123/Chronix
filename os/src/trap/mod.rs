@@ -67,12 +67,14 @@ pub async fn trap_handler()  {
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
-    let cause = scause.cause();
-    //unsafe { enable_interrupt() };
-    info!(
+    let cause = scause.cause(); 
+    /*info!(
         "[trap_handler] scause: {:?}, stval: {:#x}, sepc: {:#x}",
         cause, stval, sepc
-    );
+    ); */
+    
+    //unsafe { enable_interrupt() };
+   
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -133,7 +135,7 @@ pub async fn trap_handler()  {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            info!("interrupt: supervisor timer");
+            //info!("interrupt: supervisor timer");
             set_next_trigger();
             yield_now().await;
         }
@@ -156,7 +158,7 @@ pub fn trap_return() {
     unsafe{
         disable_interrupt();
     }
-    info!("trap return, user sp {:#x}, kernel sp {:#x},sepc:{}", current_trap_cx().x[2], current_trap_cx().kernel_sp,current_trap_cx().sepc);
+    //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT;
     //let user_satp = current_user_token();

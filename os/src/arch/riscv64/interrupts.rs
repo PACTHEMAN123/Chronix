@@ -6,7 +6,7 @@ use riscv::register::{
 pub unsafe fn disable_interrupt() {
     sstatus::clear_sie();
 }
-
+#[allow(dead_code)]
 pub unsafe fn enable_interrupt() {
     sstatus::set_sie();
 }

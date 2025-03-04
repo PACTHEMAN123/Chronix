@@ -93,7 +93,7 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     loop{
-        info!("now Idle loop");
+        //info!("now Idle loop");
        executor::run_until_idle();
     }
     //panic!("Unreachable in rust_main!");

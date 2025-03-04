@@ -1,14 +1,15 @@
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_refmut, translated_str, VirtAddr, VmSpace, VmSpaceHeapExt};
 use crate::task::processor::current_trap_cx;
+use crate::task::schedule::spawn_user_task;
 use crate::task::{
     current_task, current_user_token, exit_current_and_run_next,
 };
 use alloc::sync::Arc;
 use log::info;
 
-pub fn sys_exit(exit_code: i32) -> ! {
-    info!("sys_exit: exit_code = {},sepc={}", exit_code,current_trap_cx().sepc);
+pub fn sys_exit(exit_code: i32) -> isize {
+    //info!("sys_exit: exit_code = {},sepc={}", exit_code,current_trap_cx().sepc);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
@@ -19,8 +20,8 @@ pub fn sys_getpid() -> isize {
 }
 
 // todo: add add_task, judge whether need to be async
-pub async fn sys_fork() -> isize {
-    info!("into sys_fork");
+pub fn sys_fork() -> isize {
+    //info!("into sys_fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -30,14 +31,14 @@ pub async fn sys_fork() -> isize {
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
-    info!("sys_fork: new_pid = {}", new_pid);
+    //info!("sys_fork: new_pid = {},user_sp = {:#x}", new_pid,trap_cx.x[2]);
     // add new task to scheduler
-    //add_task(new_task);
+    spawn_user_task(new_task);
     new_pid as isize
 }
 
-pub fn sys_exec(path: usize) -> isize {
-    info!("sys_exec: path = {:#x}", path);
+pub async fn sys_exec(path: usize) -> isize {
+    //info!("sys_exec: path = {:#x}", path);
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
@@ -53,7 +54,7 @@ pub fn sys_exec(path: usize) -> isize {
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
-    info!("sys_waitpid: pid = {}, exit_code_ptr = {:#x}", pid, exit_code_ptr);
+    //info!("sys_waitpid: pid = {}, exit_code_ptr = {:#x}", pid, exit_code_ptr);
     let task = current_task().unwrap();
     // find a child process
 
@@ -73,7 +74,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
         // ++++ release child PCB
     });
     if let Some((idx, _)) = pair {
-        info!("sys_waitpid: found zombied child process");
+        //info!("sys_waitpid: found zombied child process");
         let child = inner.children.remove(idx);
         // confirm that child will be deallocated after being removed from children list
         assert_eq!(Arc::strong_count(&child), 1);

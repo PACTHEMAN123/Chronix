@@ -47,10 +47,10 @@ pub fn suspend_current_and_run_next() {
 pub const IDLE_PID: usize = 0;
 
 /// Exit the current 'Running' task ////and run the next task in task list.
-pub fn exit_current_and_run_next(exit_code: i32) {
+pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
     let task = take_current_task().unwrap();
-
+    task.inner_exclusive_access().exit_code = exit_code;
     let pid = task.getpid();
     if pid == IDLE_PID {
         println!(
@@ -96,7 +96,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        info!("trying to open initproc");
+        //info!("trying to open initproc");
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v = inode.read_all();
         TaskControlBlock::new(v.as_slice())

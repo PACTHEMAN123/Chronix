@@ -52,7 +52,7 @@ impl TrapContext {
             sstatus,
             sepc: entry,
             // saved in ___restore
-            kernel_sp: KERNEL_STACK_TOP as usize,
+            kernel_sp: 0,
             kernel_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,

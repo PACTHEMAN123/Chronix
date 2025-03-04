@@ -50,16 +50,15 @@ pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
     let schedule= move |runnable:Runnable, _info: ScheduleInfo | {
         // todo: judge push method by ScheduleInfo
         TASK_QUEUE.push(runnable);
-        info!("spawn a runnable now");
+        //info!("spawn a runnable now, runnable_num: {}", TASK_QUEUE.len());
     };
     async_task::spawn(future, WithInfo(schedule))
 }
 
 pub fn run_until_idle() -> usize{
-    info!("now run in loop");
     let mut count = 0;
     while let Some(runnable) = TASK_QUEUE.fetch() {
-        info!("already fetch a runnable");
+        //info!("already fetch a runnable");
         runnable.run();
         count += 1;
     }

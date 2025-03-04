@@ -44,7 +44,7 @@ impl <F:Future+Send+'static> Future for UserTaskFuture<F> {
         let this = unsafe {self.get_unchecked_mut()};
         switch_to_current_task(&mut this.task,&mut this.env);
         let ret = unsafe{Pin::new_unchecked(&mut this.future).poll(cx)};
-        info!("switch out current task");
+        //info!("switch out current task, current task is {}", current_task().unwrap().getpid());
         switch_out_current_task(&mut this.env);
         ret
     }
@@ -74,30 +74,29 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
 ///The main part of process execution and scheduling
 ///Loop `fetch_task` to get the process that needs to run, and switch the process 
 pub async fn run_tasks(task: Arc<TaskControlBlock>) {  
-    info!("into run_tasks");
+    //info!("into run_tasks");
     task.set_waker(get_waker().await);
-    info!(
+    /*info!(
         "into task loop, sepc {:#x}, trap cx addr {:#x}",
         current_task().unwrap().inner_exclusive_access().get_trap_cx().sepc,
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
-    );
+    );*/
     loop {
         trap_return();
-        info!("now will into trap_handler");
         trap_handler().await;
         if (*task).inner_exclusive_access().is_zombie(){
-            info!("zombie task exit");
+            //info!("zombie task exit");
             break;
         }
     }
     // wehen the task is zombie, we should switch to the next task
     info!("now exit run_tasks");
-    
+    task.handle_zombie();
 }
 
 /// spawn a new async user task
 pub fn spawn_user_task(task: Arc<TaskControlBlock>){
-    info!("now in spawn_user_task");
+    //info!("now in spawn_user_task");
     let future = UserTaskFuture::new(task.clone(), run_tasks(task));
     let (runnable, user_task) = executor::spawn(future);
     runnable.schedule();
@@ -106,7 +105,7 @@ pub fn spawn_user_task(task: Arc<TaskControlBlock>){
 
 ///spawn a new async kernel task, doing for kernel init work such as initproc
 pub fn spawn_kernel_task<F: Future<Output = ()> + Send + 'static>(kernel_task: F) {
-    info!("now in spawn_kernel_task");
+    //info!("now in spawn_kernel_task");
     let future = KernelTaskFuture::new(kernel_task);
     let (runnable, task) = executor::spawn(future);
     runnable.schedule();

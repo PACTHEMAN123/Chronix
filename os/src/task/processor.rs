@@ -79,17 +79,17 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 pub fn switch_to_current_task(task: &mut Arc<TaskControlBlock>, env: &mut EnvContext) {
     unsafe{disable_interrupt();}
     unsafe {env.auto_sum();}
-    info!("already in switch");
+    //info!("already in switch");
     let processor = unsafe{PROCESSOR.exclusive_access()};
     core::mem::swap(&mut processor.env, env);
     processor.current = Some(Arc::clone(task));
     let inner = task.inner_exclusive_access();
-    info!("switch page table");
+    //info!("switch page table");
     unsafe {
         inner.switch_page_table();
     }
-    info!("switch page table done");
-    unsafe{enable_interrupt();}
+    //info!("switch page table done");
+    //unsafe{enable_interrupt();}
 }
 
 /// Switch out current task,change page_table back to kernel_space
@@ -102,8 +102,8 @@ pub fn switch_out_current_task(env: &mut EnvContext){
     let processor = unsafe{PROCESSOR.exclusive_access()};
     core::mem::swap(processor.env_mut(), env);
     processor.current = None;
-    unsafe {enable_interrupt()};
-    info!("switch_out_current_task done");
+    //unsafe {enable_interrupt()};
+    //info!("switch_out_current_task done");
 }
 /// Switch to the kernel task,change sum bit temporarily
 pub fn switch_to_current_kernel(env: &mut EnvContext) {
@@ -111,5 +111,5 @@ pub fn switch_to_current_kernel(env: &mut EnvContext) {
     let processor = unsafe{PROCESSOR.exclusive_access()};
     processor.change_env(env);
     core::mem::swap(processor.env_mut(), env);
-    unsafe{enable_interrupt()};
+    //unsafe{enable_interrupt()};
 }

@@ -132,7 +132,7 @@ impl TaskControlBlock {
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        info!("into task exec");
+        //info!("into task exec");
         let (vm_space, user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
         let trap_cx_ppn = vm_space
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
@@ -201,6 +201,21 @@ impl TaskControlBlock {
     }
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+    pub fn handle_zombie(self: &Arc<Self>){
+        let init_proc = &crate::task::INITPROC;
+        let inner = unsafe {
+           self.inner.exclusive_access()
+        };
+        if inner.children.is_empty(){
+            return;
+        }
+        for child in inner.children.iter(){
+            if child.inner_exclusive_access().is_zombie(){
+                // todo
+            }
+            unsafe{(*child.inner.get()).parent = Some(Arc::downgrade(init_proc))};
+        }
     }
 }
 

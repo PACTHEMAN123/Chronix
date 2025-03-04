@@ -202,7 +202,7 @@ impl Future for YieldFuture {
 
 /// Yield the current thread (the scheduler will switch to the next thread)
 pub async fn yield_now() {
-    log::info!("yield_now");
+    //log::info!("yield_now");
     YieldFuture::new().await;
 }
 
