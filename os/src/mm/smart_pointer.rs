@@ -1,6 +1,7 @@
-use core::{ops::{Deref, DerefMut, Sub}, ptr::NonNull, sync::atomic::{AtomicUsize, Ordering}};
+use core::{ops::{Deref, DerefMut, Sub}, ptr::{self, NonNull}, sync::atomic::{AtomicUsize, Ordering}};
 
 use alloc::sync::Arc;
+use log::info;
 
 use super::{slab_alloc, slab_dealloc};
 
@@ -81,6 +82,7 @@ impl<T: Sized> Drop for StrongArc<T> {
         loop {
             let strong = rc_ref.load(Ordering::Acquire);
             if strong == 1 { // 只有自己拥有，也就无需担心并发竞争了，直接释放
+                unsafe { self.ptr.drop_in_place(); };
                 if (self.ptr.as_ptr() as usize - self.rc.as_ptr() as usize) <= size_of::<StrongArcPayload<T>>() {
                     // 一次释放
                     slab_dealloc(NonNull::new(self.rc.as_ptr() as usize as *mut StrongArcPayload<T>).unwrap());
@@ -89,6 +91,8 @@ impl<T: Sized> Drop for StrongArc<T> {
                     slab_dealloc(self.rc);
                     slab_dealloc(self.ptr);
                 }
+                self.rc = NonNull::dangling();
+                self.ptr = NonNull::dangling();
                 break;
             } else if strong > 1 {
                 // CAS
