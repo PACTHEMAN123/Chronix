@@ -70,7 +70,7 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
 
     // **** access current TCB exclusively
     // Change status to Zombie
-    info!("now set task {} status to Zombie", pid);
+    //info!("now set task {} status to Zombie", pid);
     inner.task_status = TaskStatus::Zombie;
     // do not move to its parent but under initproc
 }
