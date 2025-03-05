@@ -79,12 +79,12 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 pub fn switch_to_current_task(task: &mut Arc<TaskControlBlock>, env: &mut EnvContext) {
     unsafe{disable_interrupt();}
     unsafe {env.auto_sum();}
-    //info!("already in switch");
+    info!("already in switch");
     let processor = unsafe{PROCESSOR.exclusive_access()};
     core::mem::swap(&mut processor.env, env);
-    processor.current = Some(Arc::clone(task));
+    processor.current = Some(Arc::clone(task)); 
     let inner = task.inner_exclusive_access();
-    //info!("switch page table");
+    info!("switch page table");
     unsafe {
         inner.switch_page_table();
     }

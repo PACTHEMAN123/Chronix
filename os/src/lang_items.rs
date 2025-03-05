@@ -7,15 +7,15 @@ use super::mm::VirtAddr;
 
 #[allow(unused)]
 fn backtrace() {
-    info!("traceback");
+    println!("traceback: ");
     let mut fp: usize;
     unsafe { asm!("mv {}, fp", out(reg)(fp)); }
     while fp != (VirtAddr(fp).floor().0 << 12) {
         fp = unsafe {
-            *((fp - 8) as *mut usize)
+            *((fp - 16) as *mut usize)
         };
-        info!("{:#x}", unsafe {
-            *((fp - 4) as *mut usize)
+        println!("{:#x}", unsafe {
+            *((fp - 8) as *mut usize)
         });
     }
 }
@@ -23,7 +23,7 @@ fn backtrace() {
 #[panic_handler]
 /// panic handler
 fn panic(info: &PanicInfo) -> ! {
-    // backtrace();
+    backtrace();
     if let Some(location) = info.location() {
         error!(
             "[kernel] Panicked at {}:{} {}",
