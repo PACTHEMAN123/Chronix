@@ -1,5 +1,5 @@
+use crate::config::KERNEL_STACK_SIZE;
 const PTES_PER_PAGE: usize = 512;
-const KERNEL_STACK_SIZE: usize = 4096 * 16;
 const VIRT_RAM_OFFSET: usize = 0xffff_ffc0_0000_0000;
 
 #[link_section = ".bss.stack"]

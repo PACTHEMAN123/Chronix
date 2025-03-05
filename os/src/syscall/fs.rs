@@ -79,7 +79,7 @@ pub fn sys_close(fd: usize) -> isize {
 pub fn sys_dup(old_fd: usize) -> isize {
     let task = current_task().unwrap();
     
-    let mut inner = task.inner_exclusive_access();
+    let inner = task.inner_exclusive_access();
 
     if let Some(file) = &inner.fd_table[old_fd] {
         let file = file.clone();
@@ -94,7 +94,7 @@ pub fn sys_dup(old_fd: usize) -> isize {
 pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
     //info!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
     let task = current_task().unwrap();
-    let mut inner = task.inner_exclusive_access();
+    let inner = task.inner_exclusive_access();
     if old_fd >= inner.fd_table.len() {
         return -1;
     }
