@@ -400,7 +400,7 @@ impl UserVmSpace {
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
-                println!("start_va: {:#x}, end_va: {:#x}", start_va.0, end_va.0);
+                log::debug!("start_va: {:#x}, end_va: {:#x}", start_va.0, end_va.0);
 
                 let mut map_perm = MapPerm::U;
                 let ph_flags = ph.flags();
@@ -426,7 +426,7 @@ impl UserVmSpace {
         let max_end_va: VirtAddr = max_end_vpn.into();
         let user_heap_bottom: usize = max_end_va.into();
         // used in brk
-        println!("user_heap_bottom: {:#x}", user_heap_bottom);
+        log::debug!("user_heap_bottom: {:#x}", user_heap_bottom);
         ret.heap = ret.areas.len();
         ret.push(
             UserVmArea::new(
@@ -438,7 +438,7 @@ impl UserVmSpace {
         );
         let user_stack_bottom = USER_STACK_TOP - USER_STACK_SIZE;
         let user_stack_top = USER_STACK_TOP;
-        println!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
+        log::debug!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
         ret.push(
             UserVmArea::new(
                 user_stack_bottom.into()..USER_STACK_TOP.into(),
@@ -448,7 +448,7 @@ impl UserVmSpace {
             None,
         );
         
-        println!("trap_context: {:#x}", TRAP_CONTEXT);
+        log::debug!("trap_context: {:#x}", TRAP_CONTEXT);
         // map TrapContext
         ret.push(
             UserVmArea::new(
