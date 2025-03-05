@@ -173,9 +173,14 @@ pub fn slab_dealloc<T: Sized>(ptr: NonNull<T>) {
     unsafe { SLAB_ALLOCATOR.exclusive_access().dealloc(ptr); }
 }
 
+/// shrink the slab
+#[allow(unused)]
+pub fn slab_shrink() {
+    unsafe { SLAB_ALLOCATOR.exclusive_access().shrink(); }
+}
 
 #[repr(C)]
-#[allow(missing_docs, unused)]
+#[allow(missing_docs)]
 struct SlabBlock {
     next: *mut SlabBlock,
     belong: KernAddr,
@@ -183,13 +188,13 @@ struct SlabBlock {
 }
 
 #[repr(C)]
-#[allow(missing_docs, unused)]
+#[allow(missing_docs)]
 pub union FreeNode<const S: usize> {
     next: *mut FreeNode<S>,
     data: [u8; S]
 }
 
-#[allow(missing_docs, unused)]
+#[allow(missing_docs)]
 pub struct SlabCache<const S: usize> {
     head: *mut SlabBlock,
     freelist: *mut FreeNode<S>

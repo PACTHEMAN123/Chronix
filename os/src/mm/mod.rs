@@ -19,7 +19,7 @@ mod smart_pointer;
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernAddr, KernPageNum};
 pub use frame_allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker};
 pub use page_table::{translated_byte_buffer, PageTableEntry, translated_str, translated_ref, translated_refmut, UserBuffer};
-pub use page_table::{PTEFlags, PageTable};
+pub use page_table::{PTEFlags, PageTable, copy_out, copy_out_str};
 #[allow(unused)]
 pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
 pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType, VmAreaContainer, VmSpacePageFaultExt, VmSpaceHeapExt};
