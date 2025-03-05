@@ -1,7 +1,12 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use core::cmp::min;
+use core::ptr::slice_from_raw_parts_mut;
+
+use crate::config::PAGE_SIZE;
+
 use super::frame_allocator::frame_alloc_clean;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
+use super::{frame_alloc, FrameTracker, KernAddr, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -298,6 +303,86 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .to_kern()
         .get_mut()
+}
+
+
+#[allow(unused)]
+/// copy out 
+pub fn copy_out<T: Copy>(page_table: &PageTable, mut dst: VirtAddr, mut src: &[T]) {
+    let size = size_of::<T>();
+    // size is power of 2 and less than PAGE_SIZE, dst is aligned to size
+    assert!((size & (size - 1) == 0) && (size <= PAGE_SIZE) && (dst.0 & (size - 1) == 0));
+    let mut bytes = src.len() * size;
+    while bytes > 0 {
+        let step = min(bytes, PAGE_SIZE - dst.page_offset());
+        let len = step / size;
+        let dst_ka = page_table.translate_va(dst).unwrap().to_kern();
+        let dst_slice = unsafe {
+            &mut *slice_from_raw_parts_mut(dst_ka.as_non_null_ptr().as_ptr(), len)
+        };
+        dst_slice.copy_from_slice(&src[..len]);
+        src = &src[len..];
+        dst += step;
+        bytes -= step;
+    }
+}
+
+#[allow(unused)]
+/// copy out a str
+pub fn copy_out_str(page_table: &PageTable, mut dst: VirtAddr, str: &str) {
+    let mut src = str.as_bytes();
+    let mut bytes = src.len() + 1;
+
+    loop {
+        let step = min(bytes, PAGE_SIZE - dst.page_offset());
+        if step == bytes {
+            break;
+        }
+        let dst_ka = page_table.translate_va(dst).unwrap().to_kern();
+        let dst_slice = unsafe {
+            &mut *slice_from_raw_parts_mut(dst_ka.as_non_null_ptr().as_ptr(), step)
+        };
+        dst_slice.copy_from_slice(&src[..step]);
+        src = &src[step..];
+        dst += step;
+        bytes -= step;
+    }
+
+    let dst_ka = page_table.translate_va(dst).unwrap().to_kern();
+    let dst_slice = unsafe {
+        &mut *slice_from_raw_parts_mut(dst_ka.as_non_null_ptr().as_ptr(), bytes)
+    };
+    dst_slice[..bytes-1].copy_from_slice(&src[..bytes-1]);
+    dst_slice[bytes-1] = 0;
+
+}
+
+#[allow(unused)]
+/// copy in
+pub fn copy_in<T: Copy>(page_table: &PageTable, mut dst: &mut [T], mut src: VirtAddr) {
+    let size = size_of::<T>();
+    // size is power of 2 and less than PAGE_SIZE, dst is aligned to size
+    assert!((size & (size - 1) == 0) && (size <= PAGE_SIZE) && (src.0 & (size - 1) == 0));
+    let mut bytes = dst.len() * size;
+    while bytes > 0 {
+        let step = min(bytes, PAGE_SIZE - src.page_offset());
+        let len = step / size;
+        let src_ka = page_table.translate_va(src).unwrap().to_kern();
+        let src_slice = unsafe {
+            &mut *slice_from_raw_parts_mut(src_ka.as_non_null_ptr().as_ptr(), len)
+        };
+        dst[..len].copy_from_slice(src_slice);
+        dst = &mut dst[len..];
+        src += step;
+        bytes -= step;
+    }
+}
+
+#[allow(unused)]
+/// copy in a str
+pub unsafe fn copy_in_str(page_table: &PageTable, mut str: &mut str, mut src: VirtAddr) {
+    let mut dst = str.as_bytes_mut();
+    copy_in(page_table, dst, src);
 }
 
 ///Array of u8 slice that user communicate with os

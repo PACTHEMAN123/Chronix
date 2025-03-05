@@ -1,5 +1,5 @@
 
-use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
+use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}, ptr::NonNull};
 
 use crate::{config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS}, mm::PageTableEntry};
 
@@ -46,6 +46,10 @@ impl KernAddr {
     ///Get mutable reference to `PhysAddr` value
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+
+    pub fn as_non_null_ptr<T>(&self) -> NonNull<T> {
+        NonNull::new(self.0 as *mut T).unwrap()
     }
 
     pub fn page_offset(&self) -> usize {

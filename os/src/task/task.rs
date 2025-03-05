@@ -2,7 +2,7 @@
 use super::{pid_alloc, schedule, PidHandle, INITPROC};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
+use crate::mm::{copy_out, copy_out_str, PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
@@ -164,45 +164,14 @@ impl TaskControlBlock {
         meta_data[0] = args.len();
 
         let mut data_va= user_sp;
-        for (i, s) in args.iter().map(|s| s.as_bytes()).enumerate() {
-            let mut last = s.len() + 1;
-            let step = core::cmp::min(last, (data_va - 1) % PAGE_SIZE + 1);
-            data_va -= step;
-            let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
-
-            let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step) };
-
-            dst[0..step-1].copy_from_slice(&s[last-step..last-1]);
-            dst[step-1] = 0;
-            last -= step;
-
-            while last > 0 {
-                let step = core::cmp::min(last, (data_va - 1) % PAGE_SIZE + 1);
-                data_va -= step;
-
-                let pa = translated_refmut(vm_space.token(), data_va as *mut u8) as *mut u8 as usize;
-
-                let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut u8, step) };
-                dst.copy_from_slice(&s[last-step..last]);
-                last -= step;
-            }
-
+        for (i, s) in args.iter().map(|s| s.as_str()).enumerate() {
+            data_va -= s.as_bytes().len() + 1;
+            copy_out_str(&vm_space.page_table, VirtAddr(data_va), s);
             meta_data[i+1] = data_va;
         }
 
-        let mut meta_va = new_user_sp + meta_data.len() * SIZE_OF_USIZE;
-        {
-            let mut last = meta_data.len();
-            while last > 0 {
-                let step =  core::cmp::min(last * SIZE_OF_USIZE, (meta_va - 1) % PAGE_SIZE + 1);
-                meta_va -= step;
-                let len = step / SIZE_OF_USIZE;
-                let pa = translated_refmut(vm_space.token(), meta_va as *mut usize) as *mut usize as usize;
-                let dst = unsafe { &mut *slice_from_raw_parts_mut(pa as *mut usize, len) };
-                dst.copy_from_slice(&meta_data[last-len..last]);
-                last -= len;
-            }
-        }
+        copy_out(&vm_space.page_table, VirtAddr(new_user_sp), meta_data.as_slice());
+
         user_sp = new_user_sp;
         // **** access current TCB exclusively
         let inner = self.inner_exclusive_access();
