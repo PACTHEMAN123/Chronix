@@ -1,5 +1,5 @@
 //!Implementation of [`TaskControlBlock`]
-use super::{pid_alloc, schedule, PidHandle};
+use super::{pid_alloc, schedule, PidHandle, INITPROC};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
@@ -270,19 +270,14 @@ impl TaskControlBlock {
         self.pid.0
     }
     pub fn handle_zombie(self: &Arc<Self>){
-        let init_proc = &crate::task::INITPROC;
-        let inner = unsafe {
-           self.inner.exclusive_access()
-        };
-        if inner.children.is_empty(){
-            return;
+        let inner = self.inner_exclusive_access();
+        for child in inner.children.iter() {
+            let initproc_inner = INITPROC.inner_exclusive_access();
+            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+            initproc_inner.children.push(child.clone());
         }
-        for child in inner.children.iter(){
-            if child.inner_exclusive_access().is_zombie(){
-                // todo
-            }
-            unsafe{(*child.inner.get()).parent = Some(Arc::downgrade(init_proc))};
-        }
+        inner.children.clear();
+        inner.vm_space.recycle_data_pages();
     }
 }
 

@@ -3,7 +3,7 @@ use core::ops::{DerefMut, Range};
 use alloc::{collections::btree_map::{BTreeMap, Keys}, sync::Arc};
 use log::info;
 
-use crate::arch::riscv64::sfence_vma_vaddr; 
+use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}}; 
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
 use crate::mm::PageTableEntry;
 
@@ -512,7 +512,11 @@ impl VmArea for KernelVmArea {
             KernelVmAreaType::Rodata |
             KernelVmAreaType::Text => self.map_range_highly(page_table, range_vpn),
             KernelVmAreaType::KernelStack => {
-                self.map_range_and_alloc_frames(page_table, range_vpn);
+                self.map_range_to(
+                    page_table, 
+                    KERNEL_STACK_BOTTOM.into()..KERNEL_STACK_TOP.into(),
+                    PhysPageNum(range_vpn.start.0 & (KERNEL_ADDR_OFFSET >> 12))
+                );
             },
         }
     }

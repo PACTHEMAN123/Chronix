@@ -6,6 +6,9 @@ pub const KERNEL_STACK_SIZE: usize = 4096 * 16;
 pub const KERNEL_HEAP_SIZE: usize = 0x30_00000;
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
 
+pub const KERNEL_STACK_TOP: usize = KERNEL_MEMORY_SPACE.1;
+pub const KERNEL_STACK_BOTTOM: usize = KERNEL_STACK_TOP - KERNEL_STACK_SIZE;
+
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 

@@ -49,9 +49,11 @@ pub const IDLE_PID: usize = 0;
 /// Exit the current 'Running' task ////and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
-    let task = take_current_task().unwrap();
-    task.inner_exclusive_access().exit_code = exit_code;
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    inner.exit_code = exit_code;
     let pid = task.getpid();
+    println!("[kernel] Task {} exit with exit_code {} ...", pid, exit_code);
     if pid == IDLE_PID {
         println!(
             "[kernel] Idle process exit with exit_code {} ...",
@@ -67,30 +69,10 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
     }
 
     // **** access current TCB exclusively
-    let inner = task.inner_exclusive_access();
     // Change status to Zombie
+    info!("now set task {} status to Zombie", pid);
     inner.task_status = TaskStatus::Zombie;
-    // Record exit code
-    inner.exit_code = exit_code;
     // do not move to its parent but under initproc
-
-    // ++++++ access initproc TCB exclusively
-    {
-        let initproc_inner = INITPROC.inner_exclusive_access();
-        for child in inner.children.iter() {
-            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
-            initproc_inner.children.push(child.clone());
-        }
-    }
-    // ++++++ release parent PCB
-
-    inner.children.clear();
-    // deallocate user space
-    inner.vm_space.recycle_data_pages();
-    let _ = inner;
-    drop(task);
-    // **** release current PCB
-    // drop task manually to maintain rc correctly
 }
 
 lazy_static! {

@@ -10,9 +10,8 @@ use alloc::{sync::Arc, vec::Vec, string::String};
 use log::info;
 
 pub fn sys_exit(exit_code: i32) -> isize {
-    //info!("sys_exit: exit_code = {},sepc={}", exit_code,current_trap_cx().sepc);
     exit_current_and_run_next(exit_code);
-    panic!("Unreachable in sys_exit!");
+    0
 }
 
 
