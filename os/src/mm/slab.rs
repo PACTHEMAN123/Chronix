@@ -165,12 +165,12 @@ impl SlabAllocator {
 
 /// alloc from slab allocator
 pub fn slab_alloc<T: Sized>() -> Option<NonNull<T>> {
-    SLAB_ALLOCATOR.exclusive_access().alloc()
+    unsafe { SLAB_ALLOCATOR.exclusive_access().alloc() }
 }
 
 /// dealloc to slab allocator
-pub fn slab_dealloc<T: Sized>(ptr: NonNull<T>){
-    SLAB_ALLOCATOR.exclusive_access().dealloc(ptr);
+pub fn slab_dealloc<T: Sized>(ptr: NonNull<T>) {
+    unsafe { SLAB_ALLOCATOR.exclusive_access().dealloc(ptr); }
 }
 
 
