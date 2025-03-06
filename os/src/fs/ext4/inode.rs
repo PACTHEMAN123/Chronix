@@ -11,15 +11,17 @@ use virtio_drivers::transport::{DeviceType, Transport};
 
 
 use crate::drivers::block::BLOCK_DEVICE;
+use crate::fs::FS_MANAGER;
 
 use alloc::vec;
 use alloc::{format, vec::Vec};
+use alloc::string::String;
 use alloc::boxed::Box;
 
 use super::ext4fs::{Ext4FileSystem, Inode};
 use super::disk::Disk;
 
-use super::File;
+use crate::fs::File;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
@@ -145,20 +147,21 @@ impl OpenFlags {
 
 ///Open file with flags
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = ROOT_INODE.lookup(name) {
+        if let Some(inode) = root.lookup(name) {
             // clear size
             inode.truncate(0).expect("Error when truncating inode");
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
             // create file
-            ROOT_INODE
+            root
                 .create(name, InodeTypes::EXT4_DE_REG_FILE)
                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
         }
     } else {
-        ROOT_INODE.lookup(name).map(|inode| {
+        root.lookup(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
@@ -169,8 +172,9 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 
 /// List all files in the filesystems
 pub fn list_apps() {
+    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     println!("/**** APPS ****");
-    for app in ROOT_INODE.ls() {
+    for app in root.ls() {
         println!("{}", app);
     }
     println!("**************/");
