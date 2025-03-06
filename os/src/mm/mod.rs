@@ -25,7 +25,7 @@ pub use page_table::{translated_byte_buffer, translated_str, translated_ref, tra
 pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
 pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType, VmAreaContainer, VmSpacePageFaultExt, VmSpaceHeapExt};
 pub use user_check::UserCheck;
-pub use slab::{slab_alloc, slab_dealloc, SLAB_ALLOCATOR};
+pub use slab::{slab_alloc, slab_dealloc, SlabAllocator};
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
