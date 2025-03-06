@@ -1,13 +1,13 @@
 use core::ops::{DerefMut, Range};
 
-use alloc::{collections::btree_map::{BTreeMap, Keys}, sync::Arc};
+use alloc::{alloc::Global, collections::btree_map::{BTreeMap, Keys}, sync::Arc};
 use log::info;
 
 use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}}; 
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
 use crate::mm::PageTableEntry;
 
-use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, SlabAllocator, VirtAddr, VirtPageNum};
 use bitflags::bitflags;
 
 bitflags! {
@@ -239,7 +239,7 @@ pub enum UserVmAreaType {
 #[allow(missing_docs)]
 pub struct UserVmArea {
     range_va: Range<VirtAddr>,
-    pub pages: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
+    pub pages: BTreeMap<VirtPageNum, StrongArc<FrameTracker>, Global>,
     pub map_perm: MapPerm,
     pub vma_type: UserVmAreaType,
 }
@@ -250,7 +250,7 @@ impl UserVmArea {
         let range_va = range_va.start.floor().into()..range_va.end.ceil().into();
         Self {
             range_va,
-            pages: BTreeMap::new(),
+            pages: BTreeMap::new_in(Global),
             map_perm,
             vma_type
         }
@@ -287,7 +287,7 @@ impl Clone for UserVmArea {
     fn clone(&self) -> Self {
         Self { 
             range_va: self.range_va.clone(), 
-            pages: BTreeMap::new(), 
+            pages: BTreeMap::new_in(Global), 
             map_perm: self.map_perm.clone(), 
             vma_type: self.vma_type.clone() 
         }

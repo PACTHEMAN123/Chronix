@@ -28,6 +28,8 @@
 #![feature(step_trait)]
 #![feature(new_range_api)]
 #![feature(naked_functions)]
+#![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 
 extern crate alloc;
 
