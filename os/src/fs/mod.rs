@@ -2,10 +2,9 @@
 //! define the file trait
 //! impl File for OSInode in `inode.rs`
 //! impl Stdin and Stdout in `stdio.rs`
-pub mod inode;
 pub mod stdio;
-pub mod disk;
-pub mod ext4fs;
+pub mod ext4;
+pub mod vfs;
 
 use crate::mm::UserBuffer;
 /// File trait
@@ -20,7 +19,31 @@ pub trait File: Send + Sync {
     fn write(&self, buf: UserBuffer) -> usize;
 }
 
-pub use inode::{list_apps, open_file, OSInode, OpenFlags};
+
+use log::*;
+use crate::logging;
 pub use stdio::{Stdin, Stdout};
-pub use disk::Disk;
-pub use ext4fs::{Ext4FileSystem, Inode};
+
+use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
+
+use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
+pub use ext4::Ext4SuperBlock;
+pub use vfs::{SuperBlock, SuperBlockInner};
+
+/// file system manager
+/// hold the lifetime of all file system
+/// maintain the mapping
+pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn SuperBlock>>> =
+    SpinNoIrqLock::new(BTreeMap::new());
+
+/// the default filesystem on disk
+pub const DISK_FS_NAME: &str = "ext4";
+
+/// init the file system
+pub fn init() {
+    // create the ext4 file system using the block device
+    let ext4_superblock = Ext4SuperBlock::new(
+        SuperBlockInner::new(Some(BLOCK_DEVICE.clone()), None));
+    FS_MANAGER.lock().insert(DISK_FS_NAME.to_string(), ext4_superblock);
+    info!("ext4 finish init");
+}

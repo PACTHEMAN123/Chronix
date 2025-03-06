@@ -23,7 +23,7 @@ pub mod processor;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::ext4::{open_file, OpenFlags};
 use crate::mm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
