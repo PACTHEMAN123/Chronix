@@ -12,7 +12,7 @@ use riscv::register::scause;
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
     pub static ref KERNEL_SPACE: UPSafeCell<KernelVmSpace> = 
-        unsafe { UPSafeCell::new(KernelVmSpace::new()) };
+    UPSafeCell::new(KernelVmSpace::new()) ;
 }
 
 #[allow(missing_docs)]
@@ -383,9 +383,9 @@ impl UserVmSpace {
     }
 
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        let mut ret = Self::from_kernel(unsafe {
+        let mut ret = Self::from_kernel(
             KERNEL_SPACE.exclusive_access()
-        });
+        );
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
@@ -464,7 +464,7 @@ impl UserVmSpace {
     }
 
     pub fn from_existed(user_space: &mut UserVmSpace) -> Self {
-        let mut ret = Self::from_kernel(unsafe{&KERNEL_SPACE.exclusive_access()});
+        let mut ret = Self::from_kernel(&KERNEL_SPACE.exclusive_access());
         for area in user_space.areas.iter_mut() {
             match area.clone_cow(&mut user_space.page_table) {
                 Ok(new_area) => {

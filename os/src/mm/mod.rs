@@ -31,5 +31,5 @@ pub use slab::{slab_alloc, slab_dealloc, SLAB_ALLOCATOR};
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
-    unsafe{KERNEL_SPACE.exclusive_access().enable()};
+    KERNEL_SPACE.exclusive_access().enable();
 }
