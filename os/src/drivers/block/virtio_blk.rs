@@ -26,16 +26,15 @@ const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>);
 
 lazy_static! {
-    static ref QUEUE_FRAMES: UPSafeCell<Vec<FrameTracker>> = unsafe { UPSafeCell::new(Vec::new()) };
+    static ref QUEUE_FRAMES: UPSafeCell<Vec<FrameTracker>> = UPSafeCell::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {
 
     fn size(&self) -> u64 {
-        unsafe {self.0
+        self.0
             .exclusive_access()
             .capacity() * (BLOCK_SIZE as u64)
-        }
     }
 
     fn block_size(&self) -> usize {
@@ -43,20 +42,16 @@ impl BlockDevice for VirtIOBlock {
     }
     
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        unsafe{
-            self.0
+        self.0
             .exclusive_access()
             .read_blocks(block_id, buf)
             .expect("Error when reading VirtIOBlk");
-        }
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        unsafe{
-            self.0
+        self.0
             .exclusive_access()
             .write_blocks(block_id, buf)
             .expect("Error when writing VirtIOBlk");
-        }
     }
 }
 
@@ -85,9 +80,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
                 ppn_base = frame.ppn;
             }
             assert_eq!(frame.ppn.0, ppn_base.0 + i);
-            unsafe {
-                QUEUE_FRAMES.exclusive_access().push(frame);
-            }
+            QUEUE_FRAMES.exclusive_access().push(frame);
         }
         let pa: PhysAddr = ppn_base.into();
         (pa.0, NonNull::new(pa.to_kern().get_mut::<u8>()).unwrap())

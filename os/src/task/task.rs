@@ -79,9 +79,7 @@ impl TaskControlBlockInner {
 
 impl TaskControlBlock {
     pub fn inner_exclusive_access(&self) -> &mut TaskControlBlockInner {
-        unsafe {
             self.inner.exclusive_access()
-        }
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // note: the kernel stack must be allocated before the user page table is created
@@ -102,7 +100,6 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             inner: 
-            unsafe {
                  UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: user_sp,
@@ -121,7 +118,6 @@ impl TaskControlBlock {
                         Some(Arc::new(Stdout)),
                     ],
                 }) 
-            } 
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -211,7 +207,7 @@ impl TaskControlBlock {
         }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
-            inner: unsafe{
+            inner: 
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: parent_inner.base_size,
@@ -222,8 +218,7 @@ impl TaskControlBlock {
                     waker: None,
                     exit_code: 0,
                     fd_table: new_fd_table,
-                })
-            },
+                }),
         });
         // add child
         parent_inner.children.push(task_control_block.clone());

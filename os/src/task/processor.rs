@@ -49,16 +49,16 @@ impl Processor {
 
 lazy_static! {
     ///The global processor instance
-    pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
+    pub static ref PROCESSOR: UPSafeCell<Processor> = UPSafeCell::new(Processor::new()) ;
 }
 
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    unsafe{PROCESSOR.exclusive_access()}.take_current()
+    PROCESSOR.exclusive_access().take_current()
 }
 ///Get running task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    unsafe{PROCESSOR.exclusive_access()}.current()
+    PROCESSOR.exclusive_access().current()
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
@@ -80,7 +80,7 @@ pub fn switch_to_current_task(task: &mut Arc<TaskControlBlock>, env: &mut EnvCon
     unsafe{disable_interrupt();}
     unsafe {env.auto_sum();}
     //info!("already in switch");
-    let processor = unsafe{PROCESSOR.exclusive_access()};
+    let processor = PROCESSOR.exclusive_access();
     core::mem::swap(&mut processor.env, env);
     processor.current = Some(Arc::clone(task)); 
     let inner = task.inner_exclusive_access();
@@ -99,7 +99,7 @@ pub fn switch_out_current_task(env: &mut EnvContext){
     unsafe {
         KERNEL_SPACE.exclusive_access().page_table.enable();
     }
-    let processor = unsafe{PROCESSOR.exclusive_access()};
+    let processor = PROCESSOR.exclusive_access();
     core::mem::swap(processor.env_mut(), env);
     processor.current = None;
     //unsafe {enable_interrupt()};
@@ -108,7 +108,7 @@ pub fn switch_out_current_task(env: &mut EnvContext){
 /// Switch to the kernel task,change sum bit temporarily
 pub fn switch_to_current_kernel(env: &mut EnvContext) {
     unsafe{disable_interrupt();}
-    let processor = unsafe{PROCESSOR.exclusive_access()};
+    let processor = PROCESSOR.exclusive_access();
     processor.change_env(env);
     core::mem::swap(processor.env_mut(), env);
     //unsafe{enable_interrupt()};
