@@ -22,17 +22,19 @@ unsafe impl<T> Sync for UPSafeCell<T> {}
 impl<T> UPSafeCell<T> {
     /// User is responsible to guarantee that inner struct is only used in
     /// uniprocessor.
-    pub unsafe fn new(value: T) -> Self {
+    pub fn new(value: T) -> Self {
         Self {
             inner: UnsafeCell::new(value),
         }
     }
     /// Panic if the data has been borrowed.
-    pub unsafe fn exclusive_access(&self) -> &mut T {
-        &mut *self.inner.get()
+    pub fn exclusive_access(&self) -> &mut T {
+        unsafe {
+            &mut *self.inner.get()
+        }
     }
     /// get the inner data
-    pub unsafe fn get(&self) -> *mut T{
+    pub fn get(&self) -> *mut T{
         self.inner.get()
     }
 }

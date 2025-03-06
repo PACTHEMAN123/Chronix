@@ -41,7 +41,7 @@ impl PidAllocator {
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
-        unsafe { UPSafeCell::new(PidAllocator::new()) };
+    UPSafeCell::new(PidAllocator::new()) ;
 }
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);
@@ -49,11 +49,11 @@ pub struct PidHandle(pub usize);
 impl Drop for PidHandle {
     fn drop(&mut self) {
         //println!("drop pid {}", self.0);
-        unsafe{PID_ALLOCATOR.exclusive_access()}.dealloc(self.0);
+        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
 pub fn pid_alloc() -> PidHandle {
-    unsafe{PID_ALLOCATOR.exclusive_access()}.alloc()
+    PID_ALLOCATOR.exclusive_access().alloc()
 }
 
