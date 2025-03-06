@@ -13,7 +13,7 @@ use lazy_static::lazy_static;
 lazy_static! {
     /// slab allocator
     pub static ref SLAB_ALLOCATOR: UPSafeCell<SlabAllocator> = 
-        unsafe { UPSafeCell::new(SlabAllocator::new()) };
+    UPSafeCell::new(SlabAllocator::new()) ;
 }
 
 /// Slab Allocator
@@ -165,12 +165,12 @@ impl SlabAllocator {
 
 /// alloc from slab allocator
 pub fn slab_alloc<T: Sized>() -> Option<NonNull<T>> {
-    unsafe { SLAB_ALLOCATOR.exclusive_access().alloc() }
+    SLAB_ALLOCATOR.exclusive_access().alloc() 
 }
 
 /// dealloc to slab allocator
 pub fn slab_dealloc<T: Sized>(ptr: NonNull<T>) {
-    unsafe { SLAB_ALLOCATOR.exclusive_access().dealloc(ptr); }
+    SLAB_ALLOCATOR.exclusive_access().dealloc(ptr); 
 }
 
 /// shrink the slab
