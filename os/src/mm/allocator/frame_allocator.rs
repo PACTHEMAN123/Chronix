@@ -1,8 +1,8 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
 
-use super::{PhysAddr, PhysPageNum};
 use crate::config::{KERNEL_ADDR_OFFSET, MEMORY_END};
+use crate::mm::address::{PhysAddr, PhysPageNum};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
@@ -84,6 +84,7 @@ impl FrameAllocator for BitMapFrameAllocator {
     }
 }
 
+/// frame allocator
 pub static mut FRAME_ALLOCATOR: BitMapFrameAllocator = BitMapFrameAllocator::new();
 
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`

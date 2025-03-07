@@ -11,7 +11,7 @@ use crate::{
     trap::set_kernel_trap_entry,
     config::PAGE_SIZE,
     logging,
-    mm::VirtAddr,
+    mm::address::VirtAddr,
 };
 
 global_asm!(include_str!("check.S"));

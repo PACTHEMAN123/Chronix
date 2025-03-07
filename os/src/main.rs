@@ -30,6 +30,7 @@
 #![feature(naked_functions)]
 #![feature(allocator_api)]
 #![feature(btreemap_alloc)]
+#![feature(arbitrary_self_types)]
 
 extern crate alloc;
 
@@ -82,7 +83,7 @@ pub fn rust_main() -> ! {
     logging::init();
     info!("[kernel] Hello, world!");
     mm::init();
-    mm::remap_test();
+    mm::vm::remap_test();
     trap::init();
     fs::list_apps();
     task::init_initproc();

@@ -24,7 +24,7 @@ pub mod processor;
 mod task;
 
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::VmSpace;
+use crate::mm::vm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
 use lazy_static::*;

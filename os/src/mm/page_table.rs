@@ -5,8 +5,10 @@ use core::ptr::slice_from_raw_parts_mut;
 
 use crate::config::PAGE_SIZE;
 
-use super::frame_allocator::frame_alloc_clean;
-use super::{frame_alloc, FrameTracker, KernAddr, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
+use super::allocator::{frame_alloc_clean, frame_alloc, FrameTracker};
+use super::address::{KernAddr, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::vm::KERNEL_SPACE;
+
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;

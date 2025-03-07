@@ -5,10 +5,10 @@ use log::info;
 
 use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}}; 
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
-use crate::mm::PageTableEntry;
-
-use super::{frame_alloc, frame_allocator::frame_alloc_clean, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, vm_space::PageFaultAccessType, FrameTracker, PhysAddr, PhysPageNum, SlabAllocator, VirtAddr, VirtPageNum};
+use crate::mm::{PageTableEntry, allocator::{frame_alloc, frame_alloc_clean, FrameTracker}, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}};
 use bitflags::bitflags;
+
+use super::PageFaultAccessType;
 
 bitflags! {
     /// map permission corresponding to that in pte: `R W X U`
