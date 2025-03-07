@@ -1,181 +1,300 @@
-//! (FileWrapper + VfsNodeOps) -> OSInodeInner
-//! OSInodeInner -> OSInode
-extern crate lwext4_rust;
-extern crate virtio_drivers;
+//! implement the vfs operations and node operations for ext4 filesystem
+//! definition in `vfs.rs`
 
-use lwext4_rust::InodeTypes;
+use core::cell::RefCell;
+use core::ptr::NonNull;
+
+use alloc::string::String;
+use alloc::ffi::CString;
+use super::disk::Disk;
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
+
+use log::*;
+use crate::fs::vfs::{InodeInner, Inode};
+use crate::fs::SuperBlock;
+use crate::logging;
+use crate::sync::UPSafeCell;
+
+use lwext4_rust::bindings::{
+    O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
+};
+use lwext4_rust::{Ext4BlockWrapper, Ext4File, InodeTypes, KernelDevOp};
 
 use virtio_drivers::device::blk::VirtIOBlk;
 use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 use virtio_drivers::transport::{DeviceType, Transport};
 
+use crate::config::BLOCK_SIZE;
 
-use crate::drivers::block::BLOCK_DEVICE;
-use crate::fs::FS_MANAGER;
-
-use alloc::vec;
-use alloc::{format, vec::Vec};
-use alloc::string::String;
-use alloc::boxed::Box;
-
-use super::ext4fs::{Ext4FileSystem, Inode};
-use super::disk::Disk;
-
-use crate::fs::File;
-use crate::mm::UserBuffer;
-use crate::sync::UPSafeCell;
-use alloc::sync::Arc;
-use bitflags::*;
-use lazy_static::*;
-
-use log::*;
-use crate::logging;
-
-/// The OS inode inner in 'UPSafeCell'
-pub struct OSInodeInner {
-    offset: usize,
-    inode: Arc<Inode>,
+/// The inode of the Ext4 filesystem
+pub struct Ext4Inode {
+    inner: InodeInner,
+    file: UPSafeCell<Ext4File>,
 }
 
-/// A wrapper around a filesystem inode
-/// to implement File trait atop
-pub struct OSInode {
-    readable: bool,
-    writable: bool,
-    inner: UPSafeCell<OSInodeInner>,
-}
+unsafe impl Send for Ext4Inode {}
+unsafe impl Sync for Ext4Inode {}
 
-impl OSInode {
-    /// Construct an OS inode from a Inode
-    pub fn new(readable: bool, writable: bool, inode: Arc<Inode>) -> Self {
+impl Ext4Inode {
+    /// Create a new inode
+    pub fn new(super_block: Arc<dyn SuperBlock>, path: &str, types: InodeTypes) -> Self {
+        info!("Inode new {:?} {}", types, path);
+        
+        //file.file_read_test("/test/test.txt", &mut buf);
         Self {
-            readable,
-            writable,
-            inner: UPSafeCell::new(OSInodeInner { offset: 0, inode }) ,
+            inner: InodeInner::new(super_block.clone()),
+            file: UPSafeCell::new(Ext4File::new(path, types)),
         }
     }
 
-    /// Read all data inside a inode into vector
-    pub fn read_all(&self) -> Vec<u8> {
-        let inner = self.inner.exclusive_access();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
-        loop {
-            let len = inner.inode.read_at(inner.offset, &mut buffer).unwrap();
-            if len == 0 {
-                break;
+    fn path_deal_with(&self, path: &str) -> String {
+        if path.starts_with('/') {
+            warn!("path_deal_with: {}", path);
+        }
+        let p = path.trim_matches('/'); // 首尾去除
+        if p.is_empty() || p == "." {
+            return String::new();
+        }
+
+        if let Some(rest) = p.strip_prefix("./") {
+            //if starts with "./"
+            return self.path_deal_with(rest);
+        }
+        let rest_p = p.replace("//", "/");
+        if p != rest_p {
+            return self.path_deal_with(&rest_p);
+        }
+
+        //Todo ? ../
+        //注：lwext4创建文件必须提供文件path的绝对路径
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let fpath = String::from(path.to_str().unwrap().trim_end_matches('/')) + "/" + p;
+        info!("dealt with full path: {}", fpath.as_str());
+        fpath
+    }
+}
+
+impl Inode for Ext4Inode {
+
+    fn inner(&self) -> &InodeInner {
+        &self.inner
+    }
+
+    /// Find inode under current inode by name
+    #[allow(unused)]
+    fn find(&self, name: &str) -> Option<Arc<dyn Inode>> {
+        let file = unsafe{self.file.exclusive_access()};
+        info!("find name: {} in {}", name, file.get_path().to_str().unwrap());
+        let (names, inode_type) = file.lwext4_dir_entries().unwrap();
+        info!("out lwext4_dir_entries");
+        let mut name_iter = names.iter();
+        let mut inode_type_iter = inode_type.iter();
+
+        info!("into while");
+        while let Some(iname) = name_iter.next() {
+            let itypes = inode_type_iter.next();
+            info!("iname: {}", core::str::from_utf8(iname).unwrap());
+            if core::str::from_utf8(iname).unwrap().trim_end_matches('\0') == name {
+                info!("find {} success", name);
+
+                // lwext4 needs full path
+                let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
+                return Some(Arc::new(Ext4Inode::new(
+                    self.inner().super_block.upgrade()?.clone(),
+                    full_path.as_str(), 
+                    itypes.unwrap().clone())));
             }
-            inner.offset += len;
-            v.extend_from_slice(&buffer[..len]);
         }
-        v
+
+        info!("find {} failed", name);
+        None
     }
-}
 
-lazy_static! {
-    /// ext4 file system
-    pub static ref EXT4_FS: Arc<Ext4FileSystem> = Arc::new(Ext4FileSystem::new(Disk::new(BLOCK_DEVICE.clone())));
+    /// Look up the node with given `name` in the directory
+    /// Return the node if found.
+    fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
+        let file = self.file.exclusive_access();
+        
+        let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
+        
+        if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
+            info!("lookup {} success", name);
+            return Some(Arc::new(Ext4Inode::new(
+                self.inner().super_block.upgrade()?.clone(), 
+                full_path.as_str(), 
+                InodeTypes::EXT4_DE_REG_FILE)));
+        }
 
-    /// root inode
-    pub static ref ROOT_INODE: Arc<Inode> = EXT4_FS.root_dir();
-}
+        // todo!: add support for directory
 
-
-
-impl File for OSInode {
-    fn readable(&self) -> bool {
-        self.readable
+        info!("lookup {} failed", name);
+        None
     }
-    fn writable(&self) -> bool {
-        self.writable
-    }
-    fn read(&self, mut buf: UserBuffer) -> usize {
-        let inner = self.inner.exclusive_access();
-        let mut total_read_size = 0usize;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = inner.inode.read_at(inner.offset, *slice).unwrap();
-            if read_size == 0 {
-                break;
+
+    /// list all files' name in the directory
+    fn ls(&self) -> Vec<String> {
+        let file = self.file.exclusive_access();
+
+        if file.get_type() != InodeTypes::EXT4_DE_DIR {
+            info!("not a directory");
+        }
+
+        let (name, inode_type) = match file.lwext4_dir_entries() {
+            Ok((name, inode_type)) => (name, inode_type),
+            Err(e) => {
+                panic!("error when ls: {}", e);
             }
-            inner.offset += read_size;
-            total_read_size += read_size;
-        }
-        total_read_size
-    }
-    fn write(&self, buf: UserBuffer) -> usize {
-        let inner = self.inner.exclusive_access();
-        let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = inner.inode.write_at(inner.offset, *slice).unwrap();
-            assert_eq!(write_size, slice.len());
-            inner.offset += write_size;
-            total_write_size += write_size;
-        }
-        total_write_size
-    }
-}
+        };
 
-bitflags! {
-    ///Open file flags
-    pub struct OpenFlags: u32 {
-        ///Read only
-        const RDONLY = 0;
-        ///Write only
-        const WRONLY = 1 << 0;
-        ///Read & Write
-        const RDWR = 1 << 1;
-        ///Allow create
-        const CREATE = 1 << 9;
-        ///Clear file and return an empty one
-        const TRUNC = 1 << 10;
-    }
-}
+        let mut name_iter = name.iter();
+        let  _inode_type_iter = inode_type.iter();
 
-impl OpenFlags {
-    /// Do not check validity for simplicity
-    /// Return (readable, writable)
-    pub fn read_write(&self) -> (bool, bool) {
-        if self.is_empty() {
-            (true, false)
-        } else if self.contains(Self::WRONLY) {
-            (false, true)
+        let mut names = Vec::new();
+        while let Some(iname) = name_iter.next() {
+            names.push(String::from(core::str::from_utf8(iname).unwrap()));
+        }
+        names
+    }
+
+    /// Read data from inode at offset
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        debug!("To read_at {}, buf len={}", offset, buf.len());
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let path = path.to_str().unwrap();
+        file.file_open(path, O_RDONLY)?;
+
+        file.file_seek(offset as i64, SEEK_SET)?;
+        let r = file.file_read(buf);
+
+        let _ = file.file_close();
+        r
+    }
+
+    /// Write data to inode at offset
+    fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32> {
+        debug!("To write_at {}, buf len={}", offset, buf.len());
+        let file =  self.file.exclusive_access();
+        let path = file.get_path();
+        let path = path.to_str().unwrap();
+        file.file_open(path, O_RDWR)?;
+
+        file.file_seek(offset as i64, SEEK_SET)?;
+        let r = file.file_write(buf);
+
+        let _ = file.file_close();
+        r
+    }
+
+    /// Truncate the inode to the given size
+    fn truncate(&self, size: u64) -> Result<usize, i32> {
+        info!("truncate file to size={}", size);
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let path = path.to_str().unwrap();
+        file.file_open(path, O_RDWR)?;
+
+        let t = file.file_truncate(size);
+
+        let _ = file.file_close();
+        t
+    }
+
+    /// Create a new inode and return the inode
+    fn create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn Inode>> {
+        info!("create {:?} on Ext4fs: {}", ty, path);
+        let fpath = self.path_deal_with(path);
+        let fpath = fpath.as_str();
+        if fpath.is_empty() {
+            info!("given path is empty");
+            return None;
+        }
+
+        let types = ty;
+
+        let file = self.file.exclusive_access();
+
+        let result = if file.check_inode_exist(fpath, types.clone()) {
+            info!("inode already exists");
+            Ok(0)
         } else {
-            (true, true)
-        }
-    }
-}
-
-///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
-    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
-    let (readable, writable) = flags.read_write();
-    if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = root.lookup(name) {
-            // clear size
-            inode.truncate(0).expect("Error when truncating inode");
-            Some(Arc::new(OSInode::new(readable, writable, inode)))
-        } else {
-            // create file
-            root
-                .create(name, InodeTypes::EXT4_DE_REG_FILE)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
-        }
-    } else {
-        root.lookup(name).map(|inode| {
-            if flags.contains(OpenFlags::TRUNC) {
-                inode.truncate(0).expect("Error when truncating inode");
+            if types == InodeTypes::EXT4_DE_DIR {
+                file.dir_mk(fpath)
+            } else {
+                file.file_open(fpath, O_WRONLY | O_CREAT | O_TRUNC)
+                    .expect("create file failed");
+                file.file_close()
             }
-            Arc::new(OSInode::new(readable, writable, inode))
-        })
+        };
+
+        match result {
+            Err(e) => {
+                error!("create inode failed: {}", e);
+                None
+            }
+            Ok(_) => {
+                info!("create inode success");
+                Some(Arc::new(Ext4Inode::new(
+                    self.inner().super_block.upgrade()?.clone(),
+                    fpath, types)))
+            }
+        }
+    }
+
+    /// Remove the inode
+    #[allow(unused)]
+    fn remove(&self, path: &str) -> Result<usize, i32> {
+        info!("remove ext4fs: {}", path);
+        let fpath = self.path_deal_with(path);
+        let fpath = fpath.as_str();
+
+        assert!(!fpath.is_empty()); // already check at `root.rs`
+
+        let mut file = unsafe{self.file.exclusive_access()};
+        if file.check_inode_exist(fpath, InodeTypes::EXT4_DE_DIR) {
+            // Recursive directory remove
+            file.dir_rm(fpath)
+        } else {
+            file.file_remove(fpath)
+        }
+    }
+
+    /// Get the parent directory of this directory.
+    /// Return `None` if the node is a file.
+    #[allow(unused)]
+    fn parent(&self) -> Option<Arc<dyn Inode>> {
+        let file = unsafe{self.file.exclusive_access()};
+        if file.get_type() == InodeTypes::EXT4_DE_DIR {
+            let path = file.get_path();
+            let path = path.to_str().unwrap();
+            info!("Get the parent dir of {}", path);
+            let path = path.trim_end_matches('/').trim_end_matches(|c| c != '/');
+            if !path.is_empty() {
+                return Some(Arc::new(Self::new(
+                    self.inner().super_block.upgrade()?.clone(),
+                    path, 
+                    InodeTypes::EXT4_DE_DIR)));
+            }
+        }
+        None
+    }
+
+    /// Rename the inode
+    #[allow(unused)]
+    fn rename(&self, src_path: &str, dst_path: &str) -> Result<usize, i32> {
+        info!("rename from {} to {}", src_path, dst_path);
+        let mut file = unsafe{self.file.exclusive_access()};
+        file.file_rename(src_path, dst_path)
     }
 }
 
-/// List all files in the filesystems
-pub fn list_apps() {
-    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
-    println!("/**** APPS ****");
-    for app in root.ls() {
-        println!("{}", app);
+impl Drop for Ext4Inode {
+    fn drop(&mut self) {
+        let file = self.file.exclusive_access();
+        info!("Drop struct Inode {:?}", file.get_path());
+        file.file_close().expect("failed to close fd");
+        let _ = file; // todo
     }
-    println!("**************/");
 }

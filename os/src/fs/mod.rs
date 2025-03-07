@@ -43,7 +43,7 @@ pub const DISK_FS_NAME: &str = "ext4";
 pub fn init() {
     // create the ext4 file system using the block device
     let ext4_superblock = Ext4SuperBlock::new(
-        SuperBlockInner::new(Some(BLOCK_DEVICE.clone()), None));
+        SuperBlockInner::new(Some(BLOCK_DEVICE.clone())));
     FS_MANAGER.lock().insert(DISK_FS_NAME.to_string(), ext4_superblock);
     info!("ext4 finish init");
 }
