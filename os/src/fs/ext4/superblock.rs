@@ -1,9 +1,9 @@
 //! ext4 file system implement for the VFS super block
-use crate::fs::vfs::{SuperBlock, SuperBlockInner};
+use crate::fs::vfs::{Inode, SuperBlock, SuperBlockInner};
 use lwext4_rust::{Ext4BlockWrapper, Ext4File, InodeTypes, KernelDevOp};
 use super::disk::Disk;
-use super::ext4fs::Inode;
-use alloc::sync::Arc;
+use super::inode::Ext4Inode;
+use alloc::sync::{Arc, Weak};
 
 #[allow(dead_code)]
 /// EXT4 FS super block
@@ -24,9 +24,14 @@ impl Ext4SuperBlock {
         let block_device = inner.device.as_ref().unwrap().clone();
         let disk = Disk::new(block_device);
         let block = Ext4BlockWrapper::<Disk>::new(disk).expect("failed to create ext4fs");
-        let mut inner = inner;
-        inner.root = Some(Arc::new(Inode::new("/", InodeTypes::EXT4_DE_DIR)));
-        Arc::new(Self {inner, block})
+        let super_block = Arc::new(Self {inner, block});
+        
+        // need to reset the super block's root
+
+        let root = Arc::new(Ext4Inode::new(super_block.clone(), "/", InodeTypes::EXT4_DE_DIR));
+        super_block.set_root(root);
+
+        Arc::clone(&super_block)
     }
 }
 
