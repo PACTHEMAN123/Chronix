@@ -3,6 +3,9 @@
 
 use crate::config::{KERNEL_ADDR_OFFSET, MEMORY_END};
 use crate::mm::address::{PhysAddr, PhysPageNum};
+use crate::mm::{RangeKpnData, ToRangeKpn};
+use crate::sync::mutex::spin_mutex::SpinMutex;
+use crate::sync::mutex::Spin;
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
@@ -47,13 +50,50 @@ impl Drop for FrameTracker {
     }
 }
 
+#[allow(unused, missing_docs)]
+pub struct FrameRangeTracker {
+    pub range_ppn: Range<PhysPageNum>
+}
+
+#[allow(unused, missing_docs)]
+impl FrameRangeTracker {
+    /// new FrameRangeTracker from a range of Physical Page Number
+    /// It is the caller's duty to clean the frame.
+    pub fn new(range_ppn: Range<PhysPageNum>) -> Self {
+        Self { range_ppn }
+    }
+
+    pub fn clean(&self) {
+        self.range_ppn.to_kern().get_slice::<u8>().fill(0);
+    }
+
+    /// leak
+    pub fn leak(mut self) -> Range<PhysPageNum> {
+        let ret = self.range_ppn.clone();
+        self.range_ppn.end = self.range_ppn.start;
+        ret
+    }
+}
+
+impl Debug for FrameRangeTracker {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("FrameRangeTracker:PPN Range={:#x?}", self.range_ppn))
+    }
+}
+
+impl Drop for FrameRangeTracker {
+    fn drop(&mut self) {
+        frames_dealloc(self.range_ppn.clone());
+    }
+}
+
 trait FrameAllocator {
     fn init(&mut self, range_pa: Range<PhysAddr>);
     fn alloc(&mut self, size: usize) -> Option<PhysPageNum>;
     fn dealloc(&mut self, ppn: PhysPageNum, size: usize) -> bool;
 }
 
-pub struct BitMapFrameAllocator {
+struct BitMapFrameAllocator {
     range: Range<PhysPageNum>,
     inner: bitmap_allocator::BitAlloc16M,
 }
@@ -85,31 +125,48 @@ impl FrameAllocator for BitMapFrameAllocator {
 }
 
 /// frame allocator
-pub static mut FRAME_ALLOCATOR: BitMapFrameAllocator = BitMapFrameAllocator::new();
+static FRAME_ALLOCATOR: SpinMutex<BitMapFrameAllocator, Spin> = SpinMutex::new(BitMapFrameAllocator::new());
 
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
-    unsafe {
-        #[allow(static_mut_refs)]
-        FRAME_ALLOCATOR.init(
-            PhysAddr::from(ekernel as usize - KERNEL_ADDR_OFFSET)..PhysAddr::from(MEMORY_END),
-        );
-    }
+
+    FRAME_ALLOCATOR.lock().init(
+        PhysAddr::from(ekernel as usize - KERNEL_ADDR_OFFSET)..PhysAddr::from(MEMORY_END),
+    );
 }
 
 #[allow(unused)]
 /// allocate a frame
 pub fn frame_alloc() -> Option<FrameTracker> {
-    unsafe {
-        #[allow(static_mut_refs)]
-        FRAME_ALLOCATOR
-            .alloc(1)
-            .map(FrameTracker::new)
-    }
+    FRAME_ALLOCATOR
+        .lock()
+        .alloc(1)
+        .map(FrameTracker::new)
 }
+
+#[allow(unused)]
+/// allocate frames
+pub fn frames_alloc(size: usize) -> Option<FrameRangeTracker> {
+    FRAME_ALLOCATOR
+        .lock()
+        .alloc(size)
+        .map(|ppn| {
+            FrameRangeTracker::new(ppn..ppn+size)
+        })
+}
+
+#[allow(unused)]
+/// allocate frames and clean
+pub fn frames_alloc_clean(size: usize) -> Option<FrameRangeTracker> {
+    frames_alloc(size).map(|f| {
+        f.range_ppn.to_kern().get_slice::<u8>().fill(0);
+        f
+    })
+}
+
 
 #[allow(unused)]
 /// allocate a frame
@@ -120,9 +177,14 @@ pub fn frame_alloc_clean() -> Option<FrameTracker> {
 
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
-    unsafe {
-        #[allow(static_mut_refs)]
-        FRAME_ALLOCATOR.dealloc(ppn, 1);
+    FRAME_ALLOCATOR.lock().dealloc(ppn, 1);
+}
+
+/// deallocate frames
+#[allow(unused)]
+pub fn frames_dealloc(range_ppn: Range<PhysPageNum>) {
+    if range_ppn.clone().count() > 0 {
+        FRAME_ALLOCATOR.lock().dealloc(range_ppn.start, range_ppn.count());
     }
 }
 

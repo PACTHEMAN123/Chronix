@@ -1,7 +1,5 @@
 //! Implementation of physical and virtual address and page number.
 
-use core::{iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
-
 use super::PageTableEntry;
 use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
 
@@ -15,6 +13,7 @@ mod kern;
 mod phys;
 mod virt;
 
-pub use kern::{KernAddr, KernPageNum};
+pub use kern::{KernAddr, KernPageNum, ToRangeKpn, RangeKpnData};
 pub use phys::{PhysAddr, PhysPageNum};
 pub use virt::{VirtAddr, VirtPageNum};
+
