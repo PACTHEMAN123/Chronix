@@ -11,3 +11,14 @@ pub struct TimeVal {
     pub usec: usize,
 }
 
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+/// TimeSpec struct
+pub struct TimeSpec {
+    /// sec
+    pub tv_sec: usize,
+    /// nano sec
+    pub tv_nsec: usize,
+}
+

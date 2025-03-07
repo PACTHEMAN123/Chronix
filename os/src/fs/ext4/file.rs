@@ -11,15 +11,18 @@ use virtio_drivers::transport::{DeviceType, Transport};
 
 
 use crate::drivers::block::BLOCK_DEVICE;
+use crate::fs::vfs::Inode;
+use crate::fs::FS_MANAGER;
 
 use alloc::vec;
 use alloc::{format, vec::Vec};
+use alloc::string::String;
 use alloc::boxed::Box;
 
-use super::ext4fs::{Ext4FileSystem, Inode};
+use super::inode::Ext4Inode;
 use super::disk::Disk;
 
-use super::File;
+use crate::fs::File;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
@@ -32,7 +35,7 @@ use crate::logging;
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
     offset: usize,
-    inode: Arc<Inode>,
+    inode: Arc<dyn Inode>,
 }
 
 /// A wrapper around a filesystem inode
@@ -43,9 +46,12 @@ pub struct OSInode {
     inner: UPSafeCell<OSInodeInner>,
 }
 
+unsafe impl Send for OSInode {}
+unsafe impl Sync for OSInode {}
+
 impl OSInode {
     /// Construct an OS inode from a Inode
-    pub fn new(readable: bool, writable: bool, inode: Arc<Inode>) -> Self {
+    pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
         Self {
             readable,
             writable,
@@ -69,16 +75,6 @@ impl OSInode {
         v
     }
 }
-
-lazy_static! {
-    /// ext4 file system
-    pub static ref EXT4_FS: Arc<Ext4FileSystem> = Arc::new(Ext4FileSystem::new(Disk::new(BLOCK_DEVICE.clone())));
-
-    /// root inode
-    pub static ref ROOT_INODE: Arc<Inode> = EXT4_FS.root_dir();
-}
-
-
 
 impl File for OSInode {
     fn readable(&self) -> bool {
@@ -145,20 +141,21 @@ impl OpenFlags {
 
 ///Open file with flags
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = ROOT_INODE.lookup(name) {
+        if let Some(inode) = root.lookup(name) {
             // clear size
             inode.truncate(0).expect("Error when truncating inode");
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
             // create file
-            ROOT_INODE
+            root
                 .create(name, InodeTypes::EXT4_DE_REG_FILE)
                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
         }
     } else {
-        ROOT_INODE.lookup(name).map(|inode| {
+        root.lookup(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
@@ -169,8 +166,9 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 
 /// List all files in the filesystems
 pub fn list_apps() {
+    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     println!("/**** APPS ****");
-    for app in ROOT_INODE.ls() {
+    for app in root.ls() {
         println!("{}", app);
     }
     println!("**************/");
