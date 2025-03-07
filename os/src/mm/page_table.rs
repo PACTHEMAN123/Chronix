@@ -38,6 +38,34 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PageLevel {
+    Huge = 0,
+    Big = 1,
+    Small = 2
+}
+
+impl PageLevel {
+    pub const fn page_count(&self) -> usize {
+        match self {
+            PageLevel::Huge => 512 * 512,
+            PageLevel::Big => 512,
+            PageLevel::Small => 1,
+        }
+    }
+}
+
+impl From<usize> for PageLevel {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Self::Huge,
+            1 => Self::Big,
+            2 => Self::Small,
+            _ => panic!("unsupport Page Level")
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 #[repr(C)]
 #[allow(missing_docs)]
@@ -113,13 +141,13 @@ impl PageTable {
             frames: Vec::new(),
         }
     }
-    fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.to_kern().get_pte_array()[*idx];
-            if i == 2 {
+            if PageLevel::from(i) == level {
                 result = Some(pte);
                 break;
             }
@@ -132,6 +160,7 @@ impl PageTable {
         }
         result
     }
+    #[deprecated]
     pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
@@ -150,26 +179,27 @@ impl PageTable {
         result
     }
     #[allow(unused)]
-    pub fn find_leaf_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_leaf_pte(&self, vpn: VirtPageNum) -> Option<(&mut PageTableEntry, PageLevel)> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
-        let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.to_kern().get_pte_array()[*idx];
             if !pte.is_valid() {
                 return None;
             }
             if pte.is_leaf() || i == 2 {
-                result = Some(pte);
-                break;
+                return Some((pte, i.into()));
             }
             ppn = pte.ppn();
         }
-        result
+        None
     }
-    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        match self.find_pte_create(vpn) {
+    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags, level: PageLevel) {
+        match self.find_pte_create(vpn, level) {
             Some(pte) if !pte.is_valid() => {
+                if level != PageLevel::Small {
+                    info!("[PageTable::map] mapping a {:?} page", level);
+                }
                 *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
             },
             _ => {
@@ -179,7 +209,7 @@ impl PageTable {
     }
     pub fn update_perm(&mut self, vpn: VirtPageNum, flags: PTEFlags) {
         match self.find_leaf_pte(vpn) {
-            Some(pte) if pte.is_valid() => {
+            Some((pte, _)) if pte.is_valid() => {
                 pte.set_flags(flags | PTEFlags::V);
             },
             _ => {
@@ -187,8 +217,8 @@ impl PageTable {
             }
         }
     }
-    pub fn try_map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) -> Result<(), ()> {
-        match self.find_pte_create(vpn) {
+    pub fn try_map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags, level: PageLevel) -> Result<(), ()> {
+        match self.find_pte_create(vpn, level) {
             Some(pte) if !pte.is_valid() => {
                 *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
                 Ok(())
@@ -199,8 +229,8 @@ impl PageTable {
         }
     }
     pub fn unmap(&mut self, vpn: VirtPageNum) {
-        match self.find_pte(vpn) {
-            Some(pte ) if pte.is_valid()=> {
+        match self.find_leaf_pte(vpn) {
+            Some((pte, _) ) if pte.is_valid()=> {
                 *pte = PageTableEntry::empty();
             },
             _ => {
@@ -209,8 +239,8 @@ impl PageTable {
         }
     }
     pub fn try_unmap(&mut self, vpn: VirtPageNum) -> Result<(), ()> {
-        match self.find_pte(vpn) {
-            Some(pte ) if pte.is_valid()=> {
+        match self.find_leaf_pte(vpn) {
+            Some((pte, _) ) if pte.is_valid()=> {
                 *pte = PageTableEntry::empty();
                 Ok(())
             },
@@ -220,10 +250,10 @@ impl PageTable {
         }
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
-        self.find_pte(vpn).map(|pte| *pte)
+        self.find_leaf_pte(vpn).map(|(pte, _)| *pte)
     }
     pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
-        self.find_pte(va.clone().floor()).map(|pte| {
+        self.find_leaf_pte(va.floor()).map(|(pte, _)| {
             let aligned_pa: PhysAddr = pte.ppn().into();
             let offset = va.page_offset();
             let aligned_pa_usize: usize = aligned_pa.into();

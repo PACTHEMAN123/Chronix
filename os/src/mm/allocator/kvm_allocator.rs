@@ -1,0 +1,1 @@
+use buddy_system_allocator::FrameAllocator;
