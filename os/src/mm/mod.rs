@@ -7,29 +7,24 @@
 //! Every task or process has a memory_set to control its virtual memory.
 
 mod address;
-mod frame_allocator;
-mod heap_allocator;
 mod page_table;
-mod vm_area;
-mod vm_space;
 mod user_check;
-mod slab;
 mod smart_pointer;
+/// virtual memory
+pub mod vm;
+/// allocator
+pub mod allocator;
 
-pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernAddr, KernPageNum};
-pub use frame_allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker};
+pub use address::*;
 pub use page_table::{translated_byte_buffer, translated_str, translated_ref, translated_refmut, 
     copy_out, copy_out_str, PageTableEntry, UserBuffer, PTEFlags, PageTable};
-
-#[allow(unused)]
-pub use vm_area::{UserVmArea, KernelVmArea, VmArea, VmAreaFrameExt, MapPerm, KernelVmAreaType, UserVmAreaType};
-pub use vm_space::{VmSpace, KERNEL_SPACE, UserVmSpace, remap_test, PageFaultAccessType, VmAreaContainer, VmSpacePageFaultExt, VmSpaceHeapExt};
 pub use user_check::UserCheck;
-pub use slab::{slab_alloc, slab_dealloc, SlabAllocator};
+pub use smart_pointer::{StrongArc, SlabArc, SlabWeak, ArcNewInSlab};
+
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
-    heap_allocator::init_heap();
-    frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.exclusive_access().enable();
+    allocator::init_heap();
+    allocator::init_frame_allocator();
+    vm::VmSpace::enable(vm::KERNEL_SPACE.exclusive_access());
 }

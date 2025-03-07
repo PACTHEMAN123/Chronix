@@ -1,9 +1,9 @@
 use core::{alloc::{GlobalAlloc, Layout}, marker::PhantomData, ops::{Deref, DerefMut, Sub}, ptr::{self, NonNull}, sync::atomic::{AtomicUsize, Ordering}};
 
-use alloc::{alloc::{Allocator, Global}, sync::Arc};
+use alloc::{alloc::{Allocator, Global}, sync::{Arc, Weak}, task::Wake};
 use log::info;
 
-use super::SlabAllocator;
+use super::allocator::SlabAllocator;
 
 #[repr(C)]
 pub struct StrongArcPayload<T> {
@@ -29,8 +29,8 @@ impl<T> Destructor<T> for DefaultDestructor<T> {}
 #[derive(Debug)]
 pub struct StrongArc<
     T: Sized, 
+    A: Allocator + Clone = SlabAllocator,
     D: Destructor<T> = DefaultDestructor<T>,
-    A: Allocator + Clone = SlabAllocator
 > {
     rc: NonNull<AtomicUsize>,
     ptr: NonNull<T>,
@@ -38,8 +38,8 @@ pub struct StrongArc<
     _phantom_data: PhantomData<D>,
 }
 
-unsafe impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Send for StrongArc<T, D, A> {}
-unsafe impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Sync for StrongArc<T, D, A> {}
+unsafe impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> Send for StrongArc<T, A, D> {}
+unsafe impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> Sync for StrongArc<T, A, D> {}
 
 impl<T: Sized> Clone for StrongArc<T> {
     fn clone(&self) -> Self {
@@ -50,7 +50,8 @@ impl<T: Sized> Clone for StrongArc<T> {
     }
 }
 
-impl<T: Sized, D: Destructor<T>> StrongArc<T, D, SlabAllocator> {
+#[allow(unused, missing_docs)]
+impl<T: Sized, D: Destructor<T>> StrongArc<T, SlabAllocator, D> {
     pub fn new(data: T) -> Self {
         Self::new_in(data, SlabAllocator)
     }
@@ -60,7 +61,8 @@ impl<T: Sized, D: Destructor<T>> StrongArc<T, D, SlabAllocator> {
     }
 }
 
-impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> StrongArc<T, D, A> {
+#[allow(unused, missing_docs)]
+impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> StrongArc<T, A, D> {
     pub fn new_in(data: T, alloc: A) -> Self {
         // 尝试只分配一块连续内存
         match alloc.allocate(Layout::new::<StrongArcPayload<T>>()) {
@@ -109,7 +111,7 @@ impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> StrongArc<T, D, A> {
     }
 }
 
-impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Deref for StrongArc<T, D, A> {
+impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> Deref for StrongArc<T, A, D> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -117,13 +119,13 @@ impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Deref for StrongArc<T, D,
     }
 }
 
-impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> DerefMut for StrongArc<T, D, A> {
+impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> DerefMut for StrongArc<T, A, D> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.ptr.as_mut() }
     }
 }
 
-impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Drop for StrongArc<T, D, A> {
+impl<T: Sized, A: Allocator + Clone, D: Destructor<T>> Drop for StrongArc<T, A, D> {
     fn drop(&mut self) {
         let rc_ref = unsafe {
             self.rc.as_mut()
@@ -157,5 +159,22 @@ impl<T: Sized, D: Destructor<T>, A: Allocator + Clone> Drop for StrongArc<T, D, 
                 break;
             }
         }
+    }
+}
+
+#[allow(unused, missing_docs)]
+pub type SlabArc<T> = Arc<T, SlabAllocator>;
+
+#[allow(unused, missing_docs)]
+pub type SlabWeak<T> = Weak<T, SlabAllocator>;
+
+#[allow(unused, missing_docs)]
+pub trait ArcNewInSlab<T> {
+    fn new(data: T) -> Self;
+}
+
+impl<T> ArcNewInSlab<T> for SlabArc<T> {
+    fn new(data: T) -> Self {
+        Self::new_in(data, SlabAllocator)
     }
 }

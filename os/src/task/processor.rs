@@ -3,7 +3,7 @@ use super:: TaskStatus;
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
 use crate::task::{processor, context::EnvContext};
-use crate::mm::KERNEL_SPACE;
+use crate::mm::vm::KERNEL_SPACE;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
