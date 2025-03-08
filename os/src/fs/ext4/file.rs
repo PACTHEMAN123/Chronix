@@ -22,7 +22,7 @@ use alloc::boxed::Box;
 use super::inode::Ext4Inode;
 use super::disk::Disk;
 
-use crate::fs::File;
+use crate::fs::vfs::{File, FileInner};
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
@@ -32,30 +32,25 @@ use lazy_static::*;
 use log::*;
 use crate::logging;
 
-/// The OS inode inner in 'UPSafeCell'
-pub struct OSInodeInner {
-    offset: usize,
-    inode: Arc<dyn Inode>,
-}
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
-pub struct OSInode {
+pub struct Ext4File {
     readable: bool,
     writable: bool,
-    inner: UPSafeCell<OSInodeInner>,
+    inner: UPSafeCell<FileInner>,
 }
 
-unsafe impl Send for OSInode {}
-unsafe impl Sync for OSInode {}
+unsafe impl Send for Ext4File {}
+unsafe impl Sync for Ext4File {}
 
-impl OSInode {
+impl Ext4File {
     /// Construct an OS inode from a Inode
     pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
         Self {
             readable,
             writable,
-            inner: UPSafeCell::new(OSInodeInner { offset: 0, inode }) ,
+            inner: UPSafeCell::new(FileInner { offset: 0, inode }) ,
         }
     }
 
@@ -76,7 +71,7 @@ impl OSInode {
     }
 }
 
-impl File for OSInode {
+impl File for Ext4File {
     fn readable(&self) -> bool {
         self.readable
     }
@@ -140,26 +135,26 @@ impl OpenFlags {
 }
 
 ///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Ext4File>> {
     let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
         if let Some(inode) = root.lookup(name) {
             // clear size
             inode.truncate(0).expect("Error when truncating inode");
-            Some(Arc::new(OSInode::new(readable, writable, inode)))
+            Some(Arc::new(Ext4File::new(readable, writable, inode)))
         } else {
             // create file
             root
                 .create(name, InodeTypes::EXT4_DE_REG_FILE)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
+                .map(|inode| Arc::new(Ext4File::new(readable, writable, inode)))
         }
     } else {
         root.lookup(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
-            Arc::new(OSInode::new(readable, writable, inode))
+            Arc::new(Ext4File::new(readable, writable, inode))
         })
     }
 }

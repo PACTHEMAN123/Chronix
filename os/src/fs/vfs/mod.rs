@@ -4,6 +4,8 @@
 
 mod superblock;
 mod inode;
+mod file;
 
 pub use superblock::{SuperBlockInner, SuperBlock};
 pub use inode::{InodeInner, Inode};
+pub use file::{FileInner, File};
