@@ -2,6 +2,7 @@
 use log::info;
 
 use crate::fs::ext4::{open_file, OpenFlags};
+use crate::fs::vfs::File;
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -48,7 +49,7 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     }
 }
 
-pub async  fn sys_open(path: usize, flags: u32) -> isize {
+pub async fn sys_open(path: usize, flags: u32) -> isize {
     //info!("in sys_open");
     let task = current_task().unwrap();
     let token = current_user_token();

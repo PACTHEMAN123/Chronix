@@ -7,5 +7,5 @@ mod superblock;
 
 pub use disk::Disk;
 pub use inode::Ext4Inode;
-pub use file::{list_apps, open_file, OSInode, OpenFlags};
+pub use file::{list_apps, open_file, Ext4File, OpenFlags};
 pub use superblock::Ext4SuperBlock;

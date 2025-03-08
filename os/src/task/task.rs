@@ -1,7 +1,7 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{pid_alloc, schedule, PidHandle, INITPROC};
 use crate::config::TRAP_CONTEXT;
-use crate::fs::{File, Stdin, Stdout};
+use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::{UserVmSpace, VmSpace, KERNEL_SPACE}};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
