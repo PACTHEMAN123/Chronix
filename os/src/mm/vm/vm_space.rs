@@ -133,7 +133,7 @@ pub trait VmSpaceHeapExt: VmSpace {
             *heap.range_va_mut() = range.start..new_brk;
             new_brk
         } else if new_brk > range.start {
-            let mut right = heap.split_off(new_brk.floor());
+            let mut right = heap.split_off(new_brk.ceil());
             right.unmap(self.get_page_table_mut());
             new_brk
         } else {

@@ -356,12 +356,12 @@ impl VmAreaFrameExt for UserVmArea {
         match self.vma_type {
             UserVmAreaType::Heap
             | UserVmAreaType::Stack => {
-                range
-                    .for_each(|vpn| {
-                        // try_unmap, because of lazy allocation
-                        let _ = page_table.try_unmap(vpn);
-                        self.remove_allocated_frame(vpn);
-                    });
+                let mut mid = self.pages.split_off(&range.start);
+                let mut right = mid.split_off(&range.end);
+                for &vpn in mid.keys() {
+                    page_table.unmap(vpn);
+                }
+                self.pages.append(&mut right);
             },
             _ => {
                 range
