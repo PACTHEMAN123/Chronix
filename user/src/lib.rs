@@ -73,8 +73,55 @@ bitflags! {
         const CREATE = 1 << 9;
         const TRUNC = 1 << 10;
     }
+    pub struct CloneFlags: u64 {
+        /// Set if VM shared between processes.
+        const VM = 0x0000100;
+        /// Set if fs info shared between processes.
+        const FS = 0x0000200;
+        /// Set if open files shared between processes.
+        const FILES = 0x0000400;
+        /// Set if signal handlers shared.
+        const SIGHAND = 0x00000800;
+        /// Set if a pidfd should be placed in parent.
+        const PIDFD = 0x00001000;
+        /// Set if we want to have the same parent as the cloner.
+        const PARENT = 0x00008000;
+        /// Set to add to same thread group.
+        const THREAD = 0x00010000;
+        /// Set to shared SVID SEM_UNDO semantics.
+        const SYSVSEM = 0x00040000;
+        /// Set TLS info.
+        const SETTLS = 0x00080000;
+        /// Store TID in userlevel buffer before MM copy.
+        const PARENT_SETTID = 0x00100000;
+        /// Register exit futex and memory location to clear.
+        const CHILD_CLEARTID = 0x00200000;
+        /// Store TID in userlevel buffer in the child.
+        const CHILD_SETTID = 0x01000000;
+        /// Create clone detached.
+        const DETACHED = 0x00400000;
+        /// Set if the tracing process can't
+        const UNTRACED = 0x00800000;
+        /// New cgroup namespace.
+        const NEWCGROUP = 0x02000000;
+        /// New utsname group.
+        const NEWUTS = 0x04000000;
+        /// New ipcs.
+        const NEWIPC = 0x08000000;
+        /// New user namespace.
+        const NEWUSER = 0x10000000;
+        /// New pid namespace.
+        const NEWPID = 0x20000000;
+        /// New network namespace.
+        const NEWNET = 0x40000000;
+        /// Clone I/O context.
+        const IO = 0x80000000 ;
+    }
 }
-
+pub fn thread_create(flags:CloneFlags) -> isize {
+    let mut stack: [usize;1024] = [0;1024];
+    sys_clone(flags.bits() as _, stack.as_mut_ptr() as usize, 0)
+}
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
@@ -107,6 +154,9 @@ pub fn getpid() -> isize {
 }
 pub fn fork() -> isize {
     sys_fork()
+}
+pub fn clone(flags: usize, stack: usize, tls: usize) -> isize {
+    sys_clone(flags, stack, tls)
 }
 pub fn exec(path: &str, args: &[*const u8]) -> isize {
     sys_exec(path, args)
