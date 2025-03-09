@@ -48,6 +48,7 @@ __alltraps:
 
     # Load kernel frame pointer (fp) and thread pointer (tp)
     ld fp, 48*8(sp)
+    ld tp, 49*8(sp)
     ld sp, 34*8(sp)
     # jump to trap_handler
     ret 
@@ -71,7 +72,7 @@ __restore:
     sd s10, 46*8(a0)
     sd s11, 47*8(a0)
     sd fp, 48*8(a0)
-
+    sd tp, 49*8(a0)
     mv sp, a0
     # restore sstatus/sepc
     ld t0, 32*8(sp)

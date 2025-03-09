@@ -44,7 +44,7 @@ impl <F:Future+Send+'static> Future for UserTaskFuture<F> {
         let this = unsafe {self.get_unchecked_mut()};
         switch_to_current_task(&mut this.task,&mut this.env);
         let ret = unsafe{Pin::new_unchecked(&mut this.future).poll(cx)};
-        //info!("switch out current task, current task is {}", current_task().unwrap().getpid());
+        //info!("switch out current task, current task is {}", current_task().unwrap().tid());
         switch_out_current_task(&mut this.env);
         ret
     }
@@ -84,7 +84,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
     loop {
         trap_return();
         trap_handler().await;
-        if (*task).inner_exclusive_access().is_zombie(){
+        if task.is_zombie(){
             //info!("zombie task exit");
             break;
         }
