@@ -13,8 +13,10 @@ pub fn main() -> i32 {
     // brk 16GiB, to test lazy allocation
     let alloc_1 = brk(p as usize + 16 * 1024 * 1024 * 1024);
     println!("{:#x}", alloc_1);
-    let alloc_2 = brk(alloc_1 as usize + 64);
+    let alloc_2 = brk(alloc_1 as usize + 16 * 1024 * 1024 * 1024);
     println!("{:#x}", alloc_2);
+    let alloc_3 = brk(alloc_1 as usize + 64);
+    println!("{:#x}", alloc_3);
     let x = unsafe {
         &mut *(alloc_1 as *mut usize)
     };

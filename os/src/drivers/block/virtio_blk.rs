@@ -3,7 +3,7 @@
 use crate::devices::BlockDevice;
 use crate::config::{BLOCK_SIZE, KERNEL_ADDR_OFFSET};
 use crate::mm::{
-    frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker, PageTable, PhysAddr, PhysPageNum, VirtAddr, VmSpace, KERNEL_SPACE
+    allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker}, PageTable, PhysAddr, PhysPageNum, VirtAddr, vm::{VmSpace, KERNEL_SPACE}
 };
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;

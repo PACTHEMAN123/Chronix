@@ -1,8 +1,8 @@
 use core::{num::NonZeroUsize, ops::{Deref, DerefMut}};
 
-use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE, USER_STACK_TOP}, mm::{vm_area::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, VirtAddr, VirtPageNum}, sync::UPSafeCell};
+use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, TRAP_CONTEXT, USER_MEMORY_SPACE, USER_STACK_SIZE, USER_STACK_TOP}, mm::{vm::{KernelVmAreaType, MapPerm, UserVmArea, UserVmAreaType}, PageTable, PageTableEntry, address::{VirtAddr, VirtPageNum}}, sync::UPSafeCell};
 
-use super::{page_table::PageTable, vm_area::{KernelVmArea, VmArea, VmAreaCowExt, VmAreaPageFaultExt}, PageTableEntry};
+use super::vm_area::{KernelVmArea, VmArea, VmAreaCowExt, VmAreaPageFaultExt};
 
 use alloc::{format, vec::Vec};
 use lazy_static::lazy_static;
@@ -15,7 +15,7 @@ lazy_static! {
     UPSafeCell::new(KernelVmSpace::new()) ;
 }
 
-#[allow(missing_docs)]
+#[allow(missing_docs, unused)]
 pub trait VmAreaContainer<V: VmArea> {
 
     fn remove_with_va(&mut self, va: VirtAddr) -> Option<V>;
@@ -133,7 +133,7 @@ pub trait VmSpaceHeapExt: VmSpace {
             *heap.range_va_mut() = range.start..new_brk;
             new_brk
         } else if new_brk > range.start {
-            let mut right = heap.split_off(new_brk.floor());
+            let mut right = heap.split_off(new_brk.ceil());
             right.unmap(self.get_page_table_mut());
             new_brk
         } else {
@@ -142,7 +142,9 @@ pub trait VmSpaceHeapExt: VmSpace {
     }
 }
 
+/// Kernel Virtual Memory Space
 pub struct KernelVmSpace {
+    /// page table of vm space
     pub page_table: PageTable,
     areas: Vec<KernelVmArea>
 }
@@ -223,6 +225,7 @@ impl VmSpace for KernelVmSpace {
 
 impl KernelVmSpace {
 
+    /// create the kernel vm space 
     pub fn new() -> Self {
         extern "C" {
             fn stext();

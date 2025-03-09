@@ -1,9 +1,11 @@
 
 use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
+use core::ops::Range;
+
 use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
 
-use super::{KernAddr, KernPageNum, PA_WIDTH_SV39, PPN_WIDTH_SV39, VA_WIDTH_SV39, VPN_WIDTH_SV39};
+use super::{KernAddr, KernPageNum, ToRangeKpn, PA_WIDTH_SV39, PPN_WIDTH_SV39, VA_WIDTH_SV39, VPN_WIDTH_SV39};
 
 /// physical page number
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -174,5 +176,12 @@ impl Step for PhysAddr {
 
     fn backward_checked(start: Self, count: usize) -> Option<Self> {
         usize::backward_checked(start.0, count).map(|e| Self(e))
+    }
+}
+
+#[allow(unused)]
+impl ToRangeKpn for Range<PhysPageNum> {
+    fn to_kern(&self) -> Range<KernPageNum> {
+        self.start.to_kern()..self.end.to_kern()
     }
 }

@@ -3,7 +3,7 @@ use super::{context, tid_alloc, schedule, INITPROC};
 use crate::arch::riscv64::sfence_vma_all;
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{copy_out, copy_out_str, PhysPageNum, UserVmSpace, VirtAddr, VmSpace, KERNEL_SPACE};
+use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::{UserVmSpace, VmSpace, KERNEL_SPACE}};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
@@ -20,7 +20,7 @@ use core::{
     task::Waker,
 };
 use crate::config::PAGE_SIZE_BITS;
-use crate::mm::{ translated_refmut, translated_str, VirtPageNum, VmSpacePageFaultExt, PageFaultAccessType};
+use crate::mm::{ translated_refmut, translated_str, vm::{VmSpacePageFaultExt, PageFaultAccessType}};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
