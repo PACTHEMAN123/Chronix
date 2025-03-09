@@ -78,7 +78,7 @@ user:
 
 FS_IMG_DIR := .
 FS_IMG := $(FS_IMG_DIR)/fs.img
-fs-img: $(KERNEL_BIN) user
+fs-img: user
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)

@@ -1,5 +1,5 @@
 
-use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}, ptr::NonNull};
+use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Range, Sub, SubAssign}, ptr::{slice_from_raw_parts_mut, NonNull}};
 
 use crate::{config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS}, mm::PageTableEntry};
 
@@ -214,3 +214,23 @@ impl Step for KernPageNum {
         usize::backward_checked(start.0, count).map(|e| Self(e))
     }
 } 
+
+#[allow(missing_docs)]
+pub trait RangeKpnData {
+    fn get_slice<T>(&self) -> &'static mut [T];
+}
+
+impl RangeKpnData for Range<KernPageNum> {
+    fn get_slice<T>(&self) -> &'static mut [T] {
+        unsafe {
+            &mut *slice_from_raw_parts_mut(self.start.get_mut(), (self.clone().count() << PAGE_SIZE_BITS) / size_of::<T>())
+        }
+    }
+}
+
+/// cast to Range<KernPageNum>
+pub trait ToRangeKpn {
+    /// to kern
+    fn to_kern(&self) -> core::ops::Range<KernPageNum>;
+}
+

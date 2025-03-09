@@ -1,182 +1,204 @@
 use core::ptr::{null_mut, slice_from_raw_parts_mut, NonNull};
 
-use alloc::collections::btree_map::BTreeMap;
+use alloc::{alloc::{AllocError, Allocator}, collections::btree_map::BTreeMap};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::{KernAddr, PhysAddr}, sync::UPSafeCell};
+use crate::{config::PAGE_SIZE, mm::address::{KernAddr, PhysAddr}, sync::{mutex::{spin_mutex::SpinMutex, Spin}, UPSafeCell}};
 
-use super::{frame_alloc, frame_dealloc, FrameTracker, PhysPageNum};
+use super::{frame_alloc, frame_dealloc, FrameTracker};
 
 use lazy_static::lazy_static;
 
-
-lazy_static! {
-    /// slab allocator
-    pub static ref SLAB_ALLOCATOR: UPSafeCell<SlabAllocator> = 
-    UPSafeCell::new(SlabAllocator::new()) ;
-}
+/// slab allocator
+pub static SLAB_ALLOCATOR_INNER: SlabAllocatorInner = SlabAllocatorInner::new();
 
 /// Slab Allocator
-pub struct SlabAllocator {
-    pub cache08: SlabCache<8>, 
-    pub cache16: SlabCache<16>, 
-    pub cache24: SlabCache<24>, 
-    pub cache32: SlabCache<32>, 
-    pub cache40: SlabCache<40>, 
-    pub cache48: SlabCache<48>, 
-    pub cache56: SlabCache<56>, 
-    pub cache64: SlabCache<64>, 
-    pub cache72: SlabCache<72>,
-    pub cache80: SlabCache<80>,
-    pub cache88: SlabCache<88>,
-    pub cache96: SlabCache<96>, 
-    pub cache192: SlabCache<192>, 
+#[derive(Clone)]
+pub struct SlabAllocator;
+
+/// Slab Allocator's Inner
+pub struct SlabAllocatorInner {
+    pub cache08: SpinMutex<SlabCache<8>, Spin>, 
+    pub cache16: SpinMutex<SlabCache<16>, Spin>, 
+    pub cache32: SpinMutex<SlabCache<32>, Spin>, 
+    pub cache24: SpinMutex<SlabCache<24>, Spin>, 
+    pub cache40: SpinMutex<SlabCache<40>, Spin>, 
+    pub cache48: SpinMutex<SlabCache<48>, Spin>, 
+    pub cache56: SpinMutex<SlabCache<56>, Spin>, 
+    pub cache64: SpinMutex<SlabCache<64>, Spin>, 
+    pub cache72: SpinMutex<SlabCache<72>, Spin>,
+    pub cache80: SpinMutex<SlabCache<80>, Spin>,
+    pub cache88: SpinMutex<SlabCache<88>, Spin>,
+    pub cache96: SpinMutex<SlabCache<96>, Spin>, 
+    pub cache192: SpinMutex<SlabCache<192>, Spin>, 
 }
 
-impl SlabAllocator {
+unsafe impl Allocator for SlabAllocator {
+    fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
+        Ok(SLAB_ALLOCATOR_INNER.alloc_by_layout(layout).map(
+            |ptr| {
+                NonNull::slice_from_raw_parts(ptr, layout.size())
+            }
+        ).ok_or(AllocError)?)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: core::alloc::Layout) {
+        SLAB_ALLOCATOR_INNER.dealloc_by_layout(ptr, layout);
+    }
+}
+
+impl SlabAllocatorInner {
     /// new
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            cache08: SlabCache::<8>::new(),
-            cache16: SlabCache::<16>::new(),
-            cache24: SlabCache::<24>::new(),
-            cache32: SlabCache::<32>::new(),
-            cache40: SlabCache::<40>::new(),
-            cache48: SlabCache::<48>::new(),
-            cache56: SlabCache::<56>::new(),
-            cache64: SlabCache::<64>::new(),
-            cache72: SlabCache::<72>::new(),
-            cache80: SlabCache::<80>::new(),
-            cache88: SlabCache::<88>::new(),
-            cache96: SlabCache::<96>::new(),
-            cache192: SlabCache::<192>::new(),
+            cache08: SpinMutex::new(SlabCache::<8>::new()),
+            cache16: SpinMutex::new(SlabCache::<16>::new()),
+            cache24: SpinMutex::new(SlabCache::<24>::new()),
+            cache32: SpinMutex::new(SlabCache::<32>::new()),
+            cache40: SpinMutex::new(SlabCache::<40>::new()),
+            cache48: SpinMutex::new(SlabCache::<48>::new()),
+            cache56: SpinMutex::new(SlabCache::<56>::new()),
+            cache64: SpinMutex::new(SlabCache::<64>::new()),
+            cache72: SpinMutex::new(SlabCache::<72>::new()),
+            cache80: SpinMutex::new(SlabCache::<80>::new()),
+            cache88: SpinMutex::new(SlabCache::<88>::new()),
+            cache96: SpinMutex::new(SlabCache::<96>::new()),
+            cache192: SpinMutex::new(SlabCache::<192>::new()),
         }
     }
 
     /// release useless frame
-    pub fn shrink(&mut self) {
-        self.cache08.shrink();
-        self.cache16.shrink();
-        self.cache24.shrink();
-        self.cache32.shrink();
-        self.cache40.shrink();
-        self.cache48.shrink();
-        self.cache56.shrink();
-        self.cache64.shrink();
-        self.cache72.shrink();
-        self.cache80.shrink();
-        self.cache88.shrink();
-        self.cache96.shrink();
-        self.cache192.shrink();
+    pub fn shrink(&self) {
+        self.cache08.lock().shrink();
+        self.cache16.lock().shrink();
+        self.cache24.lock().shrink();
+        self.cache32.lock().shrink();
+        self.cache40.lock().shrink();
+        self.cache48.lock().shrink();
+        self.cache56.lock().shrink();
+        self.cache64.lock().shrink();
+        self.cache72.lock().shrink();
+        self.cache80.lock().shrink();
+        self.cache88.lock().shrink();
+        self.cache96.lock().shrink();
+        self.cache192.lock().shrink();
     }
 
-    /// alloc a payload
-    pub fn alloc<T: Sized>(&mut self) -> Option<NonNull<T>> {
-        match size_of::<T>() {
+    pub fn alloc_by_layout(&self, layout: core::alloc::Layout) -> Option<NonNull<u8>> {
+        match layout.pad_to_align().size() {
             0..=8 => {
-                self.cache08.alloc()
+                self.cache08.lock().alloc()
             },
             9..=16 => {
-                self.cache16.alloc()
+                self.cache16.lock().alloc()
             },
             17..=24 => {
-                self.cache24.alloc()
+                self.cache24.lock().alloc()
             },
             25..=32 => {
-                self.cache32.alloc()
+                self.cache32.lock().alloc()
             },
             33..=40 => {
-                self.cache40.alloc()
+                self.cache40.lock().alloc()
             },
             41..=48 => {
-                self.cache48.alloc()
+                self.cache48.lock().alloc()
             },
             49..=56 => {
-                self.cache56.alloc()
+                self.cache56.lock().alloc()
             },
             57..=64 => {
-                self.cache64.alloc()
+                self.cache64.lock().alloc()
             },
             65..=72 => {
-                self.cache72.alloc()
+                self.cache72.lock().alloc()
             },
             73..=80 => {
-                self.cache80.alloc()
+                self.cache80.lock().alloc()
             },
             81..=88 => {
-                self.cache88.alloc()
+                self.cache88.lock().alloc()
             },
             89..=96 => {
-                self.cache96.alloc()
+                self.cache96.lock().alloc()
             },
             97..=192 => {
-                self.cache192.alloc()
+                self.cache192.lock().alloc()
             },
             _ => None
         }
     }
 
-    /// dealloc a payload
-    pub fn dealloc<T: Sized>(&mut self, ptr: NonNull<T>) {
-        match size_of::<T>() {
+    /// alloc a payload
+    pub fn alloc<T: Sized>(&self) -> Option<NonNull<T>> {
+        self.alloc_by_layout(core::alloc::Layout::new::<T>()).map(|ptr| ptr.cast())
+    }
+
+    pub fn dealloc_by_layout(&self, ptr: NonNull<u8>, layout: core::alloc::Layout) {
+        match layout.pad_to_align().size() {
             0..=8 => {
-                self.cache08.dealloc(ptr);
+                self.cache08.lock().dealloc(ptr);
             },
             9..=16 => {
-                self.cache16.dealloc(ptr);
+                self.cache16.lock().dealloc(ptr);
             },
             17..=24 => {
-                self.cache24.dealloc(ptr);
+                self.cache24.lock().dealloc(ptr);
             },
             25..=32 => {
-                self.cache32.dealloc(ptr);
+                self.cache32.lock().dealloc(ptr);
             },
             33..=40 => {
-                self.cache40.dealloc(ptr);
+                self.cache40.lock().dealloc(ptr);
             },
             41..=48 => {
-                self.cache48.dealloc(ptr);
+                self.cache48.lock().dealloc(ptr);
             },
             49..=56 => {
-                self.cache56.dealloc(ptr);
+                self.cache56.lock().dealloc(ptr);
             },
             57..=64 => {
-                self.cache64.dealloc(ptr);
+                self.cache64.lock().dealloc(ptr);
             },
             65..=72 => {
-                self.cache72.dealloc(ptr);
+                self.cache72.lock().dealloc(ptr);
             },
             73..=80 => {
-                self.cache80.dealloc(ptr);
+                self.cache80.lock().dealloc(ptr);
             },
             81..=88 => {
-                self.cache88.dealloc(ptr);
+                self.cache88.lock().dealloc(ptr);
             },
             89..=96 => {
-                self.cache96.dealloc(ptr);
+                self.cache96.lock().dealloc(ptr);
             },
             97..=192 => {
-                self.cache192.dealloc(ptr);
+                self.cache192.lock().dealloc(ptr);
             },
             _ => {}
         }
+    }
+
+    /// dealloc a payload
+    pub fn dealloc<T: Sized>(&self, ptr: NonNull<T>) {
+        self.dealloc_by_layout(ptr.cast(), core::alloc::Layout::new::<T>());
     }
 }
 
 /// alloc from slab allocator
 pub fn slab_alloc<T: Sized>() -> Option<NonNull<T>> {
-    SLAB_ALLOCATOR.exclusive_access().alloc() 
+    SLAB_ALLOCATOR_INNER.alloc() 
 }
 
 /// dealloc to slab allocator
 pub fn slab_dealloc<T: Sized>(ptr: NonNull<T>) {
-    SLAB_ALLOCATOR.exclusive_access().dealloc(ptr); 
+    SLAB_ALLOCATOR_INNER.dealloc(ptr); 
 }
 
 /// shrink the slab
 #[allow(unused)]
 pub fn slab_shrink() {
-    unsafe { SLAB_ALLOCATOR.exclusive_access().shrink(); }
+    unsafe { SLAB_ALLOCATOR_INNER.shrink(); }
 }
 
 #[repr(C)]
@@ -208,9 +230,9 @@ unsafe impl<const S: usize> Send for SlabCache<S> {
 impl<const S: usize> SlabCache<S> {
 
     /// 初始化
-    pub fn new() -> Self {
-        // S 不能太大
-        assert_ne!(Self::block_cap(), 0);
+    pub const fn new() -> Self {
+        // // S 不能太大
+        // assert_ne!(Self::block_cap(), 0);
         Self {
             head: null_mut(),
             freelist: null_mut()

@@ -1,7 +1,7 @@
 //! File and filesystem-related syscalls
 use log::info;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::ext4::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 

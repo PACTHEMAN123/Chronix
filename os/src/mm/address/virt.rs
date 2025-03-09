@@ -1,7 +1,9 @@
 
 use core::{fmt::{self, Debug, Formatter}, iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
-use crate::{config::{PAGE_SIZE, PAGE_SIZE_BITS}, mm::PageTable};
+use core::ops::Range;
+
+use crate::{config::{PAGE_SIZE, PAGE_SIZE_BITS}, mm::{page_table::PageLevel, PageTable}};
 
 use super::{KernAddr, KernPageNum, VA_WIDTH_SV39, VPN_WIDTH_SV39};
 

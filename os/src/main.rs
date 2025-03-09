@@ -28,6 +28,9 @@
 #![feature(step_trait)]
 #![feature(new_range_api)]
 #![feature(naked_functions)]
+#![feature(allocator_api)]
+#![feature(btreemap_alloc)]
+#![feature(arbitrary_self_types)]
 
 extern crate alloc;
 
@@ -80,9 +83,10 @@ pub fn rust_main() -> ! {
     logging::init();
     info!("[kernel] Hello, world!");
     mm::init();
-    mm::remap_test();
+    mm::vm::remap_test();
     trap::init();
-    fs::list_apps();
+    fs::init();
+    fs::ext4::list_apps();
     executor::init();
     task::schedule::spawn_kernel_task(
         async move{
