@@ -19,13 +19,14 @@ const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_GETTIMEOFDAY: usize = 169;
 const SYSCALL_GETPID: usize = 172;
-const SYSCALL_FORK: usize = 220;
+const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 
 mod fs;
-mod process;
+/// File and filesystem-related syscalls
+pub mod process;
 mod time;
 
 use fs::*;
@@ -42,12 +43,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]),
-        SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]).await,
+        SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
-        SYSCALL_FORK => sys_fork(),
+        SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into()),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] ).await,
         SYSCALL_EXEC => sys_exec(args[0] , args[1] ).await,
         SYSCALL_BRK => sys_brk(crate::mm::VirtAddr(args[0])),

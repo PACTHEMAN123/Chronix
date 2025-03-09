@@ -4,27 +4,35 @@ use crate::mm::{KernelVmArea, KernelVmAreaType, MapPerm, VirtAddr, VmSpace, KERN
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
-///Pid Allocator struct
-pub struct PidAllocator {
+use crate::sync::mutex::SpinNoIrqLock;
+
+///each task owns unique TaskId
+pub type Tid = usize;
+/// each process owns unique Pid
+pub type Pid = Tid;
+/// main thread' tid of a thread group
+pub type PGid = Tid;
+///Tid Allocator struct
+pub struct TidAllocator {
     current: usize,
     recycled: Vec<usize>,
 }
 
-impl PidAllocator {
-    ///Create an empty `PidAllocator`
+impl TidAllocator {
+    ///Create an empty `TidAllocator`
     pub fn new() -> Self {
-        PidAllocator {
+        TidAllocator {
             current: 0,
             recycled: Vec::new(),
         }
     }
-    ///Allocate a pid
-    pub fn alloc(&mut self) -> PidHandle {
-        if let Some(pid) = self.recycled.pop() {
-            PidHandle(pid)
+    ///Allocate a tid
+    pub fn alloc(&mut self) -> TidHandle {
+        if let Some(tid) = self.recycled.pop() {
+            TidHandle(tid)  
         } else {
             self.current += 1;
-            PidHandle(self.current - 1)
+            TidHandle(self.current - 1)
         }
     }
     ///Recycle a pid
@@ -40,20 +48,20 @@ impl PidAllocator {
 }
 
 lazy_static! {
-    pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
-    UPSafeCell::new(PidAllocator::new()) ;
+    pub static ref TID_ALLOCATOR: SpinNoIrqLock<TidAllocator> =
+    SpinNoIrqLock::new(TidAllocator::new()) ;
 }
 ///Bind pid lifetime to `PidHandle`
-pub struct PidHandle(pub usize);
+pub struct TidHandle(pub usize);
 
-impl Drop for PidHandle {
+impl Drop for TidHandle {
     fn drop(&mut self) {
         //println!("drop pid {}", self.0);
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        TID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
-pub fn pid_alloc() -> PidHandle {
-    PID_ALLOCATOR.exclusive_access().alloc()
+pub fn tid_alloc() -> TidHandle {
+    TID_ALLOCATOR.lock().alloc()
 }
 

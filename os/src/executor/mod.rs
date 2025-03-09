@@ -55,14 +55,11 @@ pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
     async_task::spawn(future, WithInfo(schedule))
 }
 
-pub fn run_until_idle() -> usize{
-    let mut count = 0;
+pub fn run_until_idle() {
     while let Some(runnable) = TASK_QUEUE.fetch() {
         //info!("already fetch a runnable");
         runnable.run();
-        count += 1;
     }
-    count
 }
 
 #[allow(unused)]

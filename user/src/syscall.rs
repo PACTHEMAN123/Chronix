@@ -17,7 +17,7 @@ const SYSCALL_SIGRETURN: usize = 139;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_BRK: usize = 214;
-const SYSCALL_FORK: usize = 220;
+const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
 
@@ -85,9 +85,14 @@ pub fn sys_getpid() -> isize {
 }
 
 pub fn sys_fork() -> isize {
-    syscall(SYSCALL_FORK, [0, 0, 0])
+    syscall(SYSCALL_CLONE, [0, 0, 0])
 }
-
+pub fn sys_clone(flags: usize, stack: usize, tls: usize) -> isize {
+    syscall(
+        SYSCALL_CLONE,
+        [flags, stack, tls], 
+    )
+}
 pub fn sys_exec(path: &str, args: &[*const u8]) -> isize {
     syscall(
         SYSCALL_EXEC,

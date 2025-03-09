@@ -103,7 +103,7 @@ pub async fn trap_handler()  {
            match current_task() {
                 None => {},
                 Some(task) => {
-                    let res = task.inner_exclusive_access().vm_space.handle_page_fault(VirtAddr::from(stval), access_type);
+                    let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
                     match res {
                         Some(_) => {},
                         None => {
