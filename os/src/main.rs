@@ -38,6 +38,7 @@ extern crate alloc;
 extern crate bitflags;
 
 use board::MAX_PROCESSORS;
+extern crate hal;
 use log::*;
 use mm::vm::{VmSpace, KERNEL_SPACE};
 use processor::processor::current_processor;
@@ -67,6 +68,7 @@ mod executor;
 mod async_utils;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool,Ordering}};
+
 
 // global_asm!(include_str!("entry.asm"));
 /// clear BSS segment

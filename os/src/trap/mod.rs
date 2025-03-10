@@ -12,7 +12,7 @@
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
-use crate::arch::riscv64::interrupts::enable_interrupt;
+use crate::arch::Instruction;
 use crate::async_utils::yield_now;
 use crate::config::{KERNEL_ENTRY_PA, TRAP_CONTEXT};
 use crate::executor;
@@ -25,8 +25,8 @@ use crate::task::{
 use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
-use crate::arch::riscv64::interrupts::disable_interrupt;
 use alloc::task;
+use hal::instruction::InstructionHal;
 use log::{info, warn};
 use riscv::register::{
     mtvec::TrapMode,
@@ -76,7 +76,7 @@ pub async fn trap_handler()  {
         cause, stval, sepc
     ); */
     
-    unsafe { enable_interrupt() };
+    unsafe { Instruction::enable_interrupt() };
    
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
@@ -157,7 +157,7 @@ pub async fn trap_handler()  {
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() {
     unsafe{
-        disable_interrupt();
+        Instruction::disable_interrupt();
     }
     //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();

@@ -1,0 +1,8 @@
+[package]
+name = "hal"
+version = "0.1.0"
+authors = ["zlc <zlcdev@foxmail.com>"]
+edition = "2024"
+
+[dependencies]
+bitflags = "1.2.1"
