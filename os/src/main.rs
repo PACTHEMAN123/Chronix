@@ -87,7 +87,6 @@ pub fn rust_main() -> ! {
     trap::init();
     fs::init();
     fs::ext4::list_apps();
-    task::init_initproc();
     executor::init();
     task::schedule::spawn_kernel_task(
         async move{
