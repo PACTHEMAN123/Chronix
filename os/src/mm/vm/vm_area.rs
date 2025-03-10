@@ -1,9 +1,10 @@
 use core::ops::{DerefMut, Range};
 
 use alloc::{alloc::Global, collections::btree_map::{BTreeMap, Keys}, sync::Arc};
+use hal::instruction::InstructionHal;
 use log::info;
 
-use crate::{arch::riscv64::sfence_vma_vaddr, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}, mm::{allocator::{frames_alloc_clean, FrameRangeTracker}, RangeKpnData, ToRangeKpn}}; 
+use crate::{arch::Instruction, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}, mm::{allocator::{frames_alloc_clean, FrameRangeTracker}, RangeKpnData, ToRangeKpn}}; 
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
 use crate::mm::{PageTableEntry, allocator::{frame_alloc, frame_alloc_clean, FrameTracker}, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}};
 use bitflags::bitflags;
@@ -93,7 +94,7 @@ pub trait VmArea: Sized
     fn flush(&mut self) {
         let range_vpn = self.range_vpn();
         for vpn in range_vpn {
-            unsafe { sfence_vma_vaddr(vpn.into()) };
+            unsafe { Instruction::tlb_flush_addr(vpn.into()) };
         }
     }
 
@@ -210,7 +211,7 @@ pub trait VmAreaFrameExt: VmArea {
                 pte.flags().union(pte_flags)
             );
             pte.set_flags(pte.flags().union(pte_flags));
-            unsafe { sfence_vma_vaddr(vpn.into()) };
+            unsafe { Instruction::tlb_flush_addr(vpn.into()) };
         }
     }
 }
@@ -269,7 +270,7 @@ impl VmAreaCowExt for UserVmArea {
             self.perm_mut().remove(MapPerm::W);
             for &vpn in self.allocated_frames_iter() {
                 page_table.update_perm(vpn, (*self.perm()).into());
-                unsafe { sfence_vma_vaddr(vpn.into()); }
+                unsafe { Instruction::tlb_flush_addr(vpn.into()); }
             }
         } else {
             self.perm_mut().insert(MapPerm::C);
@@ -408,17 +409,26 @@ impl VmAreaPageFaultExt for UserVmArea {
             return None;
         }
         match page_table.find_leaf_pte(vpn) {
-            Some((pte, level)) if pte.is_valid() => {
+            Some((pte, mut level)) if pte.is_valid() => {
                 // Cow
                 let frame = self.pages.get(&vpn)?;
                 if frame.get_rc() == 1 {
                     self.perm_mut().remove(MapPerm::C);
                     self.perm_mut().insert(MapPerm::W);
                     pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
-                    unsafe { sfence_vma_vaddr(vpn.into()) };
+                    unsafe { Instruction::tlb_flush_addr(vpn.into()) };
                     Some(())
                 } else {
-                    let new_frame = StrongArc::new(frames_alloc_clean(level.page_count())?);
+                    let new_frame = StrongArc::new(
+                        loop {
+                            if let Some(frame) = frames_alloc_clean(level.page_count()) {
+                                break Some(frame);
+                            } else if level.lowest() {
+                                break None;
+                            }
+                            level = level.lower();
+                        }?
+                    );
                     let new_range_ppn = new_frame.range_ppn.clone();
 
                     let old_data = &frame.range_ppn.to_kern().get_slice::<u8>();
@@ -430,7 +440,7 @@ impl VmAreaPageFaultExt for UserVmArea {
                     self.perm_mut().insert(MapPerm::W);
                     *pte = PageTableEntry::new(new_range_ppn.start, PTEFlags::from(self.map_perm) | PTEFlags::V);
                     
-                    unsafe { sfence_vma_vaddr(vpn.into()) };
+                    unsafe { Instruction::tlb_flush_addr(vpn.into()) };
                     Some(())
                 }
             }
@@ -443,7 +453,7 @@ impl VmAreaPageFaultExt for UserVmArea {
                     UserVmAreaType::Stack
                     | UserVmAreaType::Heap => {
                         self.map_range_and_alloc_frames(page_table, vpn..vpn+1);
-                        unsafe { crate::arch::riscv64::sfence_vma_vaddr(vpn.into()) };
+                        unsafe { Instruction::tlb_flush_addr(vpn.into()) };
                         return Some(());
                     }
                 }

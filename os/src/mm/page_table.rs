@@ -3,6 +3,7 @@
 use core::cmp::min;
 use core::ptr::slice_from_raw_parts_mut;
 
+use crate::arch::Instruction;
 use crate::config::PAGE_SIZE;
 
 use super::allocator::{frame_alloc_clean, frame_alloc, FrameTracker};
@@ -13,6 +14,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use hal::instruction::InstructionHal;
 use log::info;
 bitflags! {
     /// page table entry flags
@@ -51,6 +53,36 @@ impl PageLevel {
             PageLevel::Huge => 512 * 512,
             PageLevel::Big => 512,
             PageLevel::Small => 1,
+        }
+    }
+
+    pub const fn lower(&self) -> Self {
+        match self {
+            PageLevel::Huge => PageLevel::Big,
+            PageLevel::Big => PageLevel::Small,
+            PageLevel::Small => PageLevel::Small,
+        }
+    }
+
+    pub const fn higher(&self) -> Self {
+        match self {
+            PageLevel::Huge => PageLevel::Huge,
+            PageLevel::Big => PageLevel::Huge,
+            PageLevel::Small => PageLevel::Big,
+        }
+    }
+
+    pub const fn lowest(&self) -> bool {
+        match self {
+            PageLevel::Small => true,
+            _ => false
+        }
+    }
+
+    pub const fn highest(&self) -> bool {
+        match self {
+            PageLevel::Huge => true,
+            _ => false
         }
     }
 }
@@ -269,7 +301,7 @@ impl PageTable {
         //     info!("{:#x}", x.ppn().0 << 12);
         // }
         riscv::register::satp::write(self.token());
-        crate::arch::riscv64::sfence_vma_all();
+        Instruction::tlb_flush_all();
     }
 }
 
