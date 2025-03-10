@@ -31,6 +31,8 @@ pub struct TrapContext {
     pub kernel_s: [usize; 12], // 36 - 47
     ///
     pub kernel_fp: usize, // 48
+    ///
+    pub kernel_tp: usize, // 49
 }
 impl TrapContext {
     ///set stack pointer to x_2 reg (sp)
@@ -56,6 +58,7 @@ impl TrapContext {
             kernel_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
+            kernel_tp: 0,
         };
         cx.set_sp(sp);
         cx

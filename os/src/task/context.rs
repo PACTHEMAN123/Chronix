@@ -2,6 +2,8 @@
 use alloc::sync::Arc;
 use riscv::register::sstatus;
 
+use super::processor::PROCESSOR;
+
 pub struct EnvContext {
     /// Permit supervisor user memory access
     sum_flag: usize,
@@ -42,5 +44,22 @@ impl EnvContext{
             }
             self.sum_flag = 0;
         }
+    }
+}
+
+/// RAII to guard sum flag
+pub struct SumGuard {}
+
+impl SumGuard{
+    #[allow(dead_code)]
+    pub fn new() -> Self{
+        PROCESSOR.exclusive_access().env_mut().sum_inc();
+        Self{}
+    }
+}
+
+impl Drop for SumGuard {
+    fn drop(&mut self) {
+        PROCESSOR.exclusive_access().env_mut().sum_dec();
     }
 }

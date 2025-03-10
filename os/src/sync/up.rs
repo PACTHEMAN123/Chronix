@@ -37,4 +37,10 @@ impl<T> UPSafeCell<T> {
     pub fn get(&self) -> *mut T{
         self.inner.get()
     }
+    /// get ref of inner data
+    pub fn get_ref(&self) -> &T{
+        unsafe{
+            &*self.inner.get()
+        }
+    }
 }
