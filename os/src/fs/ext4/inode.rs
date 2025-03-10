@@ -39,7 +39,7 @@ unsafe impl Sync for Ext4Inode {}
 impl Ext4Inode {
     /// Create a new inode
     pub fn new(super_block: Arc<dyn SuperBlock>, path: &str, types: InodeTypes) -> Self {
-        info!("Inode new {:?} {}", types, path);
+        //info!("Inode new {:?} {}", types, path);
         
         //file.file_read_test("/test/test.txt", &mut buf);
         Self {
@@ -82,36 +82,6 @@ impl Inode for Ext4Inode {
         &self.inner
     }
 
-    /// Find inode under current inode by name
-    #[allow(unused)]
-    fn find(&self, name: &str) -> Option<Arc<dyn Inode>> {
-        let file = unsafe{self.file.exclusive_access()};
-        info!("find name: {} in {}", name, file.get_path().to_str().unwrap());
-        let (names, inode_type) = file.lwext4_dir_entries().unwrap();
-        info!("out lwext4_dir_entries");
-        let mut name_iter = names.iter();
-        let mut inode_type_iter = inode_type.iter();
-
-        info!("into while");
-        while let Some(iname) = name_iter.next() {
-            let itypes = inode_type_iter.next();
-            info!("iname: {}", core::str::from_utf8(iname).unwrap());
-            if core::str::from_utf8(iname).unwrap().trim_end_matches('\0') == name {
-                info!("find {} success", name);
-
-                // lwext4 needs full path
-                let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
-                return Some(Arc::new(Ext4Inode::new(
-                    self.inner().super_block.upgrade()?.clone(),
-                    full_path.as_str(), 
-                    itypes.unwrap().clone())));
-            }
-        }
-
-        info!("find {} failed", name);
-        None
-    }
-
     /// Look up the node with given `name` in the directory
     /// Return the node if found.
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
@@ -120,7 +90,7 @@ impl Inode for Ext4Inode {
         let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
         
         if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
-            info!("lookup {} success", name);
+            //info!("lookup {} success", name);
             return Some(Arc::new(Ext4Inode::new(
                 self.inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
@@ -129,7 +99,7 @@ impl Inode for Ext4Inode {
 
         // todo!: add support for directory
 
-        info!("lookup {} failed", name);
+        //info!("lookup {} failed", name);
         None
     }
 
