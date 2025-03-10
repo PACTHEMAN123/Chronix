@@ -5,7 +5,9 @@
 mod superblock;
 mod inode;
 mod file;
+mod dentry;
 
 pub use superblock::{SuperBlockInner, SuperBlock};
 pub use inode::{InodeInner, Inode};
 pub use file::{FileInner, File};
+pub use dentry::{DentryInner, Dentry, DCACHE, DentryState};
