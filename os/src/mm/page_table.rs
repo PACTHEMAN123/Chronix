@@ -2,8 +2,6 @@
 
 use core::cmp::min;
 use core::ptr::slice_from_raw_parts_mut;
-
-use crate::arch::Instruction;
 use crate::config::PAGE_SIZE;
 
 use super::allocator::{frame_alloc_clean, frame_alloc, FrameTracker};
@@ -14,7 +12,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
-use hal::instruction::InstructionHal;
+use hal::instruction::{InstructionHal, Instruction};
 use log::info;
 bitflags! {
     /// page table entry flags

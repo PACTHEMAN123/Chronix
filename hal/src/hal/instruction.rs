@@ -10,3 +10,6 @@ pub trait InstructionHal {
     unsafe fn enable_interrupt();
 
 }
+
+/// arch must impl InstructionHal for InstructionHal
+pub struct Instruction;

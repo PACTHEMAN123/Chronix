@@ -1,8 +1,5 @@
-use hal::mem::{KernAddrHal, KernPageNumHal, PageNumberHal};
+use crate::hal::mem::{KernAddr, KernAddrHal, KernPageNum, KernPageNumHal, PageNumber, PageNumberHal};
 
-use super::PageNum;
-
-pub struct KernAddr(pub usize);
 
 impl KernAddrHal for KernAddr {
     fn get_ptr<T>(&self) -> *mut T {
@@ -10,11 +7,9 @@ impl KernAddrHal for KernAddr {
     }
 }
 
-pub struct KernPageNum(pub usize);
-
 impl KernPageNumHal for KernPageNum {
 
-    type PageNumType = PageNum;
+    type PageNumType = PageNumber;
 
     fn get_ptr<T>(&self) -> *mut T {
         (self.0 << Self::PageNumType::PAGE_SIZE_BITS) as *mut T

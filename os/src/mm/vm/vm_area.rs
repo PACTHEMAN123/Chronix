@@ -1,10 +1,10 @@
 use core::ops::{DerefMut, Range};
 
 use alloc::{alloc::Global, collections::btree_map::{BTreeMap, Keys}, sync::Arc};
-use hal::instruction::InstructionHal;
+use hal::instruction::{InstructionHal, Instruction};
 use log::info;
 
-use crate::{arch::Instruction, config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}, mm::{allocator::{frames_alloc_clean, FrameRangeTracker}, RangeKpnData, ToRangeKpn}}; 
+use crate::{config::{KERNEL_STACK_BOTTOM, KERNEL_STACK_TOP}, mm::{allocator::{frames_alloc_clean, FrameRangeTracker}, RangeKpnData, ToRangeKpn}}; 
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_STACK_SIZE, PAGE_SIZE};
 use crate::mm::{PageTableEntry, allocator::{frame_alloc, frame_alloc_clean, FrameTracker}, page_table::{PTEFlags, PageTable}, smart_pointer::StrongArc, address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}};
 use bitflags::bitflags;
