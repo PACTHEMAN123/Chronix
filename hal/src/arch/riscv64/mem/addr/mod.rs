@@ -6,10 +6,9 @@ pub use virt::*;
 pub use phys::*;
 pub use kern::*;
 
-use hal::mem::PageNumberHal;
-pub struct PageNum;
+use crate::hal::mem::{PageNumber, PageNumberHal};
 
-impl PageNumberHal for PageNum {
+impl PageNumberHal for PageNumber {
     const PAGE_SIZE: usize = 4096;
 }
 

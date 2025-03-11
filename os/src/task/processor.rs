@@ -1,13 +1,12 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use super:: TaskStatus;
 use super::TaskControlBlock;
-use crate::arch::Instruction;
 use crate::sync::UPSafeCell;
 use crate::task::{processor, context::EnvContext};
 use crate::mm::vm::KERNEL_SPACE;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
-use hal::instruction::InstructionHal;
+use hal::instruction::{Instruction, InstructionHal};
 use lazy_static::*;
 use log::*;
 use crate::{logging, mm};
