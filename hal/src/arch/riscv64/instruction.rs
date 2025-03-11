@@ -1,7 +1,6 @@
-use hal::instruction::InstructionHal;
 use riscv::register::sstatus;
 
-pub struct Instruction;
+use crate::hal::instruction::{Instruction, InstructionHal};
 
 impl InstructionHal for Instruction {
     unsafe fn tlb_flush_addr(va: usize) {

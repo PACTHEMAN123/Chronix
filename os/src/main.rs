@@ -63,9 +63,9 @@ pub mod task;
 mod processor;
 pub mod timer;
 pub mod trap;
-mod arch;
 mod executor;
 mod async_utils;
+mod arch;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool,Ordering}};
 

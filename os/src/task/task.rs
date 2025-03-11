@@ -1,7 +1,6 @@
 //!Implementation of [`TaskControlBlock`]
 use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
-use crate::arch::riscv64::sfence_vma_all;
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::{UserVmSpace, VmSpace, KERNEL_SPACE}};
@@ -19,6 +18,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, vec};
 use alloc::vec::Vec;
+use hal::instruction::{Instruction, InstructionHal};
 use crate::config::PAGE_SIZE_BITS;
 use crate::mm::{ translated_refmut, translated_str, vm::{VmSpacePageFaultExt, PageFaultAccessType}};
 use alloc::slice;
@@ -405,7 +405,7 @@ impl TaskControlBlock {
             vm_space = self.vm_space.clone();
         }else {
             vm_space = new_shared(self.with_mut_vm_space(|m| UserVmSpace::from_existed(m)));
-            unsafe { sfence_vma_all() };
+            unsafe { Instruction::tlb_flush_all() };
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
             //info!("cloning a file descriptor table");

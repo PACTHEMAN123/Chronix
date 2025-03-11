@@ -12,7 +12,6 @@
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
-use crate::arch::Instruction;
 use crate::async_utils::yield_now;
 use crate::config::{KERNEL_ENTRY_PA, TRAP_CONTEXT};
 use crate::executor;
@@ -26,7 +25,7 @@ use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use alloc::task;
-use hal::instruction::InstructionHal;
+use hal::instruction::{Instruction, InstructionHal};
 use log::{info, warn};
 use riscv::register::{
     mtvec::TrapMode,

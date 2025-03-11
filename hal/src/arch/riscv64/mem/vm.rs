@@ -1,9 +1,5 @@
-use core::iter::Map;
-
+use crate::hal::mem::{FrameAllocatorHal, FrameTracker, KernPageNumHal, MapPerm, PageLevelHal, PageTableEntryHal, PageTableHal, PhysAddr, PhysPageNum, PhysPageNumHal, VirtAddr, VirtPageNum, VirtPageNumHal};
 use alloc::vec::Vec;
-use hal::mem::{FrameAllocatorHal, FrameTracker, KernPageNumHal, MapPerm, PageLevelHal, PageTableEntryHal, PageTableHal, PhysPageNumHal, VirtPageNumHal};
-
-use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 
 #[allow(unused, missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,7 +160,7 @@ impl<A> PageTableHal for PageTable<A>
         todo!()
     }
 
-    fn map(&mut self, vpn: Self::VirtPageNum, ppn: Self::PhysPageNum, perm: hal::mem::MapPerm, level: Self::PageLevel) {
+    fn map(&mut self, vpn: Self::VirtPageNum, ppn: Self::PhysPageNum, perm: crate::hal::mem::MapPerm, level: Self::PageLevel) {
         todo!()
     }
 

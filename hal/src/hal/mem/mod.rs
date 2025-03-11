@@ -1,9 +1,10 @@
 mod addr;
 mod vm;
 
-use core::{iter::Step, ops::Range};
+use core::ops::Range;
 
 pub use addr::{KernAddrHal, PhysAddrHal, VirtAddrHal, KernPageNumHal, PhysPageNumHal, VirtPageNumHal, PageNumberHal};
+pub use addr::{KernAddr, PhysAddr, VirtAddr, KernPageNum, PhysPageNum, VirtPageNum, PageNumber};
 
 pub use vm::{PageLevelHal, PageTableHal, MapPerm, PageTableEntryHal};
 
