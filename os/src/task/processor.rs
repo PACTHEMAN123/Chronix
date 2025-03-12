@@ -9,7 +9,7 @@ use alloc::sync::Arc;
 use hal::instruction::{Instruction, InstructionHal};
 use lazy_static::*;
 use log::*;
-use crate::{logging, mm};
+use crate::mm;
 
 ///Processor management structure
 pub struct Processor {

@@ -10,11 +10,11 @@ use crate::trap::TrapContext;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use async_task::Runnable;
+use hal::instruction::{Instruction, InstructionHal};
 use lazy_static::*;
 use log::*;
 use riscv::asm;
-use crate::arch::riscv64::interrupts::{disable_interrupt, enable_interrupt};
-use crate::{logging, mm};
+use crate::mm;
 use crate::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
 pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
@@ -136,7 +136,7 @@ pub fn current_trap_cx(processor: &Processor) -> &'static mut TrapContext {
 
 /// Switch to the given task ,change page_table temporarily
 pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskControlBlock>, env: &mut EnvContext) {
-    unsafe{disable_interrupt();}
+    unsafe{ Instruction::disable_interrupt();}
     unsafe {env.auto_sum();}
     //info!("already in switch");
     processor.set_current(Arc::clone(task));
@@ -149,27 +149,27 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
         task.switch_page_table();
     }
     //info!("switch page table done");
-    unsafe{enable_interrupt();}
+    unsafe{ Instruction::enable_interrupt();}
 }
 
 /// Switch out current task,change page_table back to kernel_space
 pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
-    unsafe {disable_interrupt()};
+    unsafe { Instruction::disable_interrupt()};
     unsafe {env.auto_sum()};
     unsafe {
         KERNEL_SPACE.exclusive_access().page_table.enable();
     }
     core::mem::swap(processor.env_mut(), env);
     processor.current = None;
-    unsafe {enable_interrupt()};
+    unsafe { Instruction::enable_interrupt()};
     //info!("switch_out_current_task done");
 }
 /// Switch to the kernel task,change sum bit temporarily
 pub fn switch_to_current_kernel(processor: &mut Processor, env: &mut EnvContext) {
-    unsafe{disable_interrupt();}
+    unsafe{ Instruction::disable_interrupt();}
     processor.change_env(env);
     core::mem::swap(processor.env_mut(), env);
-    unsafe{enable_interrupt()};
+    unsafe{ Instruction::enable_interrupt()};
 }
 
 // multi processor support methods

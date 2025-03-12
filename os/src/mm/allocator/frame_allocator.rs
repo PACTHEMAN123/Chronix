@@ -9,6 +9,7 @@ use crate::sync::mutex::Spin;
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
+use hal::println;
 use log::info;
 use core::fmt::{self, Debug, Formatter};
 use core::ops::Range;

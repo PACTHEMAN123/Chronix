@@ -7,7 +7,6 @@ pub mod ext4;
 pub mod vfs;
 
 use log::*;
-use crate::logging;
 pub use stdio::{Stdin, Stdout};
 
 use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};

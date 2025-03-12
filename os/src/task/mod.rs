@@ -28,10 +28,10 @@ use crate::fs::ext4::{open_file, OpenFlags};
 use crate::mm::vm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
+use hal::println;
 use lazy_static::*;
 use task::{TaskControlBlock, TaskStatus};
 use log::*;
-use crate::logging;
 
 pub use tid::{tid_alloc, TidAllocator, TidHandle};
 pub use crate::processor::processor::{

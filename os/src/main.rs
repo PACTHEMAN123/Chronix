@@ -39,6 +39,7 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
+use hal::define_entry;
 use log::*;
 use mm::vm::{VmSpace, KERNEL_SPACE};
 use processor::processor::current_processor;
@@ -46,14 +47,11 @@ use processor::processor::current_processor;
 #[path = "boards/qemu.rs"]
 mod board;
 
-#[macro_use] 
-mod console;
 mod config;
 mod devices;
 mod drivers;
 pub mod fs;
 pub mod lang_items;
-mod logging;
 pub mod mm;
 pub mod sbi;
 pub mod sync;
@@ -65,23 +63,9 @@ pub mod timer;
 pub mod trap;
 mod executor;
 mod async_utils;
-mod arch;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool,Ordering}};
 
-
-// global_asm!(include_str!("entry.asm"));
-/// clear BSS segment
-fn clear_bss() {
-    extern "C" {
-        fn sbss();
-        fn ebss();
-    }
-    unsafe {
-        core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
-            .fill(0);
-    }
-}
 #[allow(unused)]
 static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 /// id is the running processor, now start others
@@ -99,18 +83,14 @@ fn processor_start(id: usize) {
     }
 }
 
-#[no_mangle]
 /// the rust entry-point of os
-pub fn rust_main(id: usize) -> ! {
+pub fn main(id: usize) -> ! {
     if FIRST_PROCESSOR.load(Ordering::Acquire)
     {
         FIRST_PROCESSOR.store(false, Ordering::Release);
-        clear_bss();
-        logging::init();
         info!("id: {id}");
         info!("[kernel] Hello, world!");
         mm::init();
-        mm::vm::remap_test();
         processor::processor::init(id);
         trap::init();
         fs::init();
@@ -140,3 +120,5 @@ pub fn rust_main(id: usize) -> ! {
     }
     //panic!("Unreachable in rust_main!");
 }
+
+hal::define_entry!(main);

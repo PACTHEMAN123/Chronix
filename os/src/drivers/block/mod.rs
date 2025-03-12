@@ -2,6 +2,7 @@
 
 mod virtio_blk;
 
+use hal::println;
 pub use virtio_blk::VirtIOBlock;
 
 use crate::board::BlockDeviceImpl;

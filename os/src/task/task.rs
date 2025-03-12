@@ -34,7 +34,6 @@ use core::{
 };
 use crate::{generate_atomic_accessors, generate_with_methods};
 use log::*;
-use crate::logging;
 use super::tid::{PGid,Pid, Tid, TidHandle};
 /// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
