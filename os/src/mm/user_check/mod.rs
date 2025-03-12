@@ -1,4 +1,5 @@
 use core::arch::global_asm;
+use hal::addr::{VirtAddr, VirtAddrHal, VirtPageNumHal};
 use riscv::register::{
     scause::Scause, 
     mtvec::TrapMode,
@@ -10,7 +11,6 @@ use log::*;
 use crate::{
     trap::set_kernel_trap_entry,
     config::PAGE_SIZE,
-    mm::address::VirtAddr,
 };
 
 global_asm!(include_str!("check.S"));
@@ -46,14 +46,14 @@ impl UserCheck {
     /// check if the given user address is readable or not
     pub fn check_read_slice(&self, buf: *const u8, len: usize) {
         info!("into user check and read");
-        let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
-        let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
+        let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().start_addr();
+        let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().start_addr();
         
         assert!(buf_start < buf_end);
 
         let mut va = buf_start;
         while va < buf_end {
-            if let Some(scause) = self.check_read_u8(va.into()) {
+            if let Some(scause) = self.check_read_u8(va.0) {
                 // todo: into the page fault handler
                 panic!("user read page fault: {:?}, va: {:?}", scause, va.0);
             }
@@ -67,15 +67,15 @@ impl UserCheck {
     pub fn check_write_slice(&self, buf: *mut u8, len: usize) {
         info!("into user check and write");
         info!("buf_start: {:#x}, buf_end: {:#x}", buf as usize, buf as usize + len);
-        let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
-        let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
+        let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().start_addr();
+        let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().start_addr();
         
         
         assert!(buf_start < buf_end);
 
         let mut va = buf_start;
         while va < buf_end {
-            if let Some(scause) = self.check_write_u8(va.into()) {
+            if let Some(scause) = self.check_write_u8(va.0) {
                 // todo: into the page fault handler
                 panic!("user write page fault: {:?}, va: {:#x}", scause, va.0);
             }

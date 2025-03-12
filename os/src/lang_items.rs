@@ -2,9 +2,9 @@
 
 use crate::sbi::shutdown;
 use core::{arch::asm, panic::PanicInfo};
-use hal::println;
+use hal::{addr::VirtAddrHal, println};
 use log::*;
-use super::mm::VirtAddr;
+use hal::addr::VirtAddr;
 
 #[allow(unused)]
 fn backtrace() {
