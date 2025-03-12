@@ -9,23 +9,24 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use crate::syscall::process::CloneFlags;
+use crate::signal::{KSigAction, SigManager};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, vec};
 use alloc::vec::Vec;
-use core::ops::DerefMut;
-use core::sync::atomic::{AtomicI32, AtomicUsize};
-use core::{
-    cell::RefMut,
-    task::Waker,
-};
 use crate::config::PAGE_SIZE_BITS;
 use crate::mm::{ translated_refmut, translated_str, vm::{VmSpacePageFaultExt, PageFaultAccessType}};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
-use core::ptr::slice_from_raw_parts_mut;
-use crate::generate_with_methods;
+use core::{
+    ptr::slice_from_raw_parts_mut,
+    sync::atomic::{AtomicI32, AtomicUsize, Ordering},
+    ops::DerefMut,
+    cell::RefMut,
+    task::Waker,
+};
+use crate::{generate_atomic_accessors, generate_with_methods};
 use log::*;
 use crate::logging;
 use super::context::SumGuard;
@@ -56,6 +57,10 @@ pub struct TaskControlBlock {
     /// thread group which contains this task
     pub thread_group: Shared<ThreadGroup>,
     pub pgid: Shared<PGid>,
+    /// use signal manager to handle all the signal
+    pub sig_manager: Shared<SigManager>,
+    /// pointer to user context for signal handling.
+    pub sig_ucontext_ptr: AtomicUsize, 
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -99,7 +104,11 @@ impl TaskControlBlock {
         children: BTreeMap<Pid, Arc<TaskControlBlock>>,
         vm_space: UserVmSpace,
         thread_group: ThreadGroup,
-        task_status: TaskStatus
+        task_status: TaskStatus,
+        sig_manager: SigManager
+    );
+    generate_atomic_accessors!(
+        sig_ucontext_ptr: usize
     );
     pub fn pid(self: &Arc<Self>) -> Pid {
         if self.is_leader(){
@@ -221,7 +230,9 @@ impl TaskControlBlock {
                 Some(Arc::new(Stdout)),
             ]),
             thread_group: new_shared(ThreadGroup::new()),
-            pgid: new_shared(pgid)         
+            pgid: new_shared(pgid),
+            sig_manager: new_shared(SigManager::new()),
+            sig_ucontext_ptr: AtomicUsize::new(0),         
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -316,6 +327,13 @@ impl TaskControlBlock {
         let children;
         let thread_group;
         let pgid;
+
+        let sig_manager = new_shared(
+            match flag.contains(CloneFlags::SIGHAND) {
+            true => SigManager::from_another(&self.sig_manager.lock()),
+            false => SigManager::new(),
+        });
+
         if flag.contains(CloneFlags::THREAD){
             //info!("creating a thread");
             is_leader = false;
@@ -367,6 +385,8 @@ impl TaskControlBlock {
             fd_table,
             thread_group,
             pgid,
+            sig_manager,
+            sig_ucontext_ptr: AtomicUsize::new(0),
         });
         // add child except when creating a thread
         if !flag.contains(CloneFlags::THREAD) {
@@ -407,6 +427,24 @@ impl TaskControlBlock {
         }else {
             self.get_leader().set_zombie();
         }
+    }
+}
+
+/// for the signal mechanism
+impl TaskControlBlock {
+    /// once the leader thread change the sig action
+    /// all its follower should change
+    pub fn set_sigaction(&self, signo: usize, sigaction: KSigAction) {
+        info!("[TCB] sync all child thread sigaction");
+        self.sig_manager.lock().set_sigaction(signo, sigaction);
+        self.with_mut_children(|children| {
+            if children.len() == 0 {
+                return;
+            }
+            for child in children.values() {
+                child.sig_manager.lock().set_sigaction(signo, sigaction);
+            }
+        })
     }
 }
 

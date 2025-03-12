@@ -1,0 +1,164 @@
+//! signal related syscall
+
+use log::*;
+
+use crate::mm::UserCheck;
+use crate::signal::*;
+use crate::logging;
+use crate::task::current_task;
+use crate::task::processor::current_trap_cx;
+
+/// syscall: kill
+pub fn sys_kill(pid: isize, _signo: i32) -> isize {
+    match pid {
+        0 => {
+            // sent to every process in the process group of current process
+
+        }
+        -1 => {
+            // sent to every process which current process has permission ( except init proc )
+        }
+        _ if pid < -1 => {
+            // sent to every process in process group whose ID is -pid
+        }
+        _ if pid > 0 => {
+            // sent to the process specified with pid
+        }
+        _ => {}
+    }
+    0
+}
+
+
+/// syscall: rt_sigaction
+pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut SigAction) -> isize {
+    info!(
+        "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}, act size {}",
+        signo,
+        action as usize,
+        old_action as usize,
+        core::mem::size_of::<SigAction>()
+    );
+    if signo < 0 || signo as usize > SIG_NUM {
+        info!("[sys_rt_sigaction]: error");
+        return -1;
+    }
+
+    let task = current_task().unwrap();
+    let sig_manager = task.sig_manager.lock();
+    let user_check = UserCheck::new();
+    info!("[sys_rt_sigaction]: writing odl action");
+    if old_action as *const u8 != core::ptr::null::<u8>() {
+        user_check.check_write_slice(old_action as *mut u8, core::mem::size_of::<SigAction>());
+        let k_sig_hand = &sig_manager.sig_handler[signo as usize];
+        unsafe {
+            if k_sig_hand.is_user {
+                old_action.copy_from(&k_sig_hand.sa, 1);
+            } else {
+                let mut sig_hand = k_sig_hand.sa;
+                sig_hand.sa_handler = SIG_DFL;
+                old_action.copy_from(&sig_hand as *const SigAction, 1);
+            }
+        }
+    }
+    drop(sig_manager);
+
+    info!("[sys_rt_sigaction]: reading new action");
+    if action as *const u8 != core::ptr::null::<u8>() {
+        user_check.check_read_slice(action as *const u8, core::mem::size_of::<SigAction>());
+        let mut sig_action = unsafe { *action };
+        let new_sigaction = match sig_action.sa_handler as usize {
+            SIG_DFL => KSigAction::new(signo as usize, false),
+            SIG_IGN => {
+                sig_action.sa_handler = ign_sig_handler as *const () as usize;
+                KSigAction {
+                    sa: sig_action,
+                    is_user: false,
+                }
+            }
+            SIG_ERR => {
+                todo!()
+            }
+            _ => KSigAction {
+                sa: sig_action,
+                is_user: true,
+            },
+        };
+        log::info!(
+                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}",
+                signo,
+                new_sigaction.sa.sa_handler as *const usize as usize,
+                new_sigaction.sa.sa_mask[0],
+                new_sigaction.sa.sa_flags,
+                new_sigaction.sa.sa_restorer,
+            );
+        current_task().unwrap().set_sigaction(signo as usize, new_sigaction);
+    }
+    0
+}
+
+const SIGBLOCK: i32 = 0;
+const SIGUNBLOCK: i32 = 1;
+const SIGSETMASK: i32 = 2;
+
+/// syscall: rt_sigprocmask
+pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> isize {
+    info!("[sys_rt_sigprocmask]: how: {}", how);
+    let task = current_task().unwrap();
+    let mut sig_manager = task.sig_manager.lock();
+    if old_set as usize != 0 {
+        let user_check = UserCheck::new();
+        user_check.check_write_slice(old_set as *mut u8, core::mem::size_of::<SigSet>());
+        unsafe {
+            *old_set = sig_manager.blocked_sigs;
+            debug!("[sys_rt_sigprocmask] old set: {:?}", sig_manager.blocked_sigs);
+        }
+    }
+    if set as usize == 0 {
+        debug!("arg set is null");
+        return 0;
+    }
+    let user_check = UserCheck::new();
+    user_check.check_read_slice(set as *const u8, core::mem::size_of::<SigSet>());
+    
+    let new_sig_mask = unsafe { SigSet::from_bits(*set as usize).unwrap() };
+    log::info!(
+        "[sys_rt_sigprocmask] how {}, new sig mask: {:?}",
+        how,
+        new_sig_mask
+    );
+    match how {
+        SIGBLOCK => {
+            sig_manager.blocked_sigs |= new_sig_mask;
+        }
+        SIGUNBLOCK => {
+            sig_manager.blocked_sigs.remove(new_sig_mask);
+        }
+        SIGSETMASK => {
+            sig_manager.blocked_sigs = new_sig_mask;
+        }
+        _ => {
+            return -1;
+        }
+    };
+    0
+}
+
+/// syscall: rt_sigreturn
+pub fn sys_rt_sigreturn() -> isize {
+    // read from user context
+    let user_check = UserCheck::new();
+    let task = current_task().unwrap();
+    let ucontext_ptr = task.sig_ucontext_ptr();
+    user_check.check_read_slice(ucontext_ptr as *const u8, core::mem::size_of::<UContext>());
+    let ucontext = unsafe {
+        *(ucontext_ptr as *const UContext)
+    };
+    let mut sig_manager = task.sig_manager.lock();
+    // restore the old sig mask
+    sig_manager.blocked_sigs = ucontext.uc_sigmask;
+    // restore the old context (todo: restore signal stack)
+    current_trap_cx().sepc = ucontext.uc_mcontext.user_x[0];
+    current_trap_cx().x = ucontext.uc_mcontext.user_x;
+    0
+}

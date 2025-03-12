@@ -54,6 +54,7 @@ pub mod mm;
 pub mod sbi;
 pub mod sync;
 pub mod syscall;
+pub mod signal;
 pub mod task;
 pub mod timer;
 pub mod trap;
