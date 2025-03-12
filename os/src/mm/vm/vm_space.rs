@@ -5,6 +5,7 @@ use crate::{board::{MEMORY_END, MMIO}, config::{KERNEL_ADDR_OFFSET, TRAP_CONTEXT
 use super::vm_area::{KernelVmArea, VmArea, VmAreaCowExt, VmAreaPageFaultExt};
 
 use alloc::{format, vec::Vec};
+use hal::println;
 use lazy_static::lazy_static;
 use log::info;
 use riscv::register::scause;

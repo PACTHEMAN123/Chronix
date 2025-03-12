@@ -6,7 +6,6 @@ use crate::mm::UserCheck;
 use crate::processor;
 use crate::processor::processor::current_processor;
 use crate::signal::*;
-use crate::logging;
 use crate::task::current_task;
 use crate::processor::processor::current_trap_cx;
 

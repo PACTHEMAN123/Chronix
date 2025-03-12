@@ -187,7 +187,7 @@ impl PageTableEntryHal for PageTableEntry {
         todo!()
     }
     
-    fn to_map_perm(&self) -> super::MapPerm {
+    fn map_perm(&self) -> super::MapPerm {
         todo!()
     }
 }

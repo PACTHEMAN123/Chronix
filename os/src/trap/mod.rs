@@ -26,6 +26,7 @@ use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use alloc::task;
 use hal::instruction::{Instruction, InstructionHal};
+use hal::println;
 use log::{info, warn};
 use riscv::register::{
     mtvec::TrapMode,

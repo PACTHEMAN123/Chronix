@@ -10,6 +10,8 @@ extern crate alloc;
 
 mod component;
 
+pub mod board;
+
 pub use component::*;
 
 mod interface;

@@ -20,7 +20,7 @@ bitflags! {
 
 pub trait PageTableEntryHal {
     fn new(ppn: PhysPageNum, map_perm: MapPerm, valid: bool) -> Self;
-    fn to_map_perm(&self) -> MapPerm;
+    fn map_perm(&self) -> MapPerm;
     fn set_valid(&mut self);
     fn is_valid(&self) -> bool;
 }

@@ -18,7 +18,6 @@ use virtio_drivers::transport::{DeviceType, Transport};
 use virtio_drivers::BufferDirection;
 
 use log::*;
-use crate::logging;
 
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;

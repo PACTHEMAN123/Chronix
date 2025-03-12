@@ -10,7 +10,6 @@ use log::*;
 use crate::{
     trap::set_kernel_trap_entry,
     config::PAGE_SIZE,
-    logging,
     mm::address::VirtAddr,
 };
 
