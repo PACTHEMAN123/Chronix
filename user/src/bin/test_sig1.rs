@@ -7,6 +7,7 @@ use user_lib::*;
 
 fn func() {
     println!("user_sig_test passed");
+    sigreturn();
 }
 
 #[no_mangle]
