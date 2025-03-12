@@ -12,4 +12,6 @@ impl ConstantsHal for Constant {
     const PAGE_SIZE: usize = 4096;
 
     const PG_LEVEL: usize = 3;
+    
+    const PTE_WIDTH: usize = 64;
 }

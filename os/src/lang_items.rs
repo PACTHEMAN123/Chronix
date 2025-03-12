@@ -2,6 +2,7 @@
 
 use crate::sbi::shutdown;
 use core::{arch::asm, panic::PanicInfo};
+use hal::println;
 use log::*;
 use super::mm::VirtAddr;
 

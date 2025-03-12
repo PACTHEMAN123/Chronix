@@ -3,6 +3,7 @@
 extern crate lwext4_rust;
 extern crate virtio_drivers;
 
+use hal::println;
 use lwext4_rust::InodeTypes;
 
 use virtio_drivers::device::blk::VirtIOBlk;
@@ -31,7 +32,6 @@ use bitflags::*;
 use lazy_static::*;
 
 use log::*;
-use crate::logging;
 
 
 /// A wrapper around a filesystem inode

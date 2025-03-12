@@ -1,7 +1,6 @@
 //! signal handlers
 
 use log::*;
-use crate::logging;
 
 pub const SIG_ERR: usize = usize::MAX;
 pub const SIG_DFL: usize = 0;

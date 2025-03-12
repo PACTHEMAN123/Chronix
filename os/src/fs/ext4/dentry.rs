@@ -2,7 +2,6 @@ use crate::{fs::{vfs::{Dentry, DentryInner, DentryState, DCACHE}, SuperBlock}, m
 
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
-use crate::logging;
 
 /// ext4 file system dentry implement for VFS
 pub struct Ext4Dentry {

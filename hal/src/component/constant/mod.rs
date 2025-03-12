@@ -21,6 +21,8 @@ pub trait ConstantsHal {
         }
     };
 
+    const PTE_WIDTH: usize;
+    const PTES_PER_PAGE: usize = Self::PAGE_SIZE / (Self::PTE_WIDTH >> 3);
     const PPN_WIDTH: usize = Self::PA_WIDTH - Self::PAGE_SIZE_BITS;
     const VPN_WIDTH: usize = Self::VA_WIDTH - Self::PAGE_SIZE_BITS;
 
@@ -31,7 +33,7 @@ pub trait ConstantsHal {
 pub struct Constant;
 
 impl Constant {
-    const KERNEL_STACK_SIZE: usize = 65536;
+    pub const KERNEL_STACK_SIZE: usize = 65536;
 }
 
 
