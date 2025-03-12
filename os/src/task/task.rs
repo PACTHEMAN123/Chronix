@@ -3,7 +3,7 @@ use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{Stdin, Stdout, vfs::File};
-use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::{UserVmSpace, VmSpace, KERNEL_SPACE}};
+use crate::mm::{copy_out, copy_out_str};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
@@ -18,9 +18,12 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, vec};
 use alloc::vec::Vec;
+use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal};
 use hal::instruction::{Instruction, InstructionHal};
-use crate::config::PAGE_SIZE_BITS;
-use crate::mm::{ translated_refmut, translated_str, vm::{VmSpacePageFaultExt, PageFaultAccessType}};
+use hal::pagetable::PageTableHal;
+use hal::vm::{PageFaultAccessType, VmSpaceHal};
+use crate::mm::VmSpace;
+use crate::mm::{ translated_refmut, translated_str};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
@@ -67,7 +70,7 @@ pub struct TaskControlBlock {
     pub task_status: SpinNoIrqLock<TaskStatus>,
     // mutable in self and other tasks
     /// virtual memory space of the task
-    pub vm_space: Shared<UserVmSpace>,
+    pub vm_space: Shared<VmSpace>,
     /// parent task
     pub parent: Shared<Option<Weak<TaskControlBlock>>>,
     /// child tasks
@@ -124,7 +127,7 @@ impl TaskControlBlock {
     generate_with_methods!(
         fd_table: FDTable,
         children: BTreeMap<Pid, Arc<TaskControlBlock>>,
-        vm_space: UserVmSpace,
+        vm_space: VmSpace,
         thread_group: ThreadGroup,
         task_status: TaskStatus,
         sig_manager: SigManager
@@ -171,11 +174,11 @@ impl TaskControlBlock {
     }
     /// get trap_cx of the task
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        self.trap_cx_ppn.exclusive_access().to_kern().get_mut()
+        self.trap_cx_ppn.exclusive_access().start_addr().get_mut()
     }
     /// get vm_space of the task
     pub fn get_user_token(&self) -> usize {
-        self.vm_space.lock().token()
+        self.vm_space.lock().page_table.get_token()
     }
     /// get task_status of the task
     fn get_status(&self) -> TaskStatus{
@@ -241,16 +244,15 @@ impl TaskControlBlock {
         let tid_handle = tid_alloc();
         let pgid = tid_handle.0;
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
-        let trap_cx_ppn = vm_space
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        let (mut vm_space, mut user_sp, entry_point) = VmSpace::from_elf(elf_data);
+        let trap_cx_ppn = vm_space.page_table
+            .translate_vpn(VirtAddr::from(TRAP_CONTEXT).floor())
+            .unwrap();
 
         // set argc to zero
         user_sp -= 8;
-        vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
-        *translated_refmut(vm_space.token(), user_sp as *mut usize) = 0;
+        let _ = vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
+        *translated_refmut(vm_space.page_table.get_token(), user_sp as *mut usize) = 0;
 
         let task_control_block = Self {
             tid: tid_handle,
@@ -302,12 +304,11 @@ impl TaskControlBlock {
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
         const SIZE_OF_USIZE: usize = core::mem::size_of::<usize>();
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data);
+        let (mut vm_space, mut user_sp, entry_point) = VmSpace::from_elf(elf_data);
         // update trap_cx ppn
-        let trap_cx_ppn = vm_space
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        let trap_cx_ppn = vm_space.page_table
+            .translate_vpn(VirtAddr::from(TRAP_CONTEXT).floor())
+            .unwrap();
          //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
         //info!("terminating all threads except main");
@@ -332,7 +333,7 @@ impl TaskControlBlock {
         let frames_num = ((user_sp - new_user_sp) + PAGE_SIZE - 1) / PAGE_SIZE;
         
         for i in 1..frames_num+1 {
-            vm_space.handle_page_fault(VirtAddr::from(user_sp - PAGE_SIZE * i), PageFaultAccessType::WRITE);
+            let _ = vm_space.handle_page_fault(VirtAddr::from(user_sp - PAGE_SIZE * i), PageFaultAccessType::WRITE);
         }
 
         let mut meta_data = vec![0usize; args.len()+1];
@@ -403,7 +404,7 @@ impl TaskControlBlock {
             //info!("cloning a vm");
             vm_space = self.vm_space.clone();
         }else {
-            vm_space = new_shared(self.with_mut_vm_space(|m| UserVmSpace::from_existed(m)));
+            vm_space = new_shared(self.with_mut_vm_space(|m| m.clone()));
             unsafe { Instruction::tlb_flush_all() };
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
@@ -413,10 +414,9 @@ impl TaskControlBlock {
             new_shared(self.fd_table.lock().clone())
         };
         let trap_cx_ppn = vm_space
-        .lock()
-        .translate(VirtAddr::from(TRAP_CONTEXT).into())
-        .unwrap()
-        .ppn();
+        .lock().page_table
+        .translate_vpn(VirtAddr::from(TRAP_CONTEXT).floor())
+        .unwrap();
         let task_control_block = Arc::new(TaskControlBlock {
             tid: tid_handle,
             leader,

@@ -3,7 +3,7 @@ use core::{arch::asm, ops::Range};
 use alloc::{format, vec::Vec};
 use bitflags::bitflags;
 
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker};
+use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -223,6 +223,15 @@ impl<A: FrameAllocatorHal> PageTable<A> {
 }
 
 impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
+
+    fn from_token(token: usize, alloc: A) -> Self {
+        Self {
+            root_ppn: PhysPageNum(token & ((1 << Constant::PPN_WIDTH) - 1)), 
+            frames: Vec::new(),
+            alloc
+        }
+    }
+
     fn get_token(&self) -> usize {
         (8 << 60) | self.root_ppn.0
     }
@@ -277,6 +286,14 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
 
     unsafe fn enable(&self) {
         asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
+    }
+    
+    fn translate_va(&self, va: crate::addr::VirtAddr) -> Option<crate::addr::PhysAddr> {
+        todo!()
+    }
+    
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<crate::addr::PhysPageNum> {
+        todo!()
     }
     
 

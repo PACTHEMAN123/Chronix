@@ -39,9 +39,9 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::define_entry;
+use hal::{define_entry, pagetable::PageTableHal};
 use log::*;
-use mm::vm::{VmSpace, KERNEL_SPACE};
+use mm::INIT_VMSPACE;
 use processor::processor::current_processor;
 
 #[path = "boards/qemu.rs"]
@@ -108,7 +108,9 @@ pub fn main(id: usize) -> ! {
     } else {
         processor::processor::init(id);
         trap::init();
-        KERNEL_SPACE.exclusive_access().enable();
+        unsafe {
+            INIT_VMSPACE.lock().page_table.enable();
+        }
     }
     info!("[kernel] -------hart {} start-------",id);
     trap::enable_timer_interrupt();

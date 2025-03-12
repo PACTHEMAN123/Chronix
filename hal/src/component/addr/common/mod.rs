@@ -1,8 +1,10 @@
 use core::{iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
+use riscv::register::sepc;
+
 use crate::component::constant::{Constant, ConstantsHal};
 
-macro_rules! ImplAddFor {
+macro_rules! ImplFor {
     ($tp: tt) => {
         impl Add<usize> for $tp {
             type Output = Self;
@@ -11,11 +13,6 @@ macro_rules! ImplAddFor {
                 Self(self.0 + rhs)
             }
         }
-    };
-}
-
-macro_rules! ImplSubFor {
-    ($tp: tt) => {
         impl Sub<usize> for $tp {
             type Output = Self;
         
@@ -23,12 +20,6 @@ macro_rules! ImplSubFor {
                 Self(self.0 - rhs)
             }
         }
-    };
-}
-
-
-macro_rules! ImplStepFor {
-    ($tp: tt) => {
         impl Step for $tp {
             fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
                 usize::steps_between(&start.0, &end.0)
@@ -42,69 +33,70 @@ macro_rules! ImplStepFor {
                 usize::backward_checked(start.0, count).map(|i| Self(i))
             }
         }
-    };
-}
-
-macro_rules! ImplAddAssignFor {
-    ($tp: tt) => {
         impl AddAssign<usize> for $tp {
             fn add_assign(&mut self, rhs: usize) {
                 self.0 += rhs
             }
         }
-    };
-}
-
-macro_rules! ImplSubAssignFor {
-    ($tp: tt) => {
         impl SubAssign<usize> for $tp {
             fn sub_assign(&mut self, rhs: usize) {
                 self.0 -= rhs
             }
         }
+        
     };
 }
-
-
 
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysAddr(pub usize);
 
-ImplAddFor!(PhysAddr);
-ImplSubFor!(PhysAddr);
-ImplStepFor!(PhysAddr);
-ImplAddAssignFor!(PhysAddr);
-ImplSubAssignFor!(PhysAddr);
+ImplFor!(PhysAddr);
 
+impl From<usize> for PhysAddr {
+    fn from(value: usize) -> Self {
+        Self(value & ((1 << Constant::PA_WIDTH) - 1))
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysPageNum(pub usize);
 
-ImplAddFor!(PhysPageNum);
-ImplSubFor!(PhysPageNum);
-ImplStepFor!(PhysPageNum);
-ImplAddAssignFor!(PhysPageNum);
-ImplSubAssignFor!(PhysPageNum);
+impl From<usize> for PhysPageNum {
+    fn from(value: usize) -> Self {
+        Self(value & ((1 << Constant::PPN_WIDTH) - 1))
+    }
+}
 
+ImplFor!(PhysPageNum);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtAddr(pub usize);
 
-ImplAddFor!(VirtAddr);
-ImplSubFor!(VirtAddr);
-ImplStepFor!(VirtAddr);
-ImplAddAssignFor!(VirtAddr);
-ImplSubAssignFor!(VirtAddr);
+impl From<usize> for VirtAddr {
+    fn from(value: usize) -> Self {
+        Self(value & ((1 << Constant::VA_WIDTH) - 1))
+    }
+}
+
+impl VirtAddr {
+    pub fn page_offset(&self) -> usize {
+        self.0 & ((1 << Constant::PAGE_SIZE_BITS) - 1)
+    }
+}
+
+ImplFor!(VirtAddr);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtPageNum(pub usize);
 
-ImplAddFor!(VirtPageNum);
-ImplSubFor!(VirtPageNum);
-ImplStepFor!(VirtPageNum);
-ImplAddAssignFor!(VirtPageNum);
-ImplSubAssignFor!(VirtPageNum);
+impl From<usize> for VirtPageNum {
+    fn from(value: usize) -> Self {
+        Self(value & ((1 << Constant::VPN_WIDTH) - 1))
+    }
+}
+
+ImplFor!(VirtPageNum);
 
 pub trait VirtAddrHal {
     fn floor(&self) -> VirtPageNum;
@@ -136,4 +128,9 @@ pub trait PhysAddrHal {
 pub trait PhysPageNumHal {
     fn start_addr(&self) -> PhysAddr;
     fn end_addr(&self) -> PhysAddr;
+}
+
+pub trait RangePPNHal {
+    fn get_slice<T>(&self) -> &[T];
+    fn get_slice_mut<T>(&self) -> &mut [T];
 }

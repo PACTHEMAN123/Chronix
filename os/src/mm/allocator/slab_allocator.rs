@@ -3,7 +3,7 @@ use core::ptr::{null_mut, slice_from_raw_parts_mut, NonNull};
 use alloc::{alloc::{AllocError, Allocator}, collections::btree_map::BTreeMap};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::address::{KernAddr, PhysAddr}, sync::{mutex::{spin_mutex::SpinMutex, Spin}, UPSafeCell}};
+use crate::{config::PAGE_SIZE, sync::{mutex::{spin_mutex::SpinMutex, Spin}, UPSafeCell}};
 
 use super::{frame_alloc, frame_dealloc, FrameTracker};
 

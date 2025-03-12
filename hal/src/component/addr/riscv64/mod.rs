@@ -1,6 +1,8 @@
+use core::ops::Range;
+
 use crate::component::constant::{Constant, ConstantsHal};
 
-use super::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal};
+use super::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal};
 
 impl VirtAddrHal for VirtAddr {
     fn floor(&self) -> VirtPageNum {
@@ -37,7 +39,7 @@ impl VirtPageNumHal for VirtPageNum {
     }
     
     fn end_addr(&self) -> VirtAddr {
-        VirtAddr(self.start_addr().0 | ((1usize << Constant::PAGE_SIZE_BITS) - 1))
+        VirtAddr(self.start_addr().0 + Constant::PAGE_SIZE)
     }
 }
 
@@ -65,6 +67,22 @@ impl PhysPageNumHal for PhysPageNum {
     }
     
     fn end_addr(&self) -> PhysAddr {
-        PhysAddr(self.start_addr().0 | ((1usize << Constant::PAGE_SIZE_BITS) - 1))
+        PhysAddr(self.start_addr().0 + Constant::PAGE_SIZE)
     }
 }
+
+impl RangePPNHal for Range<PhysPageNum> {
+    fn get_slice<T>(&self) -> &[T] {
+        unsafe { 
+            core::slice::from_raw_parts(self.start.start_addr().get_ptr(), 
+            self.clone().count() * Constant::PAGE_SIZE / core::mem::size_of::<T>()) 
+        }
+    }
+
+    fn get_slice_mut<T>(&self) -> &mut [T] {
+        unsafe { 
+            core::slice::from_raw_parts_mut(self.start.start_addr().get_ptr(), 
+            self.clone().count() * Constant::PAGE_SIZE / core::mem::size_of::<T>()) 
+        }
+    }
+} 

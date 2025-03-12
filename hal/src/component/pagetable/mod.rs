@@ -1,6 +1,9 @@
 
 use core::ops::Range;
 
+use crate::allocator::FrameAllocatorHal;
+use crate::addr::{PhysPageNum, VirtPageNum};
+
 use bitflags::bitflags;
 
 bitflags! {
@@ -26,7 +29,10 @@ pub trait PageTableEntryHal {
 }
 
 pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
+    fn from_token(token: usize, alloc: A) -> Self;
     fn get_token(&self) -> usize;
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
     fn new_in(ppn: PhysPageNum, asid: usize, alloc: A) -> Self;
     fn find_pte(&self, vpn: VirtPageNum) -> Option<(&mut PTE, usize)>;
     fn map(&mut self, range_vpn: Range<VirtPageNum>, start_ppn: PhysPageNum, perm: MapPerm);
@@ -46,6 +52,4 @@ mod loongarch64;
 #[cfg(target_arch = "loongarch64")]
 pub use loongarch64::*;
 
-use crate::allocator::FrameAllocatorHal;
-
-use super::addr::{PhysPageNum, VirtPageNum};
+use super::addr::{PhysAddr, VirtAddr};
