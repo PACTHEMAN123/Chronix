@@ -9,20 +9,39 @@ use crate::task::current_task;
 use crate::task::processor::current_trap_cx;
 
 /// syscall: kill
-pub fn sys_kill(pid: isize, _signo: i32) -> isize {
+pub fn sys_kill(pid: isize, signo: i32) -> isize {
     match pid {
         0 => {
             // sent to every process in the process group of current process
-
+            let task = current_task().unwrap();
+            let thread_group = task.thread_group.lock();
+            for member in thread_group
+                .iter()
+                .filter(|t|t.gettid() != task.gettid()) {
+                    // skip the current thread
+                    member.sig_manager.lock().receive(signo as usize);
+                }
         }
         -1 => {
             // sent to every process which current process has permission ( except init proc )
+            panic!("[sys_kill] unsupport for sending signal to all process");
         }
         _ if pid < -1 => {
             // sent to every process in process group whose ID is -pid
+            panic!("[sys_kill] unsupport for sending signal to specific process group");
         }
         _ if pid > 0 => {
             // sent to the process specified with pid
+            let task = current_task().unwrap();
+            //assert!(task.gettid() != pid as usize); // should not send to itself
+            let thread_group = task.thread_group.lock();
+            for member in thread_group
+                .iter()
+                .filter(|t|t.gettid() == pid as usize) {
+                    // skip the current thread
+                    info!("{} send signo to {}", task.gettid(), pid);
+                    member.sig_manager.lock().receive(signo as usize);
+                }
         }
         _ => {}
     }
