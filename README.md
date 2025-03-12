@@ -18,17 +18,16 @@ Chronix 是一个用Rust语言编写的RISC-V架构操作系统内核。它旨�
 
 ## 快速开始
 
-### 构建与运行
-
 1. **克隆仓库**
    ```bash
    git clone https://github.com/PACTHEMAN123/Chronix.git
    cd Chronix
    ```
+2. **烧写镜像**
 
-2. **构建内核**
+注意需要再运行内核之前先烧写镜像。每次测试用例修改，或者用户程序修改，都需要重新烧写。将 *烧写镜像* 和 *运行内核* 分开，方便修改内核后快速运行测试。
    ```bash
-   make build
+   make fs-img
    ```
 
 3. **运行内核**
@@ -41,26 +40,9 @@ Chronix 是一个用Rust语言编写的RISC-V架构操作系统内核。它旨�
    make debug
    ```
 
-### 构建选项
-
-- `make build`: 构建内核和用户程序。
-- `make run`: 在QEMU中运行内核。
-- `make debug`: 启动调试会话。
-- `make clean`: 清理构建产物。
-
-## 目录结构
-
-```
-Chronix/
-├── os/             # 内核源代码
-├── bootloader/     # 引导加载程序
-├── user/           # 用户程序
-├── tests/          # 测试用例
-```
-
 ## 贡献
 
-欢迎提交Issue和Pull Request，帮助我们改进 Chronix。
+欢迎提交 Issue 和 Pull Request，帮助我们改进 Chronix。
 
 ## 许可证
 
