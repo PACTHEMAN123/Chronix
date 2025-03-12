@@ -2,13 +2,16 @@
 
 use core::sync::atomic::Ordering;
 use crate::fs::ext4::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
 use crate::processor::processor::{current_processor, current_trap_cx};
+use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::task::schedule::spawn_user_task;
 use crate::task:: exit_current_and_run_next;
 use crate::processor::processor::{current_task,current_user_token};
 use crate::trap::TrapContext;
 use alloc::{sync::Arc, vec::Vec, string::String};
+use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
+use hal::pagetable::PageTableHal;
+use hal::vm::VmSpaceHal;
 use log::info;
 /// exit the current process with the given exit code
 pub fn sys_exit(exit_code: i32) -> isize {
@@ -132,7 +135,7 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
         // let argc = args_vec.len();
         task.exec(all_data.as_slice(), args_vec);
         
-        let p = task.get_trap_cx_ppn_access().to_kern().get_ref::<TrapContext>().x[2];
+        let p = task.get_trap_cx_ppn_access().start_addr().get_ref::<TrapContext>().x[2];
         // return p because cx.x[10] will be covered with it later
         p as isize
     } else {
@@ -190,7 +193,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
         let tid = res.tid();
         task.remove_child(tid);
         let exit_code = res.exit_code.load(Ordering::Relaxed);
-        *translated_refmut(task.with_vm_space(|m| m.token()), exit_code_ptr as *mut i32) = exit_code;
+        *translated_refmut(task.with_vm_space(|m| m.page_table.get_token()), exit_code_ptr as *mut i32) = exit_code;
         res.tid() as isize
     }  else {
         // todo : if the waiting task isn't zombie yet, then this time this task should do await, until the waiting task do_exit then use SIGHLD to wake up this task.

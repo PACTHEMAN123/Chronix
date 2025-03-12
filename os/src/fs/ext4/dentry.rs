@@ -1,4 +1,4 @@
-use crate::{fs::{vfs::{Dentry, DentryInner, DentryState, DCACHE}, SuperBlock}, mm::allocator::slab_alloc};
+use crate::fs::{vfs::{Dentry, DentryInner, DentryState, DCACHE}, SuperBlock};
 
 use alloc::{sync::Arc, vec::Vec};
 use log::info;

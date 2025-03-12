@@ -6,25 +6,33 @@
 //!
 //! Every task or process has a memory_set to control its virtual memory.
 
-mod address;
-mod page_table;
 mod user_check;
-mod smart_pointer;
-/// virtual memory
-pub mod vm;
 /// allocator
 pub mod allocator;
+mod page_table;
+use core::ops::Deref;
 
-pub use address::*;
-pub use page_table::{translated_byte_buffer, translated_str, translated_ref, translated_refmut, 
-    copy_out, copy_out_str, PageTableEntry, UserBuffer, PTEFlags, PageTable};
+use hal::vm::VmSpaceHal;
 pub use user_check::UserCheck;
-pub use smart_pointer::{StrongArc, SlabArc, SlabWeak, ArcNewInSlab};
 
+pub use page_table::*;
+
+#[allow(missing_docs)]
+pub type VmSpace = hal::vm::VmSpace<allocator::FrameAllocator>;
+#[allow(missing_docs)]
+pub type PageTable = hal::pagetable::PageTable<allocator::FrameAllocator>;
+#[allow(missing_docs)]
+pub type FrameTracker = hal::common::FrameTracker<allocator::FrameAllocator>;
+
+use super::sync::mutex::SpinNoIrqLock;
+lazy_static::lazy_static! {
+    #[allow(missing_docs)]
+    pub static ref INIT_VMSPACE: SpinNoIrqLock<VmSpace> = SpinNoIrqLock::new(VmSpace::new());
+}
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     allocator::init_heap();
     allocator::init_frame_allocator();
-    vm::VmSpace::enable(vm::KERNEL_SPACE.exclusive_access());
+    hal::vm::VmSpaceHal::enable(INIT_VMSPACE.lock().deref());
 }

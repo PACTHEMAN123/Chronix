@@ -5,7 +5,7 @@ use crate::allocator::FrameAllocatorHal;
 use super::addr::PhysPageNum;
 
 pub struct FrameTracker<A: FrameAllocatorHal> {
-    range_ppn: Range<PhysPageNum>,
+    pub range_ppn: Range<PhysPageNum>,
     alloc: A
 }
 

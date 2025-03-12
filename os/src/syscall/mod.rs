@@ -60,7 +60,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
         SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into()),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] ).await,
         SYSCALL_EXEC => sys_exec(args[0] , args[1] ).await,
-        SYSCALL_BRK => sys_brk(crate::mm::VirtAddr(args[0])),
+        SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

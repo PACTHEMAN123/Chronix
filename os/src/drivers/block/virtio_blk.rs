@@ -2,11 +2,12 @@
 
 use crate::devices::BlockDevice;
 use crate::config::{BLOCK_SIZE, KERNEL_ADDR_OFFSET};
-use crate::mm::{
-    allocator::{frame_alloc, frame_alloc_clean, frame_dealloc, FrameTracker}, PageTable, PhysAddr, PhysPageNum, VirtAddr, vm::{VmSpace, KERNEL_SPACE}
-};
+use crate::mm::allocator::{frames_alloc_clean, frames_dealloc, FrameAllocator};
+use crate::mm::{FrameTracker, PageTable, INIT_VMSPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
+use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
+use hal::pagetable::PageTableHal;
 use lazy_static::*;
 
 use alloc::{string::ToString, sync::Arc};
@@ -74,30 +75,30 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         info!("dma_alloc");
         let mut ppn_base = PhysPageNum(0);
         for i in 0..pages {
-            let frame = frame_alloc_clean().unwrap();
+            let frame = frames_alloc_clean(1).unwrap();
             if i == 0 {
-                ppn_base = frame.ppn;
+                ppn_base = frame.range_ppn.start;
             }
-            assert_eq!(frame.ppn.0, ppn_base.0 + i);
+            assert_eq!(frame.range_ppn.start.0, ppn_base.0 + i);
             QUEUE_FRAMES.exclusive_access().push(frame);
         }
-        let pa: PhysAddr = ppn_base.into();
-        (pa.0, NonNull::new(pa.to_kern().get_mut::<u8>()).unwrap())
+        let pa: PhysAddr = ppn_base.start_addr();
+        (pa.0, NonNull::new(pa.get_mut::<u8>()).unwrap())
     }
 
     unsafe fn dma_dealloc(paddr: virtio_drivers::PhysAddr, _vaddr: NonNull<u8>, pages: usize) -> i32 {
         info!("dma_dealloc");
         let pa = PhysAddr::from(paddr);
-        let mut ppn_base: PhysPageNum = pa.into();
+        let mut ppn_base: PhysPageNum = pa.floor();
         for _ in 0..pages {
-            frame_dealloc(ppn_base);
+            frames_dealloc(ppn_base..ppn_base+1);
             ppn_base += 1;
         }
         0
     }
 
     unsafe fn mmio_phys_to_virt(paddr: virtio_drivers::PhysAddr, _size: usize) -> NonNull<u8> {
-        NonNull::new(PhysAddr::from(paddr).to_kern().get_mut::<u8>()).unwrap()
+        NonNull::new(PhysAddr::from(paddr).get_mut::<u8>()).unwrap()
     }
 
     unsafe fn share(
@@ -105,7 +106,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         _direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         // use kernel space pagetable to get the physical address
-        let page_table = PageTable::from_token(KERNEL_SPACE.exclusive_access().token());
+        let page_table = PageTable::from_token(INIT_VMSPACE.lock().page_table.get_token(), FrameAllocator);
         let pa = page_table.translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
         
         pa.0
