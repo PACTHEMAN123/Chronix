@@ -110,3 +110,23 @@ macro_rules! generate_with_methods {
         }
     };
 }
+
+/// quick macro to generate set_xxx for AtomUsizes
+#[macro_export]
+macro_rules! generate_atomic_accessors {
+    ($($field_name:ident : $field_type:ty),+) => {
+        paste::paste! {
+            $(
+                #[allow(unused)]
+                pub fn $field_name(&self) -> $field_type {
+                    self.$field_name.load(Ordering::Relaxed)
+                }
+                #[allow(unused)]
+                pub fn [<set_ $field_name>](&self, value: $field_type) {
+                    self.$field_name.store(value, Ordering::Relaxed);
+                }
+            )+
+        }
+    };
+}
+

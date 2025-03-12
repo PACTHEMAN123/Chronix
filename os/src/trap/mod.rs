@@ -16,6 +16,7 @@ mod context;
 use crate::async_utils::yield_now;
 use crate::config::TRAP_CONTEXT;
 use crate::mm::{VirtAddr, vm::{PageFaultAccessType, VmSpacePageFaultExt}};
+use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
@@ -165,6 +166,8 @@ pub fn trap_return() {
     extern "C" {
         fn __restore();
     }
+    // handler the signal before return
+    check_signal_for_current_task();
     unsafe {
         asm!(
             "call __restore",    
