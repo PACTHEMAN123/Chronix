@@ -9,7 +9,7 @@ use crate::fs::{
 use crate::fs::vfs::dentry::global_find_dentry;
 use crate::fs::vfs::{File, dentry};
 use crate::fs::AT_FDCWD;
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, UserCheck};
 use crate::task::{current_task, current_user_token};
 use crate::utils::{abs_path_to_name, user_path_to_string};
 
@@ -83,6 +83,37 @@ pub fn sys_close(fd: usize) -> isize {
         Some(_) => 0,
         None => -1,
     }
+}
+
+/// syscall: getcwd
+/// The getcwd() function copies an absolute pathname of 
+/// the current working directory to the array pointed to by buf, 
+/// which is of length size.
+/// On success, these functions return a pointer to 
+/// a string containing the pathname of the current working directory. 
+/// In the case getcwd() and getwd() this is the same value as buf.
+/// On failure, these functions return NULL, 
+/// and errno is set to indicate the error. 
+/// The contents of the array pointed to by buf are undefined on error.
+pub fn sys_getcwd(buf: usize, len: usize) -> isize {
+    let user_check = UserCheck::new();
+    //info!("[sys_getcwd]: buf addr: {:x}, size: {}", buf, len);
+    user_check.check_write_slice(buf as *mut u8, len);
+    let task = current_task().unwrap();
+    task.with_cwd(|cwd| {
+        let path = cwd.path();
+        if len < path.len() + 1 {
+            info!("[sys_getcwd]: buf len too small to recv path");
+            return -1;
+        } else {
+            //info!("copying path: {}, len: {}", path, path.len());
+            let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+            new_buf.fill(0 as u8);
+            let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, path.len()) };
+            new_buf.copy_from_slice(path.as_bytes());
+            return buf as isize;
+        }
+    })
 }
 
 /// syscall: dup
