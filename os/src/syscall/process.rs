@@ -11,7 +11,7 @@ use crate::trap::TrapContext;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
-use hal::vm::VmSpaceHal;
+use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 /// exit the current process with the given exit code
 pub fn sys_exit(exit_code: i32) -> isize {
@@ -151,9 +151,9 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
     
     let res = {
         let children = task.children();
-        if children.is_empty(){
-            info!("sys_waitpid: no child process");
-        }
+        // if children.is_empty(){
+        //     info!("sys_waitpid: no child process");
+        // }
         match pid {
             -1 => {
                 //info!("wait for any child process");
@@ -193,7 +193,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
         let tid = res.tid();
         task.remove_child(tid);
         let exit_code = res.exit_code.load(Ordering::Relaxed);
-        *translated_refmut(task.with_vm_space(|m| m.page_table.get_token()), exit_code_ptr as *mut i32) = exit_code;
+        *translated_refmut(task.with_vm_space(|m| m.get_page_table().get_token()), exit_code_ptr as *mut i32) = exit_code;
         res.tid() as isize
     }  else {
         // todo : if the waiting task isn't zombie yet, then this time this task should do await, until the waiting task do_exit then use SIGHLD to wake up this task.

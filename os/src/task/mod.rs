@@ -25,7 +25,6 @@ mod tid;
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use crate::fs::ext4::{open_file, OpenFlags};
-use hal::vm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
 use hal::println;

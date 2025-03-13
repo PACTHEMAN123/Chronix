@@ -8,6 +8,7 @@ use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
+use hal::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
 use crate::mm;
@@ -97,7 +98,7 @@ pub fn switch_out_current_task(env: &mut EnvContext){
     unsafe { Instruction::disable_interrupt()};
     unsafe {env.auto_sum()};
     unsafe {
-        INIT_VMSPACE.lock().page_table.enable();
+        INIT_VMSPACE.lock().get_page_table().enable();
     }
     let processor = PROCESSOR.exclusive_access();
     core::mem::swap(processor.env_mut(), env);

@@ -8,18 +8,7 @@ pub trait ConstantsHal {
     const VA_WIDTH: usize;
 
     const PAGE_SIZE: usize;
-    const PAGE_SIZE_BITS: usize = {
-        let mut i = 63;
-        loop {
-            if Self::PAGE_SIZE & (1usize << i) == 1 {
-                break i + 1;
-            } else if i == 0 {
-                break 0;
-            } else {
-                i -= 1;
-            }
-        }
-    };
+    const PAGE_SIZE_BITS: usize;
 
     const PTE_WIDTH: usize;
     const PTES_PER_PAGE: usize = Self::PAGE_SIZE / (Self::PTE_WIDTH >> 3);
@@ -28,17 +17,36 @@ pub trait ConstantsHal {
 
     const PG_LEVEL: usize;
 
+    const MEMORY_END: usize;
+
+    const MMIO: &[(usize, usize)];
+
+    const KERNEL_STACK_SIZE: usize;
+    const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE + 1;
+    const KERNEL_STACK_TOP: usize;
+
+    const USER_STACK_SIZE: usize;
+    const USER_STACK_BOTTOM: usize = Self::USER_STACK_TOP - Self::USER_STACK_SIZE;
+    const USER_STACK_TOP: usize;
+
+    const USER_TRAP_CONTEXT_SIZE: usize;
+    const USER_TRAP_CONTEXT_TOP: usize;
+    const USER_TRAP_CONTEXT_BOTTOM: usize = Self::USER_TRAP_CONTEXT_TOP - Self::USER_TRAP_CONTEXT_SIZE + 1;
+
 }
 
 pub struct Constant;
-
-impl Constant {
-    pub const KERNEL_STACK_SIZE: usize = 65536;
-}
-
 
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
 
 #[cfg(target_arch = "riscv64")]
+#[allow(unused)]
 pub use riscv64::*;
+
+#[cfg(target_arch = "loongarch64")]
+mod loongarch64;
+
+#[cfg(target_arch = "loongarch64")]
+#[allow(unused)]
+pub use loongarch64::*;

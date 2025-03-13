@@ -3,7 +3,7 @@ use core::{arch::asm, ops::Range};
 use alloc::{format, vec::Vec};
 use bitflags::bitflags;
 
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -174,21 +174,66 @@ impl PageTableEntry {
     }
 }
 
+impl From<MapPerm> for PTEFlags {
+    fn from(value: MapPerm) -> Self {
+        let mut ret = Self::empty();
+        if value.contains(MapPerm::U) {
+            ret.insert(PTEFlags::U);
+        }
+        if value.contains(MapPerm::R) {
+            ret.insert(PTEFlags::R);
+        }
+        if value.contains(MapPerm::W) {
+            ret.insert(PTEFlags::W);
+        }
+        if value.contains(MapPerm::X) {
+            ret.insert(PTEFlags::X);
+        }
+        if value.contains(MapPerm::C) {
+            ret.insert(PTEFlags::C);
+        }
+        ret
+    }
+}
+
 impl PageTableEntryHal for PageTableEntry {
     fn new(ppn: PhysPageNum, map_perm: super::MapPerm, valid: bool) -> Self {
-        todo!()
+        let mut pte: PTEFlags = map_perm.into();
+        if valid {
+            pte.insert(PTEFlags::V);
+        }
+        Self {
+            bits: ppn.0 << 10 | pte.bits as usize
+        }
     }
 
     fn set_valid(&mut self) {
-        todo!()
+        self.bits |= PTEFlags::V.bits as usize;
     }
 
     fn is_valid(&self) -> bool {
-        todo!()
+        self.bits & PTEFlags::V.bits as usize != 0
     }
     
     fn map_perm(&self) -> super::MapPerm {
-        todo!()
+        let pte = self.flags();
+        let mut ret = MapPerm::empty();
+        if pte.contains(PTEFlags::U) {
+            ret.insert(MapPerm::U);
+        }
+        if pte.contains(PTEFlags::R) {
+            ret.insert(MapPerm::R);
+        }
+        if pte.contains(PTEFlags::W) {
+            ret.insert(MapPerm::W);
+        }
+        if pte.contains(PTEFlags::X) {
+            ret.insert(MapPerm::X);
+        }
+        if pte.contains(PTEFlags::C) {
+            ret.insert(MapPerm::C);
+        }
+        ret
     }
 }
 
@@ -205,8 +250,8 @@ impl<A: FrameAllocatorHal> PageTable<A> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
-        for (i, idx) in idxs.iter().enumerate() {
-            let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[*idx];
+        for (i, &idx) in idxs.iter().enumerate() {
+            let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[idx];
             if PageLevel::from(i) == level {
                 result = Some(pte);
                 break;
@@ -233,12 +278,12 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     }
 
     fn get_token(&self) -> usize {
-        (8 << 60) | self.root_ppn.0
+        (8usize << 60) | self.root_ppn.0
     }
 
-    fn new_in(ppn: PhysPageNum, _: usize, alloc: A) -> Self {
+    fn new_in(_: usize, alloc: A) -> Self {
         Self {
-            root_ppn: ppn,
+            root_ppn: alloc.alloc(1).unwrap().start,
             frames: Vec::new(),
             alloc
         }
@@ -260,27 +305,17 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         None
     }
 
-    fn map(&mut self, range_vpn: core::ops::Range<crate::addr::VirtPageNum>, mut start_ppn: PhysPageNum, perm: super::MapPerm) {
-        VpnPageRangeIter::new(range_vpn).for_each(
-            |(vpn, level)| {
-                let pte = self.find_pte_create(vpn, level).expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                *pte = PageTableEntry::new(start_ppn, perm, true);
-                start_ppn += level.page_count();
-            }
-        );
+    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapPerm, level: PageLevel) {
+        let pte = self.find_pte_create(vpn, level).expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+        *pte = PageTableEntry::new(ppn, perm, true);
     }
 
-    fn unmap(&mut self, range_vpn: core::ops::Range<crate::addr::VirtPageNum>) {
-        let mut vpn = range_vpn.start;
-        while vpn < range_vpn.end {
-            match self.find_pte(vpn).map(|(pte, i)| (pte, PageLevel::from(i))) {
-                Some((pte, level)) => {
-                    *pte = PageTableEntry::new(PhysPageNum(0), MapPerm::empty(), false);
-                    vpn -= vpn.0 % level.page_count();
-                    vpn += level.page_count();
-                }, 
-                None => panic!("vpn: {:#x} has not mapped", vpn.0)
-            }
+    fn unmap(&mut self, vpn: VirtPageNum) {
+        match self.find_pte(vpn) {
+            Some((pte, _)) => {
+                *pte = PageTableEntry::new(PhysPageNum(0), MapPerm::empty(), false);
+            }, 
+            None => panic!("vpn: {:#x} has not mapped", vpn.0)
         }
     }
 
@@ -289,11 +324,25 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     }
     
     fn translate_va(&self, va: crate::addr::VirtAddr) -> Option<crate::addr::PhysAddr> {
-        todo!()
+        let (pte, level) = self.find_pte(va.floor())?;
+        if !pte.is_valid() {
+            return None;
+        }
+        let ppn = pte.ppn();
+        let level = PageLevel::from(level);
+        let offset = va.0 % (level.page_count() * Constant::PAGE_SIZE);
+        Some(PhysAddr(ppn.start_addr().0 + offset))
     }
     
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<crate::addr::PhysPageNum> {
-        todo!()
+        let (pte, level) = self.find_pte(vpn)?;
+        if !pte.is_valid() {
+            return None;
+        }
+        let ppn = pte.ppn();
+        let level = PageLevel::from(level);
+        let offset = vpn.0 % level.page_count();
+        Some(PhysPageNum(ppn.0 + offset))
     }
     
 
