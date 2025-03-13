@@ -33,6 +33,8 @@ pub struct TrapContext {
     pub kernel_fp: usize, // 48
     ///
     pub kernel_tp: usize, // 49
+    /// used in multi_core
+    pub last_a0: usize
 }
 impl TrapContext {
     ///set stack pointer to x_2 reg (sp)
@@ -59,6 +61,7 @@ impl TrapContext {
             kernel_s: [0; 12],
             kernel_fp: 0,
             kernel_tp: 0,
+            last_a0: 0,
         };
         cx.set_sp(sp);
         cx
@@ -66,5 +69,13 @@ impl TrapContext {
     /// set entry point
     pub fn set_entry_point(&mut self, entry: usize) {
         self.sepc = entry;
+    }
+    /// save last a0 for ao0 may change during trap
+    pub fn save_last_a0(&mut self) {
+        self.last_a0 = self.x[10];
+    }
+    /// restore last a0
+    pub fn restore_last_a0(&mut self) {
+        self.x[10] = self.last_a0;
     }
 }

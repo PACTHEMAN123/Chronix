@@ -127,7 +127,8 @@ pub struct PageTable {
 #[allow(missing_docs)]
 impl PageTable {
     pub fn new() -> Self {
-        let frame = frame_alloc_clean().unwrap();
+        let frame = frame_alloc_clean();
+        let frame = frame.unwrap();
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],
@@ -198,7 +199,7 @@ impl PageTable {
         match self.find_pte_create(vpn, level) {
             Some(pte) if !pte.is_valid() => {
                 if level != PageLevel::Small {
-                    info!("[PageTable::map] mapping a {:?} page", level);
+                    //info!("[PageTable::map] mapping a {:?} page", level);
                 }
                 *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
             },

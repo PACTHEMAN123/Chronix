@@ -12,15 +12,16 @@
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
-
+use crate::arch::riscv64::interrupts::enable_interrupt;
 use crate::async_utils::yield_now;
-use crate::config::TRAP_CONTEXT;
+use crate::config::{KERNEL_ENTRY_PA, TRAP_CONTEXT};
+use crate::executor;
 use crate::mm::{VirtAddr, vm::{PageFaultAccessType, VmSpacePageFaultExt}};
 use crate::syscall::syscall;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
 };
-use crate::task::processor::current_trap_cx;
+use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use crate::arch::riscv64::interrupts::disable_interrupt;
@@ -31,6 +32,7 @@ use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sie, stval, stvec, sepc,
 };
+use core::sync::atomic::Ordering;
 
 global_asm!(include_str!("trap.S"));
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -41,14 +43,14 @@ pub fn init() {
 /// set the kernel trap entry
 pub fn set_kernel_trap_entry() {
     unsafe {
-        stvec::write(trap_from_kernel as usize, TrapMode::Direct);
+        stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
     }
 }
-
+extern "C" {
+    fn __alltraps();
+    fn __trap_from_kernel();
+}
 fn set_user_trap_entry() {
-    extern "C" {
-        fn __alltraps();
-    }
     unsafe {
         stvec::write(__alltraps as usize, TrapMode::Direct);
     }
@@ -73,17 +75,18 @@ pub async fn trap_handler()  {
         cause, stval, sepc
     ); */
     
-    //unsafe { enable_interrupt() };
+    unsafe { enable_interrupt() };
    
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
+            let current_processor = current_processor();
             // jump to next instruction anyway
-            let mut cx = current_trap_cx();
+            let cx = current_trap_cx(current_processor);
             cx.sepc += 4;
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]).await;
             // cx is changed during sys_exec, so we have to call it again
-            cx = current_trap_cx();
+            cx.save_last_a0();
             cx.x[10] = result as usize;
         }
         Trap::Exception(Exception::StorePageFault)
@@ -99,8 +102,7 @@ pub async fn trap_handler()  {
                 Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::WRITE,
                 _ => unreachable!(),
             };
-
-           match current_task() {
+            match current_task() {
                 None => {},
                 Some(task) => {
                     let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
@@ -115,7 +117,6 @@ pub async fn trap_handler()  {
                     }
                 }
             };
-
         }
         Trap::Exception(Exception::StoreFault)
         | Trap::Exception(Exception::InstructionFault)
@@ -124,7 +125,7 @@ pub async fn trap_handler()  {
                 "[trap_handler] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 scause.cause(),
                 stval,
-                current_trap_cx().sepc,
+                current_trap_cx(current_processor()).sepc,
             );
             // page fault exit code
             exit_current_and_run_next(-2);
@@ -135,7 +136,6 @@ pub async fn trap_handler()  {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            //info!("interrupt: supervisor timer");
             set_next_trigger();
             yield_now().await;
         }
@@ -173,13 +173,64 @@ pub fn trap_return() {
     }
 }
 
-#[no_mangle]
-/// Unimplement: traps/interrupts/exceptions from kernel mode
-/// Todo: Chapter 9: I/O device
-pub fn trap_from_kernel() -> ! {
-    use riscv::register::sepc;
-    println!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
-    panic!("a trap {:?} from kernel!", scause::read().cause());
-}
-
 pub use context::TrapContext;
+
+#[no_mangle]
+/// Kernel trap handler
+pub fn kernel_trap_handler() {
+    let scause = scause::read();
+    let sepc = sepc::read();
+    let cause = scause.cause();
+    let stval = stval::read();
+    match scause.cause() {
+        Trap::Exception(Exception::StorePageFault)
+        | Trap::Exception(Exception::InstructionPageFault)
+        | Trap::Exception(Exception::LoadPageFault) => {
+            log::debug!(
+                "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+            );
+
+            let access_type = match scause.cause() {
+                Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::EXECUTE,
+                Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::READ,
+                Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::WRITE,
+                _ => unreachable!(),
+            };
+            match current_task() {
+                None => {},
+                Some(task) => {
+                    let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
+                    match res {
+                        Some(_) => {},
+                        None => {
+                            // todo: don't panic, kill the task
+                            panic!(
+                                "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                            );
+                        }
+                    }
+                }
+            };
+
+        }
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            //info!("interrupt: supervisor timer");
+            set_next_trigger();
+        }
+        _ => {
+            // error!("other exception!!");
+            info!(
+                "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel panicked!!",
+                scause::read().cause(),
+                scause::read().bits(),
+                stval::read(),
+                sepc::read(),
+            );
+            panic!(
+                "a trap {:?} from kernel! stval {:#x}",
+                scause::read().cause(),
+                stval::read()
+            );
+        }
+    }
+}

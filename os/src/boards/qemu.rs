@@ -7,3 +7,5 @@ pub const MMIO: &[(usize, usize)] = &[
 ];
 
 pub type BlockDeviceImpl = crate::drivers::block::VirtIOBlock;
+
+pub const MAX_PROCESSORS: usize = 4;

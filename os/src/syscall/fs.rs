@@ -3,10 +3,10 @@ use log::info;
 
 use crate::fs::ext4::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
-use crate::task::{current_task, current_user_token};
+use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
-    let token = current_user_token();
+    let token = current_user_token(&current_processor());
     let task = current_task().unwrap();
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len {
@@ -26,7 +26,7 @@ pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
 
 pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     //info!("in sys_read");
-    let token = current_user_token();
+    let token = current_user_token(&current_processor());
     let task = current_task().unwrap();
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len{
@@ -47,7 +47,7 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
 pub async fn sys_open(path: usize, flags: u32) -> isize {
     //info!("in sys_open");
     let task = current_task().unwrap();
-    let token = current_user_token();
+    let token = current_user_token(&current_processor());
     let path = translated_str(token, path as *const u8);
     let mut ret = -1;
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {

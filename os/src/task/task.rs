@@ -1,5 +1,6 @@
 //!Implementation of [`TaskControlBlock`]
-use super::{context, tid_alloc, schedule, INITPROC};
+use super::{tid_alloc, schedule, INITPROC};
+use crate::processor::context::{EnvContext,SumGuard};
 use crate::arch::riscv64::sfence_vma_all;
 use crate::config::TRAP_CONTEXT;
 use crate::fs::{File, Stdin, Stdout};
@@ -28,33 +29,49 @@ use core::ptr::slice_from_raw_parts_mut;
 use crate::generate_with_methods;
 use log::*;
 use crate::logging;
-use super::context::SumGuard;
 use super::tid::{PGid,Pid, Tid, TidHandle};
+/// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
+/// pack FDtable as a struct
 pub type FDTable = Vec<Option<Arc<dyn File + Send + Sync>>>;
-fn new_shared<T>(data: T) -> Shared<T> {
+/// new a shared object
+pub fn new_shared<T>(data: T) -> Shared<T> {
     Arc::new(SpinNoIrqLock::new(data))
 }
+/// Task 
 pub struct TaskControlBlock {
     // immutable
+    /// task id
     pub tid: TidHandle,
+    /// leader of the thread group
     pub leader: Option<Weak<TaskControlBlock>>,
+    /// whether this task is the leader of the thread group
     pub is_leader: bool,
     // mutable only in self context , only accessed by current task
+    /// trap context physical page number
     pub trap_cx_ppn: UPSafeCell<PhysPageNum>,
+    /// waker for waiting on events
     pub waker: UPSafeCell<Option<Waker>>,
+    // mutable only in self context, can be accessed by other tasks
+    /// exit code of the task
     pub exit_code: AtomicI32,
     #[allow(unused)]
+    /// base address of the user stack, can be used in thread create
     pub base_size: AtomicUsize,
-    // mutable only in self context, can be accessed by other tasks
+    /// status of the task
     pub task_status: SpinNoIrqLock<TaskStatus>,
     // mutable in self and other tasks
+    /// virtual memory space of the task
     pub vm_space: Shared<UserVmSpace>,
+    /// parent task
     pub parent: Shared<Option<Weak<TaskControlBlock>>>,
+    /// child tasks
     pub children: Shared<BTreeMap<Pid, Arc<TaskControlBlock>>>,
+    /// file descriptor table
     pub fd_table: Shared<Vec<Option<Arc<dyn File + Send + Sync>>>>,
     /// thread group which contains this task
     pub thread_group: Shared<ThreadGroup>,
+    /// process group id
     pub pgid: Shared<PGid>,
 }
 
@@ -64,24 +81,25 @@ pub struct ThreadGroup {
 }
 
 impl ThreadGroup {
+    /// Create a new thread group.
     pub fn new() -> Self {
         Self {
             members: BTreeMap::new(),
         }
     }
-
+    /// Get the number of threads in the group.
     pub fn len(&self) -> usize {
         self.members.len()
     }
-
+    /// Add a task to the group.
     pub fn push(&mut self, task: Arc<TaskControlBlock>) {
         self.members.insert(task.tid(), Arc::downgrade(&task));
     }
-
+    /// Remove a task from the group.
     pub fn remove(&mut self, task: &TaskControlBlock) {
         self.members.remove(&task.tid());
     }
-
+    /// Get an iterator over the tasks in the group.
     pub fn iter(&self) -> impl Iterator<Item = Arc<TaskControlBlock>> + '_ {
         self.members.values().map(|t| t.upgrade().unwrap())
     }
@@ -101,6 +119,7 @@ impl TaskControlBlock {
         thread_group: ThreadGroup,
         task_status: TaskStatus
     );
+    /// get the process id for a process or leader id for a thread
     pub fn pid(self: &Arc<Self>) -> Pid {
         if self.is_leader(){
             self.tid.0
@@ -109,39 +128,51 @@ impl TaskControlBlock {
             self.get_leader().tid.0
         }
     }
+    /// get task id
     pub fn gettid(&self) -> usize {
         self.tid.0
     }
+    /// get process group id
     pub fn pgid(&self) -> PGid {
         *self.pgid.lock()
     }
+    /// set process group id
     pub fn set_pgid(&self, pgid: PGid) {
         *self.pgid.lock() = pgid
     }
+    /// get task id
     pub fn tid(&self) -> Tid {
         self.tid.0
     }
+    /// get waker of the task
     pub fn waker(&self) -> &mut Option<Waker> {
         self.waker.exclusive_access()
     }
+    /// get reference of waker of the task
     pub fn waker_ref(&self) -> &Option<Waker> {
         self.waker.get_ref()
     }
+    /// get trap_cx_ppn of the task
     pub fn get_trap_cx_ppn_access(&self) -> &mut PhysPageNum {
         self.trap_cx_ppn.exclusive_access()    
     }
+    /// get trap_cx of the task
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.exclusive_access().to_kern().get_mut()
     }
+    /// get vm_space of the task
     pub fn get_user_token(&self) -> usize {
         self.vm_space.lock().token()
     }
+    /// get task_status of the task
     fn get_status(&self) -> TaskStatus{
         *self.task_status.lock()
     }
+    /// check if the task is zombie
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
+    /// check if the task is running
     pub fn is_running(&self) -> bool {
         self.get_status() == TaskStatus::Running
     }
@@ -149,6 +180,7 @@ impl TaskControlBlock {
     pub fn set_zombie(&self) {
         *self.task_status.lock() = TaskStatus::Zombie;
     }
+    /// allocate a new fd for the task
     pub fn alloc_fd(&self) -> usize {
         let fd_table_inner = self.fd_table.lock();
         if let Some (fd) = (0..fd_table_inner.len()).find(|fd| fd_table_inner[*fd].is_none()) {
@@ -157,21 +189,27 @@ impl TaskControlBlock {
             fd_table_inner.len() 
         }
     }
+    /// switch to the task's page table
     pub unsafe fn switch_page_table(&self) {
         self.vm_space.lock().page_table.enable();
     }
+    /// get child tasks
     pub fn children(&self) -> impl DerefMut<Target = BTreeMap<Tid, Arc<Self>>> + '_ {
         self.children.lock()
     }
+    /// add a child task
     pub fn add_child(&self, child: Arc<TaskControlBlock>) {
         self.children.lock().insert(child.gettid(),child);
     }
+    /// remove a child task
     pub fn remove_child(&self, pid: usize) {
         self.children.lock().remove(&pid);
     }
+    /// check whether the task is the leader of the thread group   
     pub fn is_leader(&self) -> bool {
         self.is_leader
     }
+    /// get the clone of ref of the leader of the thread group
     pub fn get_leader(self: &Arc<Self>) -> Arc<Self> {
         if self.is_leader {
             self.clone()
@@ -183,6 +221,7 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    /// new a task with elf data
     pub fn new(elf_data: &[u8]) -> Self {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
@@ -232,16 +271,19 @@ impl TaskControlBlock {
         task_control_block.get_trap_cx().x[10] = user_sp; // set a0 to user_sp
         task_control_block
     }
+    /// 
     pub fn set_waker(&self, waker: Waker) {
         unsafe{
             (*self.waker.get()) = Some(waker);
         }
     }
+    /// 
     pub fn wake(&self){
         debug_assert!(!(self.is_zombie() || self.is_running()));
         let waker = self.waker_ref();
         waker.as_ref().unwrap().wake_by_ref();
     }
+    /// 
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
         const SIZE_OF_USIZE: usize = core::mem::size_of::<usize>();
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -304,6 +346,7 @@ impl TaskControlBlock {
         *self.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
+    /// 
     pub fn fork(self: &Arc<TaskControlBlock>, flag: CloneFlags) -> Arc<TaskControlBlock> {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
@@ -376,6 +419,7 @@ impl TaskControlBlock {
         task_control_block.with_mut_thread_group(|thread_group| thread_group.push(task_control_block.clone()));
         task_control_block
     }
+    /// 
     pub fn handle_zombie(self: &Arc<Self>){
         let mut thread_group = self.thread_group.lock();
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
@@ -411,8 +455,12 @@ impl TaskControlBlock {
 }
 
 #[derive(Copy, Clone, PartialEq)]
+/// 
 pub enum TaskStatus {
+    ///
     Ready,
+    ///
     Running,
+    ///
     Zombie,
 }
