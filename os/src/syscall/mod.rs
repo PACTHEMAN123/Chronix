@@ -11,7 +11,8 @@
 //! submodules, and you should also implement syscalls this way.
 const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3: usize = 24;
-const SYSCALL_OPEN: usize = 56;
+const SYSCALL_MKDIR: usize = 34;
+const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
@@ -41,11 +42,12 @@ pub use signal::*;
 use crate::{signal::{SigAction, SigSet}, timer::ffi::TimeVal};
 
 /// handle syscall exception with `syscall_id` and other arguments
-pub async fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
-    match syscall_id {
-        SYSCALL_OPEN => sys_open(args[0] , args[1] as u32).await,
+pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
+    match syscall_id { 
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
+        SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
+        SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]),

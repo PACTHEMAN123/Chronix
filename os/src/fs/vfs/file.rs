@@ -15,6 +15,8 @@ pub struct FileInner {
 
 /// File trait
 pub trait File: Send + Sync {
+    /// get basic File object
+    fn inner(&self) -> &FileInner;
     /// If readable
     fn readable(&self) -> bool;
     /// If writable
@@ -23,4 +25,8 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// Write `UserBuffer` to file
     fn write(&self, buf: UserBuffer) -> usize;
+    /// get the inode it points to
+    fn inode(&self) -> Option<Arc<dyn Inode>> {
+        Some(self.inner().inode.clone())
+    }
 }

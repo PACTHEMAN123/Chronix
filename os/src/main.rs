@@ -60,7 +60,7 @@ pub mod timer;
 pub mod trap;
 mod arch;
 mod executor;
-mod async_utils;
+pub mod utils;
 
 use core::arch::global_asm;
 

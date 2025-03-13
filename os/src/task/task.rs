@@ -2,6 +2,7 @@
 use super::{context, tid_alloc, schedule, INITPROC};
 use crate::arch::riscv64::sfence_vma_all;
 use crate::config::TRAP_CONTEXT;
+use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::{UserVmSpace, VmSpace, KERNEL_SPACE}};
 use crate::sync::mutex::spin_mutex::MutexGuard;
@@ -61,6 +62,8 @@ pub struct TaskControlBlock {
     pub sig_manager: Shared<SigManager>,
     /// pointer to user context for signal handling.
     pub sig_ucontext_ptr: AtomicUsize, 
+    /// current working dentry
+    pub cwd: Shared<Arc<dyn Dentry>>,
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -105,7 +108,8 @@ impl TaskControlBlock {
         vm_space: UserVmSpace,
         thread_group: ThreadGroup,
         task_status: TaskStatus,
-        sig_manager: SigManager
+        sig_manager: SigManager,
+        cwd: Arc<dyn Dentry>
     );
     generate_atomic_accessors!(
         sig_ucontext_ptr: usize
@@ -159,11 +163,12 @@ impl TaskControlBlock {
         *self.task_status.lock() = TaskStatus::Zombie;
     }
     pub fn alloc_fd(&self) -> usize {
-        let fd_table_inner = self.fd_table.lock();
+        let mut fd_table_inner = self.fd_table.lock();
         if let Some (fd) = (0..fd_table_inner.len()).find(|fd| fd_table_inner[*fd].is_none()) {
             fd
         } else {
-            fd_table_inner.len() 
+            fd_table_inner.push(None);
+            fd_table_inner.len() - 1
         }
     }
     pub unsafe fn switch_page_table(&self) {
@@ -209,6 +214,12 @@ impl TaskControlBlock {
         vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
         *translated_refmut(vm_space.token(), user_sp as *mut usize) = 0;
 
+        // initproc should set current working dir to root dentry
+        let root_dentry = {
+            let dcache = DCACHE.lock();
+            Arc::clone(dcache.get("/").unwrap())
+        };
+
         let task_control_block = Self {
             tid: tid_handle,
             leader: None,
@@ -232,7 +243,8 @@ impl TaskControlBlock {
             thread_group: new_shared(ThreadGroup::new()),
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
-            sig_ucontext_ptr: AtomicUsize::new(0),         
+            sig_ucontext_ptr: AtomicUsize::new(0),
+            cwd: new_shared(root_dentry),         
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -334,6 +346,8 @@ impl TaskControlBlock {
             false => SigManager::new(),
         });
 
+        let cwd = self.cwd.clone();
+
         if flag.contains(CloneFlags::THREAD){
             //info!("creating a thread");
             is_leader = false;
@@ -387,6 +401,7 @@ impl TaskControlBlock {
             pgid,
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
+            cwd,
         });
         // add child except when creating a thread
         if !flag.contains(CloneFlags::THREAD) {

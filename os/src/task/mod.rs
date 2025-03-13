@@ -24,7 +24,10 @@ pub mod processor;
 mod task;
 
 use core::sync::atomic::{AtomicI32, Ordering};
-use crate::fs::ext4::{open_file, OpenFlags};
+use crate::fs::{
+    ext4::open_file,
+    OpenFlags,
+};
 use crate::mm::vm::VmSpace;
 use crate::sbi::shutdown;
 use alloc::sync::Arc;
