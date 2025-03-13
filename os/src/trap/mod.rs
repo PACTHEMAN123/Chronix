@@ -15,7 +15,8 @@ mod context;
 
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
-use hal::{addr::VirtAddr, vm::{VmSpace, VmSpaceHal, PageFaultAccessType}};
+use hal::vm::UserVmSpaceHal;
+use hal::{addr::VirtAddr, vm::PageFaultAccessType};
 
 use crate::async_utils::yield_now;
 use crate::config::TRAP_CONTEXT;
@@ -113,9 +114,10 @@ pub async fn trap_handler()  {
                         Ok(()) => {},
                         Err(()) => {
                             // todo: don't panic, kill the task
-                            panic!(
+                            log::warn!(
                                 "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
                             );
+                            exit_current_and_run_next(-4);
                         }
                     }
                 }

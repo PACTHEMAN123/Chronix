@@ -1,6 +1,6 @@
 // Declare the _main_for_arch exists.
 
-use super::constant::Constant;
+use super::constant::{Constant, ConstantsHal};
 unsafe extern "Rust" {
     pub(crate) unsafe fn _main_for_arch(id: usize);
 }
@@ -40,6 +40,7 @@ macro_rules! define_entry {
 mod riscv64;
 
 #[cfg(target_arch = "riscv64")]
+#[allow(unused)]
 pub use riscv64::*;
 
 #[cfg(target_arch = "loongarch64")]

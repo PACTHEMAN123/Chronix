@@ -69,10 +69,12 @@ pub fn init() {
 mod riscv64;
 
 #[cfg(target_arch = "riscv64")]
+#[allow(unused)]
 pub use riscv64::*;
 
 #[cfg(target_arch = "loongarch64")]
 mod loongarch64;
 
 #[cfg(target_arch = "loongarch64")]
+#[allow(unused)]
 pub use loongarch64::*;

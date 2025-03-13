@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, RangePPNHal};
 use hal::allocator::FrameAllocatorHal;
+use hal::constant::{Constant, ConstantsHal};
 use hal::println;
 use log::info;
 use core::fmt::{self, Debug, Formatter};
@@ -30,7 +31,8 @@ impl BitMapFrameAllocator {
 
     fn init(&mut self, range_pa: Range<PhysAddr>) {
         self.range = range_pa.start.ceil()..range_pa.end.floor();
-        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.ceil().0));
+        info!("{:#x}, {:#x}", range_pa.end.0, range_pa.end.floor().0);
+        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.floor().0));
     }
 }
 
@@ -46,12 +48,17 @@ pub type FrameTracker = hal::common::FrameTracker<FrameAllocator>;
 
 impl FrameAllocatorHal for FrameAllocator {
     fn alloc(&self, cnt: usize) -> Option<Range<PhysPageNum>> {
-        let start = FRAME_ALLOCATOR.lock().inner.alloc_contiguous(None, cnt, 0)?;
+        let mut start = FRAME_ALLOCATOR.lock().inner.alloc_contiguous(None, cnt, 0)?;
+        start += FRAME_ALLOCATOR.lock().range.start.0;
         Some(PhysPageNum(start)..PhysPageNum(start + cnt))
     }
 
     fn dealloc(&self, range_ppn: Range<PhysPageNum>) {
-        FRAME_ALLOCATOR.lock().inner.dealloc_contiguous(range_ppn.start.0, range_ppn.count());
+        if range_ppn.end.0 - range_ppn.start.0 == 0 {
+            return;
+        }
+        let start = range_ppn.start.0 - FRAME_ALLOCATOR.lock().range.start.0;
+        FRAME_ALLOCATOR.lock().inner.dealloc_contiguous(start, range_ppn.count());
     }
 }
 

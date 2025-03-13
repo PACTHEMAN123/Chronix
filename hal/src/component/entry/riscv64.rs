@@ -1,5 +1,4 @@
 use core::sync::atomic::{AtomicBool, Ordering};
-
 use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK};
 
 #[repr(C, align(4096))]
@@ -18,7 +17,7 @@ const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
 #[naked]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
-unsafe extern "C" fn _start(processor_id: usize) -> ! {
+unsafe extern "C" fn _start(id: usize) -> ! {
     core::arch::naked_asm!(
         // 1. set boot stack
         // a0 = processor_id
@@ -26,7 +25,7 @@ unsafe extern "C" fn _start(processor_id: usize) -> ! {
         "
             addi    t0, a0, 1
             li      t1, {boot_stack_size}
-            mul     t0, t0, t1                // t0 = (hart_id + 1) * boot_stakc_size
+            mul     t0, t0, t1                // t0 = (hart_id + 1) * boot_stack_size
             la      sp, {boot_stack}
             add     sp, sp, t0                // set boot stack
         ",

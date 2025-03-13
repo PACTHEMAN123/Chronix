@@ -1,8 +1,5 @@
-
-use core::ops::Range;
-
 use crate::allocator::FrameAllocatorHal;
-use crate::addr::{PhysPageNum, VirtPageNum};
+use crate::addr::{PhysPageNum, VirtPageNum, PhysAddr, VirtAddr};
 
 use bitflags::bitflags;
 
@@ -33,10 +30,10 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn get_token(&self) -> usize;
     fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
-    fn new_in(ppn: PhysPageNum, asid: usize, alloc: A) -> Self;
+    fn new_in(asid: usize, alloc: A) -> Self;
     fn find_pte(&self, vpn: VirtPageNum) -> Option<(&mut PTE, usize)>;
-    fn map(&mut self, range_vpn: Range<VirtPageNum>, start_ppn: PhysPageNum, perm: MapPerm);
-    fn unmap(&mut self, range_vpn: Range<VirtPageNum>);
+    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapPerm, level: PageLevel);
+    fn unmap(&mut self, vpn: VirtPageNum);
     unsafe fn enable(&self);
 }
 
@@ -44,12 +41,13 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
 mod riscv64;
 
 #[cfg(target_arch = "riscv64")]
+#[allow(unused)]
 pub use riscv64::*;
 
 #[cfg(target_arch = "loongarch64")]
 mod loongarch64;
 
 #[cfg(target_arch = "loongarch64")]
+#[allow(unused)]
 pub use loongarch64::*;
 
-use super::addr::{PhysAddr, VirtAddr};
