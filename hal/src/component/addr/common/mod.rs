@@ -1,7 +1,5 @@
 use core::{iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
-use riscv::register::sepc;
-
 use crate::component::constant::{Constant, ConstantsHal};
 
 macro_rules! ImplFor {

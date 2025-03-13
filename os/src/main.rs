@@ -39,7 +39,7 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{define_entry, pagetable::PageTableHal};
+use hal::{define_entry, pagetable::PageTableHal, vm::KernVmSpaceHal};
 use log::*;
 use mm::INIT_VMSPACE;
 use processor::processor::current_processor;
@@ -109,7 +109,7 @@ pub fn main(id: usize) -> ! {
         processor::processor::init(id);
         trap::init();
         unsafe {
-            INIT_VMSPACE.lock().page_table.enable();
+            INIT_VMSPACE.lock().get_page_table().enable();
         }
     }
     info!("[kernel] -------hart {} start-------",id);

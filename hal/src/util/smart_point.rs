@@ -2,11 +2,10 @@ use core::{alloc::Layout, ops::{Deref, DerefMut}, ptr::NonNull, sync::atomic::{A
 
 use alloc::alloc::{Allocator, Global};
 
-#[repr(C)]
 struct StrongArcPayload<T> {
+    data: T,
     /// the count of owners = rc + 1
     rc: AtomicUsize,
-    data: T
 }
 
 impl<T> StrongArcPayload<T> {
@@ -48,13 +47,14 @@ impl<T: Sized> StrongArc<T, Global> {
 impl<T: Sized, A: Allocator + Clone> StrongArc<T, A> {
     pub fn new_in(data: T, alloc: A) -> Self {
         match alloc.allocate(Layout::new::<StrongArcPayload<T>>()) {
-            Ok(payload) => {
-                let mut payload: NonNull<StrongArcPayload<T>> = payload.cast();
-                let payload_ref = unsafe {
-                    payload.as_mut()
-                };
-                payload_ref.rc = AtomicUsize::new(0);
-                payload_ref.data = data;
+            Ok(p) => {
+                let mut payload: NonNull<StrongArcPayload<T>> = p.cast();
+                unsafe {
+                    payload.write_volatile(StrongArcPayload {
+                        data,
+                        rc: AtomicUsize::new(0)
+                    });
+                }
                 Self {
                     payload,
                     alloc,
@@ -67,6 +67,12 @@ impl<T: Sized, A: Allocator + Clone> StrongArc<T, A> {
     pub fn get_rc(&self) -> usize {
         unsafe {
             self.payload.as_ref().get_rc()
+        }
+    }
+
+    pub fn get_owners(&self) -> usize {
+        unsafe {
+            self.payload.as_ref().get_rc() + 1
         }
     }
 }
@@ -94,7 +100,7 @@ impl<T: Sized, A: Allocator + Clone> Drop for StrongArc<T, A> {
             let strong = rc_ref.load(Ordering::Acquire);
             if strong == 0 {
                 unsafe { 
-                    self.payload.drop_in_place();
+                    // self.payload.drop_in_place();
                     self.alloc.deallocate(self.payload.cast(), Layout::new::<StrongArcPayload<T>>());
                 }
                 self.payload = NonNull::dangling();
