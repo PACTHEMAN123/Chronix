@@ -42,6 +42,13 @@ ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
 
+# Crate features
+export SMP := 
+
+KERNEL_FEATURES := 
+ifneq ($(SMP),)
+	KERNEL_FEATURES += smp
+endif
 # KERNEL ENTRY
 KERNEL_ENTRY_PA := 0x80200000
 
@@ -68,7 +75,11 @@ $(KERNEL_BIN): kernel
 kernel:
 	@echo Platform: $(BOARD)
 	@cp os/src/linker-$(BOARD).ld os/src/linker.ld
+ifeq ($(KERNEL_FEATURES), ) 
 	@cd os && cargo build $(MODE_ARG)
+else
+	@cd os && cargo build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
+endif
 	@rm os/src/linker.ld
 
 user:
@@ -114,9 +125,13 @@ disasm-vim: kernel
 ########################################################
 # QEMU
 ########################################################
+CPU := 4
 QEMU_ARGS := 
 QEMU_ARGS += -machine virt
 QEMU_ARGS += -nographic
+ifneq ($(SMP),)
+QEMU_ARGS += -smp $(CPU)
+endif
 QEMU_ARGS += -bios $(BOOTLOADER)
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 

@@ -14,14 +14,14 @@
 //!
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
-mod context;
+pub mod task;
 /// new task scheduler implementation
 pub mod schedule;
 mod tid;
-pub mod processor;
+
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
-mod task;
+
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use crate::fs::ext4::{open_file, OpenFlags};
@@ -30,13 +30,12 @@ use crate::sbi::shutdown;
 use alloc::sync::Arc;
 use lazy_static::*;
 use task::{TaskControlBlock, TaskStatus};
-
 use log::*;
 use crate::logging;
 
 pub use tid::{tid_alloc, TidAllocator, TidHandle};
-pub use processor::{
-    current_task,  current_user_token,  take_current_task,
+pub use crate::processor::processor::{
+    current_user_token,current_task,
     Processor,
 };
 /// Suspend the current 'Running' task and run the next task in task list.
@@ -97,11 +96,13 @@ macro_rules! generate_with_methods {
         paste::paste! {
             $(
                 #[allow(unused)]
+                /// with method for Shared<$ty>, takes a closure and returns a reference to the inner value
                 pub fn [<with_ $name>]<T>(&self, f: impl FnOnce(&$ty) -> T) -> T {
                     log::trace!("with_{}", stringify!($name));
                     f(&self.$name.lock())
                 }
                 #[allow(unused)]
+                /// with  mut method for Shared<$ty>, takes a closure and returns a mutable reference to the inner value
                 pub fn [<with_mut_ $name>]<T>(&self, f: impl FnOnce(&mut $ty) -> T) -> T {
                     log::trace!("with_mut_{}", stringify!($name));
                     f(&mut self.$name.lock())

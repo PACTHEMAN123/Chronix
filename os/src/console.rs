@@ -1,6 +1,6 @@
 //! SBI console driver, for text output
 
-use crate::sbi::console_putchar;
+use crate::{sbi::console_putchar, sync::mutex::SpinNoIrqLock};
 use core::fmt::{self, Write};
 
 struct Stdout;
@@ -13,8 +13,9 @@ impl Write for Stdout {
         Ok(())
     }
 }
-
+static PRINT_LOCK: SpinNoIrqLock<()> = SpinNoIrqLock::new(());
 pub fn print(args: fmt::Arguments) {
+    let _guard = PRINT_LOCK.lock();
     Stdout.write_fmt(args).unwrap();
 }
 

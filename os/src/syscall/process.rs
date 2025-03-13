@@ -1,11 +1,10 @@
 use core::sync::atomic::Ordering;
 use crate::fs::ext4::{open_file, OpenFlags};
 use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
-use crate::task::processor::current_trap_cx;
+use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::task::schedule::spawn_user_task;
-use crate::task::{
-    current_task, current_user_token, exit_current_and_run_next,
-};
+use crate::task:: exit_current_and_run_next;
+use crate::processor::processor::{current_task,current_user_token};
 use crate::trap::TrapContext;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use log::info;
@@ -108,7 +107,7 @@ pub fn sys_clone (flags: usize, stack: VirtAddr,tls: VirtAddr) -> isize {
 /// execute a new program
 pub async fn sys_exec(path: usize, args: usize) -> isize {
     let mut args = args as *const usize;
-    let token = current_user_token();
+    let token = current_user_token(&current_processor());
     let path = translated_str(token, path as *const u8);
 
     // parse arguments
