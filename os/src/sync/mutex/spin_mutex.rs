@@ -5,7 +5,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::async_utils::SendWrapper;
+use crate::utils::async_utils::SendWrapper;
 use super::MutexSupport;
 
 /// A spin-lock based mutex.

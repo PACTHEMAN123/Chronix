@@ -3,7 +3,7 @@ use core::arch::asm;
 use crate::SignalAction;
 
 const SYSCALL_DUP: usize = 24;
-const SYSCALL_OPEN: usize = 56;
+const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_PIPE: usize = 59;
 const SYSCALL_READ: usize = 63;
@@ -40,8 +40,8 @@ pub fn sys_dup(fd: usize) -> isize {
     syscall(SYSCALL_DUP, [fd, 0, 0])
 }
 
-pub fn sys_open(path: &str, flags: u32) -> isize {
-    syscall(SYSCALL_OPEN, [path.as_ptr() as usize, flags as usize, 0])
+pub fn sys_openat(dirfd: isize, path: &str, flags: u32) -> isize {
+    syscall(SYSCALL_OPENAT, [dirfd as usize, path.as_ptr() as usize, flags as usize])
 }
 
 pub fn sys_close(fd: usize) -> isize {

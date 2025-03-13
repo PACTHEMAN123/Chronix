@@ -1,7 +1,10 @@
 //! process related syscall
 
 use core::sync::atomic::Ordering;
-use crate::fs::ext4::{open_file, OpenFlags};
+use crate::fs::{
+    ext4::open_file,
+    OpenFlags,
+};
 use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
 use crate::task::processor::current_trap_cx;
 use crate::task::schedule::spawn_user_task;
@@ -202,7 +205,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
 }
 /// yield immediatly to another process
 pub async fn sys_yield() -> isize {
-    crate::async_utils::yield_now().await;
+    crate::utils::async_utils::yield_now().await;
     0
 }
 /// change the size of the heap

@@ -95,6 +95,12 @@ impl Inode for Ext4Inode {
                 self.inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_REG_FILE)));
+        } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_DIR) {
+            info!("lookup dir {} success", name);
+            return Some(Arc::new(Ext4Inode::new(
+                self.inner().super_block.upgrade()?.clone(), 
+                full_path.as_str(), 
+                InodeTypes::EXT4_DE_DIR)));
         }
 
         // todo!: add support for directory
@@ -263,7 +269,7 @@ impl Inode for Ext4Inode {
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
         let file = self.file.exclusive_access();
-        info!("Drop struct Inode {:?}", file.get_path());
+        //info!("Drop struct Inode {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
         let _ = file; // todo
     }

@@ -9,6 +9,9 @@ pub struct Stdin;
 pub struct Stdout;
 
 impl File for Stdin {
+    fn inner(&self) -> &super::vfs::FileInner {
+        panic!("[Stdin]: dont support get inner")
+    }
     fn readable(&self) -> bool {
         true
     }
@@ -40,6 +43,9 @@ impl File for Stdin {
 }
 
 impl File for Stdout {
+    fn inner(&self) -> &super::vfs::FileInner {
+        panic!("[Stdout]: dont support get inner")
+    }
     fn readable(&self) -> bool {
         false
     }

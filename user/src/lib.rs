@@ -124,8 +124,10 @@ pub fn thread_create(flags:CloneFlags) -> isize {
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
+
+pub const AT_FDCWD: isize = -100;
 pub fn open(path: &str, flags: OpenFlags) -> isize {
-    sys_open(path, flags.bits)
+    sys_openat(AT_FDCWD, path, flags.bits)
 }
 pub fn close(fd: usize) -> isize {
     sys_close(fd)

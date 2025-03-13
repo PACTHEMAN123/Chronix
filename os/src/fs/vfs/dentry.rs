@@ -122,7 +122,7 @@ impl dyn Dentry {
         //info!("[DCACHE] miss one: {}, start to search from {}", path, self.path());
         let dentry = self.clone().walk(path);
         if dentry.state() == DentryState::NEGATIVE {
-            //info!("[DENTRY] invalid path!");
+            info!("[DENTRY] invalid path!");
             None
         } else {
             Some(dentry.clone())
@@ -152,26 +152,14 @@ pub enum DentryState {
 pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> = 
     SpinNoIrqLock::new(BTreeMap::new());
 
-// get the dentry by path
-// if the inode and its dentry exist, get the dentry
-// if the inode not exist but dentry is exist, get the negative dentry
-// if the dentry is never created, return None and let the caller to construct a new dentry
-// and insert it into the cache
-#[allow(unused)]
-pub fn get(path: &str) -> Option<Arc<dyn Dentry>> {
-    info!("[DCACHE] trying to get {}", path);
-    DCACHE.lock().get(path).cloned()
-}
 
-// insert a dentry into the cache
-#[allow(unused)]
-pub fn insert(path: String, dentry: Arc<dyn Dentry>) {
-    info!("[DCACHE] insert <{}, {}>", path, dentry.name());
-    DCACHE.lock().insert(path, dentry);
-}
-
-// remove a dentry in the dache
-#[allow(unused)]
-pub fn remove(path: &str) -> Option<Arc<dyn Dentry>>{
-    DCACHE.lock().remove(path)
+/// helper function: Search from root using absolute path,
+/// return the target dentry: maybe negative
+pub fn global_find_dentry(path: &str) -> Arc<dyn Dentry> {
+    // get the root dentry
+    let root_dentry = {
+        let dcache = DCACHE.lock();
+        Arc::clone(dcache.get("/").unwrap())
+    };
+    root_dentry.walk(path)
 }

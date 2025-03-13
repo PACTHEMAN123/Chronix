@@ -23,7 +23,10 @@ use super::dentry;
 use super::inode::Ext4Inode;
 use super::disk::Disk;
 
-use crate::fs::vfs::{File, FileInner};
+use crate::fs::{
+    vfs::{File, FileInner},
+    OpenFlags,
+};
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
@@ -73,6 +76,9 @@ impl Ext4File {
 }
 
 impl File for Ext4File {
+    fn inner(&self) -> &FileInner {
+        self.inner.exclusive_access()
+    }
     fn readable(&self) -> bool {
         self.readable
     }
@@ -105,37 +111,10 @@ impl File for Ext4File {
     }
 }
 
-bitflags! {
-    ///Open file flags
-    pub struct OpenFlags: u32 {
-        ///Read only
-        const RDONLY = 0;
-        ///Write only
-        const WRONLY = 1 << 0;
-        ///Read & Write
-        const RDWR = 1 << 1;
-        ///Allow create
-        const CREATE = 1 << 9;
-        ///Clear file and return an empty one
-        const TRUNC = 1 << 10;
-    }
-}
-
-impl OpenFlags {
-    /// Do not check validity for simplicity
-    /// Return (readable, writable)
-    pub fn read_write(&self) -> (bool, bool) {
-        if self.is_empty() {
-            (true, false)
-        } else if self.contains(Self::WRONLY) {
-            (false, true)
-        } else {
-            (true, true)
-        }
-    }
-}
 
 /// helper function: Open file in ext4 fs with flags
+/// notice that ext4 file is a abstract
+/// it can be reg_file, dir or anything...
 /// @path: absolute path
 pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<Ext4File>> {
     //let root = FS_MANAGER.lock().get("ext4").unwrap().root();

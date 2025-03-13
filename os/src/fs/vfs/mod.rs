@@ -2,10 +2,10 @@
 //! Chronix Virtual File System
 //! all file system should implement the VFS trait to plugin Chronix
 
-mod superblock;
-mod inode;
-mod file;
-mod dentry;
+pub mod superblock;
+pub mod inode;
+pub mod file;
+pub mod dentry;
 
 pub use superblock::{SuperBlockInner, SuperBlock};
 pub use inode::{InodeInner, Inode};

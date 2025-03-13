@@ -1,10 +1,17 @@
 //! File and filesystem-related syscalls
+use alloc::string::ToString;
 use log::info;
 
-use crate::fs::ext4::{open_file, OpenFlags};
-use crate::fs::vfs::File;
+use crate::fs::{
+    ext4::open_file, 
+    OpenFlags,
+};
+use crate::fs::vfs::dentry::global_find_dentry;
+use crate::fs::vfs::{File, dentry};
+use crate::fs::AT_FDCWD;
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
+use crate::utils::{abs_path_to_name, user_path_to_string};
 
 /// syscall: write
 pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
@@ -109,5 +116,108 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
         new_fd as isize
     } else {
         -1
+    }
+}
+
+/// syscall: openat
+/// If the pathname given in pathname is relative, 
+/// then it is interpreted relative to the directory referred to by the file descriptor dirfd 
+/// (rather than relative to the current working directory of the calling process, 
+/// as is done by open(2) for a relative pathname).
+/// If pathname is relative and dirfd is the special value AT_FDCWD, 
+/// then pathname is interpreted relative to the current working directory of the calling process (like open(2)).
+/// If pathname is absolute, then dirfd is ignored.
+pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> isize {
+    let flags = OpenFlags::from_bits(flags).unwrap();
+    let task = current_task().unwrap();
+    if let Some(path) = user_path_to_string(pathname) {
+        if path.starts_with("/") {
+            // absolute path, ignore the dirfd
+            let mut ret: isize = -1;
+            if let Some(file) = open_file(path.as_str(), flags) {
+                task.with_mut_fd_table(|table| {
+                    let fd = task.alloc_fd();
+                    table[fd] = Some(file);
+                    ret = fd as isize;
+                });
+            }
+            return ret;
+        } else {
+            if dirfd == AT_FDCWD {
+                //info!("[sys_openat]: using current working dir");
+                let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
+                let fpath = cw_dentry.path() + &path;
+                //info!("[sys_openat]: full path: {}", fpath);
+                let mut ret: isize = -1;
+                if let Some(file) = open_file(fpath.as_str(), flags) {
+                    let fd = task.alloc_fd();
+                    task.with_mut_fd_table(|table| {
+                        table[fd] = Some(file);
+                        ret = fd as isize;
+                    });
+                } else {
+                    info!("[sys_openat]: {} not found!", fpath);
+                }
+                return ret;
+            } else {
+                // lookup in the current task's fd table
+                let task = current_task().unwrap();
+                if let Some(_file) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
+                    info!("[sys_openat]: not support");
+                    // todo: replace inode to dentry in File object
+                    return -1;
+                } else {
+                    info!("[sys_openat]: the dirfd not exist");
+                    return -1;
+                }
+            }
+        }
+    } else {
+        info!("[sys_openat]: pathname is empty!");
+        return -1;
+    }
+}
+
+/// syscall: mkdirat
+/// If the pathname given in pathname is relative, 
+/// then it is interpreted relative to the directory referred to by the file descriptor dirfd 
+/// (rather than relative to the current working directory of the calling process, 
+/// as is done by mkdir(2) for a relative pathname).
+/// If pathname is relative and dirfd is the special value AT_FDCWD, 
+/// then pathname is interpreted relative to the current working directory of the calling process (like mkdir(2)).
+/// If pathname is absolute, then dirfd is ignored.
+pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
+    if let Some(path) = user_path_to_string(pathname) {
+        if path.starts_with("/") {
+            // absolute path, ignore the dirfd
+            let dentry = global_find_dentry(&path);
+            let parent = dentry.parent().unwrap();
+            let parent_inode = parent.inode().unwrap();
+            let name = abs_path_to_name(&path).unwrap();
+            let new_inode = parent_inode.create(&name, lwext4_rust::InodeTypes::EXT4_DE_DIR).unwrap();
+            dentry.set_inode(new_inode);
+            dentry.set_state(dentry::DentryState::USED);
+            return 0;
+        } else {
+            if dirfd == AT_FDCWD {
+                let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
+                cw_dentry.inode().unwrap().create(&path, lwext4_rust::InodeTypes::EXT4_DE_DIR);
+            } else {
+                // lookup in the current task's fd table
+                let task = current_task().unwrap();
+                if let Some(file) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
+                    let inode = file.inode().unwrap();
+                    inode.create(&path, lwext4_rust::InodeTypes::EXT4_DE_DIR);
+                    // todo: use dentry, create a new dentry and insert iode
+                } else {
+                    info!("[sys_mkdirat]: the dirfd not exist");
+                    return -1;
+                }
+            }
+        }
+        return 0;
+    } else {
+        info!("[sys_mkdirat]: pathname is empty!");
+        return -1;
     }
 }
