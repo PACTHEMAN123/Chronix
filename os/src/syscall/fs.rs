@@ -2,9 +2,11 @@
 use log::info;
 
 use crate::fs::ext4::{open_file, OpenFlags};
+use crate::fs::vfs::File;
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
+/// syscall: write
 pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
     let token = current_user_token(&current_processor());
     let task = current_task().unwrap();
@@ -24,6 +26,8 @@ pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
     }
 }
 
+
+/// syscall: read
 pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     //info!("in sys_read");
     let token = current_user_token(&current_processor());
@@ -44,6 +48,7 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     }
 }
 
+/// syscall: open
 pub async fn sys_open(path: usize, flags: u32) -> isize {
     //info!("in sys_open");
     let task = current_task().unwrap();
@@ -60,6 +65,7 @@ pub async fn sys_open(path: usize, flags: u32) -> isize {
     ret
 }
 
+/// syscall: close
 pub fn sys_close(fd: usize) -> isize {
     let task = current_task().unwrap();
     let table_len = task.with_fd_table(|table|table.len());
@@ -72,6 +78,7 @@ pub fn sys_close(fd: usize) -> isize {
     }
 }
 
+/// syscall: dup
 pub fn sys_dup(old_fd: usize) -> isize {
     let task = current_task().unwrap();
     let mut new_fd: isize = -1;
@@ -82,6 +89,7 @@ pub fn sys_dup(old_fd: usize) -> isize {
     new_fd as isize
 }
 
+/// syscall: dup3
 pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
     //info!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
     let task = current_task().unwrap();

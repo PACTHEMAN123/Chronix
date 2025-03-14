@@ -30,7 +30,7 @@ USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
 USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
 USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
 
-TEST_DIR := ./test/
+BASIC_TEST_DIR := ./vendor/testsuits-for-oskernel/basic/user/build/riscv64
 
 # BOARD
 BOARD := qemu
@@ -61,7 +61,7 @@ GDB ?= riscv64-unknown-elf-gdb
 DISASM ?= -x
 
 
-build: env $(KERNEL_BIN) user fs-img
+build: env $(KERNEL_BIN) user #fs-img: should make fs-img first 
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
@@ -87,9 +87,19 @@ user:
 	@cd user && make build MODE=$(MODE)
 	@echo "building user finished"
 
+basic_test:
+	@echo "building basic test"
+	@cd cross-compiler && tar -xf kendryte-toolchain-ubuntu-amd64-8.2.0-20190409.tar.xz
+	@chmod +x vendor/testsuits-for-oskernel/basic/user/build-oscomp.sh 
+	@env PATH=$PATH:cross-compiler/kendryte-toolchain/bin
+	@echo "unpack and export cross compiler finish"
+	@cd vendor/testsuits-for-oskernel/basic/user && ./build-oscomp.sh
+	@rm -rf cross-compiler/kendryte-toolchain
+	@echo "clean up the cross compiler dir"
+
 FS_IMG_DIR := .
 FS_IMG := $(FS_IMG_DIR)/fs.img
-fs-img: user
+fs-img: user basic_test
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)
@@ -98,10 +108,10 @@ fs-img: user
 	@mkdir -p mnt
 	dd if=/dev/zero of=$(FS_IMG) bs=1M count=2048
 	@mkfs.ext4 -F -O ^metadata_csum_seed $(FS_IMG)
-	@echo "making ext4 image by using $(TEST_DIR)"
+	@echo "making ext4 image by using $(BASIC_TEST_DIR)"
 	@sudo mount $(FS_IMG) mnt
 	@echo "copying user apps and tests to the fs.img"
-	@sudo cp -r $(TEST_DIR)/* mnt
+	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt
 	@sudo umount mnt
 	@sudo rm -rf mnt
@@ -112,7 +122,8 @@ clean:
 	@cd os && cargo clean
 	@cd user && cargo clean
 	@sudo rm -f $(FS_IMG)
-	@sudo rm -rf mnt 
+	@sudo rm -rf mnt
+	@sudo rm -rf cross-compiler/kendryte-toolchain
 
 disasm: kernel
 	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
