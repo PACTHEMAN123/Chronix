@@ -1,12 +1,13 @@
 //! VirtIO block device driver
 
 use crate::devices::BlockDevice;
-use crate::config::{BLOCK_SIZE, KERNEL_ADDR_OFFSET};
+use crate::config::BLOCK_SIZE;
 use crate::mm::allocator::{frames_alloc_clean, frames_dealloc, FrameAllocator};
 use crate::mm::{FrameTracker, PageTable, INIT_VMSPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
+use hal::constant::{Constant, ConstantsHal};
 use hal::pagetable::PageTableHal;
 use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use lazy_static::*;
@@ -22,7 +23,7 @@ use virtio_drivers::BufferDirection;
 use log::*;
 
 #[allow(unused)]
-const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
+const VIRTIO0: usize = 0x10001000 + Constant::KERNEL_ADDR_SPACE.start;
 
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>);
 

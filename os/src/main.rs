@@ -39,7 +39,7 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{define_entry, pagetable::PageTableHal, vm::KernVmSpaceHal};
+use hal::{constant::{Constant, ConstantsHal}, define_entry, pagetable::PageTableHal, vm::KernVmSpaceHal};
 use log::*;
 use mm::INIT_VMSPACE;
 use processor::processor::current_processor;
@@ -71,14 +71,13 @@ static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 /// id is the running processor, now start others
 #[allow(unused)]
 fn processor_start(id: usize) {
-    use crate::config::KERNEL_ENTRY_PA;
     use crate::processor::processor::PROCESSORS;
     let nums = MAX_PROCESSORS;
     for i in 0..nums {
         if i == id {
             continue;
         }
-        let status = sbi_rt::hart_start(i, KERNEL_ENTRY_PA,0);
+        let status = sbi_rt::hart_start(i, Constant::KERNEL_ENTRY_PA,0);
         //info!("[kernel] start to wake up processor {}... status {:?}",i,status);
     }
 }
