@@ -135,8 +135,7 @@ pub async fn trap_handler()  {
             exit_current_and_run_next(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            println!("[trap_handler] IllegalInstruction in application at {:#x}, kernel killed it.", current_trap_cx().sepc);
-            println!("[trap_handler] current sp: {:#x}", current_trap_cx().x[2]);
+            println!("[trap_handler] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
             exit_current_and_run_next(-3);
         }
