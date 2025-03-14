@@ -1,9 +1,8 @@
 use core::ops::Range;
 
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
-use log::info;
 
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc, vm::KernVmAreaType};
+use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc, vm::KernVmAreaType};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
