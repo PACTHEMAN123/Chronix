@@ -103,5 +103,5 @@ impl SigSet {
 }
 
 pub fn check_signal_for_current_task() {
-    current_task().unwrap().sig_manager.lock().check_and_handle();
+    current_task().unwrap().check_and_handle();
 }

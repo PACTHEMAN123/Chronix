@@ -9,10 +9,11 @@ use log::{debug, info, trace};
 use crate::{task::exit_current_and_run_next, trap::{trap_handler, TrapContext}};
 use crate::task::TaskControlBlock;
 use crate::executor;
-use crate::utils::async_utils::{get_waker,suspend_now};
-use crate::task::processor::*;
+use crate::async_utils::{get_waker,suspend_now};
+use crate::processor::processor::*;
 use crate::trap::trap_return;
-use super::{context::EnvContext, processor, task::TaskStatus};
+use super::task::TaskStatus;
+use crate::processor::{context::EnvContext,processor::current_processor};
 
 /// The outermost future for user task
 pub struct UserTaskFuture <F: Future + Send + 'static>{
@@ -41,11 +42,12 @@ impl <F: Future + Send + 'static> UserTaskFuture <F> {
 impl <F:Future+Send+'static> Future for UserTaskFuture<F> {
     type Output = F::Output;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        //info!("now poll task {}", self.task.tid());
         let this = unsafe {self.get_unchecked_mut()};
-        switch_to_current_task(&mut this.task,&mut this.env);
+        switch_to_current_task(current_processor(),&mut this.task,&mut this.env);
         let ret = unsafe{Pin::new_unchecked(&mut this.future).poll(cx)};
         //info!("switch out current task, current task is {}", current_task().unwrap().tid());
-        switch_out_current_task(&mut this.env);
+        switch_out_current_task(current_processor(),&mut this.env);
         ret
     }
 }
@@ -64,9 +66,9 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        switch_to_current_kernel(&mut this.env);
+        switch_to_current_kernel(current_processor(),&mut this.env);
         let ret = unsafe { Pin::new_unchecked(&mut this.future).poll(cx) };
-        switch_to_current_kernel(&mut this.env);
+        switch_to_current_kernel(current_processor(),&mut this.env);
         ret
     }
 }
@@ -92,6 +94,8 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
     // wehen the task is zombie, we should switch to the next task
     //info!("now exit run_tasks");
     task.handle_zombie();
+    //info!("now task {} dropped", task.tid());
+    drop(task);
 }
 
 /// spawn a new async user task
@@ -107,7 +111,7 @@ pub fn spawn_user_task(task: Arc<TaskControlBlock>){
 pub fn spawn_kernel_task<F: Future<Output = ()> + Send + 'static>(kernel_task: F) {
     //info!("now in spawn_kernel_task");
     let future = KernelTaskFuture::new(kernel_task);
-    let (runnable, task) = executor::spawn(future);
+    let (runnable, task) = executor::kernel_spawn(future);
     runnable.schedule();
     task.detach();
 }

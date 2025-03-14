@@ -1,6 +1,6 @@
 //! Constants used in rCore
 #[allow(unused)]
-
+pub const KERNEL_ENTRY_PA: usize = 0x80200000;
 pub const USER_STACK_SIZE: usize = 1024 * 1024 * 8;
 pub const KERNEL_STACK_SIZE: usize = 4096 * 16;
 pub const KERNEL_HEAP_SIZE: usize = 0x30_00000;

@@ -10,10 +10,13 @@ edition = "2018"
 buddy_system_allocator = "0.6"
 bitflags = "1.2.1"
 riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+spin = "0.9.8"
 
 [profile.release]
 debug = true
 
+[features]
+smp = []
 # [features]
 # board_qemu = []
 # board_k210 = []

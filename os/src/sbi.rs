@@ -1,6 +1,8 @@
 //! SBI call wrappers
 #![allow(unused)]
 
+use sbi_rt::HartMask;
+
 /// use sbi call to putchar in console (qemu uart handler)
 pub fn console_putchar(c: usize) {
     #[allow(deprecated)]
@@ -27,4 +29,14 @@ pub fn shutdown(failure: bool) -> ! {
         system_reset(Shutdown, SystemFailure);
     }
     unreachable!()
+}
+/// use sbi call to send IPI to one hart
+pub fn send_ipi(target_id: usize){
+    #[allow(deprecated)]
+    let hart_mask = 1 << target_id as usize;
+    let hart_mask_base = 0;
+    let result = sbi_rt::send_ipi(HartMask::from_mask_base(hart_mask, hart_mask_base));
+    if result.is_err() {
+        println!("Failed to send IPI to hart {}", target_id);
+    }
 }
