@@ -57,6 +57,7 @@ pub mod mm;
 pub mod sbi;
 pub mod sync;
 pub mod syscall;
+pub mod signal;
 pub mod task;
 mod processor;
 pub mod timer;

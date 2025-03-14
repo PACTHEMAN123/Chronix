@@ -11,7 +11,7 @@ use virtio_drivers::transport::{DeviceType, Transport};
 
 
 use crate::drivers::block::BLOCK_DEVICE;
-use crate::fs::vfs::Inode;
+use crate::fs::vfs::{Inode, DCACHE};
 use crate::fs::FS_MANAGER;
 
 use alloc::vec;
@@ -19,10 +19,11 @@ use alloc::{format, vec::Vec};
 use alloc::string::String;
 use alloc::boxed::Box;
 
+use super::dentry;
 use super::inode::Ext4Inode;
 use super::disk::Disk;
 
-use crate::fs::File;
+use crate::fs::vfs::{File, FileInner};
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
@@ -32,30 +33,25 @@ use lazy_static::*;
 use log::*;
 use crate::logging;
 
-/// The OS inode inner in 'UPSafeCell'
-pub struct OSInodeInner {
-    offset: usize,
-    inode: Arc<dyn Inode>,
-}
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
-pub struct OSInode {
+pub struct Ext4File {
     readable: bool,
     writable: bool,
-    inner: UPSafeCell<OSInodeInner>,
+    inner: UPSafeCell<FileInner>,
 }
 
-unsafe impl Send for OSInode {}
-unsafe impl Sync for OSInode {}
+unsafe impl Send for Ext4File {}
+unsafe impl Sync for Ext4File {}
 
-impl OSInode {
+impl Ext4File {
     /// Construct an OS inode from a Inode
     pub fn new(readable: bool, writable: bool, inode: Arc<dyn Inode>) -> Self {
         Self {
             readable,
             writable,
-            inner: UPSafeCell::new(OSInodeInner { offset: 0, inode }) ,
+            inner: UPSafeCell::new(FileInner { offset: 0, inode }) ,
         }
     }
 
@@ -76,7 +72,7 @@ impl OSInode {
     }
 }
 
-impl File for OSInode {
+impl File for Ext4File {
     fn readable(&self) -> bool {
         self.readable
     }
@@ -139,32 +135,47 @@ impl OpenFlags {
     }
 }
 
-///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
-    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
+/// helper function: Open file in ext4 fs with flags
+/// @path: absolute path
+pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<Ext4File>> {
+    //let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     let (readable, writable) = flags.read_write();
+
+    // get the root dentry and look up for the inode first
+    let root_dentry = {
+        let dcache = DCACHE.lock();
+        Arc::clone(dcache.get("/").unwrap())
+    };
+    let root_inode = root_dentry.inode().unwrap();
+    
     if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = root.lookup(name) {
+        if let Some(dentry) = root_dentry.find(path) {
             // clear size
+            let inode = dentry.inode().unwrap();
             inode.truncate(0).expect("Error when truncating inode");
-            Some(Arc::new(OSInode::new(readable, writable, inode)))
+            Some(Arc::new(Ext4File::new(readable, writable, inode)))
         } else {
             // create file
-            root
-                .create(name, InodeTypes::EXT4_DE_REG_FILE)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
+            root_inode
+                .create(path, InodeTypes::EXT4_DE_REG_FILE)
+                .map(|inode| Arc::new(Ext4File::new(readable, writable, inode)))
         }
     } else {
-        root.lookup(name).map(|inode| {
+        if let Some(dentry) = root_dentry.find(path) {
+            // get the dentry and it is valid (see dentry::find)
+            let inode = dentry.inode().unwrap();
             if flags.contains(OpenFlags::TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
-            Arc::new(OSInode::new(readable, writable, inode))
-        })
+            Some(Arc::new(Ext4File::new(readable, writable, inode)))
+        } else {
+            None
+        }
+        
     }
 }
 
-/// List all files in the filesystems
+/// helper function: List all files in the ext4 filesystem
 pub fn list_apps() {
     let root = FS_MANAGER.lock().get("ext4").unwrap().root();
     println!("/**** APPS ****");

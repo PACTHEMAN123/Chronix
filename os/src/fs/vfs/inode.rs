@@ -40,8 +40,6 @@ impl InodeInner {
 pub trait Inode {
     /// return inner
     fn inner(&self) -> &InodeInner;
-    /// use name to find under the current inode(unused)
-    fn find(&self, name: &str) -> Option<Arc<dyn Inode>>;
     /// use name to lookup under the current inode
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>>;
     /// list all files/dir/symlink under current inode
