@@ -3,7 +3,7 @@ use core::{arch::asm, ops::Range};
 use alloc::{format, vec::Vec};
 use bitflags::bitflags;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 

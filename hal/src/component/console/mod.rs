@@ -20,8 +20,19 @@ macro_rules! println {
 /// every arch needs to impl core::fmt::Write for Stdout
 struct Stdout;
 
+static CONSOLE_MUTEX: AtomicBool = AtomicBool::new(false); 
+
 pub fn _print(args: core::fmt::Arguments) {
-    core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
+    loop {
+        if CONSOLE_MUTEX.compare_exchange(
+            false, true, 
+            Ordering::Release, Ordering::Relaxed
+        ).is_ok() {
+            core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
+            CONSOLE_MUTEX.store(false, Ordering::Release);
+            break;
+        }
+    }
 }
 
 struct Logger;
@@ -67,6 +78,8 @@ pub fn init() {
 
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
+
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_arch = "riscv64")]
 #[allow(unused)]
