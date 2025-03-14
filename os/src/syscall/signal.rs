@@ -3,10 +3,12 @@
 use log::*;
 
 use crate::mm::UserCheck;
+use crate::processor;
+use crate::processor::processor::current_processor;
 use crate::signal::*;
 use crate::logging;
 use crate::task::current_task;
-use crate::task::processor::current_trap_cx;
+use crate::processor::processor::current_trap_cx;
 
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> isize {
@@ -65,10 +67,10 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
 
     let task = current_task().unwrap();
     let sig_manager = task.sig_manager.lock();
-    let user_check = UserCheck::new();
+    let _user_check = UserCheck::new();
     info!("[sys_rt_sigaction]: writing odl action");
     if old_action as *const u8 != core::ptr::null::<u8>() {
-        user_check.check_write_slice(old_action as *mut u8, core::mem::size_of::<SigAction>());
+        //user_check.check_write_slice(old_action as *mut u8, core::mem::size_of::<SigAction>());
         let k_sig_hand = &sig_manager.sig_handler[signo as usize];
         unsafe {
             if k_sig_hand.is_user {
@@ -84,7 +86,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
 
     info!("[sys_rt_sigaction]: reading new action");
     if action as *const u8 != core::ptr::null::<u8>() {
-        user_check.check_read_slice(action as *const u8, core::mem::size_of::<SigAction>());
+        //user_check.check_read_slice(action as *const u8, core::mem::size_of::<SigAction>());
         let mut sig_action = unsafe { *action };
         let new_sigaction = match sig_action.sa_handler as usize {
             SIG_DFL => KSigAction::new(signo as usize, false),
@@ -177,7 +179,8 @@ pub fn sys_rt_sigreturn() -> isize {
     // restore the old sig mask
     sig_manager.blocked_sigs = ucontext.uc_sigmask;
     // restore the old context (todo: restore signal stack)
-    current_trap_cx().sepc = ucontext.uc_mcontext.user_x[0];
-    current_trap_cx().x = ucontext.uc_mcontext.user_x;
+    let processor = current_processor();
+    current_trap_cx(processor).sepc = ucontext.uc_mcontext.user_x[0];
+    current_trap_cx(processor).x = ucontext.uc_mcontext.user_x;
     0
 }
