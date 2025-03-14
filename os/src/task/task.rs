@@ -1,7 +1,6 @@
 //!Implementation of [`TaskControlBlock`]
-use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
-use crate::config::TRAP_CONTEXT;
+use super::{tid_alloc, schedule, INITPROC};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
@@ -16,13 +15,13 @@ unsafe extern "C" {
 }
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
-use alloc::{fmt, vec};
+use alloc::{fmt, format, vec};
 use alloc::vec::Vec;
 use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal};
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
-use hal::println;
+use hal::{println, vm};
 use hal::vm::{PageFaultAccessType, UserVmSpaceHal};
 use crate::mm::{ translated_refmut, translated_str};
 use alloc::slice;
@@ -249,7 +248,7 @@ impl TaskControlBlock {
         let (vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
 
         let trap_cx_ppn = vm_space.get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_TOP).floor())
+            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
 
         // set argc to zero
@@ -311,7 +310,7 @@ impl TaskControlBlock {
         // update trap_cx ppn
         let trap_cx_ppn = vm_space
             .get_page_table()
-            .translate_vpn(VirtAddr::from(TRAP_CONTEXT).floor())
+            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
          //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
@@ -424,7 +423,7 @@ impl TaskControlBlock {
         let trap_cx_ppn = vm_space
             .lock()
             .get_page_table()
-            .translate_vpn(VirtAddr::from(TRAP_CONTEXT).floor())
+            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
         let task_control_block = Arc::new(TaskControlBlock {
             tid: tid_handle,

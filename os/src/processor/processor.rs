@@ -5,16 +5,17 @@ use crate::sync::mutex::SpinNoIrqLock;
 use crate::task::task::{TaskStatus,TaskControlBlock,Shared,new_shared};
 use crate::sync::UPSafeCell;
 use crate::processor::context::EnvContext;
-use crate::mm::vm::KERNEL_SPACE;
 use crate::trap::TrapContext;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use async_task::Runnable;
 use hal::instruction::{Instruction, InstructionHal};
+use hal::pagetable::PageTableHal;
+use hal::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
 use riscv::asm;
-use crate::mm;
+use crate::mm::{self, INIT_VMSPACE};
 use crate::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
 pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
@@ -156,9 +157,7 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
 pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
     unsafe { Instruction::disable_interrupt()};
     unsafe {env.auto_sum()};
-    unsafe {
-        KERNEL_SPACE.exclusive_access().page_table.enable();
-    }
+    INIT_VMSPACE.lock().enable();
     core::mem::swap(processor.env_mut(), env);
     processor.current = None;
     unsafe { Instruction::enable_interrupt()};

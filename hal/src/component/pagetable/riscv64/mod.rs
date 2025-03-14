@@ -3,7 +3,7 @@ use core::{arch::asm, ops::Range};
 use alloc::{format, vec::Vec};
 use bitflags::bitflags;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -258,6 +258,7 @@ impl<A: FrameAllocatorHal> PageTable<A> {
             }
             if !pte.is_valid() {
                 let frame = self.alloc.alloc(1).unwrap();
+                frame.get_slice_mut::<u8>().fill(0);
                 *pte = PageTableEntry::new(frame.start, MapPerm::empty(), true);
                 self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
             }
@@ -282,8 +283,10 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     }
 
     fn new_in(_: usize, alloc: A) -> Self {
+        let frame = alloc.alloc(1).unwrap();
+        frame.get_slice_mut::<u8>().fill(0);
         Self {
-            root_ppn: alloc.alloc(1).unwrap().start,
+            root_ppn: frame.start,
             frames: Vec::new(),
             alloc
         }

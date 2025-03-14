@@ -1,5 +1,5 @@
 use core::arch::global_asm;
-use hal::addr::{VirtAddr, VirtAddrHal, VirtPageNumHal};
+use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}};
 use riscv::register::{
     scause::Scause, 
     mtvec::TrapMode,
@@ -8,10 +8,7 @@ use riscv::register::{
 };
 use log::*;
 
-use crate::{
-    trap::set_kernel_trap_entry,
-    config::PAGE_SIZE,
-};
+use crate::trap::set_kernel_trap_entry;
 
 global_asm!(include_str!("check.S"));
 
@@ -57,7 +54,7 @@ impl UserCheck {
                 // todo: into the page fault handler
                 panic!("user read page fault: {:?}, va: {:?}", scause, va.0);
             }
-            va.0 += PAGE_SIZE;
+            va.0 += Constant::PAGE_SIZE;
         }
         info!("exit user check and read");
         // if nothing panic, indicate readable
@@ -79,7 +76,7 @@ impl UserCheck {
                 // todo: into the page fault handler
                 panic!("user write page fault: {:?}, va: {:#x}", scause, va.0);
             }
-            va.0 += PAGE_SIZE;
+            va.0 += Constant::PAGE_SIZE;
         }
         info!("exit user check and write");
         // if nothing panic, indicate writable
