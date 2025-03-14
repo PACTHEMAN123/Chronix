@@ -133,3 +133,22 @@ macro_rules! generate_atomic_accessors {
     };
 }
 
+/// quick macro to generate is_xxx and set_xxx state method
+#[macro_export]
+macro_rules! generate_state_methods {
+    ($($state:ident),+) => {
+        $(
+            paste::paste! {
+                #[allow(unused)]
+                pub fn [<is_ $state:lower>](&self) -> bool {
+                    *self.task_status.lock() == TaskStatus::$state
+                }
+                #[allow(unused)]
+                pub fn [<set_ $state:lower>](&self) {
+                    *self.task_status.lock() = TaskStatus::$state
+                }
+            }
+        )+
+    };
+}
+

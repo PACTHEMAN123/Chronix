@@ -1,24 +1,23 @@
 //! process related syscall
 
+use core::ptr::null;
 use core::sync::atomic::Ordering;
 use crate::fs::{
     ext4::open_file,
     OpenFlags,
 };
+use crate::mm::{copy_out, UserCheck};
 use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
+use crate::signal::SigSet;
 use crate::task::processor::current_trap_cx;
 use crate::task::schedule::spawn_user_task;
 use crate::task::{
     current_task, current_user_token, exit_current_and_run_next,
 };
 use crate::trap::TrapContext;
+use crate::utils::suspend_now;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use log::info;
-/// exit the current process with the given exit code
-pub fn sys_exit(exit_code: i32) -> isize {
-    exit_current_and_run_next(exit_code);
-    0
-}
 
 bitflags! {
     /// Defined in <bits/sched.h>
@@ -67,6 +66,19 @@ bitflags! {
         const IO = 0x80000000 ;
     }
 }
+
+bitflags! {
+    /// Defined in <bits/waitflags.h>.
+    pub struct WaitOptions: i32 {
+        /// Don't block waiting.
+        const WNOHANG = 0x00000001;
+        /// Report status of stopped children.
+        const WUNTRACED = 0x00000002;
+        /// Report continued child.
+        const WCONTINUED = 0x00000008;
+    }
+}
+
 /// get the pid of the current process
 pub fn sys_getpid() -> isize {
     current_task().unwrap().pid() as isize
@@ -75,6 +87,13 @@ pub fn sys_getpid() -> isize {
 pub fn sys_gettid() -> isize {
     current_task().unwrap().tid() as isize
 }
+
+/// exit the current process with the given exit code
+pub fn sys_exit(exit_code: i32) -> isize {
+    exit_current_and_run_next(exit_code);
+    0
+}
+
 /// fork a new process
 pub fn sys_fork() -> isize {
     let current_task = current_task().unwrap();
@@ -94,16 +113,31 @@ pub fn sys_fork() -> isize {
 }
 
 /// clone a new process/thread/ using clone flags
-pub fn sys_clone (flags: usize, stack: VirtAddr,tls: VirtAddr) -> isize {
+pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> isize {
+    //info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
     new_task.get_trap_cx().x[10] = 0;
     let new_tid = new_task.tid();
-
-    if !stack.0 == 0 {
+    // set new stack
+    if stack.0 != 0 {
         new_task.get_trap_cx().x[2] = stack.0;
     }
+    // set parent tid and child tid
+    let _user_check = UserCheck::new();
+    if flags.contains(CloneFlags::PARENT_SETTID) {
+        unsafe {
+            (parent_tid.0 as *mut usize).write_volatile(new_tid);
+        }
+    }
+    if flags.contains(CloneFlags::CHILD_SETTID) {
+        unsafe  {
+            (child_tid.0 as *mut usize).write_volatile(new_tid);
+        }
+        // todo: write new_tid into child memory(?)
+    }
+    // todo: more flags...
     if flags.contains(CloneFlags::SETTLS) {
         new_task.get_trap_cx().x[4] = tls.0;
     }
@@ -144,64 +178,122 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
     }
 }
 
-/// If there is not a child process whose pid is same as given, return -1.
-/// Else if there is a child process but it is still running, return -2.
-pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
-    //info!("sys_waitpid: pid = {}, exit_code_ptr = {:#x}", pid, exit_code_ptr);
+
+
+/// The waitpid() system call suspends execution of the calling thread
+/// until a child specified by pid argument has changed state.  By
+/// default, waitpid() waits only for terminated children, but this
+/// behavior is modifiable via the options argument, as described
+/// below.
+/// pid < -1 meaning wait for any child process whose process group ID
+/// is equal to the absolute value of pid.
+/// pid = -1 meaning wait for any child process.
+/// pid = 0 meaning wait for any child process whose process group ID
+/// is equal to that of the calling process at the time of the call to waitpid().
+/// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
+pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize {
     let task = current_task().unwrap();
-    
-    let res = {
+    let option = WaitOptions::from_bits_truncate(option);
+    // todo: now only support for pid == -1 and pid > 0
+    // get the all target zombie process
+    let res_task = {
         let children = task.children();
-        if children.is_empty(){
-            info!("sys_waitpid: no child process");
+        if  children.is_empty() {
+            info!("[sys_waitpid]: fail on no child");
+            return -1;
         }
         match pid {
             -1 => {
-                //info!("wait for any child process");
-                children.values()
-                .find(|child| child.is_zombie() && child.with_thread_group(|thread_group| thread_group.len() == 1)
-                ).cloned()
+                children
+                .values()
+                .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
             }
-            0 => {
-                //info!("wait for any child process in the same process group of the calling process");
-                unimplemented!();
-            }
-            p if p > 0 => {
-                let p = p as usize;
-                //info!("wait for a specific child process with pid {}", p);
-                if let Some(child) = children.get(&p ) {
-                    if child.is_zombie() && child.with_thread_group(|thread_group| thread_group.len() == 1) {
-                        Some(child).cloned()
-                    }else {
+            pid if pid > 0 => {
+                if let Some(child) = children.get(&(pid as usize)) {
+                    if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
+                        Some(child)
+                    } else {
                         None
                     }
-                }else {
-                    //info!("have no child process with pid {}",p);
-                    None
+                } else {
+                    panic!("[sys_waitpid]: no child with pid {}", pid);
                 }
             }
-            _p => {
-                //info!("wait for any child process in the process group of pid {}", p);
-                unimplemented!();
+            _ => {
+                panic!("[sys_waitpid]: not implement");
             }
-    
-        }
+        }.cloned()
     };
-    // find a child process
-    // ---- access current PCB exclusively
-    if let Some(res) = res {
-        //info!("now task {} remove child {} and return its exit code {}", task.tid(),res.tid(),res.exit_code.load(Ordering::Relaxed));
-        let tid = res.tid();
+
+    if let Some(res_task) = res_task {
+        if exit_code_ptr != 0 {
+            let exit_code = res_task.exit_code();
+            let exit_code_bytes: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    &exit_code as *const i32 as *const u8,
+                    core::mem::size_of::<i32>(),
+                )
+            };
+            copy_out(&task.vm_space.lock().page_table, VirtAddr(exit_code_ptr), exit_code_bytes);
+        }
+        let tid = res_task.tid();
         task.remove_child(tid);
-        let exit_code = res.exit_code.load(Ordering::Relaxed);
-        *translated_refmut(task.with_vm_space(|m| m.token()), exit_code_ptr as *mut i32) = exit_code;
-        res.tid() as isize
-    }  else {
-        // todo : if the waiting task isn't zombie yet, then this time this task should do await, until the waiting task do_exit then use SIGHLD to wake up this task.
-        // todo signal handling
-        -2
+        return tid as isize;
+    } else if option.contains(WaitOptions::WNOHANG) {
+        return 0;
+    } else {
+        //info!("[sys_waitpid]: task {} waiting for SIGCHLD", task.gettid());
+        let (child_pid, exit_code) = loop {
+            task.set_interruptable();
+            task.set_wake_up_sigs(SigSet::SIGCHLD);
+            suspend_now().await;
+            task.set_running();
+            // todo: missing check if getting the expect signal
+            // now check the child one more time
+            let children = task.children();
+            let child = match pid {
+                -1 => {
+                    children
+                    .values()
+                    .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
+                }
+                pid if pid > 0 => {
+                    if let Some(child) = children.get(&(pid as usize)) {
+                        if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
+                            Some(child)
+                        } else {
+                            None
+                        }
+                    } else {
+                        panic!("[sys_waitpid]: no child with pid {}", pid);
+                    }
+                }
+                _ => {
+                    panic!("[sys_waitpid]: not implement");
+                }
+            };
+            if let Some(child) = child {
+                break (
+                    child.pid(),
+                    child.exit_code(),
+                );
+            } else {
+                panic!("[sys_waitpid] unexpected result");
+            }
+        };
+        // write into exit code pointer
+        if exit_code_ptr != 0 {
+            let exit_code_bytes: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    &exit_code as *const i32 as *const u8,
+                    core::mem::size_of::<i32>(),
+                )
+            };
+            copy_out(&task.vm_space.lock().page_table, VirtAddr(exit_code_ptr), exit_code_bytes);
+        }
+        task.remove_child(child_pid);
+        return child_pid as isize;
     }
-    // ---- release current PCB automatically
 }
 /// yield immediatly to another process
 pub async fn sys_yield() -> isize {

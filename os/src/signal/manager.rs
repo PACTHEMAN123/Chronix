@@ -19,6 +19,8 @@ pub struct SigManager {
     pub blocked_sigs: SigSet,
     /// Signal handler for every signal
     pub sig_handler: [KSigAction; SIG_NUM + 1],
+    /// Wake up signals
+    pub wake_sigs: SigSet,
 }
 
 global_asm!(include_str!("trampoline.S"));
@@ -35,6 +37,7 @@ impl SigManager {
             bitmap: SigSet::empty(),
             blocked_sigs: SigSet::empty(),
             sig_handler: core::array::from_fn(|signo| KSigAction::new(signo, false)),
+            wake_sigs: SigSet::empty(),
         }
     }
     pub fn from_another(sig_manager: &SigManager) -> Self {
@@ -45,6 +48,7 @@ impl SigManager {
             bitmap: SigSet::empty(),
             blocked_sigs: SigSet::empty(),
             sig_handler: sig_manager.sig_handler,
+            wake_sigs: SigSet::empty(),
         }
     }
     /// signal manager receive a new signal
@@ -76,11 +80,11 @@ impl SigManager {
             cnt += 1;
             // block the signals
             if signo != SIGKILL && signo != SIGSTOP && self.blocked_sigs.contain_sig(signo) {
-                info!("[SIGHANDLER] signal {} blocked", signo);
+                //info!("[SIGHANDLER] signal {} blocked", signo);
                 self.pending_sigs.push_back(signo);
                 continue;
             }
-            info!("[SIGHANDLER] receive signal {}", signo);
+            //info!("[SIGHANDLER] receive signal {}", signo);
             break;
         }
         // handle a signal
