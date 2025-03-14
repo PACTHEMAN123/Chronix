@@ -1,6 +1,8 @@
 use core::ops::Range;
 
 pub trait ConstantsHal {
+    const KERNEL_ENTRY_PA: usize;
+
     const KERNEL_ADDR_SPACE: Range<usize>;
     const USER_ADDR_SPACE: Range<usize>;
 

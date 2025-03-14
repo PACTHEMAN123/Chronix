@@ -1,5 +1,4 @@
 //!Implementation of [`PidAllocator`]
-use crate::config::{KERNEL_MEMORY_SPACE, PAGE_SIZE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;

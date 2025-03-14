@@ -1,7 +1,5 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
-
-use crate::config::{KERNEL_ADDR_OFFSET, MEMORY_END};
 use crate::sync::mutex::spin_mutex::SpinMutex;
 use crate::sync::mutex::Spin;
 use crate::sync::UPSafeCell;
@@ -69,7 +67,7 @@ pub fn init_frame_allocator() {
     }
 
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(ekernel as usize - KERNEL_ADDR_OFFSET)..PhysAddr::from(MEMORY_END),
+        PhysAddr::from(ekernel as usize - Constant::KERNEL_ADDR_SPACE.start)..PhysAddr::from(Constant::MEMORY_END),
     );
 }
 

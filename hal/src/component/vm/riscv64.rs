@@ -146,6 +146,23 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
 
 }
 
+impl<A:FrameAllocatorHal> UserVmSpace<A> {
+    fn find_heap(&mut self) -> Option<&mut UserVmArea<A>> {
+        if self.areas[self.heap].vma_type == UserVmAreaType::Heap {
+            return Some(&mut self.areas[self.heap]);
+        } else {
+            self.areas.iter_mut().enumerate().find(|(i, vm)| {
+                if vm.vma_type == UserVmAreaType::Heap {
+                    self.heap = *i;
+                    true
+                } else {
+                    false
+                }
+            }).map(|(_, vm)| vm)
+        }
+    }
+}
+
 impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> {
 
     fn new_in(alloc: A) -> Self {
@@ -277,7 +294,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
     }
 
     fn reset_heap_break(&mut self, new_brk: crate::addr::VirtAddr) -> crate::addr::VirtAddr {
-        let  heap = &mut self.areas[self.heap];
+        let heap = self.find_heap().unwrap();
         let range = heap.range_va.clone();
         if new_brk >= range.end {
             heap.range_va = range.start..new_brk;

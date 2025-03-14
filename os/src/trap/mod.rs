@@ -13,13 +13,13 @@
 //! to [`syscall()`].
 mod context;
 
+use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
 use hal::vm::UserVmSpaceHal;
 use hal::{addr::VirtAddr, vm::PageFaultAccessType};
 
 use crate::async_utils::yield_now;
-use crate::config::TRAP_CONTEXT;
 use crate::executor;
 use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;
@@ -165,7 +165,7 @@ pub fn trap_return() {
     }
     //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
-    let trap_cx_ptr = TRAP_CONTEXT;
+    let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
     //let user_satp = current_user_token();
     extern "C" {
         fn __restore();
