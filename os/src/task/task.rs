@@ -1,4 +1,7 @@
 //!Implementation of [`TaskControlBlock`]
+//! 
+#![allow(missing_docs)]
+
 use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::arch::riscv64::sfence_vma_all;
@@ -11,7 +14,7 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::trap::{self, trap_handler, TrapContext};
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP};
+use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
 global_asm!(include_str!("../signal/trampoline.S"));
 unsafe extern "C" {
     unsafe fn sigreturn_trampoline();
@@ -196,18 +199,6 @@ impl TaskControlBlock {
     fn get_status(&self) -> TaskStatus{
         *self.task_status.lock()
     }
-    /// check if the task is zombie
-    pub fn is_zombie(&self) -> bool {
-        self.get_status() == TaskStatus::Zombie
-    }
-    /// check if the task is running
-    pub fn is_running(&self) -> bool {
-        self.get_status() == TaskStatus::Running
-    }
-    /// for threads except main thread
-    pub fn set_zombie(&self) {
-        *self.task_status.lock() = TaskStatus::Zombie;
-    }
     /// allocate a new fd for the task
     pub fn alloc_fd(&self) -> usize {
         let mut fd_table_inner = self.fd_table.lock();
@@ -222,6 +213,7 @@ impl TaskControlBlock {
     pub unsafe fn switch_page_table(&self) {
         self.vm_space.lock().page_table.enable();
     }
+    /// get parent task
     pub fn parent(&self) -> Option<Weak<Self>> {
         self.parent.lock().clone()
     }

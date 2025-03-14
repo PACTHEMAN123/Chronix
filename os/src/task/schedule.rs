@@ -9,7 +9,7 @@ use log::{debug, info, trace};
 use crate::{task::exit_current_and_run_next, trap::{trap_handler, TrapContext}};
 use crate::task::TaskControlBlock;
 use crate::executor;
-use crate::async_utils::{get_waker,suspend_now};
+use crate::utils::async_utils::{get_waker,suspend_now};
 use crate::processor::processor::*;
 use crate::trap::trap_return;
 use super::task::TaskStatus;

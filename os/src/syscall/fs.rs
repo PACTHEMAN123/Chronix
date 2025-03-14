@@ -2,9 +2,17 @@
 use alloc::string::ToString;
 use log::info;
 
-use crate::fs::ext4::{open_file, OpenFlags};
-use crate::fs::vfs::File;
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::fs::{
+    ext4::open_file,
+    vfs::{File, dentry::global_find_dentry, dentry},
+    OpenFlags,
+    AT_FDCWD,
+};
+use crate::utils::{
+    path::*,
+    string::*,
+};
+use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, UserCheck};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 /// syscall: write
