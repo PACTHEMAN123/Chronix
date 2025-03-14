@@ -10,7 +10,7 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, SigManager};
+use crate::signal::{KSigAction, SigManager, SigSet, SIGCHLD};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, vec};
@@ -27,7 +27,7 @@ use core::{
     cell::RefMut,
     task::Waker,
 };
-use crate::{generate_atomic_accessors, generate_with_methods};
+use crate::{generate_atomic_accessors, generate_with_methods, generate_state_methods};
 use log::*;
 use crate::logging;
 use super::context::SumGuard;
@@ -112,7 +112,17 @@ impl TaskControlBlock {
         cwd: Arc<dyn Dentry>
     );
     generate_atomic_accessors!(
+        exit_code: i32,
         sig_ucontext_ptr: usize
+    );
+    generate_state_methods!(
+        Ready,
+        Running,
+        Zombie,
+        Stopped,
+        Terminated,
+        Interruptable,
+        UnInterruptable
     );
     pub fn pid(self: &Arc<Self>) -> Pid {
         if self.is_leader(){
@@ -152,16 +162,6 @@ impl TaskControlBlock {
     fn get_status(&self) -> TaskStatus{
         *self.task_status.lock()
     }
-    pub fn is_zombie(&self) -> bool {
-        self.get_status() == TaskStatus::Zombie
-    }
-    pub fn is_running(&self) -> bool {
-        self.get_status() == TaskStatus::Running
-    }
-    /// for threads except main thread
-    pub fn set_zombie(&self) {
-        *self.task_status.lock() = TaskStatus::Zombie;
-    }
     pub fn alloc_fd(&self) -> usize {
         let mut fd_table_inner = self.fd_table.lock();
         if let Some (fd) = (0..fd_table_inner.len()).find(|fd| fd_table_inner[*fd].is_none()) {
@@ -173,6 +173,9 @@ impl TaskControlBlock {
     }
     pub unsafe fn switch_page_table(&self) {
         self.vm_space.lock().page_table.enable();
+    }
+    pub fn parent(&self) -> Option<Weak<Self>> {
+        self.parent.lock().clone()
     }
     pub fn children(&self) -> impl DerefMut<Target = BTreeMap<Tid, Arc<Self>>> + '_ {
         self.children.lock()
@@ -442,6 +445,12 @@ impl TaskControlBlock {
         }else {
             self.get_leader().set_zombie();
         }
+        // send signal to parent
+        if let Some(parent) = self.parent() {
+            //info!("task {} exit, send SIGCHLD to parent", self.pid());
+            let parent = parent.upgrade().unwrap();
+            parent.recv_sigs(SIGCHLD);
+        }
     }
 }
 
@@ -450,7 +459,7 @@ impl TaskControlBlock {
     /// once the leader thread change the sig action
     /// all its follower should change
     pub fn set_sigaction(&self, signo: usize, sigaction: KSigAction) {
-        info!("[TCB] sync all child thread sigaction");
+        //info!("[TCB] sync all child thread sigaction");
         self.sig_manager.lock().set_sigaction(signo, sigaction);
         self.with_mut_children(|children| {
             if children.len() == 0 {
@@ -461,11 +470,42 @@ impl TaskControlBlock {
             }
         })
     }
+    /// set self's wake up signals
+    /// when these signals arrive it should wake itself up
+    pub fn set_wake_up_sigs(&self, sigs: SigSet) {
+        assert!(self.is_interruptable());
+        self.with_mut_sig_manager(|manager| {
+            manager.wake_sigs = sigs | SigSet::SIGKILL | SigSet::SIGSTOP
+        })
+    }
+    /// receive function at TCB level
+    /// as we may need to wake up a task when wake up signal come
+    pub fn recv_sigs(&self, signo: usize) {
+        //info!("[TCB]: tid {} recv signo {}", self.gettid(), signo);
+        self.with_mut_sig_manager(|manager| {
+            manager.receive(signo);
+            if manager.wake_sigs.contain_sig(signo) && self.is_interruptable() {
+                //info!("[TCB]: tid {} has been wake up", self.gettid());
+                self.wake();
+            }
+        })
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
+    /// task is ready to run
     Ready,
+    /// task is currently running
     Running,
+    /// task has terminated for user mode, but hasnt call [exit]
+    Terminated,
+    /// task has [exit], but the TCB hasnt release
     Zombie,
+    /// task has stopped, due to stop signal
+    Stopped,
+    /// task is waiting for an event
+    Interruptable,
+    /// task is waiting for an event but cannot be interrupt
+    UnInterruptable,
 }

@@ -9,13 +9,13 @@ pub const SIG_IGN: usize = 1;
 
 
 pub fn term_sig_handler(signo: usize) {
-    info!("term sig handler, sig {}", signo);
+    info!("[term_sig_handler]: term sig handler, sig {}", signo);
 }
 
 pub fn ign_sig_handler(signo: usize) {
-    info!("ignore this sig {}", signo);
+    info!("[ign_sig_handler]: ignore this sig {}", signo);
 }
 
 pub fn stop_sig_handler(signo: usize) {
-    info!("stop sig handler, sig {}", signo);
+    info!("[stop_sig_handler]: stop sig handler, sig {}", signo);
 }
