@@ -20,7 +20,7 @@ async-task = { version = "4.7.1", default-features = false }
 lwext4_rust = { path = "../vendor/lwext4_rust" }
 bitmap-allocator = { path = "../vendor/bitmap-allocator" }
 paste = "1.0"
-hal = {path = "../hal" }
+hal = {path = "./hal" }
 
 [features]
 smp = []
