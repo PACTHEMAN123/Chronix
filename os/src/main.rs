@@ -37,7 +37,10 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+use board::MAX_PROCESSORS;
 use log::*;
+use mm::vm::{VmSpace, KERNEL_SPACE};
+use processor::processor::current_processor;
 
 #[path = "boards/qemu.rs"]
 mod board;
@@ -56,13 +59,14 @@ pub mod sync;
 pub mod syscall;
 pub mod signal;
 pub mod task;
+mod processor;
 pub mod timer;
 pub mod trap;
 mod arch;
 mod executor;
 pub mod utils;
 
-use core::arch::global_asm;
+use core::{arch::global_asm, sync::atomic::{AtomicBool,Ordering}};
 
 // global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
@@ -76,29 +80,61 @@ fn clear_bss() {
             .fill(0);
     }
 }
+#[allow(unused)]
+static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
+/// id is the running processor, now start others
+#[allow(unused)]
+fn processor_start(id: usize) {
+    use crate::config::KERNEL_ENTRY_PA;
+    use crate::processor::processor::PROCESSORS;
+    let nums = MAX_PROCESSORS;
+    for i in 0..nums {
+        if i == id {
+            continue;
+        }
+        let status = sbi_rt::hart_start(i, KERNEL_ENTRY_PA,0);
+        //info!("[kernel] start to wake up processor {}... status {:?}",i,status);
+    }
+}
 
 #[no_mangle]
 /// the rust entry-point of os
-pub fn rust_main() -> ! {
-    clear_bss();
-    logging::init();
-    info!("[kernel] Hello, world!");
-    mm::init();
-    mm::vm::remap_test();
-    trap::init();
-    fs::init();
-    fs::ext4::list_apps();
-    executor::init();
-    task::schedule::spawn_kernel_task(
-        async move{
-            task::add_initproc();
-        }
-    );
+pub fn rust_main(id: usize) -> ! {
+    if FIRST_PROCESSOR.load(Ordering::Acquire)
+    {
+        FIRST_PROCESSOR.store(false, Ordering::Release);
+        clear_bss();
+        logging::init();
+        info!("id: {id}");
+        info!("[kernel] Hello, world!");
+        mm::init();
+        mm::vm::remap_test();
+        processor::processor::init(id);
+        trap::init();
+        fs::init();
+        fs::ext4::list_apps();        
+        #[cfg(not(feature = "smp"))]
+        executor::init();
+        task::schedule::spawn_kernel_task(
+            async move{
+                task::add_initproc();
+            }
+        );
+
+        #[cfg(feature = "smp")]
+        processor_start(id);
+    } else {
+        processor::processor::init(id);
+        trap::init();
+        KERNEL_SPACE.exclusive_access().enable();
+    }
+    info!("[kernel] -------hart {} start-------",id);
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     loop{
         //info!("now Idle loop");
-       executor::run_until_idle();
+       let _tasks = executor::run_until_idle();
+       //info!("[kernel] {} have {} tasks run",current_processor().id(),tasks);
     }
     //panic!("Unreachable in rust_main!");
 }
