@@ -8,9 +8,13 @@ use crate::mm::{copy_out, copy_out_str, PhysPageNum, VirtAddr, VirtPageNum, vm::
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::trap::{trap_handler, TrapContext};
+use crate::trap::{self, trap_handler, TrapContext};
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, SigManager};
+use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP};
+global_asm!(include_str!("../signal/trampoline.S"));
+unsafe extern "C" {
+    unsafe fn sigreturn_trampoline();
+}
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, vec};
@@ -20,6 +24,7 @@ use crate::mm::{ translated_refmut, translated_str, vm::{VmSpacePageFaultExt, Pa
 use alloc::slice;
 use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
+use core::arch::global_asm;
 use core::{
     ptr::slice_from_raw_parts_mut,
     sync::atomic::{AtomicI32, AtomicUsize, Ordering},
@@ -489,6 +494,88 @@ impl TaskControlBlock {
                 child.sig_manager.lock().set_sigaction(signo, sigaction);
             }
         })
+    }
+
+    /// signal manager should check the signal queue
+    /// before a task return form kernel to user
+    /// and make correspond handle action
+    pub fn check_and_handle(&self) {
+        self.with_mut_sig_manager(|sig_manager| {
+            // check the signal, try to find first handle signal
+        if sig_manager.pending_sigs.is_empty() {
+            return;
+        }
+        let len = sig_manager.pending_sigs.len();
+        let mut cnt = 0;
+        let mut signo: usize = 0;
+        while cnt < len {
+            signo = sig_manager.pending_sigs.pop_front().unwrap();
+            cnt += 1;
+            // block the signals
+            if signo != SIGKILL && signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo) {
+                info!("[SIGHANDLER] signal {} blocked", signo);
+                sig_manager.pending_sigs.push_back(signo);
+                continue;
+            }
+            info!("[SIGHANDLER] receive signal {}", signo);
+            break;
+        }
+        // handle a signal
+        assert!(signo != 0);
+        let sig_action = sig_manager.sig_handler[signo];
+        let trap_cx = self.get_trap_cx();
+        if sig_action.is_user {
+            let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
+            sig_manager.blocked_sigs.add_sig(signo);
+            sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
+
+            // push the current Ucontext into user stack
+            // (todo) notice that user may provide signal stack
+            // but now we dont support this flag
+            let sp = trap_cx.x[2];
+            let new_sp = sp - size_of::<UContext>();
+            let mut ucontext = UContext {
+                uc_flags: 0,
+                uc_link: 0,
+                uc_stack: SigStack::new(),
+                uc_sigmask: old_blocked_sigs,
+                uc_sig: [0; 16],
+                uc_mcontext: MContext {
+                    user_x: trap_cx.x,
+                    fpstate: [0; 66],
+                },
+            };
+            ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
+            let ucontext_bytes: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    &ucontext as *const UContext as *const u8,
+                    core::mem::size_of::<UContext>(),
+                )
+            };
+            copy_out(&self.vm_space.lock().page_table, VirtAddr(new_sp), ucontext_bytes);
+            self.set_sig_ucontext_ptr(new_sp);
+
+            // set the current trap cx sepc to reach user handler
+            trap_cx.sepc = sig_action.sa.sa_handler as *const usize as usize;
+            // a0
+            trap_cx.x[10] = signo;
+            // sp used by sys_sigreturn to restore ucontext
+            trap_cx.x[2] = new_sp;
+            // ra: when user signal handler ended, return to sigreturn_trampoline
+            // which calls sys_sigreturn
+            trap_cx.x[1] = sigreturn_trampoline as usize;
+            // other important regs
+            trap_cx.x[4] = ucontext.uc_mcontext.user_x[4];
+            trap_cx.x[3] = ucontext.uc_mcontext.user_x[3];
+        } else {
+            let handler = unsafe {
+                core::mem::transmute::<*const (), fn(usize)>(
+                    sig_action.sa.sa_handler as *const (),
+                )
+            };
+            handler(signo);
+        }
+        });
     }
 }
 

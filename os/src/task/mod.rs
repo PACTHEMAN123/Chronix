@@ -118,10 +118,12 @@ macro_rules! generate_atomic_accessors {
     ($($field_name:ident : $field_type:ty),+) => {
         paste::paste! {
             $(
+                /// get the value of the field
                 #[allow(unused)]
                 pub fn $field_name(&self) -> $field_type {
                     self.$field_name.load(Ordering::Relaxed)
                 }
+                /// store the value of the field
                 #[allow(unused)]
                 pub fn [<set_ $field_name>](&self, value: $field_type) {
                     self.$field_name.store(value, Ordering::Relaxed);
