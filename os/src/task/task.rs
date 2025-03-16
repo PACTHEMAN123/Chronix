@@ -13,6 +13,7 @@ global_asm!(include_str!("../signal/trampoline.S"));
 unsafe extern "C" {
     unsafe fn sigreturn_trampoline();
 }
+use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, vec};
@@ -29,6 +30,7 @@ use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
 use core::arch::global_asm;
 use core::ops::Deref;
+use core::time::Duration;
 use core::{
     ptr::slice_from_raw_parts_mut,
     sync::atomic::{AtomicI32, AtomicUsize, Ordering},
@@ -49,19 +51,21 @@ pub fn new_shared<T>(data: T) -> Shared<T> {
 }
 /// Task 
 pub struct TaskControlBlock {
-    // immutable
+    // ! immutable
     /// task id
     pub tid: TidHandle,
     /// leader of the thread group
     pub leader: Option<Weak<TaskControlBlock>>,
     /// whether this task is the leader of the thread group
     pub is_leader: bool,
-    // mutable only in self context , only accessed by current task
+    // ! mutable only in self context , only accessed by current task
     /// trap context physical page number
     pub trap_cx_ppn: UPSafeCell<PhysPageNum>,
     /// waker for waiting on events
     pub waker: UPSafeCell<Option<Waker>>,
-    // mutable only in self context, can be accessed by other tasks
+    /// time recorder for a task
+    pub time_recorder: UPSafeCell<TimeRecorder>,
+    // ! mutable only in self context, can be accessed by other tasks
     /// exit code of the task
     pub exit_code: AtomicI32,
     #[allow(unused)]
@@ -69,7 +73,7 @@ pub struct TaskControlBlock {
     pub base_size: AtomicUsize,
     /// status of the task
     pub task_status: SpinNoIrqLock<TaskStatus>,
-    // mutable in self and other tasks
+    // ! mutable in self and other tasks
     /// virtual memory space of the task
     pub vm_space: Shared<UserVmSpace>,
     /// parent task
@@ -169,6 +173,14 @@ impl TaskControlBlock {
     pub fn waker_ref(&self) -> &Option<Waker> {
         self.waker.get_ref()
     }
+    /// get mut ref of time_recorder of the task
+    pub fn time_recorder(&self) -> &mut TimeRecorder {
+        self.time_recorder.exclusive_access()
+    }
+    /// get ref of time_recorder of the task
+    pub fn time_recorder_ref(&self) -> &TimeRecorder {
+        self.time_recorder.get_ref()
+    }
     /// get trap_cx_ppn of the task
     pub fn get_trap_cx_ppn_access(&self) -> &mut PhysPageNum {
         self.trap_cx_ppn.exclusive_access()    
@@ -262,6 +274,7 @@ impl TaskControlBlock {
             is_leader: true,
             trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
             waker: UPSafeCell::new(None),
+            time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicI32::new(0),
             base_size: AtomicUsize::new(user_sp),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
@@ -431,6 +444,7 @@ impl TaskControlBlock {
             is_leader,
             trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
             waker: UPSafeCell::new(None),
+            time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicI32::new(0),
             base_size: AtomicUsize::new(0),
             task_status: status,
@@ -583,6 +597,39 @@ impl TaskControlBlock {
             handler(signo);
         }
         });
+    }
+}
+
+/// caculate the process time of a task
+impl TaskControlBlock {
+    /// get the sum of time pair of all threads in the process 
+    pub fn process_time_pair(&self) ->  (Duration, Duration) {
+        self.with_thread_group(|thread_group| -> (Duration, Duration) {
+            thread_group.iter()
+            .map(|thread| thread.time_recorder().time_pair())
+            .reduce(|(user_time_one,kernel_time_one),(user_time_two, kernel_time_two)| {
+                (user_time_one + user_time_two, kernel_time_one + kernel_time_two)
+            })
+            .unwrap()
+        })
+    }
+    /// get the sum of user time of all threads in the process
+    pub fn process_user_time(&self) -> Duration {
+        self.with_thread_group(|thread_group| -> Duration {
+            thread_group.iter()
+            .map(|thread| thread.time_recorder().user_time())
+            .reduce(|time_one, time_two| time_one + time_two)
+            .unwrap()
+        })
+    }
+    /// get the sum of cpu_time of all threads in the process
+    pub fn process_cpu_time(&self) -> Duration {
+        self.with_thread_group(|thread_group| -> Duration{
+            thread_group.iter()
+            .map(|thread| thread.time_recorder().processor_time())
+            .reduce(|time_one, time_two| time_one + time_two)
+            .unwrap()
+        })
     }
 }
 

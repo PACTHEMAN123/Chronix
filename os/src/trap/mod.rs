@@ -13,6 +13,7 @@
 //! to [`syscall()`].
 mod context;
 
+use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
@@ -23,6 +24,7 @@ use crate::async_utils::yield_now;
 use crate::executor;
 use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;
+use crate::task::task::TaskControlBlock;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
 };
@@ -159,12 +161,14 @@ pub async fn trap_handler()  {
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return() {
+pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
         Instruction::disable_interrupt();
     }
     //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
+    task.time_recorder().record_trap_return();
+    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
     let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
     //let user_satp = current_user_token();
     extern "C" {
@@ -178,6 +182,8 @@ pub fn trap_return() {
             in("a0") trap_cx_ptr,        
         );
     }
+    task.time_recorder().record_trap();
+    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
 }
 
 pub use context::TrapContext;
