@@ -190,6 +190,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
     // ---- access current PCB exclusively
     if let Some(res) = res {
         //info!("now task {} remove child {} and return its exit code {}", task.tid(),res.tid(),res.exit_code.load(Ordering::Relaxed));
+        task.time_recorder().update_child_time(res.time_recorder().time_pair());
         let tid = res.tid();
         task.remove_child(tid);
         let exit_code = res.exit_code.load(Ordering::Relaxed);
@@ -198,6 +199,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize) -> isize {
     }  else {
         // todo : if the waiting task isn't zombie yet, then this time this task should do await, until the waiting task do_exit then use SIGHLD to wake up this task.
         // todo signal handling
+        // todo : handle the children time record for parent in this case
         -2
     }
     // ---- release current PCB automatically

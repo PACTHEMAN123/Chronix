@@ -141,6 +141,8 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
     unsafe {env.auto_sum();}
     //info!("already in switch");
     processor.set_current(Arc::clone(task));
+    task.time_recorder().record_switch_in();
+    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",processor.id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
     if processor.current().is_none() {
         info!("fail to set current! processor id: {}, task id: {}", processor.id(),task.tid.0);
     }
@@ -159,6 +161,9 @@ pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
     unsafe {env.auto_sum()};
     INIT_VMSPACE.lock().enable();
     core::mem::swap(processor.env_mut(), env);
+    let current = processor.current().unwrap();
+    current.time_recorder().record_switch_out();
+    //info!("id: {},task time record: user_time:{:?},kernel_time:{:?}",processor.id(),current.time_recorder().user_time(),current.time_recorder().kernel_time());
     processor.current = None;
     unsafe { Instruction::enable_interrupt()};
     //info!("switch_out_current_task done");
