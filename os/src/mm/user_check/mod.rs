@@ -8,6 +8,8 @@ use riscv::register::{
 };
 use log::*;
 
+use crate::{processor::context::SumGuard, sync::mutex::SieGuard};
+
 global_asm!(include_str!("check.S"));
 
 #[derive(Clone, Copy)]
@@ -26,16 +28,22 @@ unsafe extern "C" {
 }
 
 /// UserCheck struct for user pointer check
-pub struct UserCheck {}
+pub struct UserCheck {
+    _sum_guard: SumGuard,
+    _sie_guard: SieGuard,
+}
 
 impl UserCheck {
     /// create a new user check
     pub fn new() -> Self {
+        let ret = Self {
+            _sum_guard: SumGuard::new(),
+            _sie_guard: SieGuard::new(),
+        };
         unsafe {
             stvec::write(__try_access_user_error_trap as usize, TrapMode::Direct);
-            sstatus::set_sum(); // open the sum to gain the user access permission
         }
-        UserCheck {}
+        ret
     }
 
     /// check if the given user address is readable or not
@@ -102,9 +110,6 @@ impl UserCheck {
 
 impl Drop for UserCheck {
     fn drop(&mut self) {
-        unsafe {
-            sstatus::clear_sum(); // close the sum to disable the user access permission
-        }
         set_kernel_trap_entry();
     }
 }
