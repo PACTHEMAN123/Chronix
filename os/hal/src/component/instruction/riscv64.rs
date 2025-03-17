@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use riscv::register::sstatus;
+use riscv::register::{sie, sstatus};
 
 use super::{Instruction, InstructionHal};
 
@@ -19,5 +19,9 @@ impl InstructionHal for Instruction {
 
     unsafe fn disable_interrupt() {
         sstatus::clear_sie();
+    }
+
+    unsafe fn enable_timer_interrupt() {
+        sie::set_stimer();
     }
 }

@@ -10,10 +10,10 @@ use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::trap::{self, trap_handler, TrapContext};
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
 global_asm!(include_str!("../signal/trampoline.S"));
+#[allow(unused)]
 unsafe extern "C" {
     unsafe fn sigreturn_trampoline();
 }
@@ -26,6 +26,7 @@ use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal}
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
+use hal::trap::{TrapContext, TrapContextHal};
 use hal::{println, vm};
 use hal::vm::{PageFaultAccessType, UserVmSpaceHal};
 use crate::mm::{ translated_refmut, translated_str};
@@ -317,7 +318,7 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
         );
-        task_control_block.get_trap_cx().x[10] = user_sp; // set a0 to user_sp
+        task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
         task_control_block
     }
     /// 
@@ -391,7 +392,7 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
         );
-        trap_cx.x[10] = user_sp; // set a0 to user_sp
+        trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
         *self.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
@@ -600,20 +601,20 @@ impl TaskControlBlock {
             // push the current Ucontext into user stack
             // (todo) notice that user may provide signal stack
             // but now we dont support this flag
-            let sp = trap_cx.x[2];
+            let sp = *trap_cx.sp();
             let new_sp = sp - size_of::<UContext>();
-            let mut ucontext = UContext {
+            let ucontext = UContext {
                 uc_flags: 0,
                 uc_link: 0,
                 uc_stack: SigStack::new(),
                 uc_sigmask: old_blocked_sigs,
                 uc_sig: [0; 16],
                 uc_mcontext: MContext {
-                    user_x: trap_cx.x,
+                    user_x: [0; 32], // todo: 应该从TrapContext复制通用寄存器
                     fpstate: [0; 66],
                 },
             };
-            ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
+            // ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
             let ucontext_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &ucontext as *const UContext as *const u8,
@@ -624,17 +625,19 @@ impl TaskControlBlock {
             self.set_sig_ucontext_ptr(new_sp);
 
             // set the current trap cx sepc to reach user handler
-            trap_cx.sepc = sig_action.sa.sa_handler as *const usize as usize;
+            *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
             // a0
-            trap_cx.x[10] = signo;
+            trap_cx.set_arg_nth(0, signo);
             // sp used by sys_sigreturn to restore ucontext
-            trap_cx.x[2] = new_sp;
+            *trap_cx.sp() = new_sp;
             // ra: when user signal handler ended, return to sigreturn_trampoline
             // which calls sys_sigreturn
-            trap_cx.x[1] = sigreturn_trampoline as usize;
+            *trap_cx.ra() = sigreturn_trampoline as usize;
+            /* 暂时注释掉MContext相关的代码
             // other important regs
             trap_cx.x[4] = ucontext.uc_mcontext.user_x[4];
             trap_cx.x[3] = ucontext.uc_mcontext.user_x[3];
+            */
         } else {
             let handler = unsafe {
                 core::mem::transmute::<*const (), fn(usize)>(

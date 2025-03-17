@@ -5,4 +5,5 @@ pub mod entry;
 pub mod instruction;
 pub mod pagetable;
 pub mod common;
+pub mod trap;
 pub mod vm;

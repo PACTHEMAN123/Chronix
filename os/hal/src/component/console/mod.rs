@@ -26,7 +26,7 @@ pub fn _print(args: core::fmt::Arguments) {
     loop {
         if CONSOLE_MUTEX.compare_exchange(
             false, true, 
-            Ordering::Release, Ordering::Relaxed
+            Ordering::Acquire, Ordering::Relaxed
         ).is_ok() {
             core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
             CONSOLE_MUTEX.store(false, Ordering::Release);

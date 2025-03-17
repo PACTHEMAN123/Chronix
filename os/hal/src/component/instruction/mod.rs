@@ -3,6 +3,7 @@ pub trait InstructionHal {
     unsafe fn tlb_flush_all();
     unsafe fn enable_interrupt();
     unsafe fn disable_interrupt();
+    unsafe fn enable_timer_interrupt();
 }
 
 pub struct Instruction;

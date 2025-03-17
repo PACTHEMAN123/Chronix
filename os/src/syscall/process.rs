@@ -11,12 +11,12 @@ use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::task::schedule::spawn_user_task;
 use crate::task:: exit_current_and_run_next;
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
-use crate::trap::TrapContext;
 use crate::signal::SigSet;
 use crate::utils::suspend_now;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
+use hal::trap::{TrapContext, TrapContextHal};
 use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 
@@ -105,7 +105,7 @@ pub fn sys_fork() -> isize {
     let trap_cx = new_task.get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
-    trap_cx.x[10] = 0;
+    trap_cx.set_arg_nth(0, 0);
     //info!("sys_fork: new_pid = {},user_sp = {:#x}", new_pid,trap_cx.x[2]);
     // add new task to scheduler
     spawn_user_task(new_task);
@@ -119,12 +119,14 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
-    new_task.get_trap_cx().x[10] = 0;
+    new_task.get_trap_cx().set_arg_nth(0, 0);
     let new_tid = new_task.tid();
+
     // set new stack
-    if stack.0 != 0 {
-        new_task.get_trap_cx().x[2] = stack.0;
+    if !stack.0 == 0 {
+        *new_task.get_trap_cx().sp() = stack.0;
     }
+    
     // set parent tid and child tid
     let _user_check = UserCheck::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
@@ -140,7 +142,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     }
     // todo: more flags...
     if flags.contains(CloneFlags::SETTLS) {
-        new_task.get_trap_cx().x[4] = tls.0;
+        *new_task.get_trap_cx().tls() = tls.0;
     }
     spawn_user_task(new_task);
     new_tid as isize
@@ -171,7 +173,7 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
         // let argc = args_vec.len();
         task.exec(all_data.as_slice(), args_vec);
         
-        let p = task.get_trap_cx_ppn_access().start_addr().get_ref::<TrapContext>().x[2];
+        let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
         p as isize
     } else {
