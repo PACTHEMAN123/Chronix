@@ -231,7 +231,8 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
     if let Some(res_task) = res_task {
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
         if exit_code_ptr != 0 {
-            let exit_code = res_task.exit_code();
+            // need to fit the test's WEXITSTATUS
+            let exit_code = (res_task.exit_code() & 0xFF) << 8;
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &exit_code as *const i32 as *const u8,
@@ -288,6 +289,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         };
         // write into exit code pointer
         if exit_code_ptr != 0 {
+            let exit_code = (exit_code & 0xFF) << 8;
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &exit_code as *const i32 as *const u8,
