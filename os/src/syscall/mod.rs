@@ -14,6 +14,7 @@ const SYSCALL_GETCWD: usize = 17;
 const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3: usize = 24;
 const SYSCALL_MKDIR: usize = 34;
+const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_READ: usize = 63;
@@ -51,6 +52,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
+        SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]),

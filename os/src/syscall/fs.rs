@@ -4,7 +4,7 @@ use log::info;
 
 use crate::fs::{
     ext4::open_file,
-    vfs::{File, dentry::global_find_dentry, dentry},
+    vfs::{File, dentry::global_find_dentry, dentry, DentryState},
     OpenFlags,
     AT_FDCWD,
 };
@@ -252,5 +252,22 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
     } else {
         info!("[sys_mkdirat]: pathname is empty!");
         return -1;
+    }
+}
+
+/// chdir() changes the current working directory of the calling
+/// process to the directory specified in path.
+/// On success, zero is returned.  On error, -1 is returned, and errno
+/// is set to indicate the error.
+pub fn sys_chdir(path: *const u8) -> isize {
+    let path = user_path_to_string(path).unwrap();
+    let dentry = global_find_dentry(&path);
+    if dentry.state() == DentryState::NEGATIVE {
+        info!("[sys_chdir]: dentry not found");
+        return -1;
+    } else {
+        let task = current_task().unwrap().clone();
+        task.set_cwd(dentry);
+        return 0;
     }
 }

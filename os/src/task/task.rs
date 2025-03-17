@@ -408,14 +408,13 @@ impl TaskControlBlock {
         let children;
         let thread_group;
         let pgid;
+        let cwd;
 
         let sig_manager = new_shared(
             match flag.contains(CloneFlags::SIGHAND) {
             true => SigManager::from_another(&self.sig_manager.lock()),
             false => SigManager::new(),
         });
-
-        let cwd = self.cwd.clone();
 
         if flag.contains(CloneFlags::THREAD){
             //info!("creating a thread");
@@ -425,6 +424,7 @@ impl TaskControlBlock {
             children = self.children.clone();
             thread_group = self.thread_group.clone();
             pgid = self.pgid.clone();
+            cwd = self.cwd.clone();
         }
         else{
             is_leader = true;
@@ -433,6 +433,7 @@ impl TaskControlBlock {
             children = new_shared(BTreeMap::new());
             thread_group = new_shared(ThreadGroup::new());
             pgid = new_shared(*self.pgid.lock());
+            cwd = new_shared(self.cwd());
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
@@ -680,6 +681,19 @@ impl TaskControlBlock {
             .reduce(|time_one, time_two| time_one + time_two)
             .unwrap()
         })
+    }
+}
+
+/// for file system
+impl TaskControlBlock {
+    /// get the current working dir
+    pub fn cwd(&self) -> Arc<dyn Dentry> {
+        self.cwd.lock().clone()
+    } 
+    /// change the current working dir
+    pub fn set_cwd(&self, dentry: Arc<dyn Dentry>) {
+        info!("switching task {}'s cwd to {}", self.gettid(), dentry.path());
+        *self.cwd.lock() = dentry;
     }
 }
 
