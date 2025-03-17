@@ -1,5 +1,5 @@
 use core::arch::global_asm;
-use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}};
+use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}, trap::set_kernel_trap_entry};
 use riscv::register::{
     scause::Scause, 
     mtvec::TrapMode,
@@ -7,8 +7,6 @@ use riscv::register::{
     sstatus,
 };
 use log::*;
-
-use crate::trap::set_kernel_trap_entry;
 
 global_asm!(include_str!("check.S"));
 

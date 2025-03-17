@@ -39,7 +39,7 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{constant::{Constant, ConstantsHal}, define_entry, pagetable::PageTableHal, vm::KernVmSpaceHal};
+use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, vm::KernVmSpaceHal};
 use log::*;
 use mm::INIT_VMSPACE;
 use processor::processor::current_processor;
@@ -91,7 +91,7 @@ pub fn main(id: usize) -> ! {
         info!("[kernel] Hello, world!");
         mm::init();
         processor::processor::init(id);
-        trap::init();
+        hal::trap::init();
         fs::init();
         fs::ext4::list_apps();        
         #[cfg(not(feature = "smp"))]
@@ -106,13 +106,15 @@ pub fn main(id: usize) -> ! {
         processor_start(id);
     } else {
         processor::processor::init(id);
-        trap::init();
+        hal::trap::init();
         unsafe {
             INIT_VMSPACE.lock().get_page_table().enable();
         }
     }
     info!("[kernel] -------hart {} start-------",id);
-    trap::enable_timer_interrupt();
+    unsafe { 
+        Instruction::enable_timer_interrupt();
+    }
     timer::set_next_trigger();
     loop{
         //info!("now Idle loop");

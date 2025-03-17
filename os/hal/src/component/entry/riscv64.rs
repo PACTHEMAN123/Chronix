@@ -62,7 +62,7 @@ pub(crate) fn rust_main(id: usize) {
     if FIRST_PROCESSOR.load(Ordering::Acquire) {
         FIRST_PROCESSOR.store(false, Ordering::Release);
         super::clear_bss();
-        crate::console::init();
+        crate::console::init();  
     }
     unsafe { super::_main_for_arch(id) };
 }

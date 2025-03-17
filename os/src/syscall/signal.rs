@@ -1,5 +1,6 @@
 //! signal related syscall
 
+use hal::trap::TrapContextHal;
 use log::*;
 
 use crate::mm::UserCheck;
@@ -179,7 +180,7 @@ pub fn sys_rt_sigreturn() -> isize {
     sig_manager.blocked_sigs = ucontext.uc_sigmask;
     // restore the old context (todo: restore signal stack)
     let processor = current_processor();
-    current_trap_cx(processor).sepc = ucontext.uc_mcontext.user_x[0];
-    current_trap_cx(processor).x = ucontext.uc_mcontext.user_x;
+    *current_trap_cx(processor).sepc() = ucontext.uc_mcontext.user_x[0];
+    // current_trap_cx(processor).x = ucontext.uc_mcontext.user_x;
     0
 }

@@ -6,7 +6,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::{task::exit_current_and_run_next, trap::{trap_handler, TrapContext}};
+use crate::{task::exit_current_and_run_next, trap::hal_user_trap_handler};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::utils::async_utils::{get_waker,suspend_now};
@@ -83,9 +83,10 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
         current_task().unwrap().inner_exclusive_access().get_trap_cx().sepc,
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );*/
+
     loop {
         trap_return(&task);
-        trap_handler().await;
+        hal_user_trap_handler().await;
         if task.is_zombie(){
             //info!("zombie task exit");
             break;

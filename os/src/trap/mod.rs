@@ -11,17 +11,18 @@
 //! It then calls different functionality based on what exactly the exception
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
-mod context;
 
 use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
+use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType};
 use hal::vm::UserVmSpaceHal;
 use hal::{addr::VirtAddr, vm::PageFaultAccessType};
 
 use crate::utils::async_utils::yield_now;
 use crate::executor;
+use crate::processor::context::SumGuard;
 use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;
 use crate::task::task::TaskControlBlock;
@@ -40,77 +41,51 @@ use riscv::register::{
 };
 use core::sync::atomic::Ordering;
 
-global_asm!(include_str!("trap.S"));
-/// initialize CSR `stvec` as the entry of `__alltraps`
-pub fn init() {
-    set_kernel_trap_entry();
-}
+hal::define_user_trap_handler!(user_trap_handler);
 
-/// set the kernel trap entry
-pub fn set_kernel_trap_entry() {
-    unsafe {
-        stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
-    }
-}
-extern "C" {
-    fn __alltraps();
-    fn __trap_from_kernel();
-}
-fn set_user_trap_entry() {
-    unsafe {
-        stvec::write(__alltraps as usize, TrapMode::Direct);
-    }
-}
-/// enable timer interrupt in sie CSR
-pub fn enable_timer_interrupt() {
-    unsafe {
-        sie::set_stimer();
-    }
-}
-
-#[no_mangle]
 /// handle an interrupt, exception, or system call from user space
-pub async fn trap_handler()  {
+async fn user_trap_handler(trap_type: TrapType)  {
     set_kernel_trap_entry();
-    let scause = scause::read();
-    let stval = stval::read();
-    let sepc = sepc::read();
-    let cause = scause.cause(); 
-    /*info!(
-        "[trap_handler] scause: {:?}, stval: {:#x}, sepc: {:#x}",
-        cause, stval, sepc
-    ); */
-    
     unsafe { Instruction::enable_interrupt() };
-   
-    match scause.cause() {
-        Trap::Exception(Exception::UserEnvCall) => {
-            let current_processor = current_processor();
+    match trap_type{
+        TrapType::Syscall => {
+            let _sum = SumGuard::new();
+            let cx = unsafe {
+                &mut *(Constant::USER_TRAP_CONTEXT_BOTTOM as *mut TrapContext)
+            };
             // jump to next instruction anyway
-            let cx = current_trap_cx(current_processor);
-            cx.sepc += 4;
+            *cx.sepc() += 4;
             // get system call return value
+
             let result = syscall(
-                cx.x[17], 
-                [cx.x[10], cx.x[11], cx.x[12], cx.x[13], cx.x[14], cx.x[15]]
+                cx.syscall_id(), 
+                [
+                    cx.syscall_arg_nth(0), 
+                    cx.syscall_arg_nth(1), 
+                    cx.syscall_arg_nth(2), 
+                    cx.syscall_arg_nth(3), 
+                    cx.syscall_arg_nth(4), 
+                    cx.syscall_arg_nth(5)
+                ]
             ).await;
             // cx is changed during sys_exec, so we have to call it again
-            cx.save_last_a0();
-            cx.x[10] = result as usize;
+            cx.save_to(0, cx.ret_nth(0));
+            cx.set_ret_nth(0, result as usize);
         }
-        Trap::Exception(Exception::StorePageFault)
-        | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadPageFault) => {
+        TrapType::StorePageFault(stval)
+        | TrapType::InstructionPageFault(stval)
+        | TrapType::LoadPageFault(stval) => {
             log::debug!(
-                "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                "[trap_handler] encounter page fault, addr {stval:#x}",
             );
 
-            let access_type = match scause.cause() {
-                Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::EXECUTE,
-                Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::READ,
-                Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::WRITE,
+            let access_type = match trap_type {
+                TrapType::StorePageFault(_) => PageFaultAccessType::READ,
+                TrapType::LoadPageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::InstructionPageFault(_) => PageFaultAccessType::EXECUTE,
                 _ => unreachable!(),
             };
+
             match current_task() {
                 None => {},
                 Some(task) => {
@@ -120,40 +95,26 @@ pub async fn trap_handler()  {
                         Err(()) => {
                             // todo: don't panic, kill the task
                             log::warn!(
-                                "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                                "[trap_handler] cannot handle page fault, addr {stval:#x}",
                             );
-                            exit_current_and_run_next(-4);
+                            exit_current_and_run_next(-2);
                         }
                     }
                 }
             };
         }
-        Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::InstructionFault)
-        | Trap::Exception(Exception::LoadFault) => {
-            println!(
-                "[trap_handler] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                scause.cause(),
-                stval,
-                current_trap_cx(current_processor()).sepc,
-            );
-            // page fault exit code
-            exit_current_and_run_next(-2);
-        }
-        Trap::Exception(Exception::IllegalInstruction) => {
+        TrapType::IllegalInstruction(_) => {
             println!("[trap_handler] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
             exit_current_and_run_next(-3);
         }
-        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+        TrapType::Timer => {
             set_next_trigger();
             yield_now().await;
         }
         _ => {
             panic!(
-                "[trap_handler] Unsupported trap {:?}, stval = {:#x}!",
-                scause.cause(),
-                stval
+                "[trap_handler] Unsupported trap!"
             );
         }
     }
@@ -168,48 +129,35 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
         Instruction::disable_interrupt();
     }
-    //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
+
     set_user_trap_entry();
     task.time_recorder().record_trap_return();
     //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
     let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
-    //let user_satp = current_user_token();
-    extern "C" {
-        fn __restore();
-    }
+
     // handler the signal before return
     check_signal_for_current_task();
-    unsafe {
-        asm!(
-            "call __restore",    
-            in("a0") trap_cx_ptr,        
-        );
-    }
+    hal::trap::restore(trap_cx_ptr);
     task.time_recorder().record_trap();
     //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
 }
 
-pub use context::TrapContext;
+hal::define_kernel_trap_handler!(kernel_trap_handler);
 
-#[no_mangle]
 /// Kernel trap handler
-pub fn kernel_trap_handler() {
-    let scause = scause::read();
-    let sepc = sepc::read();
-    let cause = scause.cause();
-    let stval = stval::read();
-    match scause.cause() {
-        Trap::Exception(Exception::StorePageFault)
-        | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadPageFault) => {
+fn kernel_trap_handler(trap_type: TrapType) {
+    match trap_type {
+        TrapType::StorePageFault(stval)
+        | TrapType::LoadPageFault(stval)
+        | TrapType::InstructionPageFault(stval) => {
             log::debug!(
-                "[trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                "[trap_handler] encounter page fault, addr {stval:#x}",
             );
 
-            let access_type = match scause.cause() {
-                Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::EXECUTE,
-                Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::READ,
-                Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::WRITE,
+            let access_type = match trap_type {
+                TrapType::StorePageFault(_) => PageFaultAccessType::READ,
+                TrapType::LoadPageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::InstructionPageFault(_) => PageFaultAccessType::EXECUTE,
                 _ => unreachable!(),
             };
             match current_task() {
@@ -221,7 +169,7 @@ pub fn kernel_trap_handler() {
                         Err(()) => {
                             // todo: don't panic, kill the task
                             panic!(
-                                "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                                "[trap_handler] cannot handle page fault, addr {stval:#x}",
                             );
                         }
                     }
@@ -229,23 +177,15 @@ pub fn kernel_trap_handler() {
             };
 
         }
-        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+        TrapType::Timer => {
             //info!("interrupt: supervisor timer");
             set_next_trigger();
         }
         _ => {
             // error!("other exception!!");
-            info!(
-                "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel panicked!!",
-                scause::read().cause(),
-                scause::read().bits(),
-                stval::read(),
-                sepc::read(),
-            );
             panic!(
-                "a trap {:?} from kernel! stval {:#x}",
-                scause::read().cause(),
-                stval::read()
+                "a unsupported trap {:?} from kernel!",
+                trap_type
             );
         }
     }
