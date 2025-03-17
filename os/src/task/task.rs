@@ -4,11 +4,7 @@
 
 use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
-use crate::arch::riscv64::sfence_vma_all;
-use crate::config::TRAP_CONTEXT;
 use crate::fs::vfs::{Dentry, DCACHE};
-use crate::processor::context::{EnvContext,SumGuard};
-use super::{tid_alloc, schedule, INITPROC};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
 use crate::sync::mutex::spin_mutex::MutexGuard;
@@ -527,6 +523,8 @@ impl TaskControlBlock {
             let parent = parent.upgrade().unwrap();
             parent.recv_sigs(SIGCHLD);
         }
+        // set the end time
+        self.time_recorder().update_child_time(self.time_recorder().time_pair());
     }
 }
 
@@ -583,11 +581,11 @@ impl TaskControlBlock {
             cnt += 1;
             // block the signals
             if signo != SIGKILL && signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo) {
-                info!("[SIGHANDLER] signal {} blocked", signo);
+                //info!("[SIGHANDLER] signal {} blocked", signo);
                 sig_manager.pending_sigs.push_back(signo);
                 continue;
             }
-            info!("[SIGHANDLER] receive signal {}", signo);
+            //info!("[SIGHANDLER] receive signal {}", signo);
             break;
         }
         // handle a signal

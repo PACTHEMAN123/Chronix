@@ -20,7 +20,7 @@ use hal::println;
 use hal::vm::UserVmSpaceHal;
 use hal::{addr::VirtAddr, vm::PageFaultAccessType};
 
-use crate::async_utils::yield_now;
+use crate::utils::async_utils::yield_now;
 use crate::executor;
 use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;

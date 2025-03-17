@@ -7,12 +7,10 @@ use crate::fs::{
     OpenFlags,
 };
 use crate::mm::{copy_out, UserCheck};
-use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
-use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::task::schedule::spawn_user_task;
 use crate::task:: exit_current_and_run_next;
-use crate::processor::processor::{current_task,current_user_token, current_processor, current_trap_cx};
+use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::trap::TrapContext;
 use crate::signal::SigSet;
 use crate::utils::suspend_now;
@@ -195,7 +193,7 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
 /// is equal to that of the calling process at the time of the call to waitpid().
 /// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize {
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0
     // get the all target zombie process
@@ -238,7 +236,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
                     core::mem::size_of::<i32>(),
                 )
             };
-            copy_out(&task.vm_space.lock().page_table, VirtAddr(exit_code_ptr), exit_code_bytes);
+            copy_out(&task.vm_space.lock().get_page_table(), VirtAddr(exit_code_ptr), exit_code_bytes);
         }
         let tid = res_task.tid();
         task.remove_child(tid);
@@ -252,6 +250,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
             task.set_wake_up_sigs(SigSet::SIGCHLD);
             suspend_now().await;
             task.set_running();
+            
             // todo: missing check if getting the expect signal
             // now check the child one more time
             let children = task.children();
@@ -293,7 +292,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
                     core::mem::size_of::<i32>(),
                 )
             };
-            copy_out(&task.vm_space.lock().page_table, VirtAddr(exit_code_ptr), exit_code_bytes);
+            copy_out(&task.vm_space.lock().get_page_table(), VirtAddr(exit_code_ptr), exit_code_bytes);
         }
         task.remove_child(child_pid);
         return child_pid as isize;

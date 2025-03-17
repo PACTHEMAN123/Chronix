@@ -64,7 +64,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
         return -1;
     }
 
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     let sig_manager = task.sig_manager.lock();
     let _user_check = UserCheck::new();
     info!("[sys_rt_sigaction]: writing odl action");
@@ -112,7 +112,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
                 new_sigaction.sa.sa_flags,
                 new_sigaction.sa.sa_restorer,
             );
-        current_task().unwrap().set_sigaction(signo as usize, new_sigaction);
+        task.set_sigaction(signo as usize, new_sigaction);
     }
     0
 }
