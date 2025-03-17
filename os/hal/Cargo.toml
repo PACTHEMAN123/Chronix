@@ -1,0 +1,19 @@
+[package]
+name = "hal"
+version = "0.1.0"
+authors = ["zlc <zlcdev@foxmail.com>"]
+edition = "2024"
+license = "GPLv3"
+
+[dependencies]
+bitflags = "1.2.1"
+buddy_system_allocator = "0.6"
+log = "0.4"
+xmas-elf = "0.7.0"
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+riscv = "0.11.0"
+sbi-rt = { version = "0.0.2", features = ["legacy"] }
+
+[target.'cfg(target_arch = "loongarch64")'.dependencies]
+loongArch64 = "0.2.4"

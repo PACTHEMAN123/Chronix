@@ -2,7 +2,8 @@
 
 /// FFI for timer
 pub mod ffi;
-
+/// Time recoder for events in tasks and kernel functions
+pub mod recoder; 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use riscv::register::time;

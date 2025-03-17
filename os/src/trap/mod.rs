@@ -12,20 +12,25 @@
 //! was. For example, timer interrupts trigger task preemption, and syscalls go
 //! to [`syscall()`].
 mod context;
-use crate::arch::riscv64::interrupts::enable_interrupt;
-use crate::utils::async_utils::yield_now;
-use crate::config::{KERNEL_ENTRY_PA, TRAP_CONTEXT};
+
+use alloc::sync::Arc;
+use hal::constant::{Constant, ConstantsHal};
+use hal::instruction::{Instruction, InstructionHal};
+use hal::println;
+use hal::vm::UserVmSpaceHal;
+use hal::{addr::VirtAddr, vm::PageFaultAccessType};
+
+use crate::async_utils::yield_now;
 use crate::executor;
-use crate::mm::{VirtAddr, vm::{PageFaultAccessType, VmSpacePageFaultExt}};
 use crate::signal::check_signal_for_current_task;
 use crate::syscall::syscall;
+use crate::task::task::TaskControlBlock;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
 };
 use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
-use crate::arch::riscv64::interrupts::disable_interrupt;
 use alloc::task;
 use log::{info, warn};
 use riscv::register::{
@@ -76,7 +81,7 @@ pub async fn trap_handler()  {
         cause, stval, sepc
     ); */
     
-    unsafe { enable_interrupt() };
+    unsafe { Instruction::enable_interrupt() };
    
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
@@ -109,14 +114,15 @@ pub async fn trap_handler()  {
             match current_task() {
                 None => {},
                 Some(task) => {
-                    let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
+                    let res = task.with_mut_vm_space(|vm_space| vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
                     match res {
-                        Some(_) => {},
-                        None => {
+                        Ok(()) => {},
+                        Err(()) => {
                             // todo: don't panic, kill the task
-                            panic!(
+                            log::warn!(
                                 "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
                             );
+                            exit_current_and_run_next(-4);
                         }
                     }
                 }
@@ -158,13 +164,15 @@ pub async fn trap_handler()  {
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return() {
+pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
-        disable_interrupt();
+        Instruction::disable_interrupt();
     }
     //info!("trap return, user sp {:#x}, kernel sp {:#x}", current_trap_cx().x[2], current_trap_cx().kernel_sp);
     set_user_trap_entry();
-    let trap_cx_ptr = TRAP_CONTEXT;
+    task.time_recorder().record_trap_return();
+    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
+    let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
     //let user_satp = current_user_token();
     extern "C" {
         fn __restore();
@@ -177,6 +185,8 @@ pub fn trap_return() {
             in("a0") trap_cx_ptr,        
         );
     }
+    task.time_recorder().record_trap();
+    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
 }
 
 pub use context::TrapContext;
@@ -207,8 +217,8 @@ pub fn kernel_trap_handler() {
                 Some(task) => {
                     let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
                     match res {
-                        Some(_) => {},
-                        None => {
+                        Ok(()) => {},
+                        Err(()) => {
                             // todo: don't panic, kill the task
                             panic!(
                                 "[trap_handler] cannot handle page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",

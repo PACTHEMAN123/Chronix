@@ -8,6 +8,8 @@ use crate::fs::{
 };
 use crate::mm::{copy_out, UserCheck};
 use crate::mm::{translated_refmut, translated_str, translated_ref,VirtAddr, vm::{VmSpace, VmSpaceHeapExt}};
+use crate::processor::processor::{current_processor, current_trap_cx};
+use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::task::schedule::spawn_user_task;
 use crate::task:: exit_current_and_run_next;
 use crate::processor::processor::{current_task,current_user_token, current_processor, current_trap_cx};
@@ -15,6 +17,9 @@ use crate::trap::TrapContext;
 use crate::signal::SigSet;
 use crate::utils::suspend_now;
 use alloc::{sync::Arc, vec::Vec, string::String};
+use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
+use hal::pagetable::PageTableHal;
+use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 
 bitflags! {
@@ -168,7 +173,7 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
         // let argc = args_vec.len();
         task.exec(all_data.as_slice(), args_vec);
         
-        let p = task.get_trap_cx_ppn_access().to_kern().get_ref::<TrapContext>().x[2];
+        let p = task.get_trap_cx_ppn_access().start_addr().get_ref::<TrapContext>().x[2];
         // return p because cx.x[10] will be covered with it later
         p as isize
     } else {
@@ -224,6 +229,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
     };
 
     if let Some(res_task) = res_task {
+        res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
         if exit_code_ptr != 0 {
             let exit_code = res_task.exit_code();
             let exit_code_bytes: &[u8] = unsafe {

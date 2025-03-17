@@ -8,7 +8,6 @@ use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 use virtio_drivers::transport::{DeviceType, Transport};
 
 use log::*;
-use crate::logging;
 
 use crate::devices::BlockDevice;
 

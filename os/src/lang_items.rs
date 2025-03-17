@@ -2,15 +2,16 @@
 
 use crate::sbi::shutdown;
 use core::{arch::asm, panic::PanicInfo};
+use hal::{addr::VirtAddrHal, constant::{Constant, ConstantsHal}, println};
 use log::*;
-use super::mm::VirtAddr;
+use hal::addr::VirtAddr;
 
 #[allow(unused)]
 fn backtrace() {
     println!("traceback: ");
     let mut fp: usize;
     unsafe { asm!("mv {}, fp", out(reg)(fp)); }
-    while fp != (VirtAddr(fp).floor().0 << 12) {
+    while fp % Constant::PAGE_SIZE != 0 {
         fp = unsafe {
             *((fp - 16) as *mut usize)
         };
