@@ -1,0 +1,12 @@
+[package]
+name = "hal-marco"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+proc-macro2 = { version = "1", features = ["nightly"] }
+quote = "1"
+syn = { version = "2.0", features = ["full"] }
+
+[lib]
+proc-macro = true

@@ -1,4 +1,6 @@
 //!Stdin & Stdout
+use hal::print;
+
 use crate::fs::vfs::File;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;

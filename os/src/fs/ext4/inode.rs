@@ -13,7 +13,6 @@ use alloc::vec::Vec;
 use log::*;
 use crate::fs::vfs::{InodeInner, Inode};
 use crate::fs::SuperBlock;
-use crate::logging;
 use crate::sync::UPSafeCell;
 
 use lwext4_rust::bindings::{

@@ -1,6 +1,7 @@
 //! SBI call wrappers
 #![allow(unused)]
 
+use hal::println;
 use sbi_rt::HartMask;
 
 /// use sbi call to putchar in console (qemu uart handler)

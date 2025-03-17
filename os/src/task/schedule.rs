@@ -84,7 +84,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );*/
     loop {
-        trap_return();
+        trap_return(&task);
         trap_handler().await;
         if task.is_zombie(){
             //info!("zombie task exit");
