@@ -43,7 +43,7 @@ impl TrapContextHal for TrapContext {
     }
 
     fn syscall_arg_nth(&self, n: usize) -> usize {
-        assert!(n < 3);
+        assert!(n < 6);
         self.x[10 + n]
     }
 
