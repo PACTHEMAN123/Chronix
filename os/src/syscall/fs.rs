@@ -1,13 +1,11 @@
 //! File and filesystem-related syscalls
 use alloc::string::ToString;
 use log::info;
+use virtio_drivers::PAGE_SIZE;
 
-use crate::fs::{
-    ext4::open_file,
-    vfs::{File, dentry::global_find_dentry, dentry, DentryState},
-    OpenFlags,
-    AT_FDCWD,
-};
+use crate::{fs::{
+    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, OpenFlags, AT_FDCWD
+}, processor::context::SumGuard};
 use crate::utils::{
     path::*,
     string::*,
@@ -16,9 +14,10 @@ use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, UserCheck};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 /// syscall: write
-pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
+pub async fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
     let token = current_user_token(&current_processor());
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
+    //info!("task {} trying to write fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len {
         return -1;
@@ -29,7 +28,8 @@ pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
             return -1;
         }
         // release current task TCB manually to avoid multi-borrow
-        file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))) as isize
+        let ret = file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await;
+        ret as isize
     } else {
         -1
     }
@@ -37,10 +37,10 @@ pub fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
 
 
 /// syscall: read
-pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
-    //info!("in sys_read");
+pub async fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     let token = current_user_token(&current_processor());
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
+    //info!("task {} trying to read fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len{
         return -1;
@@ -51,7 +51,8 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
         }
         // release current task TCB manually to avoid multi-borrow
         //drop(inner);
-        file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))) as isize
+        let ret = file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await;
+        ret as isize
     } else {
         -1
     }
@@ -121,9 +122,8 @@ pub fn sys_getcwd(buf: usize, len: usize) -> isize {
 /// syscall: dup
 pub fn sys_dup(old_fd: usize) -> isize {
     let task = current_task().unwrap();
-    let mut new_fd: isize = -1;
+    let new_fd= task.alloc_fd() as isize;
     if let Some(file) = task.with_fd_table(|table| table[old_fd].clone()) {
-        new_fd = task.alloc_fd() as isize;
         task.with_mut_fd_table(|table| table[new_fd as usize] = Some(file));  
     }
     new_fd as isize
@@ -270,4 +270,35 @@ pub fn sys_chdir(path: *const u8) -> isize {
         task.set_cwd(dentry);
         return 0;
     }
+}
+
+
+const PIPE_BUF_LEN: usize = PAGE_SIZE;
+/// pipe() creates a pipe, a unidirectional data channel 
+/// that can be used for interprocess communication. 
+/// The array pipefd is used to return two file descriptors 
+/// referring to the ends of the pipe. 
+/// pipefd[0] refers to the read end of the pipe. 
+/// pipefd[1] refers to the write end of the pipe. 
+/// Data written to the write end of the pipe is buffered by the kernel 
+/// until it is read from the read end of the pipe.
+/// todo: support flags
+pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> isize {
+    let task = current_task().unwrap().clone();
+    let (read_file, write_file) = make_pipe(PIPE_BUF_LEN);
+    let read_fd = task.alloc_fd();
+    task.with_mut_fd_table(|table| {
+        table[read_fd] = Some(read_file);
+    });
+    let write_fd = task.alloc_fd();
+    task.with_mut_fd_table(|table| {
+        table[write_fd] = Some(write_file);
+    });
+
+    let _sum = SumGuard::new();
+    let pipefd = unsafe { core::slice::from_raw_parts_mut(pipe, 2 * core::mem::size_of::<i32>()) };
+    info!("read fd: {}, write fd: {}", read_fd, write_fd);
+    pipefd[0] = read_fd as i32;
+    pipefd[1] = write_fd as i32;
+    0
 }

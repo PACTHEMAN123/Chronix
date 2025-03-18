@@ -1,5 +1,7 @@
 //!Stdin & Stdout
+use async_trait::async_trait;
 use hal::print;
+use alloc::boxed::Box;
 
 use crate::fs::vfs::File;
 use crate::mm::UserBuffer;
@@ -10,6 +12,7 @@ pub struct Stdin;
 ///Standard output
 pub struct Stdout;
 
+#[async_trait]
 impl File for Stdin {
     fn inner(&self) -> &super::vfs::FileInner {
         panic!("[Stdin]: dont support get inner")
@@ -20,7 +23,7 @@ impl File for Stdin {
     fn writable(&self) -> bool {
         false
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
+    async fn read(&self, mut user_buf: UserBuffer) -> usize {
         assert_eq!(user_buf.len(), 1);
         // busy loop
         let mut c: usize;
@@ -39,11 +42,12 @@ impl File for Stdin {
         }
         1
     }
-    fn write(&self, _user_buf: UserBuffer) -> usize {
+    async fn write(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot write to stdin!");
     }
 }
 
+#[async_trait]
 impl File for Stdout {
     fn inner(&self) -> &super::vfs::FileInner {
         panic!("[Stdout]: dont support get inner")
@@ -54,10 +58,10 @@ impl File for Stdout {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, _user_buf: UserBuffer) -> usize {
+    async fn read(&self, mut _user_buf: UserBuffer) -> usize {
         panic!("Cannot read from stdout!");
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
+    async fn write(&self, user_buf: UserBuffer) -> usize {
         for buffer in user_buf.buffers.iter() {
             print!("{}", core::str::from_utf8(*buffer).unwrap());
         }

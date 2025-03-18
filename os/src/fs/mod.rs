@@ -6,6 +6,7 @@
 pub mod stdio;
 pub mod ext4;
 pub mod vfs;
+pub mod pipe;
 
 use log::*;
 pub use stdio::{Stdin, Stdout};
