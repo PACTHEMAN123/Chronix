@@ -38,10 +38,16 @@ pub fn sys_times(tms: *mut Tms) -> isize {
 }
 /// sleep syscall
 pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> isize {
-    info!("in sleep");
     let time_val_ptr = time_ptr as *const TimeSpec;
     let time_val = unsafe {*time_val_ptr};
     let sleep_time_duration = time_val.into();
     let remain = suspend_timeout(current_task().unwrap(), sleep_time_duration).await;
-    0
+    if remain.is_zero(){
+        0
+    }else{
+        unsafe {
+            (time_out_ptr as *mut TimeSpec).write(remain.into());
+        }
+        -2
+    }
 }
