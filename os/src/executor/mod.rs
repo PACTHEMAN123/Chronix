@@ -25,7 +25,9 @@ impl TaskQueue {
     pub fn push(&self, runnable: Runnable) {
         self.queue.lock().push_back(runnable);
     }
-
+    pub fn push_preempt(&self, runnable: Runnable) {
+        self.queue.lock().push_front(runnable);
+    }
     pub fn fetch(&self) -> Option<Runnable> {
         self.queue.lock().pop_front()
     }   
@@ -51,12 +53,26 @@ pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
         F: Future + Send + 'static,
         F::Output: Send + 'static,
 {
-    let schedule= move |runnable:Runnable, _info: ScheduleInfo | {
-        // todo: judge push method by ScheduleInfo
-        #[cfg(not(feature = "smp"))]
-        TASK_QUEUE.push(runnable);
-        #[cfg(feature = "smp")]
-        unsafe{PROCESSORS[crate::processor::schedule::select_run_queue_index()].unwrap_with_mut_task_queue(|task_queue|task_queue.push_back(runnable))};
+    let schedule= move |runnable:Runnable, info: ScheduleInfo | {
+            #[cfg(not(feature = "smp"))]
+            if info.woken_while_running{
+                TASK_QUEUE.push(runnable);
+            }else {
+                TASK_QUEUE.push_preempt(runnable);
+            }
+            #[cfg(feature = "smp")]
+            if info.woken_while_running{
+                unsafe{
+                    PROCESSORS[crate::processor::schedule::select_run_queue_index()]
+                    .unwrap_with_mut_task_queue(|task_queue|task_queue.push_back(runnable))
+                };
+            }else {
+                unsafe{
+                    PROCESSORS[crate::processor::schedule::select_run_queue_index()]
+                    .unwrap_with_mut_task_queue(|task_queue|task_queue.push_front(runnable))
+                }
+            }
+            
     };
     async_task::spawn(future, WithInfo(schedule))
 }
