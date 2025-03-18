@@ -123,7 +123,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     let new_tid = new_task.tid();
 
     // set new stack
-    if !stack.0 == 0 {
+    if stack.0 != 0 {
         *new_task.get_trap_cx().sp() = stack.0;
     }
     
@@ -231,7 +231,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
     if let Some(res_task) = res_task {
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
         if exit_code_ptr != 0 {
-            let exit_code = res_task.exit_code();
+            let exit_code = (res_task.exit_code() & 0xFF) << 8; // edit
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &exit_code as *const i32 as *const u8,
@@ -288,6 +288,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         };
         // write into exit code pointer
         if exit_code_ptr != 0 {
+            let exit_code = (exit_code & 0xFF) << 8; // edit
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &exit_code as *const i32 as *const u8,
