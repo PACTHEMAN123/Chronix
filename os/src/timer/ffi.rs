@@ -81,3 +81,38 @@ impl Into<Duration> for TimeSpec {
         Duration::new(self.tv_sec as u64, self.tv_nsec as u32)
     }
 }
+
+/// times struct for syscall
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct Tms {
+    /// user time
+    pub utime: usize,
+    /// system time
+    pub stime: usize,
+    /// user cpu of all
+    pub cutime: usize,
+    /// system cpu of all
+    pub cstime: usize,
+}
+
+impl Tms {
+    /// new a Tms
+    pub fn new() -> Self {
+        Self {
+            utime: 0,
+            stime: 0,
+            cutime: 0,
+            cstime: 0,
+        }
+    }
+    /// new from a TimeRecorder
+    pub fn from_time_recorder(time_recorder: &super::recoder::TimeRecorder) -> Self {
+        Self {
+            utime: time_recorder.user_time().as_micros() as usize,
+            stime: time_recorder.kernel_time().as_micros() as usize,
+            cutime: time_recorder.child_time_pair().0.as_micros() as usize,
+            cstime: time_recorder.child_time_pair().1.as_micros() as usize,
+        }
+    }
+}

@@ -5,6 +5,7 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, sync::Arc, task::Wake, vec::Vec};
+use log::info;
 use core::{
     future::Future,
     ops::{Deref, DerefMut},
@@ -225,9 +226,11 @@ impl Future for SuspendFuture {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
+        info!("poll suspend future");
         match self.has_suspended {
             true => Poll::Ready(()),
             false => {
+                info!("in false");
                 self.has_suspended = true;
                 Poll::Pending
             }
@@ -236,6 +239,7 @@ impl Future for SuspendFuture {
 }
 #[allow(dead_code)]
 pub async fn suspend_now() {
+    info!("suspend now");
     SuspendFuture::new().await
 }
 

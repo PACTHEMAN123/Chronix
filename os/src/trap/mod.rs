@@ -113,9 +113,10 @@ async fn user_trap_handler(trap_type: TrapType)  {
             yield_now().await;
         }
         _ => {
-            panic!(
+            /*panic!(
                 "[trap_handler] Unsupported trap!"
             );
+            */
         }
     }
     //println!("before trap_return");
