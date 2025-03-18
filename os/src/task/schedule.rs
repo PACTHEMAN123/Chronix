@@ -96,7 +96,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
     //info!("now exit run_tasks");
     task.handle_zombie();
     //info!("now task {} dropped", task.tid());
-    drop(task);
+    //drop(task);
 }
 
 /// spawn a new async user task

@@ -107,13 +107,15 @@ async fn user_trap_handler(trap_type: TrapType)  {
             exit_current_and_run_next(-3);
         }
         TrapType::Timer => {
+            crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
             yield_now().await;
         }
         _ => {
-            panic!(
+            /*panic!(
                 "[trap_handler] Unsupported trap!"
             );
+            */
         }
     }
     //println!("before trap_return");
@@ -177,6 +179,7 @@ fn kernel_trap_handler(trap_type: TrapType) {
         }
         TrapType::Timer => {
             //info!("interrupt: supervisor timer");
+            crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
         }
         _ => {
