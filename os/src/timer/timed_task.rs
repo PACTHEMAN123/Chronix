@@ -76,11 +76,9 @@ pub async fn ksleep(time: Duration) {
 }
 /// suspend out time out task future
 pub async fn suspend_timeout(task: &TaskControlBlock, time_limit: Duration) -> Duration {
-    info!("time limit {:?}",time_limit);
     let expire = get_current_time_duration() + time_limit;
     TIMER_MANAGER.add_timer(Timer::new_waker_timer(expire, task.waker().clone().unwrap()));
     suspend_now().await;
-    info!("after suspend now");
     let now = get_current_time_duration();
     if expire > now {
         expire - now

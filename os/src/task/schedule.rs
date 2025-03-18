@@ -42,7 +42,7 @@ impl <F: Future + Send + 'static> UserTaskFuture <F> {
 impl <F:Future+Send+'static> Future for UserTaskFuture<F> {
     type Output = F::Output;
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        info!("now poll task {}", self.task.tid());
+        //info!("now poll task {}", self.task.tid());
         let this = unsafe {self.get_unchecked_mut()};
         switch_to_current_task(current_processor(),&mut this.task,&mut this.env);
         let ret = unsafe{Pin::new_unchecked(&mut this.future).poll(cx)};
