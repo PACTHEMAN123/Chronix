@@ -5,9 +5,9 @@
 use core::arch::global_asm;
 
 use alloc::collections::vec_deque::VecDeque;
-use hal::{addr::VirtAddr, vm::{KernVmSpaceHal, UserVmSpaceHal}};
+use hal::{addr::VirtAddr, vm::{KernVmSpaceHal, UserVmSpaceHal}, signal::*};
 use log::*;
-use crate::{mm::copy_out, signal::{MContext, SigStack, UContext}, processor::processor::{current_task,current_trap_cx}};
+use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
 
 use super::{action::KSigAction, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
 
