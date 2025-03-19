@@ -1,5 +1,5 @@
-use riscv::register::sstatus;
 use self::spin_mutex::SpinMutex;
+use hal::instruction::{Instruction, InstructionHal};
 /// spin_mutex
 pub mod spin_mutex;
 
@@ -36,8 +36,8 @@ impl SieGuard {
     /// Construct a SieGuard
     pub fn new() -> Self {
         Self(unsafe {
-            let sie_before = sstatus::read().sie();
-            sstatus::clear_sie();
+            let sie_before = Instruction::sie();
+            Instruction::disable_interrupt();
             sie_before
         })
     }
@@ -46,7 +46,7 @@ impl Drop for SieGuard {
     fn drop(&mut self) {
         if self.0 {
             unsafe {
-                sstatus::set_sie();
+                Instruction::enable_interrupt();
             }
         }
     }
