@@ -4,6 +4,9 @@ pub trait InstructionHal {
     unsafe fn enable_interrupt();
     unsafe fn disable_interrupt();
     unsafe fn enable_timer_interrupt();
+    fn set_tp(processor_addr: usize);
+    fn get_tp() -> usize;
+    fn set_float_status_clean();
 }
 
 pub struct Instruction;

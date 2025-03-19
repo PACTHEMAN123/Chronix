@@ -597,7 +597,8 @@ impl TaskControlBlock {
             let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
             sig_manager.blocked_sigs.add_sig(signo);
             sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
-
+            // save fx state
+            trap_cx.fx_encounter_signal();
             // push the current Ucontext into user stack
             // (todo) notice that user may provide signal stack
             // but now we dont support this flag

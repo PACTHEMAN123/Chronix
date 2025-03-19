@@ -36,8 +36,27 @@ pub trait TrapContextHal {
     fn save_to(&mut self, idx: usize, v: usize);
 
     fn load_from(&mut self, idx: usize) -> usize;
-} 
 
+    fn mark_fx_save(&mut self);
+
+    fn fx_yield_task(&mut self);
+
+    fn fx_encounter_signal(&mut self);
+
+    fn fx_restore(&mut self);
+
+} 
+pub trait FloatContextHal {
+    fn new() -> Self;
+
+    fn save(&mut self);
+
+    fn restore(&mut self);
+
+    fn yield_task(&mut self);
+
+    fn encounter_signal(&mut self);
+}
 unsafe extern "Rust" {
     fn kernel_trap_handler_for_arch(trap_type: TrapType);
 }
