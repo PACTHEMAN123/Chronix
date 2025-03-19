@@ -1,8 +1,6 @@
 use core::arch::asm;
 
-use riscv::register::{self, scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
-
-use crate::println;
+use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
 use super::{TrapContextHal, TrapType, FloatContextHal};
 

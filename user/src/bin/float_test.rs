@@ -3,7 +3,7 @@
 
 #[macro_use]
 extern crate user_lib;
-use user_lib::fork;
+use user_lib::{fork, wait};
 
 #[no_mangle]
 pub fn main() -> i32 {
@@ -11,8 +11,10 @@ pub fn main() -> i32 {
     if fork() == 0 {
         res += 7.6;
         println!("res in child = {}", res);
-    } else {
+    } else  {
+        let mut exit_code: i32 = 0;
+        let _pid = wait(&mut exit_code);
         println!("res in parent = {}", res);
-    };
+    }
     0
 }
