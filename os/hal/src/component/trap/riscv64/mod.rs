@@ -2,10 +2,16 @@ use core::arch::asm;
 
 use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
-use super::{TrapContextHal, TrapType, FloatContextHal};
+use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
 core::arch::global_asm!(include_str!("trap.S"));
 
+
+impl TrapTypeHal for TrapType {
+    fn get() -> Self {
+        get_trap_type()
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
@@ -297,29 +303,6 @@ pub fn set_user_trap_entry() {
     }
 }
 
-#[macro_export]
-macro_rules! define_user_trap_handler {
-    ($fn: ident) => {
-        /// hal_user_trap_handler
-        #[unsafe(export_name = "user_trap_handler")]
-        pub async fn hal_user_trap_handler() {
-            let scause = scause::read();
-            let stval = stval::read();
-
-            let trap_type = match scause.cause() {
-                Trap::Exception(Exception::Breakpoint) => TrapType::Breakpoint,
-                Trap::Exception(Exception::UserEnvCall) => TrapType::Syscall,
-                Trap::Exception(Exception::LoadPageFault) => TrapType::LoadPageFault(stval),
-                Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(stval),
-                Trap::Exception(Exception::InstructionPageFault) => TrapType::InstructionPageFault(stval),
-                Trap::Interrupt(Interrupt::SupervisorTimer) => TrapType::Timer,
-                _ => TrapType::Other
-            };
-            
-            $fn(trap_type).await;
-        }
-    };
-}
 
 fn get_trap_type() -> TrapType {
     let scause = scause::read();
@@ -333,13 +316,6 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::InstructionPageFault) => TrapType::InstructionPageFault(stval),
         Trap::Interrupt(Interrupt::SupervisorTimer) => TrapType::Timer,
         _ => TrapType::Other
-    }
-}
-
-#[unsafe(no_mangle)]
-fn kernel_trap_handler() {
-    unsafe { 
-        super::kernel_trap_handler_for_arch(get_trap_type());
     }
 }
 
