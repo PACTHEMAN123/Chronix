@@ -39,7 +39,12 @@ unsafe extern "C" fn _start(id: usize) -> ! {
             csrw    satp, t0
             sfence.vma
         ",
-        // 3. jump to rust_main
+        // 3. enable float register
+        "
+            li   t0, (0b01 << 13)
+            csrs sstatus, t0 
+        ",
+        // 4. jump to rust_main
         // add virtual address offset to sp and pc
         "
             li      t2, {virt_ram_offset}

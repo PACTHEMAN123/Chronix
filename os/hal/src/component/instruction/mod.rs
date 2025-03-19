@@ -9,6 +9,9 @@ pub trait InstructionHal {
     unsafe fn set_sum();
     fn shutdown(failure: bool) -> !;
     fn hart_start(hartid: usize, start_addr: usize, opaque: usize);
+    fn set_tp(processor_addr: usize);
+    fn get_tp() -> usize;
+    fn set_float_status_clean();
 }
 
 pub struct Instruction;

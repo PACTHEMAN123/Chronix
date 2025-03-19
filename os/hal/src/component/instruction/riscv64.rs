@@ -50,4 +50,31 @@ impl InstructionHal for Instruction {
     fn hart_start(hartid: usize, start_addr: usize, opaque: usize) {
         sbi_rt::hart_start(hartid, start_addr, opaque);
     }
+    
+    #[inline(always)]
+    fn set_tp (processor_addr: usize) {
+        unsafe {
+            asm!(
+                "mv tp, {}",
+                in(reg) processor_addr,
+             )
+        }
+    }
+    #[inline(always)]
+    fn get_tp() -> usize {
+        let tp: usize;
+        unsafe {
+            asm!(
+                "mv {}, tp",
+                out(reg) tp,
+            );
+        }
+        tp
+    }
+    
+    fn set_float_status_clean() {
+        unsafe {
+            sstatus::set_fs(sstatus::FS::Clean);
+        }
+    }
 }
