@@ -15,7 +15,7 @@ __trap_from_user:
     # now sp->*TrapContext in user space, sscratch->user stack
     # save other general purpose registers
     sd x1, 1*8(sp)
-    # skip sp(x2), we will save it later
+    # skipp /x $ sp(x2), we will save it later
     
     # save x3~x31 (x4 is tp)
     .set n, 3
@@ -46,10 +46,9 @@ __trap_from_user:
     ld s9, 45*8(sp)
     ld s10, 46*8(sp)
     ld s11, 47*8(sp)
-
-    # Load kernel frame pointer (fp) and thread pointer (tp)
     ld fp, 48*8(sp)
     ld tp, 49*8(sp)
+    # set kernel_sp
     ld sp, 34*8(sp)
     # jump to trap_handler
     ret 
