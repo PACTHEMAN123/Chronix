@@ -10,11 +10,10 @@ use alloc::sync::Arc;
 use async_task::Runnable;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
-use hal::trap::TrapContext;
+use hal::trap::{TrapContext, TrapContextHal};
 use hal::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
-use riscv::asm;
 use crate::mm::{self, INIT_VMSPACE};
 use crate::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
@@ -163,7 +162,8 @@ pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
     core::mem::swap(processor.env_mut(), env);
     let current = processor.current().unwrap();
     current.time_recorder().record_switch_out();
-    //info!("id: {},task time record: user_time:{:?},kernel_time:{:?}",processor.id(),current.time_recorder().user_time(),current.time_recorder().kernel_time());
+    // float_pointer saved, marked restore is needed
+    current.get_trap_cx().fx_yield_task();
     processor.current = None;
     unsafe { Instruction::enable_interrupt()};
     //info!("switch_out_current_task done");
@@ -182,29 +182,6 @@ pub fn get_processor(id:usize) -> &'static mut Processor {
     unsafe {&mut PROCESSORS[id]}
 }
 
-#[inline(always)]
-fn set_tp(processor_addr: usize) {
-    unsafe {
-        asm!(
-            "mv tp, {}",
-            in(reg) processor_addr,
-            options(nomem, nostack, preserves_flags)
-         )
-    }
-}
-
-#[inline(always)]
-fn get_tp() -> usize {
-    let tp: usize;
-    unsafe {
-        asm!(
-            "mv {}, tp",
-            out(reg) tp,
-            options(nomem, nostack, preserves_flags)
-        );
-    }
-    tp
-}
 /// set processor by id and the move tp point to this processor
 pub fn set_processor(id:usize) {
     let processor = get_processor(id);
@@ -212,13 +189,13 @@ pub fn set_processor(id:usize) {
     #[cfg(feature = "smp")]
     processor.set_task_queue();
     let processor_addr = processor as *const _ as usize;
-    set_tp(processor_addr);
+    Instruction::set_tp(processor_addr);
 }
 
 /// get current processor
 pub fn current_processor() -> &'static mut Processor {
     unsafe {
-        &mut *(get_tp() as *mut Processor)
+        &mut *(Instruction::get_tp() as *mut Processor)
     }
 } 
 

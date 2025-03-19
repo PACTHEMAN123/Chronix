@@ -140,6 +140,7 @@ CPU := 4
 QEMU_ARGS := 
 QEMU_ARGS += -machine virt
 QEMU_ARGS += -nographic
+QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
 ifneq ($(SMP),)
 QEMU_ARGS += -smp $(CPU)
 endif

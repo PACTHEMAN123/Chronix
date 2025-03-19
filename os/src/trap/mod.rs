@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
-use hal::instruction::{Instruction, InstructionHal};
+use hal::instruction::{self, Instruction, InstructionHal};
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType};
 use hal::vm::UserVmSpaceHal;
@@ -49,9 +49,10 @@ async fn user_trap_handler(trap_type: TrapType)  {
     unsafe { Instruction::enable_interrupt() };
     match trap_type{
         TrapType::Syscall => {
-            let cur_processor = current_processor();
-            let cx = current_trap_cx(cur_processor);
-            // jump to next instruction anyway
+            let _sum = SumGuard::new();
+            let cx = unsafe {
+                &mut *(Constant::USER_TRAP_CONTEXT_BOTTOM as *mut TrapContext)
+            };
             *cx.sepc() += 4;
             // get system call return value
 
@@ -130,16 +131,27 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
         Instruction::disable_interrupt();
     }
 
-    set_user_trap_entry();
+    
     task.time_recorder().record_trap_return();
-    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
+
     let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
 
     // handler the signal before return
     check_signal_for_current_task();
+  
+    // restore float pointer and set status
+    let trap_cx = current_trap_cx(current_processor());
+    trap_cx.fx_restore();
+    set_user_trap_entry();
+    Instruction::set_float_status_clean();
+
+    // restore
     hal::trap::restore(trap_cx_ptr);
+
+    task.get_trap_cx().mark_fx_save();
+
+    // set up time recorder for trap
     task.time_recorder().record_trap();
-    //info!("hart_id:{},task time record: user_time:{:?},kernel_time:{:?}",current_processor().id(),task.time_recorder().user_time(),task.time_recorder().kernel_time());
 }
 
 hal::define_kernel_trap_handler!(kernel_trap_handler);
@@ -185,8 +197,11 @@ fn kernel_trap_handler(trap_type: TrapType) {
         _ => {
             // error!("other exception!!");
             panic!(
-                "a unsupported trap {:?} from kernel!",
-                trap_type
+                "a unsupported trap {:?} from kernel! stval: {:#x} sepc: {:#x} scause: {:?}",
+                trap_type,
+                stval::read(),
+                sepc::read(),
+                scause::read().cause(),
             );
         }
     }
