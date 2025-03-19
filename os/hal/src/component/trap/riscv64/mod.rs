@@ -303,7 +303,6 @@ pub fn set_user_trap_entry() {
     }
 }
 
-
 fn get_trap_type() -> TrapType {
     let scause = scause::read();
     let stval = stval::read();

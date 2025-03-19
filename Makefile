@@ -18,6 +18,8 @@ fmt:
 ########################################################
 # Building
 ########################################################
+ARCH := riscv64
+
 TARGET := riscv64gc-unknown-none-elf
 MODE := debug
 
@@ -53,9 +55,9 @@ endif
 KERNEL_ENTRY_PA := 0x80200000
 
 # Binutils
-OBJDUMP := rust-objdump --arch-name=riscv64
-OBJCOPY := rust-objcopy --binary-architecture=riscv64
-GDB ?= riscv64-unknown-elf-gdb
+OBJDUMP := rust-objdump --arch-name=${ARCH}
+OBJCOPY := rust-objcopy --binary-architecture=${ARCH}
+GDB ?= ${ARCH}-unknown-elf-gdb
 
 # Disassembly
 DISASM ?= -x
@@ -64,7 +66,7 @@ DISASM ?= -x
 build: env $(KERNEL_BIN) user #fs-img: should make fs-img first 
 
 env:
-	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
+	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
 	cargo install cargo-binutils
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
@@ -110,6 +112,9 @@ fs-img: user basic_test
 	@mkfs.ext4 -F -O ^metadata_csum_seed $(FS_IMG)
 	@echo "making ext4 image by using $(BASIC_TEST_DIR)"
 	@sudo mount $(FS_IMG) mnt
+	@sudo dd if=/dev/zero of=mnt/swap bs=1M count=128
+	@sudo chmod 0600 mnt/swap
+	@sudo mkswap -L swap mnt/swap
 	@echo "copying user apps and tests to the fs.img"
 	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt
