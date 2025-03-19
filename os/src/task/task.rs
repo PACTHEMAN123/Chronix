@@ -11,12 +11,7 @@ use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
-global_asm!(include_str!("../signal/trampoline.S"));
-#[allow(unused)]
-unsafe extern "C" {
-    unsafe fn sigreturn_trampoline();
-}
+use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
 use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
@@ -29,6 +24,7 @@ use hal::pagetable::PageTableHal;
 use hal::trap::{TrapContext, TrapContextHal};
 use hal::{println, vm};
 use hal::vm::{PageFaultAccessType, UserVmSpaceHal};
+use hal::signal::*;
 use crate::mm::{ translated_refmut, translated_str};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
@@ -604,18 +600,7 @@ impl TaskControlBlock {
             // but now we dont support this flag
             let sp = *trap_cx.sp();
             let new_sp = sp - size_of::<UContext>();
-            let ucontext = UContext {
-                uc_flags: 0,
-                uc_link: 0,
-                uc_stack: SigStack::new(),
-                uc_sigmask: old_blocked_sigs,
-                uc_sig: [0; 16],
-                uc_mcontext: MContext {
-                    user_x: [0; 32], // todo: 应该从TrapContext复制通用寄存器
-                    fpstate: [0; 66],
-                },
-            };
-            // ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
+            let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
             let ucontext_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &ucontext as *const UContext as *const u8,
@@ -633,12 +618,7 @@ impl TaskControlBlock {
             *trap_cx.sp() = new_sp;
             // ra: when user signal handler ended, return to sigreturn_trampoline
             // which calls sys_sigreturn
-            *trap_cx.ra() = sigreturn_trampoline as usize;
-            /* 暂时注释掉MContext相关的代码
-            // other important regs
-            trap_cx.x[4] = ucontext.uc_mcontext.user_x[4];
-            trap_cx.x[3] = ucontext.uc_mcontext.user_x[3];
-            */
+            *trap_cx.ra() = sigreturn_trampoline_addr();
         } else {
             let handler = unsafe {
                 core::mem::transmute::<*const (), fn(usize)>(

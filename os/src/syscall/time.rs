@@ -5,14 +5,12 @@ use core::time::Duration;
 use log::info;
 
 use crate::{
-    mm::UserCheck, task::current_task, timer::{ffi::{TimeSpec, TimeVal}, get_current_time_ms,timed_task::{ksleep,suspend_timeout}}, utils::Select2Futures
+    processor::context::SumGuard, task::current_task, timer::{ffi::{TimeSpec, TimeVal}, get_current_time_ms,timed_task::{ksleep,suspend_timeout}}, utils::Select2Futures
 };
 
 /// get current time of day
 pub fn sys_gettimeofday(tv: *mut TimeVal) -> isize {
-    let _user_check = UserCheck::new();
-    //user_check.check_write_slice(tv as *mut u8, core::mem::size_of::<TimeVal>());
-
+    let _sum_guard = SumGuard::new();
     let current_time = get_current_time_ms();
     let time_val = TimeVal {
         sec: current_time / 1000,
@@ -27,8 +25,7 @@ pub fn sys_gettimeofday(tv: *mut TimeVal) -> isize {
 use crate::timer::ffi::Tms;
 /// times syscall
 pub fn sys_times(tms: *mut Tms) -> isize {
-    let _user_check = UserCheck::new();
-    //user_check.check_write_slice(tms as *mut u8, core::mem::size_of::<Tms>());
+    let _sum_guard = SumGuard::new();
     let current_task = current_task().unwrap();
     let tms_val = Tms::from_time_recorder(current_task.time_recorder());
     unsafe {
