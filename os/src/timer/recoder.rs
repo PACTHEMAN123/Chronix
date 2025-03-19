@@ -54,6 +54,10 @@ impl TimeRecorder {
     pub fn processor_time(&self) -> Duration {
         self.kernel_time + self.user_time
     }
+    /// update user time start
+    pub fn update_user_start(&mut self, user_start: Duration) {
+        self.user_start = user_start;
+    }
     /// for parent task to update child task's time
     pub fn update_child_time(&mut self, (child_user_time, child_kernel_time): (Duration, Duration)) {
         self.child_user_time += child_user_time;

@@ -127,7 +127,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
         Instruction::disable_interrupt();
     }
-
+    set_user_trap_entry();
     
     task.time_recorder().record_trap_return();
 
@@ -137,9 +137,9 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     check_signal_for_current_task();
   
     // restore float pointer and set status
-    let trap_cx = current_trap_cx(current_processor());
+    let trap_cx = task.get_trap_cx();
     trap_cx.fx_restore();
-    set_user_trap_entry();
+    
     Instruction::set_float_status_clean();
 
     // restore
@@ -149,6 +149,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
 
     // set up time recorder for trap
     task.time_recorder().record_trap();
+    //info!("[in record trap] task id: {}kernel_time:{:?}",task.tid(),task.time_recorder().kernel_time());
 }
 
 hal::define_kernel_trap_handler!(kernel_trap_handler);

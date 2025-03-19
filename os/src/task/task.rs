@@ -12,6 +12,7 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
+use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
@@ -480,6 +481,8 @@ impl TaskControlBlock {
             //info!("fork should in this ");
             self.add_child(task_control_block.clone());
         }
+        // update user start 
+        task_control_block.time_recorder().update_user_start(get_current_time_duration());
         task_control_block.with_mut_thread_group(|thread_group| thread_group.push(task_control_block.clone()));
         task_control_block
     }
