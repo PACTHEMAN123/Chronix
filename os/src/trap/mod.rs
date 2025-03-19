@@ -39,7 +39,7 @@ use core::sync::atomic::Ordering;
 hal::define_user_trap_handler!(user_trap_handler);
 
 /// handle an interrupt, exception, or system call from user space
-async fn user_trap_handler()  {
+pub async fn user_trap_handler()  {
     set_kernel_trap_entry();
     unsafe { Instruction::enable_interrupt() };
     let trap_type = TrapType::get();

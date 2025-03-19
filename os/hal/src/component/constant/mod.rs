@@ -21,8 +21,6 @@ pub trait ConstantsHal {
 
     const MEMORY_END: usize;
 
-    const MMIO: &[(usize, usize)];
-
     const KERNEL_STACK_SIZE: usize;
     const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE + 1;
     const KERNEL_STACK_TOP: usize;

@@ -6,7 +6,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::{task::exit_current_and_run_next, trap::hal_user_trap_handler};
+use crate::{task::exit_current_and_run_next, trap::user_trap_handler};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::utils::async_utils::{get_waker,suspend_now};
@@ -86,7 +86,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
 
     loop {
         trap_return(&task);
-        hal_user_trap_handler().await;
+        user_trap_handler().await;
         if task.is_zombie(){
             //info!("zombie task exit");
             //info!("user time {}, kernel time {:?}", task.time_recorder().user_time().as_micros() , task.time_recorder().kernel_time());

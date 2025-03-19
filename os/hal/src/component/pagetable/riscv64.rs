@@ -7,31 +7,6 @@ use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNH
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
-bitflags! {
-    /// page table entry flags
-    pub struct PTEFlags: u16 {
-        /// Valid
-        const V = 1 << 0;
-        /// Readable
-        const R = 1 << 1;
-        /// Writable
-        const W = 1 << 2;
-        /// Executable
-        const X = 1 << 3;
-        /// User-mode accessible
-        const U = 1 << 4;
-        #[allow(missing_docs)]
-        const G = 1 << 5;
-        /// Accessed
-        const A = 1 << 6;
-        /// Dirty
-        const D = 1 << 7;
-        /// Copy On Write
-        const C = 1 << 8;
-    }
-}
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PageLevel {
     Huge = 0,
@@ -127,6 +102,32 @@ impl Iterator for VpnPageRangeIter {
         }
     }
 }
+
+
+bitflags! {
+    /// page table entry flags
+    pub struct PTEFlags: u16 {
+        /// Valid
+        const V = 1 << 0;
+        /// Readable
+        const R = 1 << 1;
+        /// Writable
+        const W = 1 << 2;
+        /// Executable
+        const X = 1 << 3;
+        /// User-mode accessible
+        const U = 1 << 4;
+        #[allow(missing_docs)]
+        const G = 1 << 5;
+        /// Accessed
+        const A = 1 << 6;
+        /// Dirty
+        const D = 1 << 7;
+        /// Copy On Write
+        const C = 1 << 8;
+    }
+}
+
 
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -238,8 +239,8 @@ impl PageTableEntryHal for PageTableEntry {
 }
 
 /// page table structure
-#[allow(missing_docs)]
 pub struct PageTable<A: FrameAllocatorHal> {
+    /// root ppn
     pub root_ppn: PhysPageNum,
     frames: Vec<FrameTracker<A>>,
     alloc: A,
