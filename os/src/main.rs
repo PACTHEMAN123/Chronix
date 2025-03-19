@@ -53,7 +53,7 @@ mod drivers;
 pub mod fs;
 pub mod lang_items;
 pub mod mm;
-pub mod sbi;
+//pub mod sbi;
 pub mod sync;
 pub mod syscall;
 pub mod signal;
@@ -77,7 +77,7 @@ fn processor_start(id: usize) {
         if i == id {
             continue;
         }
-        let status = sbi_rt::hart_start(i, Constant::KERNEL_ENTRY_PA,0);
+        Instruction::hart_start(i, Constant::KERNEL_ENTRY_PA,0);
         //info!("[kernel] start to wake up processor {}... status {:?}",i,status);
     }
 }

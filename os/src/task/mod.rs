@@ -28,7 +28,7 @@ use crate::fs::{
     ext4::open_file,
     OpenFlags,
 };
-use crate::sbi::shutdown;
+use hal::instruction::{InstructionHal, Instruction};
 use alloc::sync::Arc;
 use hal::println;
 use lazy_static::*;
@@ -62,10 +62,10 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
         );
         if exit_code != 0 {
             //crate::sbi::shutdown(255); //255 == -1 for err hint
-            shutdown(true)
+            Instruction::shutdown(true)
         } else {
             //crate::sbi::shutdown(0); //0 for success hint
-            shutdown(false)
+            Instruction::shutdown(false)
         }
     }
 

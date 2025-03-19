@@ -10,6 +10,10 @@ pub enum TrapType {
     IllegalInstruction(usize),
 }
 
+pub trait TrapTypeHal {
+    fn get() -> Self;
+}
+
 pub trait TrapContextHal {
     fn syscall_id(&self) -> usize;
 
@@ -57,17 +61,25 @@ pub trait FloatContextHal {
 
     fn encounter_signal(&mut self);
 }
-unsafe extern "Rust" {
-    fn kernel_trap_handler_for_arch(trap_type: TrapType);
+
+#[macro_export]
+macro_rules! define_user_trap_handler {
+    ($fn: ident) => {
+        /// hal_user_trap_handler
+        #[unsafe(export_name = "user_trap_handler")]
+        pub async fn hal_user_trap_handler() {
+            $fn().await;
+        }
+    };
 }
 
 #[macro_export]
 macro_rules! define_kernel_trap_handler {
     ($fn: ident) => {
         /// hal_kernel_trap_handler_for_arch
-        #[unsafe(export_name = "kernel_trap_handler_for_arch")]
-        pub fn hal_kernel_trap_handler_for_arch(trap_type: TrapType) {
-            $fn(trap_type)
+        #[unsafe(export_name = "kernel_trap_handler")]
+        pub fn hal_kernel_trap_handler() {
+            $fn()
         }
     };
 }

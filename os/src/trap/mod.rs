@@ -16,7 +16,7 @@ use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
 use hal::println;
-use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType};
+use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
 use hal::vm::UserVmSpaceHal;
 use hal::{addr::VirtAddr, vm::PageFaultAccessType};
 
@@ -34,19 +34,15 @@ use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use alloc::task;
 use log::{info, warn};
-use riscv::register::{
-    mtvec::TrapMode,
-    scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec, sepc,
-};
 use core::sync::atomic::Ordering;
 
 hal::define_user_trap_handler!(user_trap_handler);
 
 /// handle an interrupt, exception, or system call from user space
-async fn user_trap_handler(trap_type: TrapType)  {
+async fn user_trap_handler()  {
     set_kernel_trap_entry();
     unsafe { Instruction::enable_interrupt() };
+    let trap_type = TrapType::get();
     match trap_type{
         TrapType::Syscall => {
             let _sum = SumGuard::new();
@@ -158,7 +154,8 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
 hal::define_kernel_trap_handler!(kernel_trap_handler);
 
 /// Kernel trap handler
-fn kernel_trap_handler(trap_type: TrapType) {
+fn kernel_trap_handler() {
+    let trap_type = TrapType::get();
     match trap_type {
         TrapType::StorePageFault(stval)
         | TrapType::LoadPageFault(stval)
@@ -198,11 +195,8 @@ fn kernel_trap_handler(trap_type: TrapType) {
         _ => {
             // error!("other exception!!");
             panic!(
-                "a unsupported trap {:?} from kernel! stval: {:#x} sepc: {:#x} scause: {:?}",
+                "a unsupported trap {:?} from kernel!",
                 trap_type,
-                stval::read(),
-                sepc::read(),
-                scause::read().cause(),
             );
         }
     }
