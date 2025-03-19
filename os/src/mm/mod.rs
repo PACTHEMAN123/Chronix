@@ -6,14 +6,12 @@
 //!
 //! Every task or process has a memory_set to control its virtual memory.
 
-mod user_check;
 /// allocator
 pub mod allocator;
 mod page_table;
 use core::ops::Deref;
 
 use hal::vm::KernVmSpaceHal;
-pub use user_check::UserCheck;
 
 pub use page_table::*;
 

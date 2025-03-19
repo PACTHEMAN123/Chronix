@@ -11,12 +11,7 @@ use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, MContext, SigManager, SigStack, UContext, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
-global_asm!(include_str!("../signal/trampoline.S"));
-#[allow(unused)]
-unsafe extern "C" {
-    unsafe fn sigreturn_trampoline();
-}
+use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
 use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
@@ -29,6 +24,7 @@ use hal::pagetable::PageTableHal;
 use hal::trap::{TrapContext, TrapContextHal};
 use hal::{println, vm};
 use hal::vm::{PageFaultAccessType, UserVmSpaceHal};
+use hal::signal::*;
 use crate::mm::{ translated_refmut, translated_str};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
@@ -408,14 +404,13 @@ impl TaskControlBlock {
         let children;
         let thread_group;
         let pgid;
+        let cwd;
 
         let sig_manager = new_shared(
             match flag.contains(CloneFlags::SIGHAND) {
             true => SigManager::from_another(&self.sig_manager.lock()),
             false => SigManager::new(),
         });
-
-        let cwd = self.cwd.clone();
 
         if flag.contains(CloneFlags::THREAD){
             //info!("creating a thread");
@@ -425,6 +420,7 @@ impl TaskControlBlock {
             children = self.children.clone();
             thread_group = self.thread_group.clone();
             pgid = self.pgid.clone();
+            cwd = self.cwd.clone();
         }
         else{
             is_leader = true;
@@ -433,6 +429,7 @@ impl TaskControlBlock {
             children = new_shared(BTreeMap::new());
             thread_group = new_shared(ThreadGroup::new());
             pgid = new_shared(*self.pgid.lock());
+            cwd = new_shared(self.cwd());
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
@@ -604,18 +601,7 @@ impl TaskControlBlock {
             // but now we dont support this flag
             let sp = *trap_cx.sp();
             let new_sp = sp - size_of::<UContext>();
-            let ucontext = UContext {
-                uc_flags: 0,
-                uc_link: 0,
-                uc_stack: SigStack::new(),
-                uc_sigmask: old_blocked_sigs,
-                uc_sig: [0; 16],
-                uc_mcontext: MContext {
-                    user_x: [0; 32], // todo: 应该从TrapContext复制通用寄存器
-                    fpstate: [0; 66],
-                },
-            };
-            // ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
+            let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
             let ucontext_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &ucontext as *const UContext as *const u8,
@@ -633,12 +619,7 @@ impl TaskControlBlock {
             *trap_cx.sp() = new_sp;
             // ra: when user signal handler ended, return to sigreturn_trampoline
             // which calls sys_sigreturn
-            *trap_cx.ra() = sigreturn_trampoline as usize;
-            /* 暂时注释掉MContext相关的代码
-            // other important regs
-            trap_cx.x[4] = ucontext.uc_mcontext.user_x[4];
-            trap_cx.x[3] = ucontext.uc_mcontext.user_x[3];
-            */
+            *trap_cx.ra() = sigreturn_trampoline_addr();
         } else {
             let handler = unsafe {
                 core::mem::transmute::<*const (), fn(usize)>(
@@ -681,6 +662,19 @@ impl TaskControlBlock {
             .reduce(|time_one, time_two| time_one + time_two)
             .unwrap()
         })
+    }
+}
+
+/// for file system
+impl TaskControlBlock {
+    /// get the current working dir
+    pub fn cwd(&self) -> Arc<dyn Dentry> {
+        self.cwd.lock().clone()
+    } 
+    /// change the current working dir
+    pub fn set_cwd(&self, dentry: Arc<dyn Dentry>) {
+        info!("switching task {}'s cwd to {}", self.gettid(), dentry.path());
+        *self.cwd.lock() = dentry;
     }
 }
 

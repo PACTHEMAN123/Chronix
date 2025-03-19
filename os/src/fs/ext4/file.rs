@@ -3,6 +3,7 @@
 extern crate lwext4_rust;
 extern crate virtio_drivers;
 
+use async_trait::async_trait;
 use hal::println;
 use lwext4_rust::InodeTypes;
 
@@ -75,6 +76,7 @@ impl Ext4File {
     }
 }
 
+#[async_trait]
 impl File for Ext4File {
     fn inner(&self) -> &FileInner {
         self.inner.exclusive_access()
@@ -85,7 +87,7 @@ impl File for Ext4File {
     fn writable(&self) -> bool {
         self.writable
     }
-    fn read(&self, mut buf: UserBuffer) -> usize {
+    async fn read(&self, mut buf: UserBuffer) -> usize {
         let inner = self.inner.exclusive_access();
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
@@ -98,7 +100,7 @@ impl File for Ext4File {
         }
         total_read_size
     }
-    fn write(&self, buf: UserBuffer) -> usize {
+    async fn write(&self, buf: UserBuffer) -> usize {
         let inner = self.inner.exclusive_access();
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter() {

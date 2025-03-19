@@ -7,3 +7,4 @@ pub mod pagetable;
 pub mod common;
 pub mod trap;
 pub mod vm;
+pub mod signal;

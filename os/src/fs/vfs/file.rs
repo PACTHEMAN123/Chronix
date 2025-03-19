@@ -1,8 +1,12 @@
 //! virtual file system file object
 
 use crate::mm::UserBuffer;
+use async_trait::async_trait;
 
-use alloc::sync::Arc;
+use alloc::{
+    sync::Arc,
+    boxed::Box,
+};
 use super::Inode;
 
 /// basic File object
@@ -13,6 +17,7 @@ pub struct FileInner {
     pub offset: usize,
 }
 
+#[async_trait]
 /// File trait
 pub trait File: Send + Sync {
     /// get basic File object
@@ -22,9 +27,9 @@ pub trait File: Send + Sync {
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    fn read(&self, buf: UserBuffer) -> usize;
+    async fn read(&self, mut buf: UserBuffer) -> usize;
     /// Write `UserBuffer` to file
-    fn write(&self, buf: UserBuffer) -> usize;
+    async fn write(&self, buf: UserBuffer) -> usize;
     /// get the inode it points to
     fn inode(&self) -> Option<Arc<dyn Inode>> {
         Some(self.inner().inode.clone())
