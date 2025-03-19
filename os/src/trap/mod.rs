@@ -49,8 +49,14 @@ async fn user_trap_handler(trap_type: TrapType)  {
     unsafe { Instruction::enable_interrupt() };
     match trap_type{
         TrapType::Syscall => {
+            /*
             let cur_processor = current_processor();
             let cx = current_trap_cx(cur_processor);
+            */
+            let _sum = SumGuard::new();
+            let cx = unsafe {
+                &mut *(Constant::USER_TRAP_CONTEXT_BOTTOM as *mut TrapContext)
+            };
             // jump to next instruction anyway
             *cx.sepc() += 4;
             // get system call return value
@@ -93,7 +99,7 @@ async fn user_trap_handler(trap_type: TrapType)  {
                         Err(()) => {
                             // todo: don't panic, kill the task
                             log::warn!(
-                                "[trap_handler] cannot handle page fault, addr {stval:#x}",
+                                "[user_trap_handler] cannot handle page fault, addr {stval:#x}",
                             );
                             exit_current_and_run_next(-2);
                         }
@@ -169,7 +175,7 @@ fn kernel_trap_handler(trap_type: TrapType) {
                         Err(()) => {
                             // todo: don't panic, kill the task
                             panic!(
-                                "[trap_handler] cannot handle page fault, addr {stval:#x}",
+                                "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}",
                             );
                         }
                     }

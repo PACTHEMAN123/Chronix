@@ -2,7 +2,6 @@
 
 use alloc::string::{String, ToString};
 
-use crate::mm::UserCheck;
 use crate::utils::string;
 
 use super::c_str_to_string;

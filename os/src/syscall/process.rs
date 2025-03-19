@@ -6,8 +6,9 @@ use crate::fs::{
     ext4::open_file,
     OpenFlags,
 };
-use crate::mm::{copy_out, UserCheck};
+use crate::mm::copy_out;
 use crate::mm::{translated_refmut, translated_str, translated_ref};
+use crate::processor::context::SumGuard;
 use crate::task::schedule::spawn_user_task;
 use crate::task:: exit_current_and_run_next;
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
@@ -128,7 +129,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     }
 
     // set parent tid and child tid
-    let _user_check = UserCheck::new();
+    let _sum_guard = SumGuard::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
         unsafe {
             (parent_tid.0 as *mut usize).write_volatile(new_tid);

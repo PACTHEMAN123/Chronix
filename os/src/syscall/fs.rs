@@ -10,7 +10,7 @@ use crate::utils::{
     path::*,
     string::*,
 };
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, UserCheck};
+use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 /// syscall: write
@@ -99,9 +99,7 @@ pub fn sys_close(fd: usize) -> isize {
 /// and errno is set to indicate the error. 
 /// The contents of the array pointed to by buf are undefined on error.
 pub fn sys_getcwd(buf: usize, len: usize) -> isize {
-    let user_check = UserCheck::new();
-    //info!("[sys_getcwd]: buf addr: {:x}, size: {}", buf, len);
-    user_check.check_write_slice(buf as *mut u8, len);
+    let _sum_guard = SumGuard::new();
     let task = current_task().unwrap();
     task.with_cwd(|cwd| {
         let path = cwd.path();
