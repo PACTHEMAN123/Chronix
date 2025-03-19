@@ -34,11 +34,6 @@ use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use alloc::task;
 use log::{info, warn};
-use riscv::register::{
-    mtvec::TrapMode,
-    scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec, sepc,
-};
 use core::sync::atomic::Ordering;
 
 hal::define_user_trap_handler!(user_trap_handler);

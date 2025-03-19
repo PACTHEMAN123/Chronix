@@ -1,6 +1,6 @@
 //! Implementation of [`TaskContext`]
 use alloc::sync::Arc;
-use riscv::register::sstatus;
+use hal::instruction::{Instruction, InstructionHal};
 
 use super::processor::current_processor;
 /// sum flag guard
@@ -20,9 +20,9 @@ impl EnvContext{
     pub unsafe fn auto_sum(&self) {
         log::trace!("[EnvContext::auto_sum] sum_cnt: {}", self.sum_flag);
         if self.sum_flag == 0 {
-            riscv::register::sstatus::clear_sum();
+            Instruction::clear_sum();
         } else {
-            riscv::register::sstatus::set_sum();
+            Instruction::set_sum();
         }
     }
     /// Change sum flag to new value
@@ -33,7 +33,7 @@ impl EnvContext{
     pub fn sum_inc(&mut self) {
         if self.sum_flag == 0 {
             unsafe {
-                sstatus::set_sum();
+                Instruction::set_sum();
             }
             self.sum_flag = 1;
         }
@@ -42,7 +42,7 @@ impl EnvContext{
     pub fn sum_dec(&mut self) {
         if self.sum_flag == 1 {
             unsafe {
-                sstatus::clear_sum();
+                Instruction::clear_sum();
             }
             self.sum_flag = 0;
         }

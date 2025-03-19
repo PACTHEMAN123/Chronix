@@ -1,6 +1,6 @@
 //! The panic handler
 
-use crate::sbi::shutdown;
+use hal::instruction::{Instruction, InstructionHal};
 use core::{arch::asm, panic::PanicInfo};
 use hal::{addr::VirtAddrHal, constant::{Constant, ConstantsHal}, println};
 use log::*;
@@ -35,5 +35,5 @@ fn panic(info: &PanicInfo) -> ! {
     } else {
         error!("[kernel] Panicked: {}", info.message());
     }
-    shutdown(true)
+    Instruction::shutdown(true)
 }

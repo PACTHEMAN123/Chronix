@@ -8,3 +8,4 @@ pub mod common;
 pub mod trap;
 pub mod vm;
 pub mod signal;
+pub mod timer;
