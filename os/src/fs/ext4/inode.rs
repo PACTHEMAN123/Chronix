@@ -297,6 +297,25 @@ impl Inode for Ext4Inode {
 
         }
     }
+
+    /// remove the file that Ext4Inode holds
+    fn unlink(&self) -> Result<usize, i32> {
+        let file = self.file.exclusive_access();
+        let itype = file.get_type();
+        let cpath = file.get_path();
+        let path = cpath.to_str().unwrap();
+        match itype {
+            InodeTypes::EXT4_DE_REG_FILE => {
+                file.file_remove(path)
+            }
+            InodeTypes::EXT4_DE_DIR => {
+                file.dir_rm(path)
+            }
+            _ => {
+                panic!("not support");
+            }
+        }
+    }
 }
 
 impl Drop for Ext4Inode {

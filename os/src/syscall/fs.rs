@@ -1,10 +1,10 @@
 //! File and filesystem-related syscalls
 use alloc::string::ToString;
-use log::info;
+use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
 
 use crate::{fs::{
-    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD
+    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -383,4 +383,54 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> isize {
     } else {
         return -1;
     }
+}
+
+/// unlink() deletes a name from the filesystem.  If that name was the
+/// last link to a file and no processes have the file open, the file
+/// is deleted and the space it was using is made available for reuse.
+/// If the name was the last link to a file but any processes still
+/// have the file open, the file will remain in existence until the
+/// last file descriptor referring to it is closed.
+/// If the name referred to a symbolic link, the link is removed.
+/// If the name referred to a socket, FIFO, or device, the name for it
+/// is removed but processes which have the object open may continue to use it.
+/// (todo): now only remove, but not check for remaining referred.
+pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> isize {
+    let path = user_path_to_string(pathname).unwrap();
+    let dentry = if path.starts_with("/") {
+        global_find_dentry(&path)
+    } else {
+        let fpath = if dirfd == AT_FDCWD {
+            //info!("[sys_openat]: using current working dir");
+            let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
+            rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
+        } else {
+            // lookup in the current task's fd table
+            // the inode fd points to should be a dir
+            let task = current_task().unwrap();
+            if let Some(dirfile) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
+                let dentry = dirfile.dentry().unwrap();
+                rel_path_to_abs(&dentry.path(), &path).unwrap()
+            } else {
+                info!("[sys_unlinkat]: the dirfd not exist");
+                return -1;
+            }
+        };
+        //info!("[sys_unlinkat]: fpath: {}", fpath);
+        global_find_dentry(&fpath)
+    };
+    if dentry.parent().is_none() {
+        warn!("cannot unlink root!");
+        return -1;
+    }
+    let inode = dentry.inode().unwrap();
+    let is_dir = inode.inner().mode == InodeMode::DIR;
+    if flags == AT_REMOVEDIR && !is_dir {
+        return -1;
+    } else if flags != AT_REMOVEDIR && is_dir {
+        return -1;
+    }
+    inode.unlink().expect("inode unlink failed");
+    dentry.clear_inode();
+    0
 }
