@@ -158,9 +158,13 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<Ext4File>> {
 
 /// helper function: List all files in the ext4 filesystem
 pub fn list_apps() {
-    let root = FS_MANAGER.lock().get("ext4").unwrap().root();
+    let root_dentry = FS_MANAGER.lock()
+    .get("ext4").unwrap()
+    .get_sb("/").unwrap()
+    .root();
+    let root_inode = root_dentry.inode().unwrap();
     println!("/**** APPS ****");
-    for app in root.ls() {
+    for app in root_inode.ls() {
         println!("{}", app);
     }
     println!("**************/");

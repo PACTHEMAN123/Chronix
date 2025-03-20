@@ -4,7 +4,7 @@ use log::info;
 use virtio_drivers::PAGE_SIZE;
 
 use crate::{fs::{
-    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, OpenFlags, AT_FDCWD
+    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, Kstat, OpenFlags, AT_FDCWD
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -298,5 +298,24 @@ pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> isize {
     info!("read fd: {}, write fd: {}", read_fd, write_fd);
     pipefd[0] = read_fd as i32;
     pipefd[1] = write_fd as i32;
+    0
+}
+
+/// syscall fstat
+pub fn sys_fstat(fd: usize, stat_buf: usize) -> isize {
+    let _sum_guard = SumGuard::new();
+    let task = current_task().unwrap().clone();
+    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
+        if !file.readable() {
+            return -1;
+        }
+        let stat = file.inode().unwrap().getattr();
+        let stat_ptr = stat_buf as *mut Kstat;
+        unsafe {
+            *stat_ptr = stat;
+        }
+    } else {
+        return -1;
+    }
     0
 }

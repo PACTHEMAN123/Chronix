@@ -20,6 +20,7 @@ const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_PIPE: usize = 59;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_YIELD: usize = 124;
@@ -60,6 +61,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PIPE => sys_pipe2(args[0] as *mut i32, args[1] as u32),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]).await,
+        SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,
         SYSCALL_YIELD => sys_yield().await,
