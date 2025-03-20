@@ -118,10 +118,14 @@ impl dyn Dentry {
     /// if missed, try to search, start from this dentry
     /// only return USED dentry, panic on invalid path
     pub fn find(self: &Arc<Self>, path: &str) -> Option<Arc<dyn Dentry>> {
+        // the path should be relative!
+        let path = path.trim_start_matches("/");
         // dcache lock must be release before calling other dentry trait
         {
             let cache = DCACHE.lock();
-            if let Some(dentry) = cache.get(path) {
+            let abs_path = self.path() + path;
+            //info!("[DCACHE] try to get {}", abs_path);
+            if let Some(dentry) = cache.get(&abs_path) {
                 //info!("[DCACHE] hit one: {:?}", dentry.name());
                 if dentry.state() == DentryState::NEGATIVE {
                     return None;
@@ -130,10 +134,10 @@ impl dyn Dentry {
                 }  
             }
         }
-        //info!("[DCACHE] miss one: {}, start to search from {}", path, self.path());
+        //info!("[DCACHE] miss one: {:?}, start to search from {}", path, self.path());
         let dentry = self.clone().walk(path);
         if dentry.state() == DentryState::NEGATIVE {
-            info!("[DENTRY] invalid path!");
+            //info!("[DENTRY] invalid path!");
             None
         } else {
             Some(dentry.clone())
@@ -160,6 +164,8 @@ pub enum DentryState {
 /// when open a file, need to add the related dentry to cache
 /// when close a file, remove it in the cache
 /// every used or negative dentry should be in cache
+/// the key is the absolute path of the dentry
+/// the value is the dentry
 pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> = 
     SpinNoIrqLock::new(BTreeMap::new());
 
