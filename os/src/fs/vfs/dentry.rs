@@ -60,6 +60,11 @@ pub trait Dentry: Send + Sync {
         }
         *self.inner().inode.lock() = Some(inode);
     }
+    /// clear the inode, now it doesnt have a inode
+    fn clear_inode(&self) {
+        *self.inner().inode.lock() = None;
+        self.set_state(DentryState::NEGATIVE);
+    }
     /// get the super block field
     fn superblock(&self) -> Arc<dyn SuperBlock> {
         self.inner().superblock.upgrade().unwrap()
@@ -118,7 +123,11 @@ impl dyn Dentry {
             let cache = DCACHE.lock();
             if let Some(dentry) = cache.get(path) {
                 //info!("[DCACHE] hit one: {:?}", dentry.name());
-                return Some(dentry.clone());
+                if dentry.state() == DentryState::NEGATIVE {
+                    return None;
+                } else {
+                    return Some(dentry.clone());
+                }  
             }
         }
         //info!("[DCACHE] miss one: {}, start to search from {}", path, self.path());

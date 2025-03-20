@@ -143,7 +143,6 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<Ext4File>> {
         } else {
             // create file (todo: now only support root create)
             let inode = root_inode.create(&path, InodeTypes::EXT4_DE_REG_FILE).unwrap();
-            info!("path in openfile: {}", path);
             let name = abs_path_to_name(&path).unwrap();
             let parent_path = abs_path_to_parent(&path).unwrap();
             let parent_dentry = global_find_dentry(&parent_path);

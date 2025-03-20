@@ -70,6 +70,8 @@ pub trait Inode {
     fn truncate(&self, size: u64) -> Result<usize, i32>;
     /// get attributes of a file
     fn getattr(&self) -> Kstat;
+    /// called by the unlink system call
+    fn unlink(&self) -> Result<usize, i32>;
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

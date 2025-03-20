@@ -39,6 +39,8 @@ pub fn init() {
 
 /// AT_FDCWD: a special value
 pub const AT_FDCWD: isize = -100;
+/// Remove directory instead of unlinking file.
+pub const AT_REMOVEDIR: i32 = 0x200;
 
 bitflags! {
     ///Open file flags
