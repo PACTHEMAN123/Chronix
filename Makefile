@@ -18,9 +18,14 @@ fmt:
 ########################################################
 # Building
 ########################################################
-ARCH := riscv64
+ARCH := loongarch64
 
+ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
+else ifeq ($(ARCH), loongarch64)
+TARGET := loongarch64-unknown-none
+endif
+
 MODE := debug
 
 KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
@@ -32,12 +37,16 @@ USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
 USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
 USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
 
-BASIC_TEST_DIR := ./vendor/testsuits-for-oskernel/basic/user/build/riscv64
+BASIC_TEST_DIR := ./vendor/testsuits-for-oskernel/basic/user/build/${ARCH}
 
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
+ifeq ($(ARCH), riscv64)
 BOOTLOADER := bootloader/$(SBI)-$(BOARD).bin
+else ifeq ($(ARCH), loongarch64)
+BOOTLOADER := bootloader/loongarch_bios_0310.bin
+endif
 
 # Building mode argument
 ifeq ($(MODE), release)
@@ -52,12 +61,21 @@ ifneq ($(SMP),)
 	KERNEL_FEATURES += smp
 endif
 # KERNEL ENTRY
+ifeq ($(ARCH), riscv64)
 KERNEL_ENTRY_PA := 0x80200000
+else ifeq ($(ARCH), loongarch64)
+KERNEL_ENTRY_PA := 0x1c000000
+endif
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=${ARCH}
 OBJCOPY := rust-objcopy --binary-architecture=${ARCH}
-GDB ?= ${ARCH}-unknown-elf-gdb
+
+ifeq ($(ARCH), riscv64)
+GDB ?= riscv64-unknown-elf-gdb
+else ifeq ($(ARCH), loongarch64)
+GDB ?= loongarch64-linux-gnu-gdb
+endif
 
 # Disassembly
 DISASM ?= -x
@@ -75,8 +93,9 @@ $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 kernel:
+	@echo Architecture: $(ARCH)
 	@echo Platform: $(BOARD)
-	@cp os/src/linker-$(BOARD).ld os/src/linker.ld
+	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
 ifeq ($(KERNEL_FEATURES), ) 
 	@cd os && cargo build $(MODE_ARG)
 else
@@ -93,9 +112,9 @@ basic_test:
 	@echo "building basic test"
 	@cd cross-compiler && tar -xf kendryte-toolchain-ubuntu-amd64-8.2.0-20190409.tar.xz
 	@chmod +x vendor/testsuits-for-oskernel/basic/user/build-oscomp.sh 
-	@env PATH=$PATH:cross-compiler/kendryte-toolchain/bin
+	@export PATH=$$PATH:cross-compiler/kendryte-toolchain/bin
 	@echo "unpack and export cross compiler finish"
-	@cd vendor/testsuits-for-oskernel/basic/user && ./build-oscomp.sh
+	@export ARCH=$(ARCH) && cd vendor/testsuits-for-oskernel/basic/user && ./build-oscomp.sh
 	@rm -rf cross-compiler/kendryte-toolchain
 	@echo "clean up the cross compiler dir"
 
@@ -143,20 +162,39 @@ disasm-vim: kernel
 ########################################################
 CPU := 4
 QEMU_ARGS := 
-QEMU_ARGS += -machine virt
+QEMU_ARGS += -M virt
 QEMU_ARGS += -nographic
+
+ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
+QEMU_ARGS += -bios $(BOOTLOADER)
+else ifeq ($(ARCH), loongarch64)
+# QEMU_ARGS += -bios $(BOOTLOADER)
+endif
+
 ifneq ($(SMP),)
 QEMU_ARGS += -smp $(CPU)
 endif
-QEMU_ARGS += -bios $(BOOTLOADER)
-QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 
+# QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
 # for fs.img
-QEMU_ARGS += -drive file=$(FS_IMG),format=raw,id=x0,if=none
+QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+else ifeq ($(ARCH), loongarch64)
+QEMU_ARGS += -device virtio-blk-pci,drive=x0,bus=virtio-mmio-bus.0
+endif
 
+
+ifeq ($(ARCH), riscv64)
 QEMU := qemu-system-riscv64
+GDB_ARCH := riscv:rv64
+else ifeq ($(ARCH), loongarch64)
+QEMU := qemu-system-loongarch64
+GDB_ARCH := Loongarch64
+endif
+
 qemu-version-check:
 	@sh scripts/qemu-ver-check.sh $(QEMU)
 
@@ -167,14 +205,14 @@ run: run-inner
 
 debug: qemu-version-check build
 	@tmux new-session -d \
-		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
-		tmux split-window -h "$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		"$(QEMU) $(QEMU_ARGS) -s -S" && \
+		tmux split-window -h "$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
 gdbserver: qemu-version-check build
 	$(QEMU) $(QEMU_ARGS) -s -S
 
 gdbclient:
-	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'
 
 .PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel

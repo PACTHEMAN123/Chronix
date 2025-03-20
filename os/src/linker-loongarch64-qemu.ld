@@ -1,6 +1,6 @@
-OUTPUT_ARCH(riscv)
+OUTPUT_ARCH("loongarch")
 ENTRY(_start)
-BASE_ADDRESS = 0xFFFFFFC090000000;
+BASE_ADDRESS = 0x9000000090000000;
 
 SECTIONS
 {
@@ -36,6 +36,7 @@ SECTIONS
     .bss : {
         *(.bss.stack)
         kernel_stack_top = .;
+        . = ALIGN(4K);
         sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)

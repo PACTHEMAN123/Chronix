@@ -17,7 +17,7 @@ spin = "0.9"
 # sbi-rt = { version = "0.0.3", features = ["legacy"] }
 virtio-drivers = { version = "0.7" }
 async-task = { version = "4.7.1", default-features = false }
-lwext4_rust = { path = "../vendor/lwext4_rust" }
+lwext4_rust = { path = "../vendor/lwext4_rust", default-features = false}
 bitmap-allocator = { path = "../vendor/bitmap-allocator" }
 paste = "1.0"
 hal = {path = "./hal" }

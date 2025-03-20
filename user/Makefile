@@ -1,4 +1,11 @@
+ARCH := loongarch64
+
+ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
+else ifeq ($(ARCH), loongarch64)
+TARGET := loongarch64-unknown-none
+endif
+
 MODE := debug
 ifeq ($(MODE), release)
 	MODE_ARG := --release
@@ -9,8 +16,8 @@ APPS := $(wildcard $(APP_DIR)/*.rs)
 ELFS := $(patsubst $(APP_DIR)/%.rs, $(TARGET_DIR)/%, $(APPS))
 BINS := $(patsubst $(APP_DIR)/%.rs, $(TARGET_DIR)/%.bin, $(APPS))
 
-OBJDUMP := rust-objdump --arch-name=riscv64
-OBJCOPY := rust-objcopy --binary-architecture=riscv64
+OBJDUMP := rust-objdump --arch-name=$(ARCH)
+OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
 
 elf: $(APPS)
 	@cargo build $(MODE_ARG)
