@@ -9,7 +9,7 @@ impl ConstantsHal for Constant {
 
     const VA_WIDTH: usize = 39;
 
-    const PA_WIDTH: usize = 44;
+    const PA_WIDTH: usize = 56;
 
     const PAGE_SIZE: usize = 4096;
 

@@ -43,15 +43,17 @@ impl Uart {
 
 pub fn console_putchar(c: usize) {
     let c = c as u8;
+    let mut locked = COM1.lock();
     if c == b'\n' {
-        COM1.lock().putchar(b'\r');
+        locked.putchar(b'\r');
     }
-    COM1.lock().putchar(c)
+    locked.putchar(c)
 }
 
 pub fn console_getchar() -> usize {
+    let mut locked = COM1.lock();
     loop { 
-        if let Some(c) = COM1.lock().getchar() {
+        if let Some(c) = locked.getchar() {
             break c as usize;
         }
     }

@@ -1,6 +1,9 @@
 [build]
 target = "loongarch64-unknown-none"
 
+[unstable]
+build-std = ["core", "alloc"]
+
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
     "-Clink-arg=-Tsrc/linker.ld", "-Cforce-frame-pointers=yes"

@@ -144,7 +144,7 @@ impl PageTableEntry {
         PageTableEntry { bits: 0 }
     }
     pub fn ppn(&self) -> PhysPageNum {
-        PhysPageNum(self.bits >> 10 & ((1usize << 44) - 1))
+        PhysPageNum(self.bits >> 10 & ((1usize << Constant::PPN_WIDTH) - 1))
     }
     pub fn flags(&self) -> PTEFlags {
         PTEFlags::from_bits((self.bits & ((1usize << 10) - 1)) as u16).unwrap()

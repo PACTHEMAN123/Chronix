@@ -17,7 +17,7 @@
     .globl __trap_from_user
     .globl __restore
     .globl __trap_from_kernel
-    .align 2
+    .balign 4096
 __trap_from_user:
     csrwr $sp, KSAVE_CTX
     # now sp->*TrapContext in user space, KSAVE_CTX->user stack
@@ -108,6 +108,7 @@ __restore:
     ld.d $sp, $sp, 3*8
     ertn
 
+    .balign 4096
 __trap_from_kernel:
     # need to save caller-saved regs
     # note that we need save ERA & BADV here

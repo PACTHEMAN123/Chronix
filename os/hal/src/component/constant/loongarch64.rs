@@ -3,11 +3,11 @@ use super::{Constant, ConstantsHal};
 impl ConstantsHal for Constant {
     const KERNEL_ENTRY_PA: usize = 0x1c00_0000;
 
-    const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_ffff_ffff_ffff;
+    const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_007f_ffff_ffff;
 
-    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_003f_ffff_ffff;
+    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x0000_0000_0000_0000..0x0000_007f_ffff_ffff;
 
-    const PA_WIDTH: usize = 44;
+    const PA_WIDTH: usize = 56;
 
     const VA_WIDTH: usize = 39;
 

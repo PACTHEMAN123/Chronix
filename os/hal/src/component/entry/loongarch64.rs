@@ -1,5 +1,7 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use log::info;
+
 use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println};
 
 const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
@@ -51,7 +53,7 @@ pub(crate) fn rust_main(id: usize) {
     tlb_init();
     super::clear_bss();
     crate::console::init();
-    println!("hello, world");
+    info!("hello, world");
     unsafe { super::_main_for_arch(id); }
 }
 

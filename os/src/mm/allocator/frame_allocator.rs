@@ -29,7 +29,7 @@ impl BitMapFrameAllocator {
 
     fn init(&mut self, range_pa: Range<PhysAddr>) {
         self.range = range_pa.start.ceil()..range_pa.end.floor();
-        info!("{:#x}, {:#x}", range_pa.end.0, range_pa.end.floor().0);
+        info!("[FrameAllocator] range: {:#x}..{:#x}", range_pa.start.0, range_pa.end.0);
         self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.floor().0));
     }
 }
