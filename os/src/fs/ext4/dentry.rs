@@ -1,7 +1,9 @@
-use crate::fs::{vfs::{Dentry, DentryInner, DentryState, DCACHE}, SuperBlock};
+use crate::fs::{vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, DCACHE}, SuperBlock};
 
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
+
+use lwext4_rust::InodeTypes;
 
 /// ext4 file system dentry implement for VFS
 pub struct Ext4Dentry {
@@ -56,6 +58,28 @@ impl Dentry for Ext4Dentry {
             }
         }
         return current_dentry.clone();
+    }
+
+    fn child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+        info!("in child dentry, under: {}", self.path());
+        let inode = self.inode().unwrap().clone();
+        let inner = inode.inner();
+        assert!(inner.mode == InodeMode::from_inode_type(InodeTypes::EXT4_DE_DIR));
+        let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
+        for name in inode.ls() {
+            let child_inode = inode.lookup(&name).unwrap();
+            
+            let child_dentry = Ext4Dentry::new(
+                &name, 
+                self.superblock(), 
+                Some(self.clone()),
+            );
+            child_dentry.set_inode(child_inode);
+            child_dentry.set_state(DentryState::USED);
+            DCACHE.lock().insert(child_dentry.path(), child_dentry.clone());
+            child_dentrys.push(child_dentry);
+        }
+        child_dentrys
     }
 
 }
