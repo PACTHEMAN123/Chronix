@@ -42,6 +42,8 @@ impl Dentry for Ext4Dentry {
                 path_dentry.set_inode(child.clone());
                 path_dentry.set_state(DentryState::USED);
                 let key = path_dentry.path();
+                // info!("[DCACHE]: insert key: {}", key);
+                // (todo): insert op may be duplicate
                 DCACHE.lock().insert(key, path_dentry.clone());
                 current_dentry = path_dentry;
                 current_inode = child;
@@ -54,7 +56,9 @@ impl Dentry for Ext4Dentry {
                 );
                 neg_dentry.set_inode(current_inode);
                 neg_dentry.set_state(DentryState::NEGATIVE);
-                return neg_dentry.clone();
+                //info!("[DCACHE]: insert key: {}", neg_dentry.path());
+                DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
+                return neg_dentry;
             }
         }
         return current_dentry.clone();
