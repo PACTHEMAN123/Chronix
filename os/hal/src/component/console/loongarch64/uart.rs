@@ -1,6 +1,6 @@
-use crate::{constant::{Constant, ConstantsHal}, util::mutex::Mutex};
+use crate::util::mutex::Mutex;
 
-const UART_ADDR: usize = 0x01FE001E0 | Constant::KERNEL_ADDR_SPACE.start;
+const UART_ADDR: usize = 0x800000001FE001E0;
 // 0x800000001fe20000ULL
 static COM1: Mutex<Uart> = Mutex::new(Uart::new(UART_ADDR));
 

@@ -53,8 +53,13 @@ pub(crate) fn rust_main(id: usize) {
     tlb_init();
     super::clear_bss();
     crate::console::init();
-    info!("hello, world");
+    print_info();
     unsafe { super::_main_for_arch(id); }
+}
+
+fn print_info() {
+    println!("PA_LEN: {}", loongArch64::cpu::get_palen());
+    println!("VA_LEN: {}", loongArch64::cpu::get_valen());
 }
 
 #[naked]
@@ -75,6 +80,7 @@ pub unsafe extern "C" fn tlb_fill() {
             csrwr   $t0, LA_CSR_TLBRSAVE
             csrrd   $t0, LA_CSR_PGD
             lddir   $t0, $t0, 3
+            lddir   $t0, $t0, 2
             lddir   $t0, $t0, 1
             ldpte   $t0, 0
             ldpte   $t0, 1
@@ -90,8 +96,6 @@ fn tlb_init() {
 
     use loongArch64::register::*;
 
-    rvacfg::set_rbits(8);
-
     tlbidx::set_ps(Constant::PAGE_SIZE_BITS);
     stlbps::set_ps(Constant::PAGE_SIZE_BITS);
     tlbrehi::set_ps(Constant::PAGE_SIZE_BITS);
@@ -101,9 +105,9 @@ fn tlb_init() {
     pwcl::set_ptwidth(9);
     pwcl::set_dir1_base(21);
     pwcl::set_dir1_width(9);
-    pwcl::set_dir2_base(0);
-    pwcl::set_dir2_width(0);
-    pwch::set_dir3_base(30);
+    pwcl::set_dir2_base(30);
+    pwcl::set_dir2_width(9);
+    pwch::set_dir3_base(39);
     pwch::set_dir3_base(9);
     pwch::set_dir4_base(0);
     pwch::set_dir4_base(0);
