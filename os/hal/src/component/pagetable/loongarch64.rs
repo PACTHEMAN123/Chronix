@@ -179,7 +179,7 @@ impl PageTableEntry {
         (self.flags() & PTEFlags::NX) == PTEFlags::empty()
     }
     pub fn is_leaf(&self) -> bool {
-        todo!()
+        false
     }
     pub fn set_flags(&mut self, flags: PTEFlags) {
         self.bits = (self.bits & PTEFlags::MASK.bits) | flags.bits() as usize;
@@ -334,7 +334,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
             if !pte.is_valid() {
                 return None;
             }
-            if pte.is_leaf() || i == 2 {
+            if pte.is_leaf() || i == Constant::PG_LEVEL - 1 {
                 return Some((pte, i));
             }
             ppn = pte.ppn();

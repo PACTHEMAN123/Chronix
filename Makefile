@@ -97,15 +97,15 @@ kernel:
 	@echo Platform: $(BOARD)
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
 ifeq ($(KERNEL_FEATURES), ) 
-	@cd os && cargo build $(MODE_ARG)
+	@cd os && cargo  build $(MODE_ARG) --target $(TARGET)
 else
-	@cd os && cargo build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
+	@cd os && cargo  build $(MODE_ARG) --target $(TARGET) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
 
 user:
 	@echo "building user..."
-	@cd user && make build MODE=$(MODE)
+	@cd user && make build MODE=$(MODE) ARCH=$(ARCH)
 	@echo "building user finished"
 
 basic_test:
@@ -176,14 +176,14 @@ ifneq ($(SMP),)
 QEMU_ARGS += -smp $(CPU)
 endif
 
-# QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
-# for fs.img
-# QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 ifeq ($(ARCH), riscv64)
+QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH), loongarch64)
-# QEMU_ARGS += -device virtio-blk-pci,drive=x0
+QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
+QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+QEMU_ARGS += -device virtio-blk-pci,drive=x0
 endif
 
 
