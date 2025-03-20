@@ -8,10 +8,12 @@ pub mod ext4;
 pub mod vfs;
 pub mod pipe;
 
+use ext4::Ext4FSType;
 use log::*;
 pub use stdio::{Stdin, Stdout};
 
 use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
+use vfs::fstype::{FSType, MountFlags};
 
 use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
 pub use ext4::Ext4SuperBlock;
@@ -20,7 +22,7 @@ pub use vfs::{SuperBlock, SuperBlockInner};
 /// file system manager
 /// hold the lifetime of all file system
 /// maintain the mapping
-pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn SuperBlock>>> =
+pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn FSType>>> =
     SpinNoIrqLock::new(BTreeMap::new());
 
 /// the default filesystem on disk
@@ -29,9 +31,9 @@ pub const DISK_FS_NAME: &str = "ext4";
 /// init the file system
 pub fn init() {
     // create the ext4 file system using the block device
-    let ext4_superblock = Ext4SuperBlock::new(
-        SuperBlockInner::new(Some(BLOCK_DEVICE.clone())));
-    FS_MANAGER.lock().insert(DISK_FS_NAME.to_string(), ext4_superblock);
+    let diskfs = Ext4FSType::new();
+    diskfs.clone().mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone()));
+    FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
     info!("ext4 finish init");
 }
 
@@ -83,4 +85,44 @@ impl OpenFlags {
             (true, true)
         }
     }
+}
+
+// Defined in <bits/struct_stat.h>
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct Kstat {
+    /// device
+    pub st_dev: u64,
+    /// inode number
+    pub st_ino: u64,
+    /// file type
+    pub st_mode: u32,
+    /// number of hard links
+    pub st_nlink: u32,
+    /// user id
+    pub st_uid: u32,
+    /// user group id
+    pub st_gid: u32,
+    /// device no
+    pub st_rdev: u64,
+    _pad0: u64,
+    /// file size
+    pub st_size: i64,
+    /// block size
+    pub st_blksize: i32,
+    _pad1: i32,
+    /// number of blocks
+    pub st_blocks: i64,
+    /// last access time (s)
+    pub st_atime_sec: isize,
+    /// last access time (ns)
+    pub st_atime_nsec: isize,
+    /// last modify time (s)
+    pub st_mtime_sec: isize,
+    /// last modify time (ns)
+    pub st_mtime_nsec: isize,
+    /// last change time (s)
+    pub st_ctime_sec: isize,
+    /// last change time (ns)
+    pub st_ctime_nsec: isize,
 }
