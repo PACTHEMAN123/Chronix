@@ -1,0 +1,15 @@
+[0;32mQEMU version is 9.2.1(>=7), OK![0m
+(rustup target list | grep "loongarch64-unknown-none (installed)") || rustup target add loongarch64-unknown-none
+loongarch64-unknown-none (installed)
+cargo install cargo-binutils
+rustup component add rust-src
+rustup component add llvm-tools-preview
+Architecture: loongarch64
+Platform: qemu
+building user...
+make[1]: Entering directory '/home/zlc/develop/os/Chronix/user'
+make[1]: Leaving directory '/home/zlc/develop/os/Chronix/user'
+building user finished
+qemu-system-loongarch64 -machine virt -nographic -kernel os/target/loongarch64-unknown-none/debug/os -m 1G
+[34m[
+

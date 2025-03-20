@@ -49,7 +49,8 @@ impl InstructionHal for Instruction {
     }
     
     fn shutdown(failure: bool) -> ! {
-        panic!("shutdown not implemented on loongarch64")
+        log::warn!("shutdown not implemented on loongarch64");
+        loop {}
     }
     
     fn hart_start(hartid: usize, start_addr: usize, opaque: usize) {

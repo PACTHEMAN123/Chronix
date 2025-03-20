@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicBool, Ordering};
+
 #[macro_export]
 /// print string macro
 macro_rules! print {
@@ -23,13 +25,16 @@ struct Stdout;
 static CONSOLE_MUTEX: AtomicBool = AtomicBool::new(false); 
 
 pub fn _print(args: core::fmt::Arguments) {
+    
     loop {
         if CONSOLE_MUTEX.compare_exchange(
             false, true, 
             Ordering::Acquire, Ordering::Relaxed
         ).is_ok() {
+            unsafe { Instruction::disable_interrupt(); }
             core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
             CONSOLE_MUTEX.store(false, Ordering::Release);
+            unsafe { Instruction::enable_interrupt(); }
             break;
         }
     }
@@ -62,6 +67,7 @@ impl log::Log for Logger {
     fn flush(&self) {}
 }
 
+
 pub fn init() {
     static LOGGER: Logger = Logger;
     log::set_logger(&LOGGER).unwrap();
@@ -79,8 +85,6 @@ pub fn init() {
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
 
-use core::sync::atomic::{AtomicBool, Ordering};
-
 #[cfg(target_arch = "riscv64")]
 #[allow(unused)]
 pub use riscv64::*;
@@ -91,3 +95,5 @@ mod loongarch64;
 #[cfg(target_arch = "loongarch64")]
 #[allow(unused)]
 pub use loongarch64::*;
+
+use super::instruction::{Instruction, InstructionHal};

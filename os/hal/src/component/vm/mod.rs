@@ -143,7 +143,3 @@ mod loongarch64;
 
 #[cfg(target_arch = "loongarch64")]
 pub use loongarch64::*;
-
-mod common;
-
-pub use common::*;
