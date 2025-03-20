@@ -22,8 +22,7 @@ use virtio_drivers::BufferDirection;
 
 use log::*;
 
-#[allow(unused)]
-const VIRTIO0: usize = 0x10001000 + Constant::KERNEL_ADDR_SPACE.start;
+const VIRTIO0: usize = 0x10001000 | Constant::KERNEL_ADDR_SPACE.start;
 
 pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>);
 

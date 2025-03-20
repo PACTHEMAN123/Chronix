@@ -319,7 +319,13 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::FetchPageFault) => TrapType::InstructionPageFault(badv),
         Trap::Interrupt(Interrupt::Timer) => TrapType::Timer,
         _ => {
-            warn!("TrapType::Other cause: {:?} badv: {:#x} badi: {:#x}", estat.cause(), badv, register::badi::read().raw() );
+            warn!(
+                "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
+                estat.cause(), 
+                badv, 
+                register::badi::read().inst(),
+                register::era::read().raw()
+            );
             TrapType::Other
         }
     }
