@@ -2,12 +2,12 @@
 
 use core::default;
 
-use crate::{fs::vfs::dentry, sync::mutex::SpinNoIrqLock};
+use crate::{fs::vfs::{dentry, inode::InodeMode}, sync::mutex::SpinNoIrqLock};
 
 use super::{superblock, Inode, SuperBlock};
 
 use alloc::{
-    collections::btree_map::BTreeMap, string::{String, ToString}, sync::{Arc, Weak}
+    collections::btree_map::BTreeMap, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec
 };
 use log::{info, warn};
 
@@ -101,7 +101,10 @@ pub trait Dentry: Send + Sync {
     /// if find, should return a USED dentry
     /// if not find, should return a NEGATIVE dentry
     fn walk(self: Arc<Self>, path: &str) -> Arc<dyn Dentry>;
-    
+    /// get all child dentry
+    /// we assert that only dir dentry will call this method
+    /// it will insert into DACHE by the way
+    fn child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>>;
 }
 
 impl dyn Dentry {

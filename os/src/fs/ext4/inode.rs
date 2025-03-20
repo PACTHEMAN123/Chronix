@@ -4,7 +4,7 @@
 use core::cell::RefCell;
 use core::ptr::NonNull;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::ffi::CString;
 use super::disk::Disk;
 use alloc::sync::{Arc, Weak};
@@ -132,7 +132,11 @@ impl Inode for Ext4Inode {
 
         let mut names = Vec::new();
         while let Some(iname) = name_iter.next() {
-            names.push(String::from(core::str::from_utf8(iname).unwrap()));
+            // notice that the name from lwext4_dir_entries, are C string end with '\0'
+            // in order to make ls compatable with other parts, we should remove the '\0'
+            let cname = String::from(core::str::from_utf8(iname).unwrap());
+            let name = cname.trim_end_matches('\0').to_string();
+            names.push(name);
         }
         names
     }

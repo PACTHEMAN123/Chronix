@@ -4,7 +4,7 @@ use log::info;
 use virtio_drivers::PAGE_SIZE;
 
 use crate::{fs::{
-    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, Kstat, OpenFlags, AT_FDCWD
+    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -56,23 +56,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
     } else {
         -1
     }
-}
-
-/// syscall: open
-pub async fn sys_open(path: usize, flags: u32) -> isize {
-    //info!("in sys_open");
-    let task = current_task().unwrap();
-    let token = current_user_token(&current_processor());
-    let path = translated_str(token, path as *const u8);
-    let mut ret = -1;
-    if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
-        task.with_mut_fd_table(|table| {
-            let fd = task.alloc_fd();
-            table[fd] = Some(inode);
-            ret = fd as isize;
-        });
-    }
-    ret
 }
 
 /// syscall: close
@@ -174,34 +157,35 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             }
             return ret;
         } else {
-            if dirfd == AT_FDCWD {
+            let fpath = if dirfd == AT_FDCWD {
                 //info!("[sys_openat]: using current working dir");
                 let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                let fpath = cw_dentry.path() + &path;
-                //info!("[sys_openat]: full path: {}", fpath);
-                let mut ret: isize = -1;
-                if let Some(file) = open_file(fpath.as_str(), flags) {
-                    let fd = task.alloc_fd();
-                    task.with_mut_fd_table(|table| {
-                        table[fd] = Some(file);
-                        ret = fd as isize;
-                    });
-                } else {
-                    info!("[sys_openat]: {} not found!", fpath);
-                }
-                return ret;
+                rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
             } else {
                 // lookup in the current task's fd table
+                // the inode fd points to should be a dir
                 let task = current_task().unwrap();
-                if let Some(_file) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
-                    info!("[sys_openat]: not support");
-                    // todo: replace inode to dentry in File object
-                    return -1;
+                if let Some(dirfile) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
+                    let dentry = dirfile.dentry().unwrap();
+                    rel_path_to_abs(&dentry.path(), &path).unwrap()
                 } else {
                     info!("[sys_openat]: the dirfd not exist");
                     return -1;
                 }
+            };
+
+            let mut ret: isize = -1;
+            info!("fpath: {}", fpath);
+            if let Some(file) = open_file(fpath.as_str(), flags) {
+                let fd = task.alloc_fd();
+                task.with_mut_fd_table(|table| {
+                    table[fd] = Some(file);
+                    ret = fd as isize;
+                });
+            } else {
+                info!("[sys_openat]: {} not found!", fpath);
             }
+            return ret;
         }
     } else {
         info!("[sys_openat]: pathname is empty!");
@@ -309,7 +293,7 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> isize {
         if !file.readable() {
             return -1;
         }
-        let stat = file.inode().unwrap().getattr();
+        let stat = file.dentry().unwrap().inode().unwrap().getattr();
         let stat_ptr = stat_buf as *mut Kstat;
         unsafe {
             *stat_ptr = stat;
@@ -318,4 +302,85 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> isize {
         return -1;
     }
     0
+}
+
+/// syscall uname
+pub fn sys_uname(uname_buf: usize) -> isize {
+    let _sum_guard = SumGuard::new();
+    let uname = UtsName::default();
+    let uname_ptr = uname_buf as *mut UtsName;
+    unsafe {
+        *uname_ptr = uname;
+    }
+    0
+}
+
+
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+struct LinuxDirent64 {
+    d_ino: u64,
+    d_off: u64,
+    d_reclen: u16,
+    d_type: u8,
+    // d_name follows here, which will be written later
+}
+/// syscall getdents
+/// ssize_t getdents64(int fd, void dirp[.count], size_t count);
+/// The system call getdents() reads several linux_dirent structures
+/// from the directory referred to by the open file descriptor fd into
+/// the buffer pointed to by dirp.  The argument count specifies the
+/// size of that buffer.
+/// (todo) now mostly copy from Phoenix
+pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> isize {
+    const LEN_BEFORE_NAME: usize = 19;
+    let task = current_task().unwrap().clone();
+    let _sum_guard = SumGuard::new();
+    let buf_slice = unsafe {
+        core::slice::from_raw_parts_mut(buf as *mut u8, len)
+    };
+    assert!(buf_slice.len() == len);
+
+    // get the dentry the fd points to
+    if let Some(dentry) = task.with_fd_table(|table| {
+        let file = table[fd].clone().unwrap();
+        file.dentry()
+    }) {
+        let mut buf_it = buf_slice;
+        let mut writen_len = 0;
+        let mut pos = 0;
+        for child in dentry.child_dentry() {
+            assert!(child.state() != DentryState::NEGATIVE);
+            // align to 8 bytes
+            let c_name_len = child.name().len() + 1;
+            let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
+            let inode = child.inode().unwrap();
+            let linux_dirent = LinuxDirent64 {
+                d_ino: inode.inner().ino as u64,
+                d_off: pos as u64,
+                d_type: inode.inner().mode.bits() as u8,
+                d_reclen: rec_len as u16,
+            };
+
+            //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
+            if writen_len + rec_len > len {
+                break;
+            }
+
+            pos += 1;
+            let ptr = buf_it.as_mut_ptr() as *mut LinuxDirent64;
+            unsafe {
+                ptr.copy_from_nonoverlapping(&linux_dirent, 1);
+            }
+            buf_it[LEN_BEFORE_NAME..LEN_BEFORE_NAME + c_name_len - 1]
+                .copy_from_slice(child.name().as_bytes());
+            buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
+            buf_it = &mut buf_it[rec_len..];
+            writen_len += rec_len;
+        }
+        return writen_len as isize;
+    } else {
+        return -1;
+    }
 }
