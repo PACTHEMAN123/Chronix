@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use riscv::register::{sie, sstatus};
+use riscv::register;
 
 use super::{Instruction, InstructionHal};
 
@@ -14,27 +14,27 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_interrupt() {
-        sstatus::set_sie();
+        register::sstatus::set_sie();
     }
 
     unsafe fn disable_interrupt() {
-        sstatus::clear_sie();
+        register::sstatus::clear_sie();
     }
 
-    unsafe fn sie() -> bool {
-        sstatus::read().sie()
+    unsafe fn is_interrupt_enabled() -> bool {
+        register::sstatus::read().sie()
     }
 
     unsafe fn enable_timer_interrupt() {
-        sie::set_stimer();
+        register::sie::set_stimer();
     }
 
     unsafe fn clear_sum() {
-        sstatus::clear_sum();
+        register::sstatus::clear_sum();
     }
 
     unsafe fn set_sum() {
-        sstatus::set_sum();
+        register::sstatus::set_sum();
     }
 
     fn shutdown(failure: bool) -> !{
@@ -52,7 +52,7 @@ impl InstructionHal for Instruction {
     }
     
     #[inline(always)]
-    fn set_tp (processor_addr: usize) {
+    fn set_tp(processor_addr: usize) {
         unsafe {
             asm!(
                 "mv tp, {}",
@@ -60,6 +60,7 @@ impl InstructionHal for Instruction {
              )
         }
     }
+    
     #[inline(always)]
     fn get_tp() -> usize {
         let tp: usize;
@@ -74,7 +75,7 @@ impl InstructionHal for Instruction {
     
     fn set_float_status_clean() {
         unsafe {
-            sstatus::set_fs(sstatus::FS::Clean);
+            register::sstatus::set_fs(register::sstatus::FS::Clean);
         }
     }
 }

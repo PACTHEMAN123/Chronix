@@ -92,7 +92,7 @@ __restore:
 
 __trap_from_kernel:
     # need to save caller-saved regs
-    # note that we need save sepc & stvec here
+    # note that we need save sepc & stval here
     addi sp, sp, -20*8
     sd  ra,  1*8(sp)
     sd  t0,  2*8(sp)
