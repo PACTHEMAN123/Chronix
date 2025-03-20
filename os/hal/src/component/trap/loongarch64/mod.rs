@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 
+use log::warn;
 use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
 
 use crate::instruction::{Instruction, InstructionHal};
@@ -317,7 +318,10 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(badv),
         Trap::Exception(Exception::FetchPageFault) => TrapType::InstructionPageFault(badv),
         Trap::Interrupt(Interrupt::Timer) => TrapType::Timer,
-        _ => TrapType::Other
+        _ => {
+            warn!("TrapType::Other cause: {:?} badv: {:#x} badi: {:#x}", estat.cause(), badv, register::badi::read().raw() );
+            TrapType::Other
+        }
     }
 }
 

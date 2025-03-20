@@ -162,7 +162,7 @@ disasm-vim: kernel
 ########################################################
 CPU := 4
 QEMU_ARGS := 
-QEMU_ARGS += -M virt
+QEMU_ARGS += -machine virt
 QEMU_ARGS += -nographic
 
 ifeq ($(ARCH), riscv64)
@@ -179,11 +179,11 @@ endif
 # QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
 # for fs.img
-QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+# QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH), loongarch64)
-QEMU_ARGS += -device virtio-blk-pci,drive=x0,bus=virtio-mmio-bus.0
+# QEMU_ARGS += -device virtio-blk-pci,drive=x0
 endif
 
 
