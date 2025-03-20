@@ -10,8 +10,6 @@ pub trait UContextHal {
     fn restore_old_context(&self, cx: &mut TrapContext);
 }
 
-
-
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
 

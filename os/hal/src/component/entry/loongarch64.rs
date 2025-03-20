@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK};
+use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println};
 
 const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
 
@@ -8,17 +8,22 @@ const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
 #[naked]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
-unsafe extern "C" fn _start(id: usize) -> ! {
+unsafe extern "C" fn _start() -> ! {
     core::arch::naked_asm!(
         r"
+        csrrd        $a0, 0x20                    # cpuid
         addi.d       $t0, $a0, 1                  # t0 = hart_id + 1
         la.global    $sp, {boot_stack}
         li.d         $t1, {boot_stack_size}
         mul.d        $t0, $t1, $t0                # t0 = (hart_id + 1) * boot_stack_size
         add.d        $sp, $sp, $t0
 
-        li.d         $t0, 0xF000_0000_0000_0001
-        csrwr        $t0, 0x180                   # LOONGARCH_CSR_DMWIN0
+        ori          $t0, $zero, 0x1     # CSR_DMW1_PLV0
+        lu52i.d      $t0, $t0, -2048     # UC, PLV0, 0x8000 xxxx xxxx xxxx
+        csrwr        $t0, 0x180          # LOONGARCH_CSR_DMWIN0
+        ori          $t0, $zero, 0x11    # CSR_DMW1_MAT | CSR_DMW1_PLV0
+        lu52i.d      $t0, $t0, -1792     # CA, PLV0, 0x9000 xxxx xxxx xxxx
+        csrwr        $t0, 0x181          # LOONGARCH_CSR_DMWIN1
 
         # Enable PG 
         li.w		 $t0, 0xb0		              # PLV=0, IE=0, PG=1
@@ -29,9 +34,9 @@ unsafe extern "C" fn _start(id: usize) -> ! {
         csrwr		 $t0, 0x2                     # LOONGARCH_CSR_EUEN
 
         li.d         $t2, {virt_ram_offset}       
-        or.d         $sp, $sp, $t2
+        or           $sp, $sp, $t2
         la.global    $a2, {entry}
-        or.d         $a2, $a2, $t2
+        or           $a2, $a2, $t2
         jirl         $zero, $a2, 0                # call rust_main
         ",
         boot_stack_size = const Constant::KERNEL_STACK_SIZE,
@@ -41,15 +46,12 @@ unsafe extern "C" fn _start(id: usize) -> ! {
     );
 }
 
-pub static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 
 pub(crate) fn rust_main(id: usize) {
     tlb_init();
-    if FIRST_PROCESSOR.load(Ordering::Acquire) {
-        FIRST_PROCESSOR.store(false, Ordering::Release);
-        super::clear_bss();
-        crate::console::init();  
-    }
+    super::clear_bss();
+    crate::console::init();
+    println!("hello, world");
     unsafe { super::_main_for_arch(id); }
 }
 
@@ -71,7 +73,7 @@ pub unsafe extern "C" fn tlb_fill() {
             csrwr   $t0, LA_CSR_TLBRSAVE
             csrrd   $t0, LA_CSR_PGD
             lddir   $t0, $t0, 3
-            lddir   $t0, $t0, 2
+            lddir   $t0, $t0, 1
             ldpte   $t0, 0
             ldpte   $t0, 1
             tlbfill
@@ -97,10 +99,10 @@ fn tlb_init() {
     pwcl::set_ptwidth(9);
     pwcl::set_dir1_base(21);
     pwcl::set_dir1_width(9);
-    pwcl::set_dir2_base(30);
-    pwcl::set_dir2_width(9);
-    pwch::set_dir3_base(0);
-    pwch::set_dir3_base(0);
+    pwcl::set_dir2_base(0);
+    pwcl::set_dir2_width(0);
+    pwch::set_dir3_base(30);
+    pwch::set_dir3_base(9);
     pwch::set_dir4_base(0);
     pwch::set_dir4_base(0);
 

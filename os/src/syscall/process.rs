@@ -143,7 +143,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     }
     // todo: more flags...
     if flags.contains(CloneFlags::SETTLS) {
-        *new_task.get_trap_cx().tls() = tls.0;
+        *new_task.get_trap_cx().tp() = tls.0;
     }
     spawn_user_task(new_task);
     new_tid as isize

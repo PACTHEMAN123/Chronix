@@ -31,9 +31,9 @@ pub trait TrapContextHal {
 
     fn sp(&mut self) -> &mut usize;
 
-    fn sepc(&mut self) -> &mut usize;
+    fn tp(&mut self) -> &mut usize;
 
-    fn tls(&mut self) -> &mut usize;
+    fn sepc(&mut self) -> &mut usize;
 
     fn app_init_context(entry: usize, sp: usize) -> Self;
 
@@ -87,8 +87,6 @@ macro_rules! define_user_trap_handler {
 
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
-
-use core::usize;
 
 #[cfg(target_arch = "riscv64")]
 #[allow(unused)]

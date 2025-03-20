@@ -2,6 +2,8 @@ use core::arch::asm;
 
 use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
+use crate::instruction::{Instruction, InstructionHal};
+
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
 core::arch::global_asm!(include_str!("trap.S"));
@@ -88,7 +90,7 @@ impl TrapContextHal for TrapContext {
         // set CPU privilege to User after trapping back
         unsafe {
             sstatus::set_spp(SPP::User);
-            sstatus::clear_sie();
+            Instruction::disable_interrupt();
         }
         let mut cx = Self {
             x: [0; 32],
@@ -133,7 +135,7 @@ impl TrapContextHal for TrapContext {
         self.stored
     }
     
-    fn tls(&mut self) -> &mut usize {
+    fn tp(&mut self) -> &mut usize {
         &mut self.x[4]
     }
     

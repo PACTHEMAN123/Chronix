@@ -20,9 +20,23 @@ fn clear_bss() {
         fn sbss();
         fn ebss();
     }
+    let sbss = sbss as usize;
+    let ebss = ebss as usize;
     unsafe {
-        core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
-            .fill(0);
+        let mem = core::slice::from_raw_parts_mut(sbss as *mut u8, ebss as usize - sbss as usize);
+        mem.fill(0);
+        // let mut i = sbss;
+        // core::arch::asm!(
+        //     "
+        //     1:
+        //     st.b    $zero, {0}, 0
+        //     addi.d    {0}, {0}, 0x1
+        //     bne     {0}, {1}, 1b
+        //     ",
+        //     inout(reg) i,
+        //     in(reg) ebss,
+        // )
+
     }
 }
 
