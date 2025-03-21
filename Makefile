@@ -27,6 +27,7 @@ TARGET := loongarch64-unknown-none
 endif
 
 MODE := debug
+USER_MODE := $(MODE)
 
 KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
@@ -52,6 +53,8 @@ endif
 ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
+
+MODE_ARG += --target $(TARGET)
 
 # Crate features
 export SMP := 
@@ -80,7 +83,6 @@ endif
 # Disassembly
 DISASM ?= -x
 
-
 build: env $(KERNEL_BIN) user #fs-img: should make fs-img first 
 
 env:
@@ -97,15 +99,15 @@ kernel:
 	@echo Platform: $(BOARD)
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
 ifeq ($(KERNEL_FEATURES), ) 
-	@cd os && cargo  build $(MODE_ARG) --target $(TARGET)
+	@cd os && cargo  build $(MODE_ARG)
 else
-	@cd os && cargo  build $(MODE_ARG) --target $(TARGET) --features "$(KERNEL_FEATURES)"
+	@cd os && cargo  build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
 
 user:
 	@echo "building user..."
-	@cd user && make build MODE=$(MODE) ARCH=$(ARCH)
+	@cd user && make build MODE=$(USER_MODE) ARCH=$(ARCH)
 	@echo "building user finished"
 
 basic_test:
@@ -169,7 +171,7 @@ ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
 QEMU_ARGS += -bios $(BOOTLOADER)
 else ifeq ($(ARCH), loongarch64)
-# QEMU_ARGS += -bios $(BOOTLOADER)
+QEMU_ARGS += -cpu la464
 endif
 
 ifneq ($(SMP),)

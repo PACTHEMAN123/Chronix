@@ -23,6 +23,7 @@ unsafe extern "C" fn _start(id: usize) -> ! {
         // a0 = processor_id
         // sp = boot_stack + (hartid + 1) * 64KB
         "
+            .attribute arch, \"rv64gc\"
             addi    t0, a0, 1
             li      t1, {boot_stack_size}
             mul     t0, t0, t1                // t0 = (hart_id + 1) * boot_stack_size
