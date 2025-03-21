@@ -25,20 +25,7 @@ impl Ext4SuperBlock {
         let block_device = inner.device.as_ref().unwrap().clone();
         let disk = Disk::new(block_device);
         let block = Ext4BlockWrapper::<Disk>::new(disk).expect("failed to create ext4fs");
-        let super_block = Arc::new(Self {inner, block});
-        
-        // need to reset the super block's root
-        // now we simply mount the ext4fs at "/"
-        let root = Arc::new(Ext4Inode::new(super_block.clone(), "/", InodeTypes::EXT4_DE_DIR));
-        super_block.set_root(root.clone());
-
-        // create root dentry and insert into dache
-        let root_dentry = Ext4Dentry::new("/", super_block.clone(), None);
-        root_dentry.set_inode(root.clone());
-        root_dentry.set_state(DentryState::USED);
-        DCACHE.lock().insert("/".to_string(), root_dentry);
-
-        Arc::clone(&super_block)
+        Arc::new(Self {inner, block})
     }
 }
 

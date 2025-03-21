@@ -4,15 +4,16 @@
 use core::cell::RefCell;
 use core::ptr::NonNull;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::ffi::CString;
 use super::disk::Disk;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 
 use log::*;
+use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{InodeInner, Inode};
-use crate::fs::SuperBlock;
+use crate::fs::{Kstat, SuperBlock};
 use crate::sync::UPSafeCell;
 
 use lwext4_rust::bindings::{
@@ -39,11 +40,14 @@ impl Ext4Inode {
     /// Create a new inode
     pub fn new(super_block: Arc<dyn SuperBlock>, path: &str, types: InodeTypes) -> Self {
         //info!("Inode new {:?} {}", types, path);
-        
-        //file.file_read_test("/test/test.txt", &mut buf);
+        let mode = InodeMode::from_inode_type(types.clone());
+        let mut file  = Ext4File::new(path, types);
+        // (todo) notice that lwext4 mention in file_size(): should open file as RDONLY first 
+        // may be a bug in the future
+        let size = file.file_size();
         Self {
-            inner: InodeInner::new(super_block.clone()),
-            file: UPSafeCell::new(Ext4File::new(path, types)),
+            inner: InodeInner::new(super_block.clone(), mode, size as usize),
+            file: UPSafeCell::new(file),
         }
     }
 
@@ -128,7 +132,11 @@ impl Inode for Ext4Inode {
 
         let mut names = Vec::new();
         while let Some(iname) = name_iter.next() {
-            names.push(String::from(core::str::from_utf8(iname).unwrap()));
+            // notice that the name from lwext4_dir_entries, are C string end with '\0'
+            // in order to make ls compatable with other parts, we should remove the '\0'
+            let cname = String::from(core::str::from_utf8(iname).unwrap());
+            let name = cname.trim_end_matches('\0').to_string();
+            names.push(name);
         }
         names
     }
@@ -263,6 +271,51 @@ impl Inode for Ext4Inode {
         let mut file = unsafe{self.file.exclusive_access()};
         file.file_rename(src_path, dst_path)
     }
+
+    fn getattr(&self) -> Kstat {
+        let inner = self.inner();
+        let size = inner.size;
+        Kstat {
+            st_dev: 0,
+            st_ino: inner.ino as u64,
+            st_mode: inner.mode.bits() as _,
+            st_nlink: inner.nlink as u32,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            _pad0: 0,
+            st_size: size as _,
+            _pad1: 0,
+            st_blksize: BLOCK_SIZE as _,
+            st_blocks: (size / BLOCK_SIZE) as _,
+            st_atime_sec: inner.atime.tv_sec as _,
+            st_atime_nsec: inner.atime.tv_nsec as _,
+            st_mtime_sec: inner.mtime.tv_sec as _,
+            st_mtime_nsec: inner.mtime.tv_nsec as _,
+            st_ctime_sec: inner.ctime.tv_sec as _,
+            st_ctime_nsec: inner.ctime.tv_nsec as _,
+
+        }
+    }
+
+    /// remove the file that Ext4Inode holds
+    fn unlink(&self) -> Result<usize, i32> {
+        let file = self.file.exclusive_access();
+        let itype = file.get_type();
+        let cpath = file.get_path();
+        let path = cpath.to_str().unwrap();
+        match itype {
+            InodeTypes::EXT4_DE_REG_FILE => {
+                file.file_remove(path)
+            }
+            InodeTypes::EXT4_DE_DIR => {
+                file.dir_rm(path)
+            }
+            _ => {
+                panic!("not support");
+            }
+        }
+    }
 }
 
 impl Drop for Ext4Inode {
@@ -271,5 +324,23 @@ impl Drop for Ext4Inode {
         //info!("Drop struct Inode {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
         let _ = file; // todo
+    }
+}
+
+/// translate between InodeTypes and InodeMode
+impl InodeMode {
+    pub fn from_inode_type(itype: InodeTypes) -> Self {
+        let perm_mode = InodeMode::OWNER_MASK | InodeMode::GROUP_MASK | InodeMode::OTHER_MASK;
+        let file_mode = match itype {
+            InodeTypes::EXT4_DE_DIR => InodeMode::DIR,
+            InodeTypes::EXT4_DE_REG_FILE => InodeMode::FILE,
+            InodeTypes::EXT4_DE_CHRDEV => InodeMode::CHAR,
+            InodeTypes::EXT4_DE_FIFO => InodeMode::FIFO,
+            InodeTypes::EXT4_DE_BLKDEV => InodeMode::BLOCK,
+            InodeTypes::EXT4_DE_SOCK => InodeMode::SOCKET,
+            InodeTypes::EXT4_DE_SYMLINK => InodeMode::LINK,
+            _ => InodeMode::TYPE_MASK,
+        };
+        file_mode | perm_mode
     }
 }

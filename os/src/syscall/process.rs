@@ -10,7 +10,7 @@ use crate::mm::copy_out;
 use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::processor::context::SumGuard;
 use crate::task::schedule::spawn_user_task;
-use crate::task:: exit_current_and_run_next;
+use crate::task::{ exit_current_and_run_next, INITPROC};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::signal::SigSet;
 use crate::utils::suspend_now;
@@ -312,4 +312,15 @@ pub fn sys_brk(addr: VirtAddr) -> isize {
     let task = current_task().unwrap();
     let ret  = task.with_mut_vm_space(|vm_space| vm_space.reset_heap_break(addr).0) as isize;
     ret
+}
+
+/// syscall: get_ppid
+pub fn sys_getppid() -> isize {
+    let task = current_task().unwrap().clone();
+    if let Some(parent) = task.parent() {
+        let parent = parent.upgrade().unwrap();
+        return parent.pid() as isize;
+    } else {
+        return INITPROC.pid() as isize;
+    }
 }

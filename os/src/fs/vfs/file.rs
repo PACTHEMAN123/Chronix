@@ -7,12 +7,12 @@ use alloc::{
     sync::Arc,
     boxed::Box,
 };
-use super::Inode;
+use super::{Dentry, Inode};
 
 /// basic File object
 pub struct FileInner {
-    /// the inode it points to
-    pub inode: Arc<dyn Inode>,
+    /// the dentry it points to
+    pub dentry: Arc<dyn Dentry>,
     /// the current pos 
     pub offset: usize,
 }
@@ -30,8 +30,13 @@ pub trait File: Send + Sync {
     async fn read(&self, mut buf: UserBuffer) -> usize;
     /// Write `UserBuffer` to file
     async fn write(&self, buf: UserBuffer) -> usize;
-    /// get the inode it points to
+    /// get the dentry it points to
+    fn dentry(&self) -> Option<Arc<dyn Dentry>> {
+        Some(self.inner().dentry.clone())
+    }
+    /// quicker way to get the inode it points to
+    /// notice that maybe unsafe!
     fn inode(&self) -> Option<Arc<dyn Inode>> {
-        Some(self.inner().inode.clone())
+        self.dentry().unwrap().inode().clone()
     }
 }
