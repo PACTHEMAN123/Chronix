@@ -6,10 +6,13 @@ else ifeq ($(ARCH), loongarch64)
 TARGET := loongarch64-unknown-none
 endif
 
-MODE := debug
+MODE := release
 ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
+
+MODE_ARG += --target $(TARGET)
+
 APP_DIR := src/bin
 TARGET_DIR := target/$(TARGET)/$(MODE)
 APPS := $(wildcard $(APP_DIR)/*.rs)
@@ -20,7 +23,7 @@ OBJDUMP := rust-objdump --arch-name=$(ARCH)
 OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
 
 elf: $(APPS)
-	@cargo build $(MODE_ARG) --target $(TARGET)
+	@cargo build $(MODE_ARG)
 
 binary: elf
 	@$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)

@@ -324,7 +324,7 @@ pub fn restore(cx: usize) {
     unsafe {
         core::arch::asm!(
             "call __restore",    
-            in("a0") cx,        
+            in("a0") cx,      
         );
     }
 }
