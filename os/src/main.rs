@@ -108,9 +108,9 @@ pub fn main(id: usize) -> ! {
     } else {
         processor::processor::init(id);
         hal::trap::init();
-        unsafe {
-            INIT_VMSPACE.lock().get_page_table().enable();
-        }
+        // unsafe {
+        //     INIT_VMSPACE.lock().get_page_table().enable();
+        // }
     }
     info!("[kernel] -------hart {} start-------",id);
     unsafe { 

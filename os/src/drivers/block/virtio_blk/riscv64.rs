@@ -61,7 +61,7 @@ impl VirtIOBlock {
     pub fn new() -> Self {
         unsafe {
             let header = core::ptr::NonNull::new(VIRTIO0 as *mut VirtIOHeader).unwrap();
-            let transport = MmioTransport::new(header).unwrap();
+            let transport = MmioTransport::new(header, 4096).unwrap();
             Self(UPSafeCell::new(
                 VirtIOBlk::<VirtioHal, MmioTransport>::new(transport).expect("failed to create blk driver"),
             ))
