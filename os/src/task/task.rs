@@ -7,6 +7,8 @@ use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
+#[cfg(feature = "smp")]
+use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
@@ -94,6 +96,9 @@ pub struct TaskControlBlock {
     pub sig_ucontext_ptr: AtomicUsize, 
     /// current working dentry
     pub cwd: Shared<Arc<dyn Dentry>>,
+    #[cfg(feature = "smp")]
+    /// sche_entity of the task
+    pub sche_entity: Shared<TaskLoadTracker>,
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -141,6 +146,10 @@ impl TaskControlBlock {
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>
+    );
+    #[cfg(feature = "smp")]
+    generate_with_methods!(
+        sche_entity: TaskLoadTracker
     );
     generate_atomic_accessors!(
         exit_code: i32,
@@ -307,7 +316,9 @@ impl TaskControlBlock {
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
-            cwd: new_shared(root_dentry),         
+            cwd: new_shared(root_dentry), 
+            #[cfg(feature = "smp")]
+            sche_entity: new_shared(TaskLoadTracker::new()),        
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -475,6 +486,8 @@ impl TaskControlBlock {
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd,
+            #[cfg(feature = "smp")]
+            sche_entity: new_shared(TaskLoadTracker::new()),
         });
         // add child except when creating a thread
         if !flag.contains(CloneFlags::THREAD) {
