@@ -1,24 +1,30 @@
 //! vfs super block
 //! 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use spin::Once;
 
 use crate::devices::BlockDevice;
 use crate::fs::vfs::Inode;
 
+use super::fstype::FSType;
+use super::Dentry;
+
 /// the base of super block of all file system
 pub struct SuperBlockInner {
     /// the block device fs using
     pub device: Option<Arc<dyn BlockDevice>>,
-    /// the root inode
-    pub root: Once<Arc<dyn Inode>>,
+    /// file system type
+    pub fs_type: Weak<dyn FSType>,
+    /// the root dentry to the mount point
+    pub root: Once<Arc<dyn Dentry>>,
 }
 
 impl SuperBlockInner {
     /// create a super block inner with device
-    pub fn new(device: Option<Arc<dyn BlockDevice>>) -> Self {
+    pub fn new(device: Option<Arc<dyn BlockDevice>>, fs_type: Arc<dyn FSType>) -> Self {
         Self {
             device,
+            fs_type: Arc::downgrade(&fs_type),
             root: Once::new(),
         }
     }
@@ -29,14 +35,14 @@ pub trait SuperBlock: Send + Sync {
     /// get the inner data of superblock
     fn inner(&self) -> &SuperBlockInner;
     /// set root
-    fn set_root(&self, root: Arc<dyn Inode>) {
+    fn set_root_dentry(&self, root: Arc<dyn Dentry>) {
         self.inner().root.call_once(|| root);
     }
 }
 
 impl dyn SuperBlock {
-    /// get the root inode
-    pub fn root(&self) -> Arc<dyn Inode> {
-        Arc::clone(&self.inner().root.get().unwrap())
+    /// get the root dentry
+    pub fn root(&self) -> Arc<dyn Dentry> {
+        self.inner().root.get().unwrap().clone()
     }
 }

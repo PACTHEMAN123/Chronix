@@ -6,6 +6,7 @@ pub mod superblock;
 pub mod inode;
 pub mod file;
 pub mod dentry;
+pub mod fstype;
 
 pub use superblock::{SuperBlockInner, SuperBlock};
 pub use inode::{InodeInner, Inode};
