@@ -49,7 +49,7 @@ impl TimeRecorder {
     /// kernel time method
     pub fn kernel_time(&self) -> Duration {
         self.kernel_time
-    }
+    } 
     /// time for cacluating cpu usage
     pub fn processor_time(&self) -> Duration {
         self.kernel_time + self.user_time

@@ -106,6 +106,8 @@ async fn user_trap_handler()  {
         }
         TrapType::Timer => {
             crate::timer::timer::TIMER_MANAGER.check();
+            #[cfg(feature = "smp")]
+            crate::processor::processor::current_processor().update_load_avg();
             set_next_trigger();
             yield_now().await;
         }

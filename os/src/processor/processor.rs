@@ -1,6 +1,6 @@
 //!Implementation of [`Processor`] and Intersection of control flow
 use core::arch::asm;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU64, AtomicUsize};
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::task::task::{TaskStatus,TaskControlBlock,Shared,new_shared};
 use crate::sync::UPSafeCell;
@@ -19,6 +19,8 @@ use crate::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
 pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
 #[cfg(feature = "smp")]
+use super::schedule::TaskLoadTracker;
+#[cfg(feature = "smp")]
 pub type TaskQueue = VecDeque<Runnable>;
 ///Processor management structure
 pub struct Processor {
@@ -32,6 +34,11 @@ pub struct Processor {
     #[cfg(feature = "smp")]
     /// counter to decide whether to schedule
     pub counter: AtomicUsize,
+    #[cfg(feature = "smp")]
+    /// sche_entity for rq
+    pub sche_entity: Option<Shared<TaskLoadTracker>>,
+    /// the cpu timeline
+    pub timeline: AtomicU64
 }
 #[cfg(feature = "smp")]
 #[macro_export]
@@ -67,7 +74,10 @@ impl Processor {
             #[cfg(feature = "smp")]
             task_queue: None,
             #[cfg(feature = "smp")]
-            counter: AtomicUsize::new(0)
+            counter: AtomicUsize::new(0),
+            #[cfg(feature = "smp")]
+            sche_entity: None,
+            timeline: AtomicU64::new(0),
         }
     }
     /// Get the id of the current processor
@@ -108,6 +118,8 @@ impl Processor {
     }
     #[cfg(feature = "smp")]
     generate_unwrap_with_methods!(
+        //task_queue: TaskQueue
+        sche_entity: TaskLoadTracker,
         task_queue: TaskQueue
     );
     /// get the num of processor task
@@ -115,7 +127,36 @@ impl Processor {
     pub fn task_nums(&self) -> AtomicUsize {
         AtomicUsize::new(self.unwrap_with_task_queue(|q| q.len()))
     }
-
+    #[cfg(feature = "smp")]
+    /// initialize sche entity for rq
+    pub fn initial_sche_entity(&mut self){
+        self.sche_entity = Some(new_shared(TaskLoadTracker::new()));
+    } 
+    /// get current cpu timeline 
+    pub fn get_current_timeline(&self) -> u64 {
+        self.timeline.load(core::sync::atomic::Ordering::SeqCst)
+    }
+    /// adjust current timeline
+    pub fn add_current_timeline(&self, added_timeline: u64) {
+        let current_timeline = self.get_current_timeline();
+        let new_timeline = current_timeline.wrapping_add(added_timeline);
+        self.timeline.store(new_timeline, core::sync::atomic::Ordering::SeqCst);
+    }
+    /**
+     * used in following circumstances: 
+     * 1. when a task switch out
+     * 2. when a task became zombie
+     * 3. every time we call rq_task_clock()
+     */
+    pub fn update_current_timeline(&mut self){
+        let current = self.current().unwrap();
+        self.add_current_timeline(current.time_recorder().processor_time().as_micros() as u64);
+    }
+    /// get runqueue task clock
+    pub fn rq_task_clock(&mut self) -> u64 {
+        self.update_current_timeline();
+        self.get_current_timeline()
+    }
 }
 /// current running task of the current processsor
 pub fn current_task() -> Option<&'static Arc<TaskControlBlock>> {
@@ -162,6 +203,7 @@ pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
     core::mem::swap(processor.env_mut(), env);
     let current = processor.current().unwrap();
     current.time_recorder().record_switch_out();
+    processor.add_current_timeline(current.time_recorder().processor_time().as_micros() as u64);
     //info!("task id: {}kernel_time:{:?}",current.tid(),current.time_recorder().kernel_time());
     // float_pointer saved, marked restore is needed
     current.get_trap_cx().fx_yield_task();
@@ -189,6 +231,8 @@ pub fn set_processor(id:usize) {
     processor.set_id(id);
     #[cfg(feature = "smp")]
     processor.set_task_queue();
+    #[cfg(feature = "smp")]
+    processor.initial_sche_entity();
     let processor_addr = processor as *const _ as usize;
     Instruction::set_tp(processor_addr);
 }
