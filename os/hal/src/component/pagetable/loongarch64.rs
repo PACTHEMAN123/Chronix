@@ -3,7 +3,7 @@ use core::ops::Range;
 use alloc::{format, vec::Vec};
 use loongArch64::register;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -11,14 +11,16 @@ use super::{MapPerm, PageTableEntryHal, PageTableHal};
 pub enum PageLevel {
     Huge = 0,
     Big = 1,
-    Small = 2
+    Middle = 2,
+    Small = 3
 }
 
 impl PageLevel {
     pub const fn page_count(&self) -> usize {
         match self {
-            PageLevel::Huge => 512 * 512,
-            PageLevel::Big => 512,
+            PageLevel::Huge => 512 * 512 * 512,
+            PageLevel::Big => 512 * 512,
+            PageLevel::Middle => 512,
             PageLevel::Small => 1,
         }
     }
@@ -26,7 +28,8 @@ impl PageLevel {
     pub const fn lower(&self) -> Self {
         match self {
             PageLevel::Huge => PageLevel::Big,
-            PageLevel::Big => PageLevel::Small,
+            PageLevel::Big => PageLevel::Middle,
+            PageLevel::Middle => PageLevel::Small,
             PageLevel::Small => PageLevel::Small,
         }
     }
@@ -35,7 +38,8 @@ impl PageLevel {
         match self {
             PageLevel::Huge => PageLevel::Huge,
             PageLevel::Big => PageLevel::Huge,
-            PageLevel::Small => PageLevel::Big,
+            PageLevel::Middle => PageLevel::Big,
+            PageLevel::Small => PageLevel::Middle,
         }
     }
 
@@ -59,7 +63,8 @@ impl From<usize> for PageLevel {
         match value {
             0 => Self::Huge,
             1 => Self::Big,
-            2 => Self::Small,
+            2 => Self::Middle,
+            3 => Self::Small,
             _ => panic!("unsupport Page Level")
         }
     }
@@ -85,21 +90,25 @@ impl Iterator for VpnPageRangeIter {
         if self.range_vpn.is_empty() {
             None
         } else {
-            if self.range_vpn.start.0 % PageLevel::Huge.page_count() == 0 
-            && self.range_vpn.clone().count() >= PageLevel::Huge.page_count() {
-                let ret = (self.range_vpn.start, PageLevel::Huge);
-                self.range_vpn.start += PageLevel::Huge.page_count();
-                Some(ret)
-            } else if self.range_vpn.start.0 % PageLevel::Big.page_count() == 0
-            && self.range_vpn.clone().count() >= PageLevel::Big.page_count() {
-                let ret = (self.range_vpn.start, PageLevel::Big);
-                self.range_vpn.start += PageLevel::Big.page_count();
-                Some(ret)
-            } else {
-                let ret = (self.range_vpn.start, PageLevel::Small);
-                self.range_vpn.start += PageLevel::Small.page_count();
-                Some(ret)
-            }
+            // if self.range_vpn.start.0 % PageLevel::Big.page_count() == 0 
+            // && self.range_vpn.clone().count() >= PageLevel::Big.page_count() {
+            //     let ret = (self.range_vpn.start, PageLevel::Big);
+            //     self.range_vpn.start += PageLevel::Big.page_count();
+            //     Some(ret)
+            // } else if self.range_vpn.start.0 % PageLevel::Middle.page_count() == 0
+            // && self.range_vpn.clone().count() >= PageLevel::Middle.page_count() {
+            //     let ret = (self.range_vpn.start, PageLevel::Middle);
+            //     self.range_vpn.start += PageLevel::Middle.page_count();
+            //     Some(ret)
+            // } else {
+            //     let ret = (self.range_vpn.start, PageLevel::Small);
+            //     self.range_vpn.start += PageLevel::Small.page_count();
+            //     Some(ret)
+            // }
+
+            let ret = (self.range_vpn.start, PageLevel::Small);
+            self.range_vpn.start += PageLevel::Small.page_count();
+            Some(ret)
         }
     }
 }
@@ -179,7 +188,7 @@ impl PageTableEntry {
         (self.flags() & PTEFlags::NX) == PTEFlags::empty()
     }
     pub fn is_leaf(&self) -> bool {
-        false
+        self.flags().contains(PTEFlags::GH)
     }
     pub fn set_flags(&mut self, flags: PTEFlags) {
         self.bits = (self.bits & PTEFlags::MASK.bits) | flags.bits() as usize;
@@ -266,6 +275,9 @@ impl<A: FrameAllocatorHal> PageTable<A> {
         for (i, &idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[idx];
             if PageLevel::from(i) == level {
+                if !level.lowest() {
+                    pte.flags().insert(PTEFlags::GH);
+                }
                 result = Some(pte);
                 break;
             }
