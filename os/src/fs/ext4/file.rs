@@ -13,6 +13,7 @@ use virtio_drivers::transport::{DeviceType, Transport};
 
 
 use crate::drivers::block::BLOCK_DEVICE;
+use crate::fs::page::page::PAGE_SIZE;
 use crate::fs::vfs::dentry::global_find_dentry;
 use crate::fs::vfs::{Dentry, DentryState, Inode, DCACHE};
 use crate::fs::FS_MANAGER;
@@ -65,10 +66,10 @@ impl Ext4File {
     pub fn read_all(&self) -> Vec<u8> {
         let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; PAGE_SIZE];
         let mut v: Vec<u8> = Vec::new();
         loop {
-            let len = inode.read_at(inner.offset, &mut buffer).unwrap();
+            let len = inode.clone().cache_read_at(inner.offset, &mut buffer).unwrap();
             if len == 0 {
                 break;
             }
