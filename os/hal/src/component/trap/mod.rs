@@ -31,9 +31,9 @@ pub trait TrapContextHal {
 
     fn sp(&mut self) -> &mut usize;
 
-    fn sepc(&mut self) -> &mut usize;
+    fn tp(&mut self) -> &mut usize;
 
-    fn tls(&mut self) -> &mut usize;
+    fn sepc(&mut self) -> &mut usize;
 
     fn app_init_context(entry: usize, sp: usize) -> Self;
 
@@ -63,23 +63,23 @@ pub trait FloatContextHal {
 }
 
 #[macro_export]
-macro_rules! define_user_trap_handler {
+macro_rules! define_kernel_trap_handler {
     ($fn: ident) => {
-        /// hal_user_trap_handler
-        #[unsafe(export_name = "user_trap_handler")]
-        pub async fn hal_user_trap_handler() {
-            $fn().await;
+        /// hal_kernel_trap_handler_for_arch
+        #[unsafe(export_name = "kernel_trap_handler")]
+        pub fn __hal_kernel_trap_handler() {
+            $fn()
         }
     };
 }
 
 #[macro_export]
-macro_rules! define_kernel_trap_handler {
+macro_rules! define_user_trap_handler {
     ($fn: ident) => {
-        /// hal_kernel_trap_handler_for_arch
-        #[unsafe(export_name = "kernel_trap_handler")]
-        pub fn hal_kernel_trap_handler() {
-            $fn()
+        /// hal_user_trap_handler
+        #[unsafe(export_name = "user_trap_handler")]
+        pub async fn __hal_user_trap_handler() {
+            $fn().await;
         }
     };
 }
@@ -87,8 +87,6 @@ macro_rules! define_kernel_trap_handler {
 
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
-
-use core::usize;
 
 #[cfg(target_arch = "riscv64")]
 #[allow(unused)]

@@ -1,8 +1,8 @@
 use core::arch::asm;
 
-use riscv::register::{self, scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
+use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
-use crate::println;
+use crate::instruction::{Instruction, InstructionHal};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
@@ -90,7 +90,7 @@ impl TrapContextHal for TrapContext {
         // set CPU privilege to User after trapping back
         unsafe {
             sstatus::set_spp(SPP::User);
-            sstatus::clear_sie();
+            Instruction::disable_interrupt();
         }
         let mut cx = Self {
             x: [0; 32],
@@ -135,7 +135,7 @@ impl TrapContextHal for TrapContext {
         self.stored
     }
     
-    fn tls(&mut self) -> &mut usize {
+    fn tp(&mut self) -> &mut usize {
         &mut self.x[4]
     }
     
@@ -305,7 +305,6 @@ pub fn set_user_trap_entry() {
     }
 }
 
-
 fn get_trap_type() -> TrapType {
     let scause = scause::read();
     let stval = stval::read();
@@ -325,7 +324,7 @@ pub fn restore(cx: usize) {
     unsafe {
         core::arch::asm!(
             "call __restore",    
-            in("a0") cx,        
+            in("a0") cx,      
         );
     }
 }

@@ -3,7 +3,7 @@ pub trait InstructionHal {
     unsafe fn tlb_flush_all();
     unsafe fn enable_interrupt();
     unsafe fn disable_interrupt();
-    unsafe fn sie() -> bool;
+    unsafe fn is_interrupt_enabled() -> bool;
     unsafe fn enable_timer_interrupt();
     unsafe fn clear_sum();
     unsafe fn set_sum();
