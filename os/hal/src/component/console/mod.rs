@@ -31,10 +31,11 @@ pub fn _print(args: core::fmt::Arguments) {
             false, true, 
             Ordering::Acquire, Ordering::Relaxed
         ).is_ok() {
-            unsafe { Instruction::disable_interrupt(); }
+            //unsafe { Instruction::disable_interrupt(); }
+            let _sie_guard = SieGuard::new();
             core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
             CONSOLE_MUTEX.store(false, Ordering::Release);
-            unsafe { Instruction::enable_interrupt(); }
+            //unsafe { Instruction::enable_interrupt(); }
             break;
         }
     }
@@ -95,5 +96,7 @@ mod loongarch64;
 #[cfg(target_arch = "loongarch64")]
 #[allow(unused)]
 pub use loongarch64::*;
+
+use crate::util::sie_guard::SieGuard;
 
 use super::instruction::{Instruction, InstructionHal};

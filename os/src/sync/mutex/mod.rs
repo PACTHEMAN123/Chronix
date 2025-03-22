@@ -1,5 +1,6 @@
 use self::spin_mutex::SpinMutex;
 use hal::instruction::{Instruction, InstructionHal};
+use hal::util::sie_guard::SieGuard;
 /// spin_mutex
 pub mod spin_mutex;
 
@@ -27,29 +28,6 @@ impl MutexSupport for Spin {
     fn before_lock() -> Self::GuardData {}
     #[inline(always)]
     fn after_unlock(_: &mut Self::GuardData) {}
-}
-
-/// Sie Guard
-pub struct SieGuard(bool);
-
-impl SieGuard {
-    /// Construct a SieGuard
-    pub fn new() -> Self {
-        Self(unsafe {
-            let sie_before = Instruction::is_interrupt_enabled();
-            Instruction::disable_interrupt();
-            sie_before
-        })
-    }
-}
-impl Drop for SieGuard {
-    fn drop(&mut self) {
-        if self.0 {
-            unsafe {
-                Instruction::enable_interrupt();
-            }
-        }
-    }
 }
 
 /// SpinNoIrq MutexSupport

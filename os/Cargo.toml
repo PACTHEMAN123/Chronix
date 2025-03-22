@@ -20,6 +20,7 @@ bitmap-allocator = { path = "../vendor/bitmap-allocator" }
 paste = "1.0"
 hal = {path = "./hal" }
 async-trait = "0.1.88"
+hashbrown = "0.14"
 
 [features]
 smp = []

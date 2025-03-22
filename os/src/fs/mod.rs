@@ -7,6 +7,7 @@ pub mod stdio;
 pub mod ext4;
 pub mod vfs;
 pub mod pipe;
+pub mod page;
 
 use ext4::Ext4FSType;
 use log::*;
