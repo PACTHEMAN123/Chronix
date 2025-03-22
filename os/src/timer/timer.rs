@@ -2,7 +2,8 @@
 use core::{cmp::Reverse, task::Waker, time::Duration};
 extern crate alloc;
 use alloc::{boxed::Box, collections::BinaryHeap};
-use crate::info;
+use log::info;
+
 use super::get_current_time_duration;
 use spin::Lazy;
 use crate::sync::mutex::SpinNoIrqLock;
@@ -109,7 +110,15 @@ impl TimerManager {
         while let Some(timer) = timers.peek() {
             let current_time = get_current_time_duration();
             if current_time >= timer.0.expire {
-                //info!("[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",current_time,timer.0.expire);
+                log::trace!("timers len {}", timers.len());
+                
+                
+                info!(
+                    "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
+                    current_time,
+                    timer.0.expire
+                );
+                  
                 let timer = timers.pop().unwrap().0;
                 if let Some(new_timer) = timer.callback() {
                     timers.push(Reverse(new_timer));
