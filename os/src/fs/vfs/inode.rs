@@ -54,10 +54,16 @@ pub trait Inode {
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>>;
     /// list all files/dir/symlink under current inode
     fn ls(&self) -> Vec<String>;
-    /// read at given offset
+    /// read at given offset in direct IO
+    /// the Inode should make sure stop reading when at EOF itself
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
-    /// write at given offset
+    /// write at given offset in direct IO
+    /// the Inode should make sure stop writing when at EOF itself
     fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32>;
+    /// read at given offset, allowing page caching
+    fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
+    /// write at given offset, allowing page caching
+    fn cache_write_at(self: Arc<Self>, offset: usize, buf: &[u8]) -> Result<usize, i32>;
     /// create inode
     fn create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn Inode>>;
     /// remove inode
