@@ -5,7 +5,7 @@ use hal::{
     signal::*,
 };
 use log::*;
-
+use super::{SysError,SysResult};
 use crate::processor;
 use crate::processor::context::SumGuard;
 use crate::processor::processor::current_processor;
@@ -15,7 +15,7 @@ use crate::processor::processor::current_trap_cx;
 use crate::task::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 
 /// syscall: kill
-pub fn sys_kill(pid: isize, signo: i32) -> isize {
+pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let pgid = task.pgid();
     match pid {
@@ -64,18 +64,18 @@ pub fn sys_kill(pid: isize, signo: i32) -> isize {
                     task.sig_manager.lock().receive(signo as usize);
                 }else {
                     // todo standard error
-                    return -2;
+                    return Err(SysError::ESRCH);
                 }
             }
         }
         _ => {}
     }
-    0
+    Ok(0)
 }
 
 
 /// syscall: rt_sigaction
-pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut SigAction) -> isize {
+pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut SigAction) -> SysResult {
     info!(
         "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}, act size {}",
         signo,
@@ -85,7 +85,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     );
     if signo < 0 || signo as usize > SIG_NUM {
         info!("[sys_rt_sigaction]: error");
-        return -1;
+        return Err(SysError::EINVAL);
     }
 
     let task = current_task().unwrap().clone();
@@ -136,7 +136,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
             );
         task.set_sigaction(signo as usize, new_sigaction);
     }
-    0
+    Ok(0)
 }
 
 const SIGBLOCK: i32 = 0;
@@ -144,7 +144,7 @@ const SIGUNBLOCK: i32 = 1;
 const SIGSETMASK: i32 = 2;
 
 /// syscall: rt_sigprocmask
-pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> isize {
+pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> SysResult {
     info!("[sys_rt_sigprocmask]: how: {}", how);
     let task = current_task().unwrap().clone();
     let mut sig_manager = task.sig_manager.lock();
@@ -157,7 +157,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> is
     }
     if set as usize == 0 {
         debug!("arg set is null");
-        return 0;
+        return Ok(0);
     }
     let _sum_guard = SumGuard::new();
     
@@ -178,14 +178,14 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> is
             sig_manager.blocked_sigs = new_sig_mask;
         }
         _ => {
-            return -1;
+            return Err(SysError::EINVAL);
         }
     };
-    0
+    Ok(0)
 }
 
 /// syscall: rt_sigreturn
-pub fn sys_rt_sigreturn() -> isize {
+pub fn sys_rt_sigreturn() -> SysResult {
     info!("[sys_rt_sigreturn]: into");
     // read from user context
     let _sum_guard = SumGuard::new();
@@ -200,5 +200,5 @@ pub fn sys_rt_sigreturn() -> isize {
     // restore the old context (todo: restore signal stack)
     let cx = current_trap_cx(current_processor());
     ucontext.restore_old_context(cx);
-    0
+    Ok(0)
 }

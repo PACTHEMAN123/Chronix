@@ -22,6 +22,8 @@ use hal::trap::{TrapContext, TrapContextHal};
 use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 
+use super::{SysResult,SysError};
+
 bitflags! {
     /// Defined in <bits/sched.h>
     pub struct CloneFlags: u64 {
@@ -83,18 +85,18 @@ bitflags! {
 }
 
 /// get the pid of the current process
-pub fn sys_getpid() -> isize {
-    current_task().unwrap().pid() as isize
+pub fn sys_getpid() -> SysResult {
+    Ok(current_task().unwrap().pid() as isize)
 }
 /// get the tid of the current thread
-pub fn sys_gettid() -> isize {
-    current_task().unwrap().tid() as isize
+pub fn sys_gettid() -> SysResult {
+    Ok(current_task().unwrap().tid() as isize)
 }
 
 /// exit the current process with the given exit code
-pub fn sys_exit(exit_code: i32) -> isize {
+pub fn sys_exit(exit_code: i32) -> SysResult {
     exit_current_and_run_next(exit_code);
-    0
+    Ok(0)
 }
 
 /// fork a new process
@@ -116,7 +118,7 @@ pub fn sys_fork() -> isize {
 }
 
 /// clone a new process/thread/ using clone flags
-pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> isize {
+pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
     //info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
@@ -147,10 +149,10 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
         *new_task.get_trap_cx().tp() = tls.0;
     }
     spawn_user_task(new_task);
-    new_tid as isize
+    Ok(new_tid as isize)
 }
 /// execute a new program
-pub async fn sys_exec(path: usize, args: usize) -> isize {
+pub async fn sys_exec(path: usize, args: usize) -> SysResult {
     let mut args = args as *const usize;
     let token = current_user_token(&current_processor());
     let path = translated_str(token, path as *const u8);
@@ -177,9 +179,9 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
         
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
-        p as isize
+        Ok(p as isize)
     } else {
-        -1
+        Err(SysError::ENOENT)
     }
 }
 
@@ -196,7 +198,7 @@ pub async fn sys_exec(path: usize, args: usize) -> isize {
 /// pid = 0 meaning wait for any child process whose process group ID
 /// is equal to that of the calling process at the time of the call to waitpid().
 /// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
-pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize {
+pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0
@@ -205,7 +207,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         let children = task.children();
         if  children.is_empty() {
             info!("[sys_waitpid]: fail on no child");
-            return -1;
+            return Err(SysError::ESRCH);
         }
         match pid {
             -1 => {
@@ -246,9 +248,9 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         task.remove_child(tid);
         TASK_MANAGER.remove_task(tid);
         PROCESS_GROUP_MANAGER.remove(&task);
-        return tid as isize;
+        return Ok(tid as isize);
     } else if option.contains(WaitOptions::WNOHANG) {
-        return 0;
+        return Ok(0);
     } else {
         //info!("[sys_waitpid]: task {} waiting for SIGCHLD", task.gettid());
         let (child_pid, exit_code) = loop {
@@ -305,49 +307,48 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         TASK_MANAGER.remove_task(child_pid);
         info!("remove task {} from PROCESS_GROUP_MANAGER", task.tid());
         PROCESS_GROUP_MANAGER.remove(&task);
-        return child_pid as isize;
+        return Ok(child_pid as isize);
     }
 }
 /// yield immediatly to another process
-pub async fn sys_yield() -> isize {
+pub async fn sys_yield() -> SysResult {
     crate::utils::async_utils::yield_now().await;
-    0
+    Ok(0)
 }
 /// change the size of the heap
-pub fn sys_brk(addr: VirtAddr) -> isize {
+pub fn sys_brk(addr: VirtAddr) -> SysResult {
     let task = current_task().unwrap();
     let ret  = task.with_mut_vm_space(|vm_space| vm_space.reset_heap_break(addr).0) as isize;
-    ret
+    Ok(ret)
 }
 
 /// syscall: get_ppid
-pub fn sys_getppid() -> isize {
+pub fn sys_getppid() -> SysResult {
     let task = current_task().unwrap().clone();
     if let Some(parent) = task.parent() {
         let parent = parent.upgrade().unwrap();
-        return parent.pid() as isize;
+        return Ok(parent.pid() as isize);
     } else {
-        return INITPROC.pid() as isize;
+        return Ok(INITPROC.pid() as isize);
     }
 }
 /// get the process group id of the specified process
-pub fn sys_getpgid(pid: usize) -> isize {
+pub fn sys_getpgid(pid: usize) -> SysResult {
     if pid == 0 {
-        current_task().unwrap().pgid() as isize
+        Ok(current_task().unwrap().pgid() as isize)
     }else {
         match TASK_MANAGER.get_task(pid){
             Some(task) => {
-                task.pgid() as isize
+                Ok(task.pgid() as isize)
             }
             None => {
-                // todo: standard error
-                -2  
+                Err(SysError::ESRCH)
             }
         }
     }
 }
 /// set the process group id of the specified process
-pub fn sys_setpgid(pid: usize, pgid: usize) -> isize {
+pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult {
     let task =  if pid == 0{
         current_task().unwrap().clone()
     }else {
@@ -363,5 +364,5 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> isize {
             PROCESS_GROUP_MANAGER.add_group(&task);
         }
     }
-    0
+    Ok(0)
 }

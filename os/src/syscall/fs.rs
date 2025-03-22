@@ -2,7 +2,6 @@
 use alloc::string::ToString;
 use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
-
 use crate::{fs::{
     ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard};
@@ -10,64 +9,64 @@ use crate::utils::{
     path::*,
     string::*,
 };
+use super::{SysResult,SysError};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 /// syscall: write
-pub async fn sys_write(fd: usize, buf: usize, len: usize) -> isize {
+pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let token = current_user_token(&current_processor());
     let task = current_task().unwrap().clone();
     //info!("task {} trying to write fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len {
-        return -1;
+        return Err(SysError::EBADF);
     }
     if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
         // info!("write to file");
         if !file.writable() {
-            return -1;
+            return Err(SysError::EBADF);
         }
         // release current task TCB manually to avoid multi-borrow
-        let ret = file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await;
-        ret as isize
+        return Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await as isize);
     } else {
-        -1
+        return Err(SysError::EBADF);
     }
 }
 
 
 /// syscall: read
-pub async fn sys_read(fd: usize, buf: usize, len: usize) -> isize {
+pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let token = current_user_token(&current_processor());
     let task = current_task().unwrap().clone();
     //info!("task {} trying to read fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len{
-        return -1;
+        return Err(SysError::EBADF);
     }
     if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
         if !file.readable() {
-            return -1;
+            return Err(SysError::EBADF);
         }
         // release current task TCB manually to avoid multi-borrow
         //drop(inner);
         let ret = file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await;
-        ret as isize
+        return Ok(ret as isize);
     } else {
-        -1
+        return Err(SysError::EBADF);
     }
 }
 
 /// syscall: close
-pub fn sys_close(fd: usize) -> isize {
+pub fn sys_close(fd: usize) -> SysResult {
     let task = current_task().unwrap();
     let table_len = task.with_fd_table(|table|table.len());
     if fd >= table_len {
-        return -1;
+        return Err(SysError::EBADF);
     }
     match task.with_mut_fd_table(|table| table[fd].take()){
-        Some(_) => 0,
-        None => -1,
+        Some(_) => {return Ok(0);},
+        None => {return Err(SysError::EBADF);},
     }
 }
 
@@ -81,42 +80,42 @@ pub fn sys_close(fd: usize) -> isize {
 /// On failure, these functions return NULL, 
 /// and errno is set to indicate the error. 
 /// The contents of the array pointed to by buf are undefined on error.
-pub fn sys_getcwd(buf: usize, len: usize) -> isize {
+pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let task = current_task().unwrap();
     task.with_cwd(|cwd| {
         let path = cwd.path();
         if len < path.len() + 1 {
             info!("[sys_getcwd]: buf len too small to recv path");
-            return -1;
+            return Err(SysError::ERANGE);
         } else {
             //info!("copying path: {}, len: {}", path, path.len());
             let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
             new_buf.fill(0 as u8);
             let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, path.len()) };
             new_buf.copy_from_slice(path.as_bytes());
-            return buf as isize;
+            return Ok(buf as isize);
         }
     })
 }
 
 /// syscall: dup
-pub fn sys_dup(old_fd: usize) -> isize {
+pub fn sys_dup(old_fd: usize) -> SysResult {
     let task = current_task().unwrap();
     let new_fd= task.alloc_fd() as isize;
     if let Some(file) = task.with_fd_table(|table| table[old_fd].clone()) {
         task.with_mut_fd_table(|table| table[new_fd as usize] = Some(file));  
     }
-    new_fd as isize
+    Ok(new_fd as isize)
 }
 
 /// syscall: dup3
-pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
+pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> SysResult {
     //info!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
     let task = current_task().unwrap();
     let table_len = task.with_fd_table(|table|table.len());
     if old_fd >= table_len {
-        return -1;
+        return Err(SysError::EBADF);
     }
     if let Some(file) = task.with_fd_table(|table| table[old_fd].clone()) {
         if new_fd < table_len {
@@ -127,9 +126,9 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
                 table[new_fd] = Some(file);
             });
         }
-        new_fd as isize
+        Ok(new_fd as isize)
     } else {
-        -1
+        Err(SysError::EBADF)
     }
 }
 
@@ -141,7 +140,7 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> isize {
 /// If pathname is relative and dirfd is the special value AT_FDCWD, 
 /// then pathname is interpreted relative to the current working directory of the calling process (like open(2)).
 /// If pathname is absolute, then dirfd is ignored.
-pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> isize {
+pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> SysResult {
     let flags = OpenFlags::from_bits(flags).unwrap();
     let task = current_task().unwrap();
     if let Some(path) = user_path_to_string(pathname) {
@@ -155,7 +154,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
                     ret = fd as isize;
                 });
             }
-            return ret;
+            return Ok(ret);
         } else {
             let fpath = if dirfd == AT_FDCWD {
                 //info!("[sys_openat]: using current working dir");
@@ -170,7 +169,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
                     rel_path_to_abs(&dentry.path(), &path).unwrap()
                 } else {
                     info!("[sys_openat]: the dirfd not exist");
-                    return -1;
+                    return Err(SysError::EBADF);
                 }
             };
 
@@ -185,11 +184,11 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             } else {
                 info!("[sys_openat]: {} not found!", fpath);
             }
-            return ret;
+            return Ok(ret);
         }
     } else {
         info!("[sys_openat]: pathname is empty!");
-        return -1;
+        return Err(SysError::ENOENT);
     }
 }
 
@@ -201,7 +200,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 /// If pathname is relative and dirfd is the special value AT_FDCWD, 
 /// then pathname is interpreted relative to the current working directory of the calling process (like mkdir(2)).
 /// If pathname is absolute, then dirfd is ignored.
-pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
+pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
     if let Some(path) = user_path_to_string(pathname) {
         if path.starts_with("/") {
             // absolute path, ignore the dirfd
@@ -212,7 +211,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
             let new_inode = parent_inode.create(&name, lwext4_rust::InodeTypes::EXT4_DE_DIR).unwrap();
             dentry.set_inode(new_inode);
             dentry.set_state(dentry::DentryState::USED);
-            return 0;
+            return Ok(0);
         } else {
             if dirfd == AT_FDCWD {
                 let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
@@ -226,14 +225,14 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
                     // todo: use dentry, create a new dentry and insert iode
                 } else {
                     info!("[sys_mkdirat]: the dirfd not exist");
-                    return -1;
+                    return Err(SysError::EBADF);
                 }
             }
         }
-        return 0;
+        return Ok(0);
     } else {
         info!("[sys_mkdirat]: pathname is empty!");
-        return -1;
+        return Err(SysError::ENOENT);
     }
 }
 
@@ -241,16 +240,16 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> isize {
 /// process to the directory specified in path.
 /// On success, zero is returned.  On error, -1 is returned, and errno
 /// is set to indicate the error.
-pub fn sys_chdir(path: *const u8) -> isize {
+pub fn sys_chdir(path: *const u8) -> SysResult {
     let path = user_path_to_string(path).unwrap();
     let dentry = global_find_dentry(&path);
     if dentry.state() == DentryState::NEGATIVE {
         info!("[sys_chdir]: dentry not found");
-        return -1;
+        return Err(SysError::ENOENT);
     } else {
         let task = current_task().unwrap().clone();
         task.set_cwd(dentry);
-        return 0;
+        return Ok(0);
     }
 }
 
@@ -265,7 +264,7 @@ const PIPE_BUF_LEN: usize = PAGE_SIZE;
 /// Data written to the write end of the pipe is buffered by the kernel 
 /// until it is read from the read end of the pipe.
 /// todo: support flags
-pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> isize {
+pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> SysResult {
     let task = current_task().unwrap().clone();
     let (read_file, write_file) = make_pipe(PIPE_BUF_LEN);
     let read_fd = task.alloc_fd();
@@ -282,16 +281,16 @@ pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> isize {
     info!("read fd: {}, write fd: {}", read_fd, write_fd);
     pipefd[0] = read_fd as i32;
     pipefd[1] = write_fd as i32;
-    0
+    Ok(0)
 }
 
 /// syscall fstat
-pub fn sys_fstat(fd: usize, stat_buf: usize) -> isize {
+pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let task = current_task().unwrap().clone();
     if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
         if !file.readable() {
-            return -1;
+            return Err(SysError::EBADF);
         }
         let stat = file.dentry().unwrap().inode().unwrap().getattr();
         let stat_ptr = stat_buf as *mut Kstat;
@@ -299,20 +298,20 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> isize {
             *stat_ptr = stat;
         }
     } else {
-        return -1;
+        return Err(SysError::EBADF);
     }
-    0
+    return Ok(0);
 }
 
 /// syscall uname
-pub fn sys_uname(uname_buf: usize) -> isize {
+pub fn sys_uname(uname_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let uname = UtsName::default();
     let uname_ptr = uname_buf as *mut UtsName;
     unsafe {
         *uname_ptr = uname;
     }
-    0
+    Ok(0)
 }
 
 
@@ -333,7 +332,7 @@ struct LinuxDirent64 {
 /// the buffer pointed to by dirp.  The argument count specifies the
 /// size of that buffer.
 /// (todo) now mostly copy from Phoenix
-pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> isize {
+pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     const LEN_BEFORE_NAME: usize = 19;
     let task = current_task().unwrap().clone();
     let _sum_guard = SumGuard::new();
@@ -379,9 +378,9 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> isize {
             buf_it = &mut buf_it[rec_len..];
             writen_len += rec_len;
         }
-        return writen_len as isize;
+        return Ok(writen_len as isize);
     } else {
-        return -1;
+        Err(SysError::EBADF)
     }
 }
 
@@ -395,7 +394,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> isize {
 /// If the name referred to a socket, FIFO, or device, the name for it
 /// is removed but processes which have the object open may continue to use it.
 /// (todo): now only remove, but not check for remaining referred.
-pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> isize {
+pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
     let path = user_path_to_string(pathname).unwrap();
     let dentry = if path.starts_with("/") {
         global_find_dentry(&path)
@@ -413,7 +412,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> isize {
                 rel_path_to_abs(&dentry.path(), &path).unwrap()
             } else {
                 info!("[sys_unlinkat]: the dirfd not exist");
-                return -1;
+                return Err(SysError::EBADF);
             }
         };
         //info!("[sys_unlinkat]: fpath: {}", fpath);
@@ -421,16 +420,16 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> isize {
     };
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
-        return -1;
+        return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
     let is_dir = inode.inner().mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {
-        return -1;
+        return Err(SysError::ENOTDIR);
     } else if flags != AT_REMOVEDIR && is_dir {
-        return -1;
+        return Err(SysError::EPERM);
     }
     inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
-    0
+    Ok(0)
 }
