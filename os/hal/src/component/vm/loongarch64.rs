@@ -1,14 +1,11 @@
 use core::ops::Range;
 
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
-
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc, vm::KernVmAreaType};
+use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
 pub struct KernVmSpace<A: FrameAllocatorHal> {
-    page_table: PageTable<A>,
-    areas: Vec<KernVmArea<A>>,
     alloc: A,
 }
 
@@ -22,125 +19,20 @@ pub struct UserVmSpace<A: FrameAllocatorHal> {
 
 impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
 
+    fn enable(&self) {
+        // do nothing
+    }
+
     fn get_page_table(&self) -> &PageTable<A> {
-        &self.page_table
+        panic!()
     }
 
     fn new_in(alloc: A) -> Self{
-
-        unsafe extern "C" {
-            fn stext();
-            fn etext();
-            fn srodata();
-            fn erodata();
-            fn sdata();
-            fn edata();
-            fn sbss_with_stack();
-            fn kernel_stack_bottom();
-            fn kernel_stack_top();
-            fn ebss();
-            fn ekernel();
-        }
-
-        let mut ret = Self {
-            page_table: PageTable::new_in(0, alloc.clone()),
-            areas: Vec::new(),
-            alloc
-        };
-
-        ret.push_area(KernVmArea::new(
-                (stext as usize).into()..(etext as usize).into(), 
-                KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::X, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (srodata as usize).into()..(erodata as usize).into(), 
-                KernVmAreaType::Data, 
-                MapPerm::R, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (sdata as usize).into()..(edata as usize).into(), 
-                KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (sdata as usize).into()..(edata as usize).into(), 
-                KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (sbss_with_stack as usize).into()..(ebss as usize).into(), 
-                KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (kernel_stack_bottom as usize).into()..(kernel_stack_top as usize).into(), 
-                KernVmAreaType::KernelStack, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (ekernel as usize).into()..(Constant::MEMORY_END + Constant::KERNEL_ADDR_SPACE.start).into(), 
-                KernVmAreaType::PhysMem, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-
-        ret.push_area(KernVmArea::new(
-                (ekernel as usize).into()..(Constant::MEMORY_END + Constant::KERNEL_ADDR_SPACE.start).into(), 
-                KernVmAreaType::PhysMem, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
-            ),
-            None
-        );
-        
-        for pair in crate::board::MMIO {
-            ret.push_area(
-                KernVmArea::new(
-                    ((*pair).0 + Constant::KERNEL_ADDR_SPACE.start).into()..((*pair).0 + Constant::KERNEL_ADDR_SPACE.start + (*pair).1).into(),
-                    KernVmAreaType::MemMappedReg, 
-                    MapPerm::R | MapPerm::W,
-                    ret.alloc.clone()
-                ),
-                None
-            );
-        }
-        
-        ret
+        Self { alloc }
     }
     
-    fn push_area(&mut self, mut area: KernVmArea<A>, data: Option<&[u8]>) {
-        area.map(&mut self.page_table);
-        if let Some(data) = data{
-            area.copy_data(&mut self.page_table, data);
-        }
-        self.areas.push(area);
+    fn push_area(&mut self, mut _area: KernVmArea<A>, _data: Option<&[u8]>) {
+        panic!()
     }
 
 }
@@ -184,16 +76,6 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
             heap: 0,
             alloc: kvm_space.alloc.clone()
         };
-
-        ret.page_table.root_ppn
-            .start_addr()
-            .get_mut::<[PageTableEntry; 512]>()[256..]
-            .copy_from_slice(
-                &kvm_space.page_table.root_ppn
-                    .start_addr()
-                    .get_mut::<[PageTableEntry; 512]>()[256..]
-            );
-
         ret
     }
 
@@ -341,62 +223,6 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
     }
     
 
-}
-
-impl<A: FrameAllocatorHal> KernVmArea<A> {
-
-    fn range_vpn(&self) -> Range<VirtPageNum> {
-        self.range_va.start.floor()..self.range_va.end.ceil()
-    }
-
-    fn copy_data(&mut self, page_table: &PageTable<A>, data: &[u8]) {
-        let mut start: usize = 0;
-        let len = data.len();
-        for vpn in self.range_vpn() {
-            let src = &data[start..len.min(start + Constant::PAGE_SIZE)];
-            let dst = &mut page_table
-                .translate_vpn(vpn)
-                .unwrap()
-                .start_addr()
-                .get_mut::<[u8; Constant::PAGE_SIZE]>()[..src.len()];
-            dst.copy_from_slice(src);
-            start += Constant::PAGE_SIZE;
-            if start >= len {
-                break;
-            }
-        }
-    }
-
-    fn map_range_to(&self, page_table: &mut PageTable<A>, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
-        VpnPageRangeIter::new(range_vpn)
-        .for_each(|(vpn, level)| {
-            let ppn = PhysPageNum(start_ppn.0);
-            start_ppn += level.page_count();
-            page_table.map(vpn, ppn, self.map_perm, level);
-        });
-    }
-
-    fn map(&self, page_table: &mut PageTable<A>) {
-        let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
-        match self.vma_type {
-            KernVmAreaType::Data |
-            KernVmAreaType::PhysMem |
-            KernVmAreaType::MemMappedReg => {
-                self.map_range_to(
-                    page_table,
-                    range_vpn.clone(), 
-                    PhysPageNum(range_vpn.start.0 & !(Constant::KERNEL_ADDR_SPACE.start >> Constant::PAGE_SIZE_BITS))
-                );
-            },
-            KernVmAreaType::KernelStack => {
-                self.map_range_to(
-                    page_table, 
-                    Constant::KERNEL_STACK_BOTTOM.into()..Constant::KERNEL_STACK_TOP.into(),
-                    PhysPageNum(range_vpn.start.0 & (Constant::KERNEL_ADDR_SPACE.start >> 12))
-                );
-            },
-        }
-    }
 }
 
 impl<A: FrameAllocatorHal> UserVmArea<A> {

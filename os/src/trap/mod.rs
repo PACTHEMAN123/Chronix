@@ -39,7 +39,7 @@ use core::sync::atomic::Ordering;
 hal::define_user_trap_handler!(user_trap_handler);
 
 /// handle an interrupt, exception, or system call from user space
-async fn user_trap_handler()  {
+pub async fn user_trap_handler()  {
     set_kernel_trap_entry();
     unsafe { Instruction::enable_interrupt() };
     let trap_type = TrapType::get();
@@ -106,6 +106,8 @@ async fn user_trap_handler()  {
         }
         TrapType::Timer => {
             crate::timer::timer::TIMER_MANAGER.check();
+            #[cfg(feature = "smp")]
+            crate::processor::processor::current_processor().update_load_avg();
             set_next_trigger();
             yield_now().await;
         }
@@ -127,7 +129,6 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
         Instruction::disable_interrupt();
     }
-
     
     task.time_recorder().record_trap_return();
 
@@ -137,8 +138,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     check_signal_for_current_task();
   
     // restore float pointer and set status
-    let trap_cx = current_trap_cx(current_processor());
-    trap_cx.fx_restore();
+    task.get_trap_cx().fx_restore();
     set_user_trap_entry();
     Instruction::set_float_status_clean();
 
@@ -149,6 +149,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
 
     // set up time recorder for trap
     task.time_recorder().record_trap();
+    //info!("[in record trap] task id: {}kernel_time:{:?}",task.tid(),task.time_recorder().kernel_time());
 }
 
 hal::define_kernel_trap_handler!(kernel_trap_handler);

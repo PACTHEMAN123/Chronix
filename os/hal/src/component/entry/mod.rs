@@ -20,9 +20,11 @@ fn clear_bss() {
         fn sbss();
         fn ebss();
     }
+    let sbss = sbss as usize;
+    let ebss = ebss as usize;
     unsafe {
-        core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
-            .fill(0);
+        let mem = core::slice::from_raw_parts_mut(sbss as *mut u8, ebss as usize - sbss as usize);
+        mem.fill(0);
     }
 }
 

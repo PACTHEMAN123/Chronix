@@ -36,7 +36,7 @@ impl SieGuard {
     /// Construct a SieGuard
     pub fn new() -> Self {
         Self(unsafe {
-            let sie_before = Instruction::sie();
+            let sie_before = Instruction::is_interrupt_enabled();
             Instruction::disable_interrupt();
             sie_before
         })

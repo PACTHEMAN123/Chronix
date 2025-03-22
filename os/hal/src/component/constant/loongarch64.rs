@@ -1,25 +1,25 @@
 use super::{Constant, ConstantsHal};
 
 impl ConstantsHal for Constant {
-    const KERNEL_ENTRY_PA: usize = 0x8020_0000;
+    const KERNEL_ENTRY_PA: usize = 0x9000_0000_9000_0000;
 
-    const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0xffff_ffc0_0000_0000..0xffff_ffff_ffff_ffff;
+    const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_ffff_ffff_ffff;
 
-    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x0000_0000_0000_0000..0x0000_003f_ffff_ffff;
+    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x0000_0000_0000_0000..0x0000_ffff_ffff_ffff;
 
-    const VA_WIDTH: usize = 39;
+    const PA_WIDTH: usize = 48;
 
-    const PA_WIDTH: usize = 56;
+    const VA_WIDTH: usize = 48;
 
     const PAGE_SIZE: usize = 4096;
 
     const PAGE_SIZE_BITS: usize = 12;
 
-    const PG_LEVEL: usize = 3;
+    const PG_LEVEL: usize = 4;
     
     const PTE_WIDTH: usize = 64;
     
-    const MEMORY_END: usize = 0x8800_0000;
+    const MEMORY_END: usize = 0x9000_0000_A000_0000;
     
     const KERNEL_STACK_SIZE: usize = 16 * 4096;
     

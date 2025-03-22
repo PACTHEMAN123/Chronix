@@ -1,7 +1,14 @@
 [build]
-target = "riscv64gc-unknown-none-elf"
+target = "loongarch64-unknown-none"
 
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
-    "-Cforce-frame-pointers=yes"
+    "-Cforce-frame-pointers=yes",
 ]
+
+[target.loongarch64-unknown-none]
+rustflags = [
+    "-Cforce-frame-pointers=yes",
+    "-Ctarget-feature=-lsx,-lasx"
+]
+
