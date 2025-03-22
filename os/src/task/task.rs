@@ -2,11 +2,13 @@
 //! 
 #![allow(missing_docs)]
 
+use super::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use super::{tid_alloc, schedule, INITPROC};
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
+use crate::processor::processor::PROCESSORS;
 #[cfg(feature = "smp")]
 use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
@@ -18,7 +20,7 @@ use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
-use alloc::{fmt, format, vec};
+use alloc::{fmt, format, task, vec};
 use alloc::vec::Vec;
 use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal};
 use hal::constant::{Constant, ConstantsHal};
@@ -497,6 +499,10 @@ impl TaskControlBlock {
         // update user start 
         task_control_block.time_recorder().update_user_start(get_current_time_duration());
         task_control_block.with_mut_thread_group(|thread_group| thread_group.push(task_control_block.clone()));
+        if task_control_block.is_leader() {
+            PROCESS_GROUP_MANAGER.add_task_to_group(task_control_block.pgid(), &task_control_block);
+        }
+        TASK_MANAGER.add_task(&task_control_block);
         task_control_block
     }
     /// 
@@ -505,7 +511,9 @@ impl TaskControlBlock {
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
         {
             if !self.is_leader() {
+                // for thread, just remove itself from thread_group and task_manager
                 thread_group.remove(self);
+                TASK_MANAGER.remove_task(self.tid());
             }
             return;
         }
@@ -514,6 +522,7 @@ impl TaskControlBlock {
         }
         else {
             thread_group.remove(self);
+            TASK_MANAGER.remove_task(self.tid());
         }
         self.with_mut_children(|children|{
             if children.len() == 0 {

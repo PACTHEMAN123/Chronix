@@ -10,43 +10,63 @@ use crate::processor;
 use crate::processor::context::SumGuard;
 use crate::processor::processor::current_processor;
 use crate::signal::*;
-use crate::task::current_task;
+use crate::task::{current_task,INITPROC_PID};
 use crate::processor::processor::current_trap_cx;
+use crate::task::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> isize {
+    let task = current_task().unwrap().clone();
+    let pgid = task.pgid();
     match pid {
         0 => {
             // sent to every process in the process group of current process
-            let task = current_task().unwrap().clone();
-            let thread_group = task.thread_group.lock();
-            for member in thread_group
-                .iter()
-                .filter(|t|t.gettid() != task.gettid()) {
-                    // skip the current thread
-                    member.sig_manager.lock().receive(signo as usize);
-                }
+            for process in PROCESS_GROUP_MANAGER
+            .get_group(pgid)
+            .unwrap()
+            .into_iter()
+            .map(|inner| inner.upgrade().unwrap())
+            {
+                process.sig_manager.lock().receive(signo as usize);
+            }
         }
         -1 => {
             // sent to every process which current process has permission ( except init proc )
-            panic!("[sys_kill] unsupport for sending signal to all process");
+            //panic!("[sys_kill] unsupport for sending signal to all process");
+            TASK_MANAGER.for_each_task(|task|{
+                if task.tid() == INITPROC_PID {
+                }
+                if signo != 0 {
+                    task.sig_manager.lock().receive(signo as usize);
+                }
+            });
         }
         _ if pid < -1 => {
             // sent to every process in process group whose ID is -pid
-            panic!("[sys_kill] unsupport for sending signal to specific process group");
+            //panic!("[sys_kill] unsupport for sending signal to specific process group");
+            let inner_pid = -pid as usize;
+            for task in PROCESS_GROUP_MANAGER
+            .get_group(pgid)
+            .unwrap()
+            .into_iter()
+            .map(|t| t.upgrade().unwrap())
+            {
+                if task.tid() == inner_pid {
+                    task.sig_manager.lock().receive(signo as usize);
+                }
+            }
         }
         _ if pid > 0 => {
             // sent to the process specified with pid
-            let task = current_task().unwrap().clone();
             //assert!(task.gettid() != pid as usize); // should not send to itself
-            let thread_group = task.thread_group.lock();
-            for member in thread_group
-                .iter()
-                .filter(|t|t.gettid() == pid as usize) {
-                    // skip the current thread
-                    info!("{} send signo to {}", task.gettid(), pid);
-                    member.sig_manager.lock().receive(signo as usize);
+            if let Some(task) = TASK_MANAGER.get_task(pid as usize) {
+                if task.is_leader() {
+                    task.sig_manager.lock().receive(signo as usize);
+                }else {
+                    // todo standard error
+                    return -2;
                 }
+            }
         }
         _ => {}
     }
