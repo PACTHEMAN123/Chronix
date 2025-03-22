@@ -18,6 +18,8 @@ pub mod task;
 /// new task scheduler implementation
 pub mod schedule;
 mod tid;
+/// manger for task
+pub mod manager;
 
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
@@ -32,6 +34,7 @@ use hal::instruction::{InstructionHal, Instruction};
 use alloc::sync::Arc;
 use hal::println;
 use lazy_static::*;
+use manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use task::{TaskControlBlock, TaskStatus};
 use log::*;
 
@@ -47,7 +50,8 @@ pub fn suspend_current_and_run_next() {
 
 /// pid of usertests app in make run TEST=1
 pub const IDLE_PID: usize = 0;
-
+/// pid of the init process
+pub const INITPROC_PID: usize = 1;
 /// Exit the current 'Running' task ////and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
@@ -88,6 +92,8 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     //info!("initproc tid: {}",INITPROC.tid());
+    TASK_MANAGER.add_task(&INITPROC);
+    PROCESS_GROUP_MANAGER.add_group(&INITPROC);
     schedule::spawn_user_task(INITPROC.clone());
 }
 

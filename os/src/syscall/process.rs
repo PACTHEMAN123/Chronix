@@ -10,7 +10,8 @@ use crate::mm::copy_out;
 use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::processor::context::SumGuard;
 use crate::task::schedule::spawn_user_task;
-use crate::task::{ exit_current_and_run_next, INITPROC};
+use crate::task::{exit_current_and_run_next, INITPROC};
+use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::signal::SigSet;
 use crate::utils::suspend_now;
@@ -243,6 +244,8 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
         }
         let tid = res_task.tid();
         task.remove_child(tid);
+        TASK_MANAGER.remove_task(tid);
+        PROCESS_GROUP_MANAGER.remove(&task);
         return tid as isize;
     } else if option.contains(WaitOptions::WNOHANG) {
         return 0;
@@ -299,6 +302,9 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> isize
             copy_out(&task.vm_space.lock().get_page_table(), VirtAddr(exit_code_ptr), exit_code_bytes);
         }
         task.remove_child(child_pid);
+        TASK_MANAGER.remove_task(child_pid);
+        info!("remove task {} from PROCESS_GROUP_MANAGER", task.tid());
+        PROCESS_GROUP_MANAGER.remove(&task);
         return child_pid as isize;
     }
 }
@@ -323,4 +329,39 @@ pub fn sys_getppid() -> isize {
     } else {
         return INITPROC.pid() as isize;
     }
+}
+/// get the process group id of the specified process
+pub fn sys_getpgid(pid: usize) -> isize {
+    if pid == 0 {
+        current_task().unwrap().pgid() as isize
+    }else {
+        match TASK_MANAGER.get_task(pid){
+            Some(task) => {
+                task.pgid() as isize
+            }
+            None => {
+                // todo: standard error
+                -2  
+            }
+        }
+    }
+}
+/// set the process group id of the specified process
+pub fn sys_setpgid(pid: usize, pgid: usize) -> isize {
+    let task =  if pid == 0{
+        current_task().unwrap().clone()
+    }else {
+        TASK_MANAGER.get_task(pid).unwrap()
+    };
+
+    if pgid == 0 {
+        PROCESS_GROUP_MANAGER.add_group(&task);
+    }else {
+        if PROCESS_GROUP_MANAGER.get_group(pgid).is_some() {
+            PROCESS_GROUP_MANAGER.add_task_to_group(pgid, &task);
+        }else {
+            PROCESS_GROUP_MANAGER.add_group(&task);
+        }
+    }
+    0
 }
