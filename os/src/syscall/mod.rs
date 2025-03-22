@@ -31,6 +31,8 @@ const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
+const SYSCALL_SETPGID: usize = 154;
+const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GETTIMEOFDAY: usize = 169;
 const SYSCALL_GETPID: usize = 172;
@@ -45,16 +47,19 @@ pub mod process;
 pub mod time;
 pub mod signal;
 
+mod sys_error;
 pub use fs::*;
 pub use process::*;
 pub use time::*;
 pub use signal::*;
-
+use self::sys_error::SysError;
 use crate::{signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
+/// The result of a syscall, either Ok(return value) or Err(error code)
+pub type SysResult = Result<isize, SysError>;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    match syscall_id { 
+    let result = match syscall_id { 
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
@@ -80,10 +85,20 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
+        SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
+        SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into(), args[3].into(), args[4].into()),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_EXEC => sys_exec(args[0] , args[1] ).await,
         SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
+    };
+    match result {
+        Ok(ret ) => {
+            ret
+        }
+        Err(err) => {
+            -err.code() 
+        }
     }
 }
