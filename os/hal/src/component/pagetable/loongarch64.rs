@@ -195,7 +195,8 @@ impl PageTableEntry {
         !self.flags().contains(PTEFlags::NX)
     }
     pub fn is_leaf(&self) -> bool {
-        self.flags().contains(PTEFlags::GH)
+        // self.flags().contains(PTEFlags::GH)
+        false
     }
     pub fn set_flags(&mut self, flags: PTEFlags) {
         self.bits = (self.bits & PTEFlags::MASK.bits) | flags.bits() as usize;
@@ -277,15 +278,13 @@ pub struct PageTable<A: FrameAllocatorHal> {
 
 impl<A: FrameAllocatorHal> PageTable<A> {
     fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PageTableEntry> {
+        assert!(level.lowest());
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, &idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[idx];
             if PageLevel::from(i) == level {
-                if !level.lowest() {
-                    pte.flags().insert(PTEFlags::GH);
-                }
                 result = Some(pte);
                 break;
             }
@@ -372,7 +371,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     fn unmap(&mut self, vpn: VirtPageNum) {
         match self.find_pte(vpn) {
             Some((pte, _)) => {
-                *pte = PageTableEntry::new(PhysPageNum(0), MapPerm::empty(), false);
+                *pte = PageTableEntry { bits: 0 };
             }, 
             None => panic!("vpn: {:#x} has not mapped", vpn.0)
         }

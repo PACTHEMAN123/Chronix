@@ -27,7 +27,7 @@ impl ConstantsHal for Constant {
     
     const USER_STACK_SIZE: usize = 16 * 4096;
     
-    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM - Self::PAGE_SIZE;
+    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM;
     
     const USER_TRAP_CONTEXT_SIZE: usize = Self::PAGE_SIZE;
     
