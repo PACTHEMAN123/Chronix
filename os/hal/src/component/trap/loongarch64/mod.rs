@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use log::warn;
 use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
 
-use crate::instruction::{Instruction, InstructionHal};
+use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, instruction::{Instruction, InstructionHal}, pagetable::{PTEFlags, PageTable, PageTableHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
@@ -43,6 +43,7 @@ impl Debug for TrapContext {
 
 #[allow(unused)]
 #[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub struct KernelContext {
     /// stack point
     pub(crate) sp: usize, // 0
@@ -153,7 +154,8 @@ impl TrapContextHal for TrapContext {
     }
 
     fn mark_fx_save(&mut self) {
-        // nothing to do
+        self.user_fx.need_save = register::euen::read().fpe() as u8;
+        self.user_fx.signal_dirty = register::euen::read().fpe() as u8;
     }
 
     fn fx_yield_task(&mut self) {
@@ -228,7 +230,7 @@ impl FloatContextHal for FloatContext {
             return;
         }
         self.need_restore = 0;
-        //println!("{:#x}", self as *mut Self as usize);
+        // println!("restore float");
         unsafe {
             let mut _t: usize = 1; // as long as not x0
             core::arch::asm!("
@@ -308,9 +310,49 @@ pub fn set_user_trap_entry() {
     register::eentry::set_eentry(__trap_from_user as usize);
 }
 
+fn handle_page_modify_fault(badv: usize) -> TrapType {
+    println!("handle_page_modify_fault, {:#x}", badv);
+    let va = VirtAddr(badv); //虚拟地址
+    let vpn: VirtPageNum = va.floor(); //虚拟地址的虚拟页号
+    let token = register::pgdl::read().base();
+    let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
+    let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
+    if !pte.flags().contains(PTEFlags::W) {
+        return TrapType::StorePageFault(badv);
+    }
+    pte.set_flags(PTEFlags::D);
+    unsafe {
+        core::arch::asm!("tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
+    }
+    let tlbidx = register::tlbidx::read(); //获取TLB项索引
+    assert_eq!(tlbidx.ne(), false);
+    register::tlbelo0::set_dirty(true);
+    register::tlbelo1::set_dirty(true);
+
+    unsafe {
+        core::arch::asm!("tlbwr"); //重新将tlbelo写入tlb
+    }
+    
+    TrapType::Processed
+}
+
 fn get_trap_type() -> TrapType {
     let estat = register::estat::read();
     let badv = register::badv::read().raw();
+    match estat.cause() {
+        Trap::Exception(Exception::LoadPageFault) |
+        Trap::Exception(Exception::StorePageFault) |
+        Trap::Exception(Exception::FetchPageFault) => {
+            warn!(
+                "TrapType::PageFault cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
+                estat.cause(), 
+                badv, 
+                register::badi::read().inst(),
+                register::era::read().raw()
+            );
+        }
+        _ => {}
+    }
     match estat.cause() {
         Trap::Exception(Exception::Breakpoint) => TrapType::Breakpoint,
         Trap::Exception(Exception::Syscall) => TrapType::Syscall,
@@ -318,6 +360,13 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(badv),
         Trap::Exception(Exception::FetchPageFault) => TrapType::InstructionPageFault(badv),
         Trap::Interrupt(Interrupt::Timer) => TrapType::Timer,
+        Trap::Exception(Exception::PageModifyFault) => {
+            handle_page_modify_fault(badv)
+        },
+        Trap::Exception(Exception::FloatingPointUnavailable) => {
+            register::euen::set_fpe(true);
+            TrapType::Processed
+        },
         _ => {
             warn!(
                 "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 

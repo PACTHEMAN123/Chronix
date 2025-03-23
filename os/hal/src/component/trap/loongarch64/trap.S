@@ -44,7 +44,7 @@ __trap_from_user:
     st.d $t1, $sp, 33*8
     # read user stack from KSAVE_CTX and save it in TrapContext
     csrrd $t2, KSAVE_CTX
-    st.d $t0, $sp, 3*8
+    st.d $t2, $sp, 3*8
 
     # move to kernel_sp
     # Load callee-saved registers (s0-s11)
@@ -65,25 +65,27 @@ __trap_from_user:
     ld.d $sp, $sp, 34*8
     # jump to trap_handler
     ret
+    nop
 
 __restore:
     # a0: *TrapContext in user space(Constant); a1: user space token
     csrwr $a0, KSAVE_CTX
+    csrrd $a0, KSAVE_CTX
     # save kernel callee-saved regs
-    st.d $sp, $sp, 34*8
-    st.d $ra, $sp, 35*8
-    st.d $s0, $sp, 36*8
-    st.d $s1, $sp, 37*8
-    st.d $s2, $sp, 38*8
-    st.d $s3, $sp, 39*8
-    st.d $s4, $sp, 40*8
-    st.d $s5, $sp, 41*8
-    st.d $s6, $sp, 42*8
-    st.d $s7, $sp, 43*8
-    st.d $s8, $sp, 44*8
-    st.d $fp, $sp, 45*8
-    st.d $tp, $sp, 46*8
-    csrrd $sp, KSAVE_CTX
+    st.d $sp, $a0, 34*8
+    st.d $ra, $a0, 35*8
+    st.d $s0, $a0, 36*8
+    st.d $s1, $a0, 37*8
+    st.d $s2, $a0, 38*8
+    st.d $s3, $a0, 39*8
+    st.d $s4, $a0, 40*8
+    st.d $s5, $a0, 41*8
+    st.d $s6, $a0, 42*8
+    st.d $s7, $a0, 43*8
+    st.d $s8, $a0, 44*8
+    st.d $fp, $a0, 45*8
+    st.d $tp, $a0, 46*8
+    move $sp, $a0
 
     # restore prmd/era
     ld.d $t0, $sp, 32*8
@@ -112,55 +114,55 @@ __restore:
 __trap_from_kernel:
     # need to save caller-saved regs
     # note that we need save ERA & BADV here
-    addi.d $sp, $sp, -22*8
-    st.d $ra, $sp, 0*8
-    st.d $tp, $sp, 1*8
-    st.d $a0, $sp, 2*8
-    st.d $a1, $sp, 3*8
-    st.d $a2, $sp, 4*8
-    st.d $a3, $sp, 5*8
-    st.d $a4, $sp, 6*8
-    st.d $a5, $sp, 7*8
-    st.d $a6, $sp, 8*8
-    st.d $a7, $sp, 9*8
-    st.d $t0, $sp, 10*8
-    st.d $t1, $sp, 11*8
-    st.d $t2, $sp, 12*8
-    st.d $t3, $sp, 13*8
-    st.d $t4, $sp, 14*8
-    st.d $t5, $sp, 15*8
-    st.d $t6, $sp, 16*8
-    st.d $t7, $sp, 17*8
-    st.d $t8, $sp, 18*8
-    st.d $r21, $sp, 19*8
+    addi.d $sp, $sp, -23*8
+    st.d $ra, $sp, 1*8
+    st.d $tp, $sp, 2*8
+    st.d $a0, $sp, 3*8
+    st.d $a1, $sp, 4*8
+    st.d $a2, $sp, 5*8
+    st.d $a3, $sp, 6*8
+    st.d $a4, $sp, 7*8
+    st.d $a5, $sp, 8*8
+    st.d $a6, $sp, 9*8
+    st.d $a7, $sp, 10*8
+    st.d $t0, $sp, 11*8
+    st.d $t1, $sp, 12*8
+    st.d $t2, $sp, 13*8
+    st.d $t3, $sp, 14*8
+    st.d $t4, $sp, 15*8
+    st.d $t5, $sp, 16*8
+    st.d $t6, $sp, 17*8
+    st.d $t7, $sp, 18*8
+    st.d $t8, $sp, 19*8
+    st.d $r21, $sp, 20*8
     csrrd $t0, ERA
     csrrd $t1, BADV
-    st.d $t0, $sp, 20*8
-    st.d $t1, $sp, 21*8
+    st.d $t0, $sp, 21*8
+    st.d $t1, $sp, 22*8
     bl kernel_trap_handler
-    ld.d $t0, $sp, 20*8
-    ld.d $t1, $sp, 21*8
+    ld.d $t0, $sp, 21*8
+    ld.d $t1, $sp, 22*8
     csrwr $t0, ERA
     csrwr $t1, BADV
-    ld.d $ra, $sp, 0*8
-    ld.d $tp, $sp, 1*8
-    ld.d $a0, $sp, 2*8
-    ld.d $a1, $sp, 3*8
-    ld.d $a2, $sp, 4*8
-    ld.d $a3, $sp, 5*8
-    ld.d $a4, $sp, 6*8
-    ld.d $a5, $sp, 7*8
-    ld.d $a6, $sp, 8*8
-    ld.d $a7, $sp, 9*8
-    ld.d $t0, $sp, 10*8
-    ld.d $t1, $sp, 11*8
-    ld.d $t2, $sp, 12*8
-    ld.d $t3, $sp, 13*8
-    ld.d $t4, $sp, 14*8
-    ld.d $t5, $sp, 15*8
-    ld.d $t6, $sp, 16*8
-    ld.d $t7, $sp, 17*8
-    ld.d $t8, $sp, 18*8
-    ld.d $r21, $sp, 19*8
-    addi.d $sp, $sp, 22*8
+    ld.d $ra, $sp, 1*8
+    ld.d $tp, $sp, 2*8
+    ld.d $a0, $sp, 3*8
+    ld.d $a1, $sp, 4*8
+    ld.d $a2, $sp, 5*8
+    ld.d $a3, $sp, 6*8
+    ld.d $a4, $sp, 7*8
+    ld.d $a5, $sp, 8*8
+    ld.d $a6, $sp, 9*8
+    ld.d $a7, $sp, 10*8
+    ld.d $t0, $sp, 11*8
+    ld.d $t1, $sp, 12*8
+    ld.d $t2, $sp, 13*8
+    ld.d $t3, $sp, 14*8
+    ld.d $t4, $sp, 15*8
+    ld.d $t5, $sp, 16*8
+    ld.d $t6, $sp, 17*8
+    ld.d $t7, $sp, 18*8
+    ld.d $t8, $sp, 19*8
+    ld.d $r21, $sp, 20*8
+    addi.d $sp, $sp, 23*8
     ertn

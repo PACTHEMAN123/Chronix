@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use hal::println;
+
 use super::get_current_time_duration;
 /// Time recoder for events in tasks and kernel functions
 /// Todo:need to distinguish time for calculating cpu usage, time for IO or NET, time for sleeping, etc.

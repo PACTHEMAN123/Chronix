@@ -22,7 +22,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, task, vec};
 use alloc::vec::Vec;
-use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal};
+use hal::addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal, VirtPageNumHal};
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
@@ -235,7 +235,7 @@ impl TaskControlBlock {
     }
     /// switch to the task's page table
     pub unsafe fn switch_page_table(&self) {
-        self.vm_space.lock().get_page_table().enable();
+        self.vm_space.lock().enable();
     }
     /// get parent task
     pub fn parent(&self) -> Option<Weak<Self>> {

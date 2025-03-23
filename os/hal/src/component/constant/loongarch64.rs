@@ -5,7 +5,7 @@ impl ConstantsHal for Constant {
 
     const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_ffff_ffff_ffff;
 
-    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x0000_0000_0000_0000..0x0000_ffff_ffff_ffff;
+    const USER_ADDR_SPACE: core::ops::Range<usize> = 0x0000_0000_0000_0000..0x0000_7fff_ffff_ffff;
 
     const PA_WIDTH: usize = 48;
 
@@ -27,7 +27,7 @@ impl ConstantsHal for Constant {
     
     const USER_STACK_SIZE: usize = 16 * 4096;
     
-    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM;
+    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM - Self::PAGE_SIZE;
     
     const USER_TRAP_CONTEXT_SIZE: usize = Self::PAGE_SIZE;
     

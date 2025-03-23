@@ -35,6 +35,7 @@ pub extern "C" fn _start(p: *const usize) -> ! {
     let argv = unsafe { p.add(1) as usize };
     
     unsafe {
+        #[allow(static_mut_refs)]
         HEAP.lock()
             .init(HEAP_SPACE.as_ptr() as usize, USER_HEAP_SIZE);
     }
