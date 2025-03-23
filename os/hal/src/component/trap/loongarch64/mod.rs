@@ -318,7 +318,8 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
     let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
     if !pte.flags().contains(PTEFlags::W) {
-        return TrapType::StorePageFault(badv);
+        // return TrapType::StorePageFault(badv);
+        return TrapType::Other;
     }
     pte.set_flags(PTEFlags::D);
     unsafe {
