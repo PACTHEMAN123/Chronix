@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use hal::{constant::{Constant, ConstantsHal}, println, trap::{TrapContext, TrapContextHal}};
 use core::{
     future::Future,
     pin::Pin,
@@ -86,6 +87,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
 
     loop {
         trap_return(&task);
+        // println!("trap_return");
         user_trap_handler().await;
         if task.is_zombie(){
             //info!("zombie task exit");

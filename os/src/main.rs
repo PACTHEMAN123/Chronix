@@ -108,9 +108,7 @@ pub fn main(id: usize) -> ! {
     } else {
         processor::processor::init(id);
         hal::trap::init();
-        // unsafe {
-        //     INIT_VMSPACE.lock().get_page_table().enable();
-        // }
+        INIT_VMSPACE.lock().enable();
     }
     info!("[kernel] -------hart {} start-------",id);
     unsafe { 
@@ -118,9 +116,9 @@ pub fn main(id: usize) -> ! {
     }
     timer::set_next_trigger();
     loop{
-        //info!("now Idle loop");
-       let _tasks = executor::run_until_idle();
-       //info!("[kernel] {} have {} tasks run",current_processor().id(),tasks);
+        // info!("now Idle loop");
+        let _tasks = executor::run_until_idle();
+        // info!("[kernel] {} have {} tasks run",current_processor().id(),tasks);
     }
     //panic!("Unreachable in rust_main!");
 }

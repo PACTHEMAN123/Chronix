@@ -7,6 +7,8 @@ pub trait TimerHal {
     fn read() -> usize;
     /// set next time interrupt
     fn set_timer(timer: usize);
+    /// get timer freq
+    fn get_timer_freq() -> usize;
 }
 
 #[cfg(target_arch = "riscv64")]

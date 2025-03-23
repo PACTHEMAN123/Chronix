@@ -1,8 +1,6 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use log::info;
-
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println};
+use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}};
 
 const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
 
@@ -48,48 +46,58 @@ unsafe extern "C" fn _start() -> ! {
     );
 }
 
+pub static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 
 pub(crate) fn rust_main(id: usize) {
-    tlb_init();
-    super::clear_bss();
-    crate::console::init();
-    print_info();
+    if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
+        tlb_init();
+        super::clear_bss();
+        crate::console::init();
+        print_info();
+    }
     unsafe { super::_main_for_arch(id); }
 }
 
 fn print_info() {
+    println!(r" _____                  _   _     _   _      _      _     
+|_   _|  _ __    __ _  (_) | |_  | | | |    / \    | |    
+  | |   | '__|  / _` | | | | __| | |_| |   / _ \   | |    
+  | |   | |    | (_| | | | | |_  |  _  |  / ___ \  | |___ 
+  |_|   |_|     \__,_| |_|  \__| |_| |_| /_/   \_\ |_____|");
     println!("PA_LEN: {}", loongArch64::cpu::get_palen());
     println!("VA_LEN: {}", loongArch64::cpu::get_valen());
+    println!("Frequency: {} Hz", Timer::get_timer_freq());
+    println!("");
 }
 
-#[naked]
-pub unsafe extern "C" fn tlb_fill() {
-    core::arch::naked_asm!(
-        "
-        .equ LA_CSR_PGDL,          0x19    /* Page table base address when VA[47] = 0 */
-        .equ LA_CSR_PGDH,          0x1a    /* Page table base address when VA[47] = 1 */
-        .equ LA_CSR_PGD,           0x1b    /* Page table base */
-        .equ LA_CSR_TLBRENTRY,     0x88    /* TLB refill exception entry */
-        .equ LA_CSR_TLBRBADV,      0x89    /* TLB refill badvaddr */
-        .equ LA_CSR_TLBRERA,       0x8a    /* TLB refill ERA */
-        .equ LA_CSR_TLBRSAVE,      0x8b    /* KScratch for TLB refill exception */
-        .equ LA_CSR_TLBRELO0,      0x8c    /* TLB refill entrylo0 */
-        .equ LA_CSR_TLBRELO1,      0x8d    /* TLB refill entrylo1 */
-        .equ LA_CSR_TLBREHI,       0x8e    /* TLB refill entryhi */
-        .balign 4096
-            csrwr   $t0, LA_CSR_TLBRSAVE
-            csrrd   $t0, LA_CSR_PGD
-            lddir   $t0, $t0, 3
-            lddir   $t0, $t0, 2
-            lddir   $t0, $t0, 1
-            ldpte   $t0, 0
-            ldpte   $t0, 1
-            tlbfill
-            csrrd   $t0, LA_CSR_TLBRSAVE
-            ertn
-        "
-    );
-}
+core::arch::global_asm!(
+    r"
+    .equ LA_CSR_PGDL,          0x19    /* Page table base address when VA[47] = 0 */
+    .equ LA_CSR_PGDH,          0x1a    /* Page table base address when VA[47] = 1 */
+    .equ LA_CSR_PGD,           0x1b    /* Page table base */
+    .equ LA_CSR_TLBRENTRY,     0x88    /* TLB refill exception entry */
+    .equ LA_CSR_TLBRBADV,      0x89    /* TLB refill badvaddr */
+    .equ LA_CSR_TLBRERA,       0x8a    /* TLB refill ERA */
+    .equ LA_CSR_TLBRSAVE,      0x8b    /* KScratch for TLB refill exception */
+    .equ LA_CSR_TLBRELO0,      0x8c    /* TLB refill entrylo0 */
+    .equ LA_CSR_TLBRELO1,      0x8d    /* TLB refill entrylo1 */
+    .equ LA_CSR_TLBREHI,       0x8e    /* TLB refill entryhi */
+    .globl _tlb_fill
+    .balign 4096
+    _tlb_fill:
+        csrwr   $t0, LA_CSR_TLBRSAVE
+        csrrd   $t0, LA_CSR_PGD
+        lddir   $t0, $t0, 3
+        lddir   $t0, $t0, 2
+        lddir   $t0, $t0, 1
+        ldpte   $t0, 0
+        ldpte   $t0, 1
+        tlbfill
+        csrrd   $t0, LA_CSR_TLBRSAVE
+        ertn
+    "
+);
+
 
 /// Sv39 mode
 fn tlb_init() {
@@ -108,9 +116,17 @@ fn tlb_init() {
     pwcl::set_dir2_base(30);
     pwcl::set_dir2_width(9);
     pwch::set_dir3_base(39);
-    pwch::set_dir3_base(9);
+    pwch::set_dir3_width(9);
     pwch::set_dir4_base(0);
-    pwch::set_dir4_base(0);
+    pwch::set_dir4_width(0);
+    unsafe extern "C" {
+        fn _tlb_fill();
+    }
+    assert!((_tlb_fill as usize) % 4096 == 0);
+    
+    tlbrentry::set_tlbrentry(_tlb_fill as usize & ((1 << Constant::PA_WIDTH) - 1));
 
-    tlbrentry::set_tlbrentry(tlb_fill as usize);
+    unsafe {
+        core::arch::asm!("invtlb 0,$r0,$r0"); //clear tlb
+    }
 }

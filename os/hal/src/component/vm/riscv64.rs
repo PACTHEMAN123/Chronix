@@ -22,8 +22,10 @@ pub struct UserVmSpace<A: FrameAllocatorHal> {
 
 impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
 
-    fn get_page_table(&self) -> &PageTable<A> {
-        &self.page_table
+    fn enable(&self) {
+        unsafe {
+            self.page_table.enable();
+        }
     }
 
     fn new_in(alloc: A) -> Self{
@@ -141,6 +143,14 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
             area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(area);
+    }
+    
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<crate::addr::PhysPageNum>{
+        self.page_table.translate_vpn(vpn)
+    }
+    
+    fn translate_va(&self, va: VirtAddr) -> Option<crate::addr::PhysAddr> {
+        self.page_table.translate_va(va)
     }
 
 }
@@ -499,7 +509,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
             for &vpn in self.frames.keys() {
                 let (pte, _) = page_table.find_pte(vpn).unwrap();
                 pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
-                unsafe { Instruction::tlb_flush_addr(vpn.0); }
+                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
             }
         } else {
             self.map_perm.insert(MapPerm::C);
@@ -533,7 +543,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                     self.map_perm.remove(MapPerm::C);
                     self.map_perm.insert(MapPerm::W);
                     pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
-                    unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
                     let new_frame = StrongArc::new(self.alloc.alloc_tracker(level.page_count()).ok_or(())?);
@@ -549,7 +559,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                     self.map_perm.insert(MapPerm::W);
                     *pte = PageTableEntry::new(new_range_ppn.start, self.map_perm, true);
                     
-                    unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 }
             }
@@ -564,7 +574,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                         let new_frame = self.alloc.alloc_tracker(1).ok_or(())?;
                         self.map_range_to(page_table, vpn..vpn+1, new_frame.range_ppn.start);
                         self.frames.insert(vpn, StrongArc::new(new_frame));
-                        unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                        unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                         return Ok(());
                     }
                 }
