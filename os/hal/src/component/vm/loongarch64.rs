@@ -1,7 +1,7 @@
 use core::ops::Range;
 
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
+use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -23,16 +23,20 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         // do nothing
     }
 
-    fn get_page_table(&self) -> &PageTable<A> {
-        panic!()
-    }
-
     fn new_in(alloc: A) -> Self{
         Self { alloc }
     }
     
     fn push_area(&mut self, mut _area: KernVmArea<A>, _data: Option<&[u8]>) {
-        panic!()
+        // do nothing
+    }
+
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<crate::addr::PhysPageNum>{
+        Some(crate::addr::PhysPageNum(vpn.0 & !(0x8_0000_0000_0000)))
+    }
+    
+    fn translate_va(&self, va: VirtAddr) -> Option<crate::addr::PhysAddr> {
+        Some(crate::addr::PhysAddr(va.0 & !(0x8000_0000_0000_0000)))
     }
 
 }
@@ -152,7 +156,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         // map TrapContext
         ret.push_area(
             UserVmArea::new(
-                Constant::USER_TRAP_CONTEXT_BOTTOM.into()..(Constant::USER_TRAP_CONTEXT_TOP).into(),
+                Constant::USER_TRAP_CONTEXT_BOTTOM.into()..Constant::USER_TRAP_CONTEXT_TOP.into(),
                 UserVmAreaType::TrapContext,
                 MapPerm::R | MapPerm::W,
                 kvm_space.alloc.clone()
@@ -175,10 +179,15 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
     }
 
     fn reset_heap_break(&mut self, new_brk: crate::addr::VirtAddr) -> crate::addr::VirtAddr {
-        let heap = self.find_heap().unwrap();
+        let heap = &mut self.areas[self.heap];
         let range = heap.range_va.clone();
         if new_brk >= range.end {
             heap.range_va = range.start..new_brk;
+            for vpn in range.end.ceil()..new_brk.ceil() {
+                let frame = self.alloc.alloc_tracker(1).unwrap();
+                self.page_table.map(vpn, frame.range_ppn.start, heap.map_perm, PageLevel::Small);
+                heap.frames.insert(vpn, StrongArc::new(frame));
+            }
             new_brk
         } else if new_brk > range.start {
             let mut right = heap.split_off(new_brk.ceil());
@@ -272,26 +281,32 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
     }
 
     fn map(&mut self, page_table: &mut PageTable<A>) {
-        if self.map_perm.contains(MapPerm::C) {
-            for (&vpn, frame) in self.frames.iter() {
-                self.map_range_to(page_table, vpn..vpn+1, frame.range_ppn.start);
-            }
-        } else {
-            match self.vma_type {
-                UserVmAreaType::Data |
-                UserVmAreaType::TrapContext => {
-                    let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
-                    for vpn in range_vpn {
-                        let frame = self.alloc.alloc_tracker(1).unwrap();
-                        page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                        self.frames.insert(vpn, StrongArc::new(frame));
-                    }
-                },
-                UserVmAreaType::Heap |
-                UserVmAreaType::Stack => {
-                },
-            }
+        let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
+        for vpn in range_vpn {
+            let frame = self.alloc.alloc_tracker(1).unwrap();
+            page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
+            self.frames.insert(vpn, StrongArc::new(frame));
         }
+        // if self.map_perm.contains(MapPerm::C) {
+        //     for (&vpn, frame) in self.frames.iter() {
+        //         self.map_range_to(page_table, vpn..vpn+1, frame.range_ppn.start);
+        //     }
+        // } else {
+        //     match self.vma_type {
+        //         UserVmAreaType::Data |
+        //         UserVmAreaType::TrapContext => {
+        //             let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
+        //             for vpn in range_vpn {
+        //                 let frame = self.alloc.alloc_tracker(1).unwrap();
+        //                 page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
+        //                 self.frames.insert(vpn, StrongArc::new(frame));
+        //             }
+        //         },
+        //         UserVmAreaType::Heap |
+        //         UserVmAreaType::Stack => {
+        //         },
+        //     }
+        // }
     }
 
     fn unmap(&mut self, page_table: &mut PageTable<A>) {
@@ -316,7 +331,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
 
     fn clone_cow(&mut self, page_table: &mut PageTable<A>) -> Result<Self, Self> {
         // note: trap context cannot supprt COW
-        if self.vma_type == UserVmAreaType::TrapContext {
+        if true {
             return Err(self.clone());
         }
         if self.map_perm.contains(MapPerm::W) {
@@ -324,8 +339,8 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
             self.map_perm.remove(MapPerm::W);
             for &vpn in self.frames.keys() {
                 let (pte, _) = page_table.find_pte(vpn).unwrap();
-                pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
-                unsafe { Instruction::tlb_flush_addr(vpn.0); }
+                pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::DEFAULT);
+                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
             }
         } else {
             self.map_perm.insert(MapPerm::C);
@@ -358,12 +373,11 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                 if frame.get_owners() == 1 {
                     self.map_perm.remove(MapPerm::C);
                     self.map_perm.insert(MapPerm::W);
-                    pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
-                    unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                    pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::DEFAULT);
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
                     let new_frame = StrongArc::new(self.alloc.alloc_tracker(level.page_count()).ok_or(())?);
-                    new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                     let new_range_ppn = new_frame.range_ppn.clone();
 
                     let old_data = &frame.range_ppn.get_slice::<u8>();
@@ -375,7 +389,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                     self.map_perm.insert(MapPerm::W);
                     *pte = PageTableEntry::new(new_range_ppn.start, self.map_perm, true);
                     
-                    unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 }
             }
@@ -390,7 +404,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                         let new_frame = self.alloc.alloc_tracker(1).ok_or(())?;
                         self.map_range_to(page_table, vpn..vpn+1, new_frame.range_ppn.start);
                         self.frames.insert(vpn, StrongArc::new(new_frame));
-                        unsafe { Instruction::tlb_flush_addr(vpn.0) };
+                        unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                         return Ok(());
                     }
                 }

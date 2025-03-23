@@ -3,7 +3,7 @@ use core::ops::Range;
 use alloc::{format, vec::Vec};
 use loongArch64::register;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -152,6 +152,7 @@ bitflags::bitflags! {
         const RPLV = 1 << 63;
 
         const MASK = 0xE000_0000_0000_1FFF;
+        const DEFAULT = Self::P.bits | Self::MAT_L.bits;
     }
 }
 
@@ -170,22 +171,28 @@ impl PageTableEntry {
         PageTableEntry { bits: 0 }
     }
     pub fn ppn(&self) -> PhysPageNum {
-        PhysPageNum(self.bits >> 10 & ((1usize << Constant::PPN_WIDTH) - 1))
+        PhysPageNum(self.bits >> 12 & ((1usize << Constant::PPN_WIDTH) - 1))
     }
     pub fn flags(&self) -> PTEFlags {
         PTEFlags::from_bits(self.bits & PTEFlags::MASK.bits).unwrap()
     }
+    pub fn is_zero(&self) -> bool {
+        self.bits == 0
+    }
     pub fn is_valid(&self) -> bool {
-        (self.flags() & PTEFlags::V) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::V)
+    }
+    pub fn is_exist(&self) -> bool {
+        self.flags().contains(PTEFlags::P)
     }
     pub fn readable(&self) -> bool {
-        (self.flags() & PTEFlags::NR) == PTEFlags::empty()
+        !self.flags().contains(PTEFlags::NR)
     }
     pub fn writable(&self) -> bool {
-        (self.flags() & PTEFlags::W) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::W)
     }
     pub fn executable(&self) -> bool {
-        (self.flags() & PTEFlags::NX) == PTEFlags::empty()
+        !self.flags().contains(PTEFlags::NX)
     }
     pub fn is_leaf(&self) -> bool {
         self.flags().contains(PTEFlags::GH)
@@ -205,7 +212,7 @@ impl From<MapPerm> for PTEFlags {
             ret.insert(PTEFlags::NR);
         }
         if value.contains(MapPerm::W) {
-            ret.insert(PTEFlags::W);
+            ret.insert(PTEFlags::W | PTEFlags::D);
         }
         if !value.contains(MapPerm::X) {
             ret.insert(PTEFlags::NX);
@@ -220,11 +227,12 @@ impl From<MapPerm> for PTEFlags {
 impl PageTableEntryHal for PageTableEntry {
     fn new(ppn: PhysPageNum, map_perm: super::MapPerm, valid: bool) -> Self {
         let mut pte: PTEFlags = map_perm.into();
+        pte |= PTEFlags::DEFAULT;
         if valid {
             pte.insert(PTEFlags::V);
         }
         Self {
-            bits: ppn.0 << 10 | pte.bits as usize
+            bits: ppn.0 << 12 | pte.bits as usize
         }
     }
 
@@ -281,10 +289,12 @@ impl<A: FrameAllocatorHal> PageTable<A> {
                 result = Some(pte);
                 break;
             }
-            if !pte.is_valid() {
+            if pte.is_zero() {
                 let frame = self.alloc.alloc(1).unwrap();
                 frame.get_slice_mut::<u8>().fill(0);
-                *pte = PageTableEntry::new(frame.start, MapPerm::empty(), true);
+                *pte = PageTableEntry {
+                    bits: (frame.start.0 << Constant::PAGE_SIZE_BITS)
+                };
                 self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
             }
             ppn = pte.ppn();
@@ -343,7 +353,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         let mut ppn = self.root_ppn;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[*idx];
-            if !pte.is_valid() {
+            if pte.is_zero() {
                 return None;
             }
             if pte.is_leaf() || i == Constant::PG_LEVEL - 1 {

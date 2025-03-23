@@ -1,7 +1,7 @@
 use core::ops::Range;
 use alloc::collections::btree_map::BTreeMap;
-use crate::{allocator::FrameAllocatorHal, util::smart_point::StrongArc};
-use super::{addr::{VirtAddr, VirtPageNum}, common::FrameTracker, pagetable::{MapPerm, PageTable, PageTableHal}};
+use crate::{allocator::FrameAllocatorHal, println, util::smart_point::StrongArc};
+use super::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, common::FrameTracker, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTable, PageTableHal}};
 use bitflags::bitflags;
 
 #[derive(Debug, Clone, Copy,  PartialEq, Eq)]
@@ -94,17 +94,15 @@ pub type VmSpaceEntryPoint = usize;
 
 pub trait KernVmSpaceHal<A: FrameAllocatorHal> {
 
-    fn get_page_table(&self) -> &PageTable<A>;
-
-    fn enable(&self) {
-        unsafe {
-            self.get_page_table().enable();
-        }
-    }
+    fn enable(&self);
 
     fn new_in(alloc: A) -> Self;
 
     fn push_area(&mut self, area: KernVmArea<A>, data: Option<&[u8]>);
+
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
+
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
 }
 
 pub trait UserVmSpaceHal<A: FrameAllocatorHal, K: KernVmSpaceHal<A>>: Sized {
@@ -116,6 +114,7 @@ pub trait UserVmSpaceHal<A: FrameAllocatorHal, K: KernVmSpaceHal<A>>: Sized {
     fn enable(&self) {
         unsafe {
             self.get_page_table().enable();
+            Instruction::tlb_flush_all();
         }
     }
 

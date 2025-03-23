@@ -107,8 +107,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         _direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         // use kernel space pagetable to get the physical address
-        let page_table = PageTable::from_token(INIT_VMSPACE.lock().get_page_table().get_token(), FrameAllocator);
-        let pa = page_table.translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
+        let pa = INIT_VMSPACE.lock().translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
         
         pa.0
     }

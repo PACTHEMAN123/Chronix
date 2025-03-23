@@ -62,7 +62,7 @@ pub struct PhysPageNum(pub usize);
 
 impl From<usize> for PhysPageNum {
     fn from(value: usize) -> Self {
-        Self(value & ((1 << Constant::PPN_WIDTH) - 1))
+        Self(value & ((1usize << Constant::PPN_WIDTH) - 1))
     }
 }
 
@@ -73,13 +73,13 @@ pub struct VirtAddr(pub usize);
 
 impl From<usize> for VirtAddr {
     fn from(value: usize) -> Self {
-        Self(value & ((1 << Constant::VA_WIDTH) - 1))
+        Self(value & ((1usize << Constant::VA_WIDTH) - 1))
     }
 }
 
 impl VirtAddr {
     pub fn page_offset(&self) -> usize {
-        self.0 & ((1 << Constant::PAGE_SIZE_BITS) - 1)
+        self.0 & ((1usize << Constant::PAGE_SIZE_BITS) - 1)
     }
 }
 
