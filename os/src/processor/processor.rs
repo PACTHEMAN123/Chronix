@@ -11,7 +11,7 @@ use async_task::Runnable;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::trap::{TrapContext, TrapContextHal};
-use hal::vm::KernVmSpaceHal;
+use crate::mm::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
 use crate::mm::{self, INIT_VMSPACE};

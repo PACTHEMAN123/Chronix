@@ -3,13 +3,13 @@
 use crate::devices::BlockDevice;
 use crate::config::BLOCK_SIZE;
 use crate::mm::allocator::{frames_alloc_clean, frames_dealloc, FrameAllocator};
+use crate::mm::vm::KernVmSpaceHal;
 use crate::mm::{FrameTracker, PageTable, INIT_VMSPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
 use hal::constant::{Constant, ConstantsHal};
 use hal::pagetable::PageTableHal;
-use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use lazy_static::*;
 
 use alloc::{string::ToString, sync::Arc};
