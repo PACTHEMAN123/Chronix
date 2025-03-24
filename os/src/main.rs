@@ -39,9 +39,9 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, vm::KernVmSpaceHal};
+use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal};
 use log::*;
-use mm::INIT_VMSPACE;
+use mm::{vm::KernVmSpaceHal, INIT_VMSPACE};
 use processor::processor::current_processor;
 
 #[path = "boards/qemu.rs"]

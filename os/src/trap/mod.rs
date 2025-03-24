@@ -17,8 +17,8 @@ use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
-use hal::vm::UserVmSpaceHal;
-use hal::{addr::VirtAddr, vm::PageFaultAccessType};
+use crate::mm::vm::{UserVmSpaceHal, PageFaultAccessType};
+use hal::addr::VirtAddr;
 
 use crate::utils::async_utils::yield_now;
 use crate::executor;
@@ -71,7 +71,7 @@ pub async fn user_trap_handler()  {
         TrapType::StorePageFault(stval)
         | TrapType::InstructionPageFault(stval)
         | TrapType::LoadPageFault(stval) => {
-            log::info!(
+            log::debug!(
                 "[user_trap_handler] encounter page fault, addr {stval:#x}",
             );
 

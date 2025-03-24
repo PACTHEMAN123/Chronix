@@ -10,7 +10,7 @@ use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
 use hal::constant::{Constant, ConstantsHal};
 use hal::pagetable::PageTableHal;
 use hal::println;
-use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
+use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use lazy_static::*;
 
 use alloc::{string::ToString, sync::Arc};
