@@ -11,3 +11,17 @@ pub trait FrameAllocatorHal: Sync + Clone {
     }
 
 }
+
+/// a fake frame allocator
+#[derive(Clone)]
+pub struct FakeFrameAllocator;
+
+impl FrameAllocatorHal for FakeFrameAllocator {
+    fn alloc(&self, _cnt: usize) -> Option<Range<PhysPageNum>> {
+        panic!("alloc is not implemented by FakeFrameAllocator")
+    }
+
+    fn dealloc(&self, _range_ppn: Range<PhysPageNum>) {
+        panic!("dealloc is not implemented by FakeFrameAllocator")
+    }
+}

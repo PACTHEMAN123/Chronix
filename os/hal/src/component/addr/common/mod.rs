@@ -8,14 +8,14 @@ macro_rules! ImplFor {
             type Output = Self;
         
             fn add(self, rhs: usize) -> Self::Output {
-                Self(self.0 + rhs)
+                Self::from(self.0 + rhs)
             }
         }
         impl Sub<usize> for $tp {
             type Output = Self;
         
             fn sub(self, rhs: usize) -> Self::Output {
-                Self(self.0 - rhs)
+                Self::from(self.0 - rhs)
             }
         }
         impl Step for $tp {
@@ -33,12 +33,12 @@ macro_rules! ImplFor {
         }
         impl AddAssign<usize> for $tp {
             fn add_assign(&mut self, rhs: usize) {
-                self.0 += rhs
+                *self = Self::from(self.0 + rhs)
             }
         }
         impl SubAssign<usize> for $tp {
             fn sub_assign(&mut self, rhs: usize) {
-                self.0 -= rhs
+                *self = Self::from(self.0 - rhs)
             }
         }
         
@@ -48,6 +48,10 @@ macro_rules! ImplFor {
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysAddr(pub usize);
+
+impl PhysAddr {
+    const MAX: usize = 0x0000_ffff_ffff_ffff;
+}
 
 ImplFor!(PhysAddr);
 
@@ -60,9 +64,14 @@ impl From<usize> for PhysAddr {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysPageNum(pub usize);
 
+
+impl PhysPageNum {
+    const MAX: usize = 0x0000_000f_ffff_ffff;
+}
+
 impl From<usize> for PhysPageNum {
     fn from(value: usize) -> Self {
-        Self(value & ((1 << Constant::PPN_WIDTH) - 1))
+        Self(value & ((1usize << Constant::PPN_WIDTH) - 1))
     }
 }
 
@@ -71,15 +80,19 @@ ImplFor!(PhysPageNum);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtAddr(pub usize);
 
+impl VirtAddr {
+    const MAX: usize = 0x0000_ffff_ffff_ffff;
+}
+
 impl From<usize> for VirtAddr {
     fn from(value: usize) -> Self {
-        Self(value & ((1 << Constant::VA_WIDTH) - 1))
+        Self(value & ((1usize << Constant::VA_WIDTH) - 1))
     }
 }
 
 impl VirtAddr {
     pub fn page_offset(&self) -> usize {
-        self.0 & ((1 << Constant::PAGE_SIZE_BITS) - 1)
+        self.0 & ((1usize << Constant::PAGE_SIZE_BITS) - 1)
     }
 }
 
@@ -92,6 +105,10 @@ impl From<usize> for VirtPageNum {
     fn from(value: usize) -> Self {
         Self(value & ((1 << Constant::VPN_WIDTH) - 1))
     }
+}
+
+impl VirtPageNum {
+    const MAX: usize = 0x0000_000f_ffff_ffff;
 }
 
 ImplFor!(VirtPageNum);

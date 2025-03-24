@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrapType {
     Other,
+    Processed,
     Breakpoint,
     Syscall,
     Timer,

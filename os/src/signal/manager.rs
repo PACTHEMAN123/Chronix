@@ -5,7 +5,8 @@
 use core::arch::global_asm;
 
 use alloc::collections::vec_deque::VecDeque;
-use hal::{addr::VirtAddr, vm::{KernVmSpaceHal, UserVmSpaceHal}, signal::*};
+use hal::{addr::VirtAddr, signal::*};
+use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::*;
 use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
 
