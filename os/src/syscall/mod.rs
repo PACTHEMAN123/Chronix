@@ -52,7 +52,7 @@ pub use fs::*;
 pub use process::*;
 pub use time::*;
 pub use signal::*;
-use self::sys_error::SysError;
+pub use self::sys_error::SysError;
 use crate::{signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;

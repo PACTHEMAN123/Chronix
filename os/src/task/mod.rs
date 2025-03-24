@@ -27,7 +27,7 @@ pub mod manager;
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use crate::fs::{
-    ext4::open_file,
+    vfs::file::open_file,
     OpenFlags,
 };
 use hal::instruction::{InstructionHal, Instruction};

@@ -277,9 +277,13 @@ impl Inode for Ext4Inode {
     }
 
     /// Create a new inode and return the inode
-    fn create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn Inode>> {
-        info!("create {:?} on Ext4fs: {}", ty, path);
-        let fpath = self.path_deal_with(path);
+    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
+        let ty: InodeTypes = mode.into();
+        let file = self.file.exclusive_access();
+        let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
+        let fpath = parent_path + "/" + name;
+        info!("create {:?} on Ext4fs: {}", ty, fpath);
+        let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
         if fpath.is_empty() {
             info!("given path is empty");
@@ -315,52 +319,6 @@ impl Inode for Ext4Inode {
                     fpath, types)))
             }
         }
-    }
-
-    /// Remove the inode
-    #[allow(unused)]
-    fn remove(&self, path: &str) -> Result<usize, i32> {
-        info!("remove ext4fs: {}", path);
-        let fpath = self.path_deal_with(path);
-        let fpath = fpath.as_str();
-
-        assert!(!fpath.is_empty()); // already check at `root.rs`
-
-        let mut file = unsafe{self.file.exclusive_access()};
-        if file.check_inode_exist(fpath, InodeTypes::EXT4_DE_DIR) {
-            // Recursive directory remove
-            file.dir_rm(fpath)
-        } else {
-            file.file_remove(fpath)
-        }
-    }
-
-    /// Get the parent directory of this directory.
-    /// Return `None` if the node is a file.
-    #[allow(unused)]
-    fn parent(&self) -> Option<Arc<dyn Inode>> {
-        let file = unsafe{self.file.exclusive_access()};
-        if file.get_type() == InodeTypes::EXT4_DE_DIR {
-            let path = file.get_path();
-            let path = path.to_str().unwrap();
-            info!("Get the parent dir of {}", path);
-            let path = path.trim_end_matches('/').trim_end_matches(|c| c != '/');
-            if !path.is_empty() {
-                return Some(Arc::new(Self::new(
-                    self.inner().super_block.upgrade()?.clone(),
-                    path, 
-                    InodeTypes::EXT4_DE_DIR)));
-            }
-        }
-        None
-    }
-
-    /// Rename the inode
-    #[allow(unused)]
-    fn rename(&self, src_path: &str, dst_path: &str) -> Result<usize, i32> {
-        info!("rename from {} to {}", src_path, dst_path);
-        let mut file = unsafe{self.file.exclusive_access()};
-        file.file_rename(src_path, dst_path)
     }
 
     fn getattr(&self) -> Kstat {
@@ -407,6 +365,27 @@ impl Inode for Ext4Inode {
             }
         }
     }
+
+    fn remove(&self, name: &str, mode: InodeMode) -> Result<usize, i32> {
+        let ty = InodeTypes::from(mode);
+        let file = self.file.exclusive_access();
+        let parent_path = String::from(file.get_path().to_str().unwrap());
+        let fpath = parent_path + "/" + name;
+
+        info!("remove ext4fs: {}", fpath);
+        let fpath = self.path_deal_with(&fpath);
+        let fpath = fpath.as_str();
+
+        assert!(!fpath.is_empty()); // already check at `root.rs`
+
+        if file.check_inode_exist(fpath, ty) {
+            // Recursive directory remove
+            file.dir_rm(fpath)
+        } else {
+            file.file_remove(fpath)
+        }
+    }
+
 }
 
 impl Drop for Ext4Inode {
@@ -444,6 +423,21 @@ impl InodeMode {
             _ => InodeMode::TYPE_MASK,
         };
         file_mode | perm_mode
+    }
+}
+
+impl From<InodeMode> for InodeTypes {
+    fn from(mode: InodeMode) -> Self {
+        match mode.intersection(InodeMode::TYPE_MASK) {
+            InodeMode::DIR => InodeTypes::EXT4_DE_DIR,
+            InodeMode::FILE => InodeTypes::EXT4_DE_REG_FILE,
+            InodeMode::LINK => InodeTypes::EXT4_DE_SYMLINK,
+            InodeMode::CHAR => InodeTypes::EXT4_DE_CHRDEV,
+            InodeMode::BLOCK => InodeTypes::EXT4_DE_BLKDEV,
+            InodeMode::FIFO => InodeTypes::EXT4_DE_FIFO,
+            InodeMode::SOCKET => InodeTypes::EXT4_DE_SOCK,
+            _ => InodeTypes::EXT4_DE_UNKNOWN,
+        }
     }
 }
 

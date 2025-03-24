@@ -3,7 +3,7 @@
 use core::ptr::null;
 use core::sync::atomic::Ordering;
 use crate::fs::{
-    ext4::open_file,
+    vfs::file::open_file,
     OpenFlags,
 };
 use crate::mm::copy_out;

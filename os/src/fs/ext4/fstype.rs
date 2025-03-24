@@ -37,8 +37,13 @@ impl FSType for Ext4FSType {
     fn kill_sb(&self) -> isize {
         todo!()
     }
-    fn mount(self: Arc<Self>, name: &str, parent: Option<Arc<dyn Dentry>>, _flags: MountFlags, dev: Option<Arc<dyn BlockDevice>>) -> Option<Arc<dyn Dentry>> {
-        let sb = Ext4SuperBlock::new(SuperBlockInner::new(dev, self.clone()));
+    fn mount(&'static self, name: &str, parent: Option<Arc<dyn Dentry>>, _flags: MountFlags, dev: Option<Arc<dyn BlockDevice>>) -> Option<Arc<dyn Dentry>> {
+        // can be dangerous..
+        let fs_type = unsafe {
+            let ptr: *const dyn FSType = self;
+            Arc::from_raw(ptr)
+        };
+        let sb = Ext4SuperBlock::new(SuperBlockInner::new(dev, fs_type.clone()));
         let root_inode = Arc::new(Ext4Inode::new(sb.clone(), "/", InodeTypes::EXT4_DE_DIR)); 
         let root_dentry = Ext4Dentry::new(name, sb.clone(), parent.clone());
         root_dentry.set_inode(root_inode);

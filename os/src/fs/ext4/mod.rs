@@ -1,4 +1,7 @@
 //! VFS for lwext4_rust
+extern crate lwext4_rust;
+
+pub use lwext4_rust::InodeTypes;
 
 mod disk;
 mod inode;
@@ -10,11 +13,13 @@ mod fstype;
 pub use disk::Disk;
 use hal::println;
 pub use inode::Ext4Inode;
-pub use file::{list_apps, open_file, Ext4File};
+pub use file::Ext4File;
 pub use superblock::Ext4SuperBlock;
 pub use dentry::Ext4Dentry;
 pub use fstype::Ext4FSType;
 use virtio_drivers::PAGE_SIZE;
+
+use crate::fs::vfs::inode::InodeMode;
 
 use super::vfs::DCACHE;
 
@@ -23,7 +28,7 @@ pub fn page_cache_test() {
     // create a new inode at root
     let root_dentry = DCACHE.lock().get("/").unwrap().clone();
     let root = root_dentry.inode().unwrap();
-    let inode = root.create("/page_cache_test.txt", lwext4_rust::InodeTypes::EXT4_DE_REG_FILE).unwrap();
+    let inode = root.create("/page_cache_test.txt", InodeMode::FILE).unwrap();
 
     // write something in inode using cache mode
     let write_buf = [0xAAu8; 4 * PAGE_SIZE];
@@ -39,7 +44,7 @@ pub fn page_cache_test() {
     // drop(inode);
 
     // get the same inode and read again, make sure the data has been write back
-    let inode = root.create("/page_cache_test.txt", lwext4_rust::InodeTypes::EXT4_DE_REG_FILE).unwrap();
+    let inode = root.create("/page_cache_test.txt", InodeMode::FILE).unwrap();
     let mut read_buf_2 = [0u8; 4 * PAGE_SIZE];
     let read_size_2 = inode.clone().cache_read_at(0, &mut read_buf_2).expect("cache read failed at second time");
     assert!(read_size == read_size_2);

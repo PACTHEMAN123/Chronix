@@ -4,16 +4,18 @@
 //! impl Stdin and Stdout in `stdio.rs`
 #![allow(missing_docs)]
 pub mod stdio;
+pub mod fat32;
 pub mod ext4;
 pub mod vfs;
 pub mod pipe;
 pub mod page;
 
 use ext4::Ext4FSType;
+use fatfs::FatType;
 use log::*;
 pub use stdio::{Stdin, Stdout};
 
-use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
 use vfs::fstype::{FSType, MountFlags};
 
 use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
@@ -27,15 +29,42 @@ pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn FSType>>> =
     SpinNoIrqLock::new(BTreeMap::new());
 
 /// the default filesystem on disk
+#[cfg(not(feature = "fat32"))]
 pub const DISK_FS_NAME: &str = "ext4";
+
+#[cfg(not(feature = "fat32"))]
+type DiskFSType = Ext4FSType;
+
+#[cfg(feature = "fat32")]
+pub const DISK_FS_NAME: &str = "fat32";
+
+use crate::fs::fat32::fstype::Fat32FSType;
+#[cfg(feature = "fat32")]
+type DiskFSType = Fat32FSType;
+
+
+/// register all filesystem
+/// we need this to borrow static reference to mount the fs
+fn register_all_fs() {
+    let diskfs = DiskFSType::new();
+    FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
+}
+
+/// get the file system by name
+pub fn get_filesystem(name: &str) -> &'static Arc<dyn FSType> {
+    let arc = FS_MANAGER.lock().get(name).unwrap().clone();
+    Box::leak(Box::new(arc))
+}
+
 
 /// init the file system
 pub fn init() {
+    register_all_fs();
     // create the ext4 file system using the block device
-    let diskfs = Ext4FSType::new();
-    diskfs.clone().mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone()));
-    FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
-    info!("ext4 finish init");
+    let diskfs = get_filesystem(DISK_FS_NAME);
+    diskfs.mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone()));
+    info!("fs finish init");
+
 }
 
 /// AT_FDCWD: a special value

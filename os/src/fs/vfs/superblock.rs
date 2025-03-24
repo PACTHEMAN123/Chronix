@@ -38,6 +38,8 @@ pub trait SuperBlock: Send + Sync {
     fn set_root_dentry(&self, root: Arc<dyn Dentry>) {
         self.inner().root.call_once(|| root);
     }
+    /// get root dir inode (will only use construct)
+    fn get_root_inode(&'static self, name: &str) -> Arc<dyn Inode>;
 }
 
 impl dyn SuperBlock {

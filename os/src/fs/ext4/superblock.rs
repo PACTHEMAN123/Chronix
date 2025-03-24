@@ -33,4 +33,7 @@ impl SuperBlock for Ext4SuperBlock {
     fn inner(&self) -> &SuperBlockInner {
         &self.inner
     }
+    fn get_root_inode(&'static self, _name: &str) -> Arc<dyn Inode> {
+        self.inner().root.get().unwrap().clone().inode().unwrap()
+    }
 }

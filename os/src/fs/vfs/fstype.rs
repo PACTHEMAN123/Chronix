@@ -1,9 +1,7 @@
 //! vfs file system type
 
 use alloc::{
-    collections::btree_map::BTreeMap,
-    string::{String, ToString},
-    sync::Arc,
+    boxed::Box, collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc
 };
 
 use crate::{devices::BlockDevice, sync::mutex::SpinNoIrqLock};
@@ -30,7 +28,7 @@ pub trait FSType: Send + Sync {
     /// get the base fs type
     fn inner(&self) -> &FSTypeInner;
     /// mount a new instance of this file system
-    fn mount(self: Arc<Self>, name: &str, parent: Option<Arc<dyn Dentry>>, flags: MountFlags, dev: Option<Arc<dyn BlockDevice>>) -> Option<Arc<dyn Dentry>>;
+    fn mount(&'static self, name: &str, parent: Option<Arc<dyn Dentry>>, flags: MountFlags, dev: Option<Arc<dyn BlockDevice>>) -> Option<Arc<dyn Dentry>>;
     /// shutdown a instance of this file system
     fn kill_sb(&self) -> isize;
     /// get the file system name
@@ -44,6 +42,11 @@ pub trait FSType: Send + Sync {
         .lock()
         .get(abs_mount_path)
         .cloned()
+    }
+    /// get the static superblock
+    fn get_static_sb(&'static self, abs_mount_path: &str) -> &'static Arc<dyn SuperBlock> {
+        let arc = self.inner().supers.lock().get(abs_mount_path).cloned().unwrap();
+        Box::leak(Box::new(arc))
     }
     /// add a new super block
     fn add_sb(&self, abs_mount_path: &str, super_block: Arc<dyn SuperBlock>) {
