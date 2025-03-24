@@ -1,19 +1,16 @@
-use crate::fs::{ext4::Ext4File, vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock};
-
+use crate::fs::{fat32::file::FatFile, vfs::{Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock};
 use alloc::{sync::Arc, vec::Vec};
-use log::info;
 
-use lwext4_rust::InodeTypes;
 
-/// ext4 file system dentry implement for VFS
-pub struct Ext4Dentry {
+/// fat32 file system dentry implement for VFS
+pub struct FatDentry {
     inner: DentryInner,
 }
 
-unsafe impl Send for Ext4Dentry {}
-unsafe impl Sync for Ext4Dentry {}
+unsafe impl Send for FatDentry {}
+unsafe impl Sync for FatDentry {}
 
-impl Ext4Dentry {
+impl FatDentry {
     pub fn new(
         name: &str,
         superblock: Arc<dyn SuperBlock>,
@@ -26,11 +23,12 @@ impl Ext4Dentry {
     }
 }
 
-impl Dentry for Ext4Dentry {
+impl Dentry for FatDentry {
     fn inner(&self) -> &DentryInner {
         &self.inner
     }
-    fn new(&self,
+    fn new(
+        &self,
         name: &str,
         superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
@@ -43,6 +41,6 @@ impl Dentry for Ext4Dentry {
     fn open(self: Arc<Self>, flags: OpenFlags) -> Option<Arc<dyn File>> {
         assert!(self.state() == DentryState::USED);
         let (readable, writable) = flags.read_write();
-        Some(Arc::new(Ext4File::new(readable, writable, self.clone())))
+        Some(Arc::new(FatFile::new(readable, writable, self.clone())))
     }
 }

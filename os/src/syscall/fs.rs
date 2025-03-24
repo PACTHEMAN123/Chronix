@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
 use crate::{fs::{
-    ext4::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
+    vfs::file::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -208,20 +208,20 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
             let parent = dentry.parent().unwrap();
             let parent_inode = parent.inode().unwrap();
             let name = abs_path_to_name(&path).unwrap();
-            let new_inode = parent_inode.create(&name, lwext4_rust::InodeTypes::EXT4_DE_DIR).unwrap();
+            let new_inode = parent_inode.create(&name, InodeMode::DIR).unwrap();
             dentry.set_inode(new_inode);
             dentry.set_state(dentry::DentryState::USED);
             return Ok(0);
         } else {
             if dirfd == AT_FDCWD {
                 let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                cw_dentry.inode().unwrap().create(&path, lwext4_rust::InodeTypes::EXT4_DE_DIR);
+                cw_dentry.inode().unwrap().create(&path, InodeMode::DIR);
             } else {
                 // lookup in the current task's fd table
                 let task = current_task().unwrap();
                 if let Some(file) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
                     let inode = file.inode().unwrap();
-                    inode.create(&path, lwext4_rust::InodeTypes::EXT4_DE_DIR);
+                    inode.create(&path, InodeMode::DIR);
                     // todo: use dentry, create a new dentry and insert iode
                 } else {
                     info!("[sys_mkdirat]: the dirfd not exist");
@@ -431,5 +431,11 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     }
     inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
+    Ok(0)
+}
+
+/// syscall: mount
+/// (todo): now not support for device, we only have one block device
+pub fn sys_mount() -> SysResult {
     Ok(0)
 }

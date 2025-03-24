@@ -3,7 +3,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
-use lwext4_rust::InodeTypes;
 
 use super::SuperBlock;
 use crate::timer::ffi::TimeSpec;
@@ -64,20 +63,16 @@ pub trait Inode {
     fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
     /// write at given offset, allowing page caching
     fn cache_write_at(self: Arc<Self>, offset: usize, buf: &[u8]) -> Result<usize, i32>;
-    /// create inode
-    fn create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn Inode>>;
-    /// remove inode
-    fn remove(&self, path: &str) -> Result<usize, i32>;
-    /// get current inode parent
-    fn parent(&self) -> Option<Arc<dyn Inode>>;
-    /// rename current inode
-    fn rename(&self, src_path: &str, dst_path: &str) -> Result<usize, i32>;
+    /// create inode under current inode
+    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>>;
     /// resize the current inode
     fn truncate(&self, size: u64) -> Result<usize, i32>;
     /// get attributes of a file
     fn getattr(&self) -> Kstat;
     /// called by the unlink system call
     fn unlink(&self) -> Result<usize, i32>;
+    /// remove inode current inode
+    fn remove(&self, name: &str, mode: InodeMode) -> Result<usize, i32>;
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

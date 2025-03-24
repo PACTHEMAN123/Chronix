@@ -21,9 +21,11 @@ paste = "1.0"
 hal = {path = "./hal" }
 async-trait = "0.1.88"
 hashbrown = "0.14"
+fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
 
 [features]
 smp = []
+fat32 = []
 
 
 [profile.release]

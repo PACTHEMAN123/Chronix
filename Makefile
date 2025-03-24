@@ -49,6 +49,13 @@ else ifeq ($(ARCH), loongarch64)
 BOOTLOADER := bootloader/loongarch_bios_0310.bin
 endif
 
+KERNEL_FEATURES := 
+# Disk file system (default: ext4)
+FS := ext4
+ifeq ($(FS), fat32)
+KERNEL_FEATURES += fat32
+endif
+
 # Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
@@ -59,7 +66,6 @@ MODE_ARG += --target $(TARGET)
 # Crate features
 export SMP := 
 
-KERNEL_FEATURES := 
 ifneq ($(SMP),)
 	KERNEL_FEATURES += smp
 endif
@@ -129,13 +135,19 @@ fs-img: user basic_test
 	@echo "creating dir..."
 	@mkdir -p $(FS_IMG_DIR)
 	@mkdir -p mnt
+ifeq ($(FS), fat32)
+	dd if=/dev/zero of=$(FS_IMG) bs=1k count=1363148
+	@mkfs.vfat -F 32 -s 8 $(FS_IMG)
+	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
+else
 	dd if=/dev/zero of=$(FS_IMG) bs=1M count=2048
 	@mkfs.ext4 -F -O ^metadata_csum_seed $(FS_IMG)
-	@echo "making ext4 image by using $(BASIC_TEST_DIR)"
 	@sudo mount $(FS_IMG) mnt
-	@sudo dd if=/dev/zero of=mnt/swap bs=1M count=128
-	@sudo chmod 0600 mnt/swap
-	@sudo mkswap -L swap mnt/swap
+endif
+	@echo "making $(FS) image by using $(BASIC_TEST_DIR)"
+#	@sudo dd if=/dev/zero of=mnt/swap bs=1M count=128
+#	@sudo chmod 0600 mnt/swap
+#	@sudo mkswap -L swap mnt/swap
 	@echo "copying user apps and tests to the fs.img"
 	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt

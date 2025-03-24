@@ -93,7 +93,7 @@ pub fn main(id: usize) -> ! {
         processor::processor::init(id);
         hal::trap::init();
         fs::init();
-        fs::ext4::list_apps(); 
+        fs::vfs::file::list_apps(); 
         // fs::ext4::page_cache_test();       
         #[cfg(not(feature = "smp"))]
         executor::init();

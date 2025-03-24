@@ -8,3 +8,6 @@
 	path = vendor/testsuits-for-oskernel
 	url = https://github.com/oscomp/testsuits-for-oskernel.git
 	branch = pre-2025
+[submodule "vendor/rust-fatfs"]
+	path = vendor/rust-fatfs
+	url = https://github.com/rafalh/rust-fatfs
