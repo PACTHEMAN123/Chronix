@@ -232,9 +232,13 @@ impl Inode for FatDirInode {
         let dir = self.dir.exclusive_access();
         let target = dir.inner
         .iter()
-        .find(|x| x.as_ref().unwrap().file_name() == name)
-        .expect("iter over dir failed");
-        let target = target.unwrap();
+        .find(|x| {
+            x.as_ref().unwrap().file_name() == name
+        });
+        if target.is_none() {
+            return None;
+        }
+        let target = target.unwrap().unwrap();
         if target.is_dir() {
             Some(Arc::new(FatDirInode {
                 inner: InodeInner::new(
@@ -252,7 +256,7 @@ impl Inode for FatDirInode {
             Some(Arc::new(FatFileInode {
                 inner: InodeInner::new(
                     self.inner().super_block.upgrade()?.clone(),
-                InodeMode::DIR,
+                InodeMode::FILE,
                 0,
                 ),
                 file: UPSafeCell::new(FatFileMeta {

@@ -199,10 +199,8 @@ impl dyn Dentry {
     /// we assert that only dir dentry will call this method
     /// it will insert into DACHE by the way
     pub fn child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
-        info!("in child dentry, under: {}", self.path());
+        //info!("in child dentry, under: {}", self.path());
         let inode = self.inode().unwrap().clone();
-        let inner = inode.inner();
-        assert!(inner.mode == InodeMode::DIR);
         let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
         for name in inode.ls() {
             let child_inode = inode.lookup(&name).unwrap();
