@@ -2,25 +2,26 @@ use core::ops::Range;
 
 use alloc::{collections::btree_map::BTreeMap, vec::Vec};
 
-use crate::{addr::{PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTable, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc, vm::KernVmAreaType};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
+
+use crate::mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
-pub struct KernVmSpace<A: FrameAllocatorHal> {
-    page_table: PageTable<A>,
-    areas: Vec<KernVmArea<A>>,
-    alloc: A,
+#[allow(missing_docs, unused)]
+pub struct KernVmSpace {
+    page_table: PageTable,
+    areas: Vec<KernVmArea>,
 }
 
-pub struct UserVmSpace<A: FrameAllocatorHal> {
-    page_table: PageTable<A>,
-    areas: Vec<UserVmArea<A>>,
+#[allow(missing_docs, unused)]
+pub struct UserVmSpace {
+    page_table: PageTable,
+    areas: Vec<UserVmArea>,
     heap: usize,
-    #[allow(unused)]
-    alloc: A,
 }
 
-impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
+impl KernVmSpaceHal for KernVmSpace {
 
     fn enable(&self) {
         unsafe {
@@ -28,7 +29,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         }
     }
 
-    fn new_in(alloc: A) -> Self{
+    fn new() -> Self{
 
         unsafe extern "C" {
             fn stext();
@@ -45,16 +46,14 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         }
 
         let mut ret = Self {
-            page_table: PageTable::new_in(0, alloc.clone()),
+            page_table: PageTable::new_in(0, FrameAllocator),
             areas: Vec::new(),
-            alloc
         };
 
         ret.push_area(KernVmArea::new(
                 (stext as usize).into()..(etext as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::X, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::X,
             ),
             None
         );
@@ -62,8 +61,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (srodata as usize).into()..(erodata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R, 
-                ret.alloc.clone()
+                MapPerm::R,
             ),
             None
         );
@@ -71,8 +69,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (sdata as usize).into()..(edata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::W,
             ),
             None
         );
@@ -80,8 +77,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (sdata as usize).into()..(edata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::W,
             ),
             None
         );
@@ -90,7 +86,6 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
                 (sbss_with_stack as usize).into()..(ebss as usize).into(), 
                 KernVmAreaType::Data, 
                 MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
             ),
             None
         );
@@ -98,8 +93,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (kernel_stack_bottom as usize).into()..(kernel_stack_top as usize).into(), 
                 KernVmAreaType::KernelStack, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::W,
             ),
             None
         );
@@ -107,8 +101,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (ekernel as usize).into()..(Constant::MEMORY_END + Constant::KERNEL_ADDR_SPACE.start).into(), 
                 KernVmAreaType::PhysMem, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::W,
             ),
             None
         );
@@ -116,8 +109,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret.push_area(KernVmArea::new(
                 (ekernel as usize).into()..(Constant::MEMORY_END + Constant::KERNEL_ADDR_SPACE.start).into(), 
                 KernVmAreaType::PhysMem, 
-                MapPerm::R | MapPerm::W, 
-                ret.alloc.clone()
+                MapPerm::R | MapPerm::W,
             ),
             None
         );
@@ -128,7 +120,6 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
                     ((*pair).0 + Constant::KERNEL_ADDR_SPACE.start).into()..((*pair).0 + Constant::KERNEL_ADDR_SPACE.start + (*pair).1).into(),
                     KernVmAreaType::MemMappedReg, 
                     MapPerm::R | MapPerm::W,
-                    ret.alloc.clone()
                 ),
                 None
             );
@@ -137,7 +128,7 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         ret
     }
     
-    fn push_area(&mut self, mut area: KernVmArea<A>, data: Option<&[u8]>) {
+    fn push_area(&mut self, mut area: KernVmArea, data: Option<&[u8]>) {
         area.map(&mut self.page_table);
         if let Some(data) = data{
             area.copy_data(&mut self.page_table, data);
@@ -145,18 +136,18 @@ impl<A: FrameAllocatorHal> KernVmSpaceHal<A> for KernVmSpace<A> {
         self.areas.push(area);
     }
     
-    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<crate::addr::PhysPageNum>{
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>{
         self.page_table.translate_vpn(vpn)
     }
     
-    fn translate_va(&self, va: VirtAddr) -> Option<crate::addr::PhysAddr> {
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
         self.page_table.translate_va(va)
     }
 
 }
 
-impl<A:FrameAllocatorHal> UserVmSpace<A> {
-    fn find_heap(&mut self) -> Option<&mut UserVmArea<A>> {
+impl UserVmSpace {
+    fn find_heap(&mut self) -> Option<&mut UserVmArea> {
         if self.areas[self.heap].vma_type == UserVmAreaType::Heap {
             return Some(&mut self.areas[self.heap]);
         } else {
@@ -172,27 +163,25 @@ impl<A:FrameAllocatorHal> UserVmSpace<A> {
     }
 }
 
-impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> {
+impl UserVmSpaceHal for UserVmSpace {
 
-    fn new_in(alloc: A) -> Self {
+    fn new() -> Self {
         Self {
-            page_table: PageTable::<A>::new_in(0, alloc.clone()),
+            page_table: PageTable::new_in(0, FrameAllocator),
             areas: Vec::new(),
-            heap: 0,
-            alloc
+            heap: 0
         }
     }
 
-    fn get_page_table(&self) -> &PageTable<A> {
+    fn get_page_table(&self) -> &PageTable {
         &self.page_table
     }
 
-    fn from_kernel(kvm_space: &KernVmSpace<A>) -> Self {
+    fn from_kernel(kvm_space: &KernVmSpace) -> Self {
         let ret = Self {
-            page_table: PageTable::new_in(0, kvm_space.alloc.clone()),
+            page_table: PageTable::new_in(0, FrameAllocator),
             areas: Vec::new(),
             heap: 0,
-            alloc: kvm_space.alloc.clone()
         };
 
         ret.page_table.root_ppn
@@ -207,7 +196,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         ret
     }
 
-    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace<A>) -> (Self, super::VmSpaceUserStackTop, super::VmSpaceEntryPoint) {
+    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, super::VmSpaceUserStackTop, super::VmSpaceEntryPoint) {
         let mut ret = Self::from_kernel(kvm_space);
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -237,8 +226,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
                 let map_area = UserVmArea::new(
                     start_va..end_va, 
                     UserVmAreaType::Data,
-                    map_perm, 
-                    kvm_space.alloc.clone()
+                    map_perm,
                 );
                 max_end_vpn = map_area.range_vpn().end;
                 ret.push_area(
@@ -259,7 +247,6 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
                 user_heap_bottom.into()..user_heap_bottom.into(),
                 UserVmAreaType::Heap,
                 MapPerm::R | MapPerm::W | MapPerm::U,
-                kvm_space.alloc.clone()
             ),
             None,
         );
@@ -271,7 +258,6 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
                 user_stack_bottom.into()..user_stack_top.into(),
                 UserVmAreaType::Stack,
                 MapPerm::R | MapPerm::W | MapPerm::U,
-                kvm_space.alloc.clone()
             ),
             None,
         );
@@ -283,7 +269,6 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
                 Constant::USER_TRAP_CONTEXT_BOTTOM.into()..(Constant::USER_TRAP_CONTEXT_TOP).into(),
                 UserVmAreaType::TrapContext,
                 MapPerm::R | MapPerm::W,
-                kvm_space.alloc.clone()
             ),
             None,
         );
@@ -294,7 +279,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         )
     }
 
-    fn push_area(&mut self, mut area: UserVmArea<A>, data: Option<&[u8]>) {
+    fn push_area(&mut self, mut area: UserVmArea, data: Option<&[u8]>) {
         area.map(&mut self.page_table);
         if let Some(data) = data{
             area.copy_data(&mut self.page_table, data);
@@ -302,7 +287,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         self.areas.push(area);
     }
 
-    fn reset_heap_break(&mut self, new_brk: crate::addr::VirtAddr) -> crate::addr::VirtAddr {
+    fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr {
         let heap = self.find_heap().unwrap();
         let range = heap.range_va.clone();
         if new_brk >= range.end {
@@ -317,7 +302,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         }
     }
 
-    fn handle_page_fault(&mut self, va: crate::addr::VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
+    fn handle_page_fault(&mut self, va: VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
         let area = self.areas
             .iter_mut()
             .find(|a| a.range_va.contains(&va))
@@ -326,7 +311,7 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
         area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
     }
     
-    fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace<A>) -> Self {
+    fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self {
         let mut ret = Self::from_kernel(kvm_space);
         for area in uvm_space.areas.iter_mut() {
             match area.clone_cow(&mut uvm_space.page_table) {
@@ -353,13 +338,14 @@ impl<A: FrameAllocatorHal> UserVmSpaceHal<A, KernVmSpace<A>> for UserVmSpace<A> 
 
 }
 
-impl<A: FrameAllocatorHal> KernVmArea<A> {
+#[allow(missing_docs, unused)]
+impl KernVmArea {
 
     fn range_vpn(&self) -> Range<VirtPageNum> {
         self.range_va.start.floor()..self.range_va.end.ceil()
     }
 
-    fn copy_data(&mut self, page_table: &PageTable<A>, data: &[u8]) {
+    fn copy_data(&mut self, page_table: &PageTable, data: &[u8]) {
         let mut start: usize = 0;
         let len = data.len();
         for vpn in self.range_vpn() {
@@ -377,7 +363,7 @@ impl<A: FrameAllocatorHal> KernVmArea<A> {
         }
     }
 
-    fn map_range_to(&self, page_table: &mut PageTable<A>, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
+    fn map_range_to(&self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
         VpnPageRangeIter::new(range_vpn)
         .for_each(|(vpn, level)| {
             let ppn = PhysPageNum(start_ppn.0);
@@ -386,7 +372,7 @@ impl<A: FrameAllocatorHal> KernVmArea<A> {
         });
     }
 
-    fn map(&self, page_table: &mut PageTable<A>) {
+    fn map(&self, page_table: &mut PageTable) {
         let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
         match self.vma_type {
             KernVmAreaType::Data |
@@ -409,13 +395,14 @@ impl<A: FrameAllocatorHal> KernVmArea<A> {
     }
 }
 
-impl<A: FrameAllocatorHal> UserVmArea<A> {
+#[allow(missing_docs, unused)]
+impl UserVmArea {
 
     fn range_vpn(&self) -> Range<VirtPageNum> {
         self.range_va.start.floor()..self.range_va.end.ceil()
     }
 
-    fn copy_data(&mut self, page_table: &PageTable<A>, data: &[u8]) {
+    fn copy_data(&mut self, page_table: &PageTable, data: &[u8]) {
         let mut start: usize = 0;
         let len = data.len();
         for vpn in self.range_vpn() {
@@ -440,13 +427,12 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
             frames: self.frames.split_off(&p),
             map_perm: self.map_perm,
             vma_type: self.vma_type,
-            alloc: self.alloc.clone()
         };
         self.range_va = self.range_va.start..p.start_addr();
         ret
     }
     
-    fn map_range_to(&self, page_table: &mut PageTable<A>, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
+    fn map_range_to(&self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
         VpnPageRangeIter::new(range_vpn)
         .for_each(|(vpn, level)| {
             let ppn = PhysPageNum(start_ppn.0);
@@ -455,7 +441,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
         });
     }
 
-    fn map(&mut self, page_table: &mut PageTable<A>) {
+    fn map(&mut self, page_table: &mut PageTable) {
         if self.map_perm.contains(MapPerm::C) {
             for (&vpn, frame) in self.frames.iter() {
                 self.map_range_to(page_table, vpn..vpn+1, frame.range_ppn.start);
@@ -466,7 +452,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                 UserVmAreaType::TrapContext => {
                     let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
                     for vpn in range_vpn {
-                        let frame = self.alloc.alloc_tracker(1).unwrap();
+                        let frame = FrameAllocator.alloc_tracker(1).unwrap();
                         page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
                         self.frames.insert(vpn, StrongArc::new(frame));
                     }
@@ -478,7 +464,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
         }
     }
 
-    fn unmap(&mut self, page_table: &mut PageTable<A>) {
+    fn unmap(&mut self, page_table: &mut PageTable) {
         let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
         match self.vma_type {
             UserVmAreaType::Data |
@@ -498,7 +484,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
         }
     }
 
-    fn clone_cow(&mut self, page_table: &mut PageTable<A>) -> Result<Self, Self> {
+    fn clone_cow(&mut self, page_table: &mut PageTable) -> Result<Self, Self> {
         // note: trap context cannot supprt COW
         if self.vma_type == UserVmAreaType::TrapContext {
             return Err(self.clone());
@@ -519,12 +505,11 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
             frames: self.frames.clone(), 
             map_perm: self.map_perm.clone(), 
             vma_type: self.vma_type.clone(),
-            alloc: self.alloc.clone()
         })
     }
 
     fn handle_page_fault(&mut self, 
-        page_table: &mut PageTable<A>, 
+        page_table: &mut PageTable, 
         vpn: VirtPageNum,
         access_type: PageFaultAccessType
     ) -> Result<(), ()> {
@@ -546,7 +531,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
-                    let new_frame = StrongArc::new(self.alloc.alloc_tracker(level.page_count()).ok_or(())?);
+                    let new_frame = StrongArc::new(FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?);
                     new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                     let new_range_ppn = new_frame.range_ppn.clone();
 
@@ -571,7 +556,7 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
                     },
                     UserVmAreaType::Stack
                     | UserVmAreaType::Heap => {
-                        let new_frame = self.alloc.alloc_tracker(1).ok_or(())?;
+                        let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
                         self.map_range_to(page_table, vpn..vpn+1, new_frame.range_ppn.start);
                         self.frames.insert(vpn, StrongArc::new(new_frame));
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
@@ -584,14 +569,13 @@ impl<A: FrameAllocatorHal> UserVmArea<A> {
 
 }
 
-impl<A: FrameAllocatorHal> Clone for UserVmArea<A> {
+impl Clone for UserVmArea {
     fn clone(&self) -> Self {
         Self { 
             range_va: self.range_va.clone(), 
             vma_type: self.vma_type.clone(), 
             map_perm: self.map_perm.clone(), 
-            frames: BTreeMap::new(), 
-            alloc: self.alloc.clone() 
+            frames: BTreeMap::new(),
         }
     }
 }

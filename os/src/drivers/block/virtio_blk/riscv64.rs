@@ -3,13 +3,13 @@
 use crate::devices::BlockDevice;
 use crate::config::BLOCK_SIZE;
 use crate::mm::allocator::{frames_alloc_clean, frames_dealloc, FrameAllocator};
+use crate::mm::vm::KernVmSpaceHal;
 use crate::mm::{FrameTracker, PageTable, INIT_VMSPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
 use hal::constant::{Constant, ConstantsHal};
 use hal::pagetable::PageTableHal;
-use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use lazy_static::*;
 
 use alloc::{string::ToString, sync::Arc};
@@ -61,7 +61,7 @@ impl VirtIOBlock {
     pub fn new() -> Self {
         unsafe {
             let header = core::ptr::NonNull::new(VIRTIO0 as *mut VirtIOHeader).unwrap();
-            let transport = MmioTransport::new(header).unwrap();
+            let transport = MmioTransport::new(header, 4096).unwrap();
             Self(UPSafeCell::new(
                 VirtIOBlk::<VirtioHal, MmioTransport>::new(transport).expect("failed to create blk driver"),
             ))
@@ -107,8 +107,7 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         _direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         // use kernel space pagetable to get the physical address
-        let page_table = PageTable::from_token(INIT_VMSPACE.lock().get_page_table().get_token(), FrameAllocator);
-        let pa = page_table.translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
+        let pa = INIT_VMSPACE.lock().translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
         
         pa.0
     }

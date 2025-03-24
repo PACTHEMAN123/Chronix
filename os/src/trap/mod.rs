@@ -17,8 +17,8 @@ use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
-use hal::vm::UserVmSpaceHal;
-use hal::{addr::VirtAddr, vm::PageFaultAccessType};
+use crate::mm::vm::{UserVmSpaceHal, PageFaultAccessType};
+use hal::addr::VirtAddr;
 
 use crate::utils::async_utils::yield_now;
 use crate::executor;
@@ -72,7 +72,7 @@ pub async fn user_trap_handler()  {
         | TrapType::InstructionPageFault(stval)
         | TrapType::LoadPageFault(stval) => {
             log::debug!(
-                "[trap_handler] encounter page fault, addr {stval:#x}",
+                "[user_trap_handler] encounter page fault, addr {stval:#x}",
             );
 
             let access_type = match trap_type {
@@ -89,7 +89,6 @@ pub async fn user_trap_handler()  {
                     match res {
                         Ok(()) => {},
                         Err(()) => {
-                            // todo: don't panic, kill the task
                             log::warn!(
                                 "[user_trap_handler] cannot handle page fault, addr {stval:#x}",
                             );
@@ -111,14 +110,14 @@ pub async fn user_trap_handler()  {
             set_next_trigger();
             yield_now().await;
         }
+        TrapType::Processed => {}
         _ => {
-            /*panic!(
+            panic!(
                 "[trap_handler] Unsupported trap!"
             );
-            */
         }
     }
-    //println!("before trap_return");
+    // println!("before trap_return");
 }
 
 #[no_mangle]
@@ -141,7 +140,6 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     task.get_trap_cx().fx_restore();
     set_user_trap_entry();
     Instruction::set_float_status_clean();
-
     // restore
     hal::trap::restore(trap_cx_ptr);
 
@@ -162,7 +160,7 @@ fn kernel_trap_handler() {
         | TrapType::LoadPageFault(stval)
         | TrapType::InstructionPageFault(stval) => {
             log::debug!(
-                "[trap_handler] encounter page fault, addr {stval:#x}",
+                "[kernel_trap_handler] encounter page fault, addr {stval:#x}",
             );
 
             let access_type = match trap_type {
@@ -193,6 +191,7 @@ fn kernel_trap_handler() {
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
         }
+        TrapType::Processed => {}
         _ => {
             // error!("other exception!!");
             panic!(

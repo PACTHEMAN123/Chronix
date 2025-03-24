@@ -11,6 +11,8 @@ buddy_system_allocator = "0.6"
 log = "0.4"
 xmas-elf = "0.7.0"
 hal-marco = { path = "./hal-marco" }
+lazy_static = { version = "1.5.0", features = ["spin_no_std"]}
+virtio-drivers = "0.9.0"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.11.0"

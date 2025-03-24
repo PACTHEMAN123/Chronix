@@ -11,4 +11,7 @@ impl TimerHal for Timer {
     fn set_timer(timer: usize) {
         sbi_rt::set_timer(timer as _);
     }
+    fn get_timer_freq() -> usize {
+        return 12500000;
+    }
 }

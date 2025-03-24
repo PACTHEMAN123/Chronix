@@ -19,7 +19,7 @@ use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
 use hal::trap::{TrapContext, TrapContextHal};
-use hal::vm::{KernVmSpaceHal, UserVmSpaceHal};
+use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 
 use super::{SysResult,SysError};

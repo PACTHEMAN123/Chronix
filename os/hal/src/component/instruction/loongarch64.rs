@@ -78,6 +78,6 @@ impl InstructionHal for Instruction {
     }
     
     fn set_float_status_clean() {
-        // do nothing
+        register::euen::set_fpe(false);
     }
 }
