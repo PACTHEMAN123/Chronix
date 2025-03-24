@@ -429,7 +429,10 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     } else if flags != AT_REMOVEDIR && is_dir {
         return Err(SysError::EPERM);
     }
-    inode.unlink().expect("inode unlink failed");
+    // use parent inode to remove the inode in the fs
+    let name = abs_path_to_name(&path).unwrap();
+    dentry.parent().unwrap().inode().unwrap().remove(&name, inode.inner().mode).expect("remove failed");
+    //inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
     Ok(0)
 }
