@@ -305,7 +305,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         }
         task.remove_child(child_pid);
         TASK_MANAGER.remove_task(child_pid);
-        info!("remove task {} from PROCESS_GROUP_MANAGER", task.tid());
+        //info!("remove task {} from PROCESS_GROUP_MANAGER", task.tid());
         PROCESS_GROUP_MANAGER.remove(&task);
         return Ok(child_pid as isize);
     }
@@ -366,3 +366,16 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult {
     }
     Ok(0)
 }
+/// exit_group - exit all threads in a process
+pub fn sys_exit_group(exit_code: i32) -> SysResult {
+    let task = current_task().unwrap();
+    task.with_thread_group(|tg| {
+        for thread in tg.iter() {
+            // info!("[sys_exit_group]: exit thread {}", thread.tid())
+            thread.set_zombie();
+        }
+    });
+    task.set_exit_code((exit_code & 0xFF) << 8);
+    Ok(0)
+}
+

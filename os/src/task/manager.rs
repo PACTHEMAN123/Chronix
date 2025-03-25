@@ -78,7 +78,7 @@ impl ProcessGroupManager {
     }
     /// remove a task from a group
     pub fn remove(&self, task: &Arc<TaskControlBlock>) {
-        info!("remove task {} from group {}", task.tid(), task.pgid());
+        //info!("remove task {} from group {}", task.tid(), task.pgid());
         self.0.lock().get_mut(&task.pgid()).unwrap()
         .retain(|t|t.upgrade().map_or(false, |inner| Arc::ptr_eq(task, &inner)));
     }

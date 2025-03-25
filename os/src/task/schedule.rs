@@ -18,7 +18,8 @@ use crate::processor::{context::EnvContext,processor::current_processor};
 
 /// The outermost future for user task
 pub struct UserTaskFuture <F: Future + Send + 'static>{
-    task: Arc<TaskControlBlock>,
+    /// pub for cpu_mask
+    pub task: Arc<TaskControlBlock>,
     env: EnvContext,
     future: F,
 }
