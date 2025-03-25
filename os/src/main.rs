@@ -114,10 +114,9 @@ pub fn main(id: usize) -> ! {
         Instruction::enable_timer_interrupt();
     }
     timer::set_next_trigger();
-    
-    let _tasks = executor::run_until_idle();
-
-    Instruction::shutdown(false);
+    loop {
+        let _tasks = executor::run_until_idle();
+    }
 }
 
 hal::define_entry!(main);

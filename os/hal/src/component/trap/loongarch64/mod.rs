@@ -182,8 +182,8 @@ impl FloatContextHal for FloatContext {
         if self.need_save == 0 {
             return;
         }
-        warn!("FP Save");
         self.need_save = 0;
+        warn!("FP save");
         let last_fpe = register::euen::read().fpe();
         register::euen::set_fpe(true);
         unsafe {
