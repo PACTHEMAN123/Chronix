@@ -10,6 +10,7 @@ use alloc::sync::Arc;
 use async_task::Runnable;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
+use hal::println;
 use hal::trap::{TrapContext, TrapContextHal};
 use crate::mm::vm::KernVmSpaceHal;
 use lazy_static::*;

@@ -183,7 +183,6 @@ ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
 QEMU_ARGS += -bios $(BOOTLOADER)
 else ifeq ($(ARCH), loongarch64)
-QEMU_ARGS += -cpu la464
 endif
 
 ifneq ($(SMP),)

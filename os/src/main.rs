@@ -39,7 +39,7 @@ extern crate bitflags;
 
 use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal};
+use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::*;
 use mm::{vm::KernVmSpaceHal, INIT_VMSPACE};
 use processor::processor::current_processor;
@@ -78,15 +78,14 @@ fn processor_start(id: usize) {
             continue;
         }
         Instruction::hart_start(i, Constant::KERNEL_ENTRY_PA,0);
-        //info!("[kernel] start to wake up processor {}... status {:?}",i,status);
+        // info!("[kernel] start to wake up processor {}... ",i);
     }
 }
 
 /// the rust entry-point of os
 pub fn main(id: usize) -> ! {
-    if FIRST_PROCESSOR.load(Ordering::Acquire)
+    if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok()
     {
-        FIRST_PROCESSOR.store(false, Ordering::Release);
         info!("id: {id}");
         info!("[kernel] Hello, world!");
         mm::init();
@@ -115,12 +114,9 @@ pub fn main(id: usize) -> ! {
         Instruction::enable_timer_interrupt();
     }
     timer::set_next_trigger();
-    loop{
-        // info!("now Idle loop");
+    loop {
         let _tasks = executor::run_until_idle();
-        // info!("[kernel] {} have {} tasks run",current_processor().id(),tasks);
     }
-    //panic!("Unreachable in rust_main!");
 }
 
 hal::define_entry!(main);
