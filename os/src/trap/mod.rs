@@ -126,7 +126,7 @@ pub async fn user_trap_handler()  {
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return(task: &Arc<TaskControlBlock>) {
     unsafe{
-        Instruction::disable_interrupt();
+        Instruction::disable_interrupt();  
     }
     
     task.time_recorder().record_trap_return();
@@ -135,7 +135,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
 
     // handler the signal before return
     check_signal_for_current_task();
-  
+
     // restore float pointer and set status
     task.get_trap_cx().fx_restore();
     set_user_trap_entry();

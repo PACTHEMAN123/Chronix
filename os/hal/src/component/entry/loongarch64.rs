@@ -49,8 +49,8 @@ unsafe extern "C" fn _start() -> ! {
 pub static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 
 pub(crate) fn rust_main(id: usize) {
+    tlb_init();
     if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
-        tlb_init();
         super::clear_bss();
         crate::console::init();
         print_info();

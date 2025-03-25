@@ -19,13 +19,19 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
+        let mut try_count: usize = 0usize;
+        let sie_guard = SieGuard::new();
+        core::hint::spin_loop();
         loop {
-            let sie_guard = SieGuard::new();
             if self.mutex.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
                 break MutexGuard {
                     mutex: self,
                     sie_guard,
                 }
+            }
+            try_count += 1;
+            if try_count > 10000000 {
+                panic!("dead lock");
             }
         }
     }
