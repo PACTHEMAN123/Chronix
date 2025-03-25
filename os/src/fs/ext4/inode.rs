@@ -91,6 +91,30 @@ impl Inode for Ext4Inode {
         &self.inner
     }
 
+    fn cache(&self) -> Arc<PageCache> {
+        self.cache.clone()
+    }
+
+    fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
+        let page_cache = self.cache();
+        let size = self.file.exclusive_access().file_size() as usize;
+        if offset >= size {
+            info!("[Ext4 INode]: read_page_at: reach EOF");
+            return None;
+        }
+
+        let page = if let Some(page) = page_cache.get_page(offset) {
+            page.clone()
+        } else {
+            let mut page = Page::new(offset);
+            let read_size = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), offset);
+            page_cache.insert_page(offset, page.clone());
+            page_cache.update_end(offset + read_size);
+            page
+        };
+        Some(page)
+    }
+
     /// Look up the node with given `name` in the directory
     /// Return the node if found.
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
@@ -323,7 +347,11 @@ impl Inode for Ext4Inode {
 
     fn getattr(&self) -> Kstat {
         let inner = self.inner();
-        let size = inner.size;
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let _r = file.file_open(&path.to_str().unwrap(), O_RDONLY);
+        let size = file.file_size() as usize;
+        info!("file size: {}", size);
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,

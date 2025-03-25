@@ -3,7 +3,7 @@
 use core::{cmp, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 
 use alloc::sync::{Arc, Weak};
-use hal::{addr::RangePPNHal, allocator::FrameAllocatorHal};
+use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, util::smart_point::StrongArc};
 
 use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator}, FrameTracker}};
 
@@ -12,8 +12,8 @@ pub struct Page {
     pub is_dirty: AtomicBool,
     /// offset in a file (if is owned by file)
     pub index: usize, 
-    /// the physical frame it points to
-    pub frame: Arc<FrameTracker>,
+    /// the physical frame it owns
+    pub frame: StrongArc<FrameTracker>,
 }
 
 unsafe impl Send for Page {}
@@ -23,13 +23,13 @@ pub const PAGE_SIZE: usize = 4096;
 impl Page {
     /// create a Page by allocating a frame
     pub fn new(index: usize) -> Arc<Self> {
-        let frame = Arc::new(FrameAllocator.alloc_tracker(1).expect("[Page]: allocating page failed"));
+        let frame = FrameAllocator.alloc_tracker(1).expect("[Page]: allocating page failed");
         // clean up the page
         frame.range_ppn.get_slice_mut::<u8>().fill(0);
         Arc::new(Self {
             is_dirty: AtomicBool::new(false), // need more flags
             index: index,
-            frame: frame,
+            frame: StrongArc::new(frame),
         })
     }
     /// return the mutable slice of the raw data the page points to
@@ -39,6 +39,14 @@ impl Page {
     /// return the immutable slice of the raw data the page points to
     pub fn get_slice<T>(&self) -> &[T] {
         self.frame.range_ppn.get_slice::<T>()
+    }
+    /// return the physical page number of this page
+    pub fn ppn(&self) -> PhysPageNum {
+        self.frame.range_ppn.start
+    }
+    /// return the physical frame
+    pub fn frame(&self) -> StrongArc<FrameTracker> {
+        self.frame.clone()
     }
     /// write the page at a specific offset
     /// this only will only be call when user try to write cached page

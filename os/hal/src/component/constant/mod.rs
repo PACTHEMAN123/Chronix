@@ -29,6 +29,15 @@ pub trait ConstantsHal {
     const USER_STACK_BOTTOM: usize = Self::USER_STACK_TOP - Self::USER_STACK_SIZE;
     const USER_STACK_TOP: usize;
 
+    const USER_FILE_BEG: usize = Self::USER_FILE_END - Self::USER_FILE_SIZE;
+    const USER_FILE_SIZE: usize;
+    const USER_FILE_END: usize;
+    const USER_FILE_PER_PAGES: usize = 8; // how many pages can a mmap file own
+
+    const USER_SHARE_BEG: usize = Self::USER_SHARE_END - Self::USER_SHARE_SIZE;
+    const USER_SHARE_SIZE: usize;
+    const USER_SHARE_END: usize;
+
     const USER_TRAP_CONTEXT_SIZE: usize;
     const USER_TRAP_CONTEXT_TOP: usize;
     const USER_TRAP_CONTEXT_BOTTOM: usize = Self::USER_TRAP_CONTEXT_TOP - Self::USER_TRAP_CONTEXT_SIZE + 1;

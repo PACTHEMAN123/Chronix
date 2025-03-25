@@ -15,6 +15,8 @@ const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3: usize = 24;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UNLINKAT: usize = 35;
+const SYSCALL_UMOUNT2: usize = 39;
+const SYSCALL_MOUNT: usize = 40;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
@@ -41,14 +43,19 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
+const SYSCALL_MUNMAP: usize = 215;
+const SYSCALL_MMAP: usize = 222;
 
 pub mod fs;
 pub mod process;
 pub mod time;
 pub mod signal;
+pub mod mm;
 
 mod sys_error;
 pub use fs::*;
+use hal::addr::VirtAddr;
+use mm::{sys_mmap, sys_munmap};
 pub use process::*;
 pub use time::*;
 pub use signal::*;
@@ -66,6 +73,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
+        SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as usize),
+        SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe2(args[0] as *mut i32, args[1] as u32),
@@ -91,6 +100,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_EXEC => sys_exec(args[0] , args[1] ).await,
         SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
+        SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
+        SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     };
     match result {

@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::timer::ffi::TimeSpec;
+use crate::{fs::page::{cache::PageCache, page::Page}, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -59,6 +59,13 @@ pub trait Inode {
     /// write at given offset in direct IO
     /// the Inode should make sure stop writing when at EOF itself
     fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32>;
+    /// get the page cache it owned
+    fn cache(&self) -> Arc<PageCache>;
+    /// get a page at given offset
+    /// if the page already in cache, just return the cache
+    /// if the page is not in cache, need to load the page into cache
+    /// if the offset is out of bound, return None 
+    fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>>;
     /// read at given offset, allowing page caching
     fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
     /// write at given offset, allowing page caching
