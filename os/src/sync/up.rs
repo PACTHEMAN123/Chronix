@@ -27,6 +27,12 @@ impl<T> UPSafeCell<T> {
             inner: UnsafeCell::new(value),
         }
     }
+    /// new a const UPSafeCell
+    pub const fn const_new(value: T) -> Self {
+        Self {
+            inner: UnsafeCell::new(value),
+        }
+    }
     /// Panic if the data has been borrowed.
     pub fn exclusive_access(&self) -> &mut T {
         unsafe {
