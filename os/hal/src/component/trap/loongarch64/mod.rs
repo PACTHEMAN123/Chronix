@@ -1,13 +1,15 @@
 use core::fmt::Debug;
 
 use log::warn;
-use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
+use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}, euen::set_fpe};
 
-use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, instruction::{Instruction, InstructionHal}, pagetable::{PTEFlags, PageTable, PageTableHal}, println};
+use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}, pagetable::{PTEFlags, PageTable, PageTableHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
 core::arch::global_asm!(include_str!("trap.S"));
+
+pub(crate) static mut FP_REG_DIRTY: [bool; MAX_PROCESSORS] = [false; MAX_PROCESSORS];
 
 impl TrapTypeHal for TrapType {
     fn get() -> Self {
@@ -154,8 +156,8 @@ impl TrapContextHal for TrapContext {
     }
 
     fn mark_fx_save(&mut self) {
-        self.user_fx.need_save = register::euen::read().fpe() as u8;
-        self.user_fx.signal_dirty = register::euen::read().fpe() as u8;
+        self.user_fx.need_save |= register::euen::read().fpe() as u8;
+        self.user_fx.signal_dirty |= register::euen::read().fpe() as u8;
     }
 
     fn fx_yield_task(&mut self) {
@@ -180,7 +182,10 @@ impl FloatContextHal for FloatContext {
         if self.need_save == 0 {
             return;
         }
+        warn!("FP Save");
         self.need_save = 0;
+        let last_fpe = register::euen::read().fpe();
+        register::euen::set_fpe(true);
         unsafe {
             let mut _t: usize = 1; // as long as not x0
             core::arch::asm!("
@@ -223,6 +228,7 @@ impl FloatContextHal for FloatContext {
             inout(reg) _t
             );
         }
+        register::euen::set_fpe(last_fpe);
     }
 
     fn restore(&mut self) {
@@ -230,7 +236,9 @@ impl FloatContextHal for FloatContext {
             return;
         }
         self.need_restore = 0;
-        // println!("restore float");
+        warn!("FP restore");
+        let last_fpe = register::euen::read().fpe();
+        register::euen::set_fpe(true);
         unsafe {
             let mut _t: usize = 1; // as long as not x0
             core::arch::asm!("
@@ -273,6 +281,7 @@ impl FloatContextHal for FloatContext {
             inout(reg) _t
             );
         }
+        register::euen::set_fpe(last_fpe);
     }
 
     fn yield_task(&mut self) {
@@ -365,7 +374,8 @@ fn get_trap_type() -> TrapType {
             handle_page_modify_fault(badv)
         },
         Trap::Exception(Exception::FloatingPointUnavailable) => {
-            register::euen::set_fpe(true);
+            let cpuid = register::cpuid::read().core_id();
+            unsafe { FP_REG_DIRTY[cpuid] = true; }
             TrapType::Processed
         },
         _ => {

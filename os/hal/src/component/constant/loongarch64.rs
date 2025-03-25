@@ -1,7 +1,7 @@
 use super::{Constant, ConstantsHal};
 
 impl ConstantsHal for Constant {
-    const KERNEL_ENTRY_PA: usize = 0x9000_0000_9000_0000;
+    const KERNEL_ENTRY_PA: usize = 0x9000_0000;
 
     const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9000_ffff_ffff_ffff;
 

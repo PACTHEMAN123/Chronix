@@ -1,5 +1,5 @@
-use core::sync::atomic::{AtomicBool, Ordering};
-use crate::util::sie_guard::SieGuard;
+use core::{ops::DerefMut, sync::atomic::{AtomicBool, Ordering}};
+use crate::util::{mutex::Mutex, sie_guard::{self, SieGuard}};
 
 #[macro_export]
 /// print string macro
@@ -23,20 +23,15 @@ macro_rules! println {
 /// every arch needs to impl core::fmt::Write for Stdout
 struct Stdout;
 
-static CONSOLE_MUTEX: AtomicBool = AtomicBool::new(false); 
+/// Stdout mutex
+static STDOUT_MUTEX: AtomicBool = AtomicBool::new(false); 
 
 pub fn _print(args: core::fmt::Arguments) {
-    
     loop {
-        if CONSOLE_MUTEX.compare_exchange(
-            false, true, 
-            Ordering::Acquire, Ordering::Relaxed
-        ).is_ok() {
-            //unsafe { Instruction::disable_interrupt(); }
-            let _sie_guard = SieGuard::new();
+        let _sie_guard = SieGuard::new();
+        if STDOUT_MUTEX.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
-            CONSOLE_MUTEX.store(false, Ordering::Release);
-            //unsafe { Instruction::enable_interrupt(); }
+            STDOUT_MUTEX.store(false, Ordering::Release);
             break;
         }
     }
