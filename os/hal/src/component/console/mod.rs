@@ -1,4 +1,5 @@
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::util::sie_guard::SieGuard;
 
 #[macro_export]
 /// print string macro
@@ -96,7 +97,3 @@ mod loongarch64;
 #[cfg(target_arch = "loongarch64")]
 #[allow(unused)]
 pub use loongarch64::*;
-
-use crate::util::sie_guard::SieGuard;
-
-use super::instruction::{Instruction, InstructionHal};

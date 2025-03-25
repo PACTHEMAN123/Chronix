@@ -1,6 +1,6 @@
 use core::{alloc::Layout, ops::{Deref, DerefMut}, ptr::NonNull, sync::atomic::{AtomicUsize, Ordering}};
 
-use alloc::alloc::{Allocator, Global};
+use alloc::alloc::{handle_alloc_error, Allocator, Global};
 
 struct StrongArcPayload<T> {
     data: T,
@@ -46,7 +46,8 @@ impl<T: Sized> StrongArc<T, Global> {
 #[allow(unused, missing_docs)]
 impl<T: Sized, A: Allocator + Clone> StrongArc<T, A> {
     pub fn new_in(data: T, alloc: A) -> Self {
-        match alloc.allocate(Layout::new::<StrongArcPayload<T>>()) {
+        let layout = Layout::new::<StrongArcPayload<T>>();
+        match alloc.allocate(layout) {
             Ok(p) => {
                 let mut payload: NonNull<StrongArcPayload<T>> = p.cast();
                 unsafe {
@@ -60,7 +61,7 @@ impl<T: Sized, A: Allocator + Clone> StrongArc<T, A> {
                     alloc,
                 }
             },
-            Err(_) => panic!("allocate failed")
+            Err(_) => handle_alloc_error(layout)
         }
     }
 
@@ -100,7 +101,7 @@ impl<T: Sized, A: Allocator + Clone> Drop for StrongArc<T, A> {
             let strong = rc_ref.load(Ordering::Acquire);
             if strong == 0 {
                 unsafe { 
-                    // self.payload.drop_in_place();
+                    self.payload.drop_in_place();
                     self.alloc.deallocate(self.payload.cast(), Layout::new::<StrongArcPayload<T>>());
                 }
                 self.payload = NonNull::dangling();

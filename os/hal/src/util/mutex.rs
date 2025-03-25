@@ -1,7 +1,5 @@
 use core::{cell::UnsafeCell, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, Ordering}};
 
-use crate::instruction::{Instruction, InstructionHal};
-
 use super::sie_guard::SieGuard;
 
 pub struct Mutex<T> {
@@ -16,25 +14,27 @@ impl<T> Mutex<T> {
     pub const fn new(val: T) -> Self {
         Self {
             val: UnsafeCell::new(val),
-            mutex: AtomicBool::new(false)
+            mutex: AtomicBool::new(false),
         }
     }
 
     pub fn lock<'a>(&'a self) -> MutexGuard<'a, T> {
         loop {
+            let sie_guard = SieGuard::new();
             if self.mutex.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                // unsafe { Instruction::disable_interrupt(); }
-                let _sie_guard = SieGuard::new();
                 break MutexGuard {
-                    mutex: self
+                    mutex: self,
+                    sie_guard,
                 }
             }
         }
     }
 }
 
+#[allow(unused)]
 pub struct MutexGuard<'a, T> {
-    mutex: &'a Mutex<T>
+    mutex: &'a Mutex<T>,
+    sie_guard: SieGuard,
 }
 
 impl<'a, T> MutexGuard<'a, T> {
@@ -58,7 +58,6 @@ impl<'a, T> DerefMut for MutexGuard<'a, T> {
 impl<'a, T> Drop for MutexGuard<'a, T> {
     fn drop(&mut self) {
         self.mutex.mutex.store(false, Ordering::Release);
-        // unsafe { Instruction::enable_interrupt(); }
     }
 }
 
