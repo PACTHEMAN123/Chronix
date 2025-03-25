@@ -1,10 +1,12 @@
-use core::ops::Range;
+use core::{cmp, ops::Range};
 
-use alloc::{collections::btree_map::BTreeMap, vec::Vec};
+use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
+use log::info;
 
-use crate::mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable};
+use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable}};
+use crate::syscall::{mm::MmapFlags, SysResult};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -335,7 +337,66 @@ impl UserVmSpaceHal for UserVmSpace {
         ret
     }
     
+    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult {
+        assert!(va.0 % PAGE_SIZE == 0);
+        // todo: now we dont support fixed addr mmap
+        // just simply alloc mmap area from start of the mmap area
+        // need to feat unmap vm area
+        let start = VirtAddr::from(Constant::USER_FILE_BEG);
+        let range = start..start + len;
+        let page_table = &mut self.page_table;
+        let inode = file.inode().unwrap();
+        let mut vma = UserVmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
+        let mut range_vpn = vma.range_vpn();
+        let length = cmp::min(len, Constant::USER_FILE_PER_PAGES * PAGE_SIZE);
+        // the offset is already page aligned
+        for page_offset in (offset..offset + length).step_by(PAGE_SIZE) {
+            // get the cached page
+            if let Some(page) = inode.clone().read_page_at(page_offset) {
+                // page already in cache
+                let vpn = range_vpn.next().unwrap();
+                if flags.contains(MmapFlags::MAP_PRIVATE) {
+                    // private mode: map in COW
+                    let mut new_perm = perm;
+                    new_perm.remove(MapPerm::W);
+                    new_perm.insert(MapPerm::C);
+                    // map a single page
+                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                    vma.frames.insert(vpn, StrongArc::clone(&page.frame()));
+                    vma.map_perm.insert(MapPerm::C);
+                    // update tlb
+                    unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                } else {
+                    // share mode
+                    info!("[alloc_mmap_area]: mapping vpn:{:x} to ppn:{:x}", vpn.0, page.ppn().0);
+                    page_table.map(vpn, page.ppn(), perm, PageLevel::Small);
+                    vma.frames.insert(vpn, StrongArc::clone(&page.frame()));
+                    unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                }
+            } else {
+                // reach EOF
+                break;
+            }
+        }
+        self.push_area(vma, None);
+        Ok(start.0 as isize)
+    }
 
+    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult {
+        assert!(va.0 % PAGE_SIZE == 0);
+        // need to support fixed map
+        let start = VirtAddr::from(Constant::USER_SHARE_BEG);
+        let range = start..start + len;
+        if is_share {
+            let vma = UserVmArea::new(range, UserVmAreaType::Shm, perm);
+            self.push_area(vma, None);
+        } else {
+            let vma = UserVmArea::new_mmap(range, perm, flags, None, 0);
+            self.push_area(vma, None);
+
+        }
+        Ok(start.0 as isize)
+    }
 }
 
 #[allow(missing_docs, unused)]
@@ -427,6 +488,9 @@ impl UserVmArea {
             frames: self.frames.split_off(&p),
             map_perm: self.map_perm,
             vma_type: self.vma_type,
+            file: self.file.clone(),
+            offset: self.offset,
+            mmap_flags: self.mmap_flags,
         };
         self.range_va = self.range_va.start..p.start_addr();
         ret
@@ -458,7 +522,9 @@ impl UserVmArea {
                     }
                 },
                 UserVmAreaType::Heap |
-                UserVmAreaType::Stack => {
+                UserVmAreaType::Stack |
+                UserVmAreaType::Mmap |
+                UserVmAreaType::Shm => {
                 },
             }
         }
@@ -475,7 +541,9 @@ impl UserVmArea {
                 self.frames.clear();
             },
             UserVmAreaType::Heap |
-            UserVmAreaType::Stack => {
+            UserVmAreaType::Stack | 
+            UserVmAreaType::Mmap | 
+            UserVmAreaType::Shm => {
                 for &vpn in self.frames.keys() {
                     page_table.unmap(vpn);
                 }
@@ -505,6 +573,9 @@ impl UserVmArea {
             frames: self.frames.clone(), 
             map_perm: self.map_perm.clone(), 
             vma_type: self.vma_type.clone(),
+            file: self.file.clone(),
+            mmap_flags: self.mmap_flags.clone(),
+            offset: self.offset,
         })
     }
 
@@ -561,6 +632,12 @@ impl UserVmArea {
                         self.frames.insert(vpn, StrongArc::new(new_frame));
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                         return Ok(());
+                    },
+                    UserVmAreaType::Mmap => {
+                        panic!("do something");
+                    },
+                    UserVmAreaType::Shm => {
+                        panic!("do something");
                     }
                 }
             }
@@ -576,6 +653,9 @@ impl Clone for UserVmArea {
             vma_type: self.vma_type.clone(), 
             map_perm: self.map_perm.clone(), 
             frames: BTreeMap::new(),
+            file: self.file.clone(),
+            mmap_flags: self.mmap_flags.clone(),
+            offset: self.offset,
         }
     }
 }

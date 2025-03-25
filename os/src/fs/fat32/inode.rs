@@ -11,6 +11,8 @@ use fatfs::{Read, Seek, SeekFrom, Write};
 use log::{debug, info};
 
 use crate::fs::vfs::inode::InodeMode;
+use crate::fs::page::cache::PageCache;
+use crate::fs::page::page::Page;
 use crate::fs::{Kstat, SuperBlock};
 use crate::{fs::vfs::{Inode, InodeInner}, sync::UPSafeCell};
 
@@ -46,6 +48,14 @@ pub struct FatDirMeta {
 impl Inode for FatFileInode {
     fn inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn cache(&self) -> Arc<PageCache> {
+        panic!("not support");
+    }
+
+    fn read_page_at(self: Arc<Self>, _offset: usize) -> Option<Arc<Page>> {
+        panic!("not support");
     }
 
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
@@ -164,6 +174,12 @@ impl Inode for FatFileInode {
 impl Inode for FatDirInode {
     fn inner(&self) -> &InodeInner {
         &self.inner
+    }
+    fn cache(&self) -> Arc<PageCache> {
+        panic!("fat32 not support for caching")
+    }
+    fn read_page_at(self: Arc<Self>, _offset: usize) -> Option<Arc<Page>> {
+        panic!("not support");
     }
     fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
         let dir = self.dir.exclusive_access();

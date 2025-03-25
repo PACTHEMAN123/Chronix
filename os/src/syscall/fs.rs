@@ -2,8 +2,8 @@
 use alloc::string::ToString;
 use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
-use crate::{fs::{
-    vfs::file::open_file, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
+use crate::{drivers::BLOCK_DEVICE, fs::{
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -438,7 +438,30 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
 }
 
 /// syscall: mount
-/// (todo): now not support for device, we only have one block device
-pub fn sys_mount() -> SysResult {
+/// (todo)
+pub fn sys_mount(
+    _source: *const u8,
+    _target: *const u8,
+    _fstype: *const u8,
+    _flags: u32,
+    _data: usize,
+) -> SysResult {
+    /*
+    let _source_path = user_path_to_string(source).unwrap();
+    let target_path = user_path_to_string(target).unwrap();
+    let flags = MountFlags::from_bits(flags).unwrap();
+    let fat32_type = get_filesystem("fat32");
+    let dev = Some(BLOCK_DEVICE.clone());
+    let parent_path = abs_path_to_parent(&target_path).unwrap();
+    let name = abs_path_to_name(&target_path).unwrap();
+    let parent = global_find_dentry(&parent_path);
+
+    fat32_type.mount(&name, Some(parent), flags, dev);
+    */
+    Ok(0)
+}
+
+/// fake unmount
+pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
     Ok(0)
 }

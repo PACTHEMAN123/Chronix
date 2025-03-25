@@ -1,8 +1,10 @@
 use core::ops::Range;
-use alloc::collections::btree_map::BTreeMap;
+use alloc::{collections::btree_map::BTreeMap, sync::Arc};
 
 use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
+
+use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}};
 
 use super::{allocator::FrameAllocator, PageTable, FrameTracker};
 
@@ -29,7 +31,11 @@ pub enum UserVmAreaType {
     /// stack
     Stack, 
     /// trap context
-    TrapContext
+    TrapContext,
+    /// file mmap
+    Mmap,
+    /// shared memory
+    Shm,
 }
 
 #[allow(missing_docs, unused)]
@@ -38,6 +44,10 @@ pub struct UserVmArea {
     pub vma_type: UserVmAreaType,
     pub map_perm: MapPerm,
     pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
+    /// for mmap usage
+    pub file: Option<Arc<dyn File>>,
+    pub mmap_flags: MmapFlags,
+    pub offset: usize,
 }
 
 #[allow(missing_docs, unused)]
@@ -52,6 +62,27 @@ impl UserVmArea {
             vma_type,
             map_perm,
             frames: BTreeMap::new(),
+            file: None,
+            mmap_flags: MmapFlags::default(),
+            offset: 0,
+        }
+    }
+
+    fn new_mmap(
+        range_va: Range<VirtAddr>,
+        map_perm: MapPerm,
+        flags: MmapFlags,
+        file: Option<Arc<dyn File>>,
+        offset: usize,
+    ) -> Self {
+        Self {
+            range_va,
+            vma_type: UserVmAreaType::Mmap,
+            map_perm,
+            frames: BTreeMap::new(),
+            file: file,
+            mmap_flags: flags,
+            offset: 0,
         }
     }
 }
@@ -149,6 +180,10 @@ pub trait UserVmSpaceHal: Sized {
     fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr;
 
     fn handle_page_fault(&mut self, va: VirtAddr, access_type: PageFaultAccessType) -> Result<(), ()>;
+
+    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult;
+
+    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult;
 }
 
 #[cfg(target_arch = "riscv64")]
