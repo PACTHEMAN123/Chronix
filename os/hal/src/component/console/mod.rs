@@ -1,5 +1,5 @@
-use core::{ops::DerefMut, sync::atomic::{AtomicBool, Ordering}};
-use crate::util::{mutex::Mutex, sie_guard::{self, SieGuard}};
+use core::sync::atomic::{AtomicBool, Ordering};
+use crate::util::sie_guard::SieGuard;
 
 #[macro_export]
 /// print string macro
