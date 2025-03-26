@@ -37,7 +37,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
     "socket-dhcpv4",
     "async",
 ] }
-rand = {version = "0.9.0", default-features = false, features = ["small_rng"]}
+rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_rng"]}
 [features]
 smp = []
 fat32 = []

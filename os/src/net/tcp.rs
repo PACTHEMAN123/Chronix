@@ -152,8 +152,9 @@ impl TcpSocket {
 }
 
 impl Sock for TcpSocket {
-    async fn connect(&self, addr: IpEndpoint) ->SockResult<()>{
-        todo!()
+    async fn connect(&self, _addr: IpEndpoint) ->SockResult<()>{
+        // todo
+        Ok(())
     }
     
     fn bind(&self, _sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>  {

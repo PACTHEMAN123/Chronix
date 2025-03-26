@@ -2,8 +2,11 @@ use core::ptr::NonNull;
 
 use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::info;
+use smoltcp::{phy::{Device, DeviceCapabilities, RxToken, TxToken}, time::Instant};
 
-use crate::sync::mutex::SpinLock;
+use crate::sync::{mutex::SpinLock, UPSafeCell};
+
+use super::NetDevice;
 /// NET_BUF_LEN
 pub const NET_BUF_LEN: usize = 1526;
 const MIN_BUFFER_LEN: usize = 1526;
@@ -122,6 +125,10 @@ impl NetBufPtr {
     pub const fn packet_with_header(&self) -> &[u8] {
         self.get_slice(0, self.header_len + self.packet_len) 
     }
+    /// Returns both the header and the packet parts, as a contiguous mut slice.
+    pub const fn packet_with_header_mut(&self) -> &mut [u8] {
+        self.get_mut_slice(0, self.header_len + self.packet_len) 
+    }
     /// returns the whole buffer
     pub fn as_slice(&self) -> &[u8] {
         self.get_slice(0, self.capacity)
@@ -129,6 +136,14 @@ impl NetBufPtr {
     /// returns the whole mutable buffer
     pub fn as_mut_slice(&self) -> &mut [u8] {
         self.get_mut_slice(0, self.capacity)
+    }
+    /// returns buffer's header length
+    pub fn header_len(&self) -> usize {
+        self.header_len
+    }
+    /// returns buffer's capacity
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 }
 
@@ -139,3 +154,67 @@ impl Drop for NetBufPtr {
 }
 
 pub type NetBufBox = Box<NetBufPtr>;
+
+/// device wrapper for network device
+pub struct NetDeviceWrapper {
+    /// the inner device wrapped by UPSafeCell
+    inner: UPSafeCell<Box<dyn NetDevice>>,
+}
+
+impl NetDeviceWrapper {
+    /// new a NetDeviceWrapper
+    pub fn new(dev: Box<dyn NetDevice>) -> Self {
+        Self {
+            inner: UPSafeCell::new(dev),
+        }
+    }
+}
+/// rx token and tx token needed for smoltcp
+pub struct NetRxToken<'a>(&'a UPSafeCell<Box<dyn NetDevice>>, Box<NetBufPtr>);
+pub struct NetTxToken<'a>(&'a UPSafeCell<Box<dyn NetDevice>>);
+
+impl <'a> RxToken for NetRxToken<'a> {
+    /// receive a packet than call the closure with the packet bytes
+    fn consume<R, F>(self, f: F) -> R
+        where
+            F: FnOnce(&[u8]) -> R 
+    {
+        let rx_buf = self.1;
+        let result = f(rx_buf.packet_mut());
+        self.0.exclusive_access().recycle_rx_buffer(rx_buf);
+        result
+    }
+}
+
+impl <'a> TxToken for NetTxToken<'a> {
+    /// construct a transmit buffer of size `len` and call the passed closure `f` with a mutable reference to that buffer.
+    fn consume<R, F>(self, len: usize, f: F) -> R
+        where
+            F: FnOnce(&mut [u8]) -> R 
+    {
+        let tx_buf = self.0.exclusive_access().alloc_tx_buffer(len);
+        let result = f(tx_buf.packet_mut());
+        self.0.exclusive_access().transmit(tx_buf);
+        result
+    }
+}
+/// Device implementation in Smoltcp
+impl Device for NetDeviceWrapper {
+    type RxToken<'a> = NetRxToken<'a> where Self: 'a;
+    type TxToken<'a> = NetTxToken<'a> where Self: 'a;
+
+    fn capabilities(&self) -> DeviceCapabilities {
+        self.inner.get_ref().capabilities()
+    }
+    fn receive(&mut self, _: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+        let inner = self.inner.exclusive_access();
+        inner.recycle_tx_buffer();
+        let rx_buf = inner.receive();
+        Some((NetRxToken(&self.inner, rx_buf), NetTxToken(&self.inner)))
+    }
+    fn transmit(&mut self, _: Instant) -> Option<Self::TxToken<'_>> {
+        let inner = self.inner.exclusive_access();
+        inner.recycle_tx_buffer();
+        Some(NetTxToken(&self.inner))
+    }
+}
