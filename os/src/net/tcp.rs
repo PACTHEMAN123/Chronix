@@ -153,7 +153,7 @@ impl TcpSocket {
 
 impl Sock for TcpSocket {
     async fn connect(&self, addr: IpEndpoint) ->SockResult<()>{
-        
+        todo!()
     }
     
     fn bind(&self, _sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>  {
@@ -242,11 +242,11 @@ impl TcpSocket {
         // 1. quick temp random scan
         let mut attempt = 0;
         while attempt < 3 { // at most 3 attempts
-            let base = {
+            let _base = {
                 let mut curr = CURR.lock();
                 let base = *curr;
                 // every time randomely increase the step size:（1-1023）
-                *curr = curr.wrapping_add(small_rng.random() % 1024 + 1);
+                *curr = curr.wrapping_add(small_rng.random::<u16>() % 1024 + 1);
                 if *curr < PORT_START || *curr > PORT_END {
                     *curr = PORT_START;
                 }
