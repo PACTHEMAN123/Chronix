@@ -8,9 +8,7 @@ use virtio_drivers::{
     device::net::VirtIONetRaw,
     transport::{mmio::MmioTransport, Transport},
 };
-
-type NetDeviceImpl = VirtIoNetDev<MmioTransport>;
-
+use crate::devices::net::EthernetAddress;
 pub struct VirtIoNetDev<T: Transport> {
     rx_buffers: [Option<NetBufBox>; NET_QUEUE_SIZE],
     tx_buffers: [Option<NetBufBox>; NET_QUEUE_SIZE],
@@ -21,7 +19,6 @@ pub struct VirtIoNetDev<T: Transport> {
 
 unsafe impl<T: Transport> Send for VirtIoNetDev<T> {}
 unsafe impl<T: Transport> Sync for VirtIoNetDev<T> {}
-
 impl<T: Transport> VirtIoNetDev<T> {
     /// new a VirtIoNetDev
     pub fn new(transport: T) -> Box<Self> {
@@ -94,5 +91,38 @@ impl<T: Transport> VirtIoNetDev<T> {
             self.raw_device.transmit_begin(tx_buf.packet_with_header()).unwrap()
         };
         self.tx_buffers[token as usize] = Some(tx_buf);
+    }
+     /// alocate a tx buffer
+    fn alloc_tx_buffer(&mut self, size: usize) -> Box<NetBufPtr> {
+        let mut net_buf = self.free_tx_bufs.pop().unwrap();
+        let packet_len = size;
+
+        let head_len = net_buf.header_len();
+        if packet_len + head_len > net_buf.capacity() {
+            panic!("tx buffer too small");
+        }
+        net_buf.set_packet_len(packet_len);
+        net_buf
+    }
+    ///recycle buf when rx complete
+    fn recycle_rx_buffer(&mut self, rx_buf: Box<NetBufPtr>) {
+        let new_token = unsafe {
+            self.raw_device.receive_begin(rx_buf.as_mut_slice())
+        }
+        .unwrap();
+        self.rx_buffers[new_token as usize] = Some(rx_buf);
+    }
+    /// recycle used tx buffer
+    fn recycle_tx_buffer(&mut self) {
+        while let Some(token) = self.raw_device.poll_transmit() {
+            let tx_buf = self.tx_buffers[token as usize].take().unwrap();
+            unsafe {
+                let __= self.raw_device.transmit_complete(token, tx_buf.packet_with_header());
+            };
+            self.free_tx_bufs.push(tx_buf);
+        }
+    }
+    fn mac_address(&self) -> EthernetAddress {
+        EthernetAddress(self.raw_device.mac_address())
     }
  }

@@ -86,16 +86,5 @@ impl ListenTable {
             entry.wake()
         }
     }
-    /// check wheter a port can accept connection
-    pub fn can_accept(&self, port: u16) -> SockResult<bool> {
-        if let Some(entry) = self.inner[port as usize].lock().deref(){
-            Ok(entry.syn_queue.iter().any(|&handle| is_connected(handle)))
-        }else {
-            Err(SysError::EINVAL)
-        }
-    }
-}
 
-fn is_connected(handle: SocketHandle) -> bool {
-    true
 }
