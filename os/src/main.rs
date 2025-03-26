@@ -46,6 +46,7 @@ use processor::processor::current_processor;
 
 #[path = "boards/qemu.rs"]
 mod board;
+#[allow(unused)]
 mod net;
 mod config;
 mod devices;
