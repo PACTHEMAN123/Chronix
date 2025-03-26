@@ -320,17 +320,18 @@ pub fn set_user_trap_entry() {
 }
 
 fn handle_page_modify_fault(badv: usize) -> TrapType {
-    println!("handle_page_modify_fault, {:#x}", badv);
     let va = VirtAddr(badv); //虚拟地址
     let vpn: VirtPageNum = va.floor(); //虚拟地址的虚拟页号
     let token = register::pgdl::read().base();
     let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
     let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
-    if !pte.flags().contains(PTEFlags::W) {
+    if !pte.flags().contains(PTEFlags::W) && !pte.flags().contains(PTEFlags::C) {
         // return TrapType::StorePageFault(badv);
         return TrapType::Other;
+    } else if pte.flags().contains(PTEFlags::C) {
+        return TrapType::StorePageFault(badv);
     }
-    pte.set_flags(PTEFlags::D);
+    pte.set_flags(pte.flags() | PTEFlags::D);
     unsafe {
         core::arch::asm!("tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
     }
@@ -349,20 +350,20 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
 fn get_trap_type() -> TrapType {
     let estat = register::estat::read();
     let badv = register::badv::read().raw();
-    match estat.cause() {
-        Trap::Exception(Exception::LoadPageFault) |
-        Trap::Exception(Exception::StorePageFault) |
-        Trap::Exception(Exception::FetchPageFault) => {
-            warn!(
-                "TrapType::PageFault cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
-                estat.cause(), 
-                badv, 
-                register::badi::read().inst(),
-                register::era::read().raw()
-            );
-        }
-        _ => {}
-    }
+    // match estat.cause() {
+    //     Trap::Exception(Exception::LoadPageFault) |
+    //     Trap::Exception(Exception::StorePageFault) |
+    //     Trap::Exception(Exception::FetchPageFault) => {
+    //         warn!(
+    //             "TrapType::PageFault cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
+    //             estat.cause(), 
+    //             badv, 
+    //             register::badi::read().inst(),
+    //             register::era::read().raw()
+    //         );
+    //     }
+    //     _ => {}
+    // }
     match estat.cause() {
         Trap::Exception(Exception::Breakpoint) => TrapType::Breakpoint,
         Trap::Exception(Exception::Syscall) => TrapType::Syscall,

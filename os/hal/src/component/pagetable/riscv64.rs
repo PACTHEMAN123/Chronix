@@ -246,29 +246,6 @@ pub struct PageTable<A: FrameAllocatorHal> {
     alloc: A,
 }
 
-impl<A: FrameAllocatorHal> PageTable<A> {
-    fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PageTableEntry> {
-        let idxs = vpn.indexes();
-        let mut ppn = self.root_ppn;
-        let mut result: Option<&mut PageTableEntry> = None;
-        for (i, &idx) in idxs.iter().enumerate() {
-            let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[idx];
-            if PageLevel::from(i) == level {
-                result = Some(pte);
-                break;
-            }
-            if !pte.is_valid() {
-                let frame = self.alloc.alloc(1).unwrap();
-                frame.get_slice_mut::<u8>().fill(0);
-                *pte = PageTableEntry::new(frame.start, MapPerm::empty(), true);
-                self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
-            }
-            ppn = pte.ppn();
-        }
-        result
-    }
-}
-
 impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
 
     fn from_token(token: usize, alloc: A) -> Self {
@@ -291,6 +268,27 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
             frames: Vec::new(),
             alloc
         }
+    }
+
+    fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PageTableEntry> {
+        let idxs = vpn.indexes();
+        let mut ppn = self.root_ppn;
+        let mut result: Option<&mut PageTableEntry> = None;
+        for (i, &idx) in idxs.iter().enumerate() {
+            let pte = &mut ppn.start_addr().get_mut::<[PageTableEntry; 512]>()[idx];
+            if PageLevel::from(i) == level {
+                result = Some(pte);
+                break;
+            }
+            if !pte.is_valid() {
+                let frame = self.alloc.alloc(1).unwrap();
+                frame.get_slice_mut::<u8>().fill(0);
+                *pte = PageTableEntry::new(frame.start, MapPerm::empty(), true);
+                self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
+            }
+            ppn = pte.ppn();
+        }
+        result
     }
 
     fn find_pte(&self, vpn: crate::addr::VirtPageNum) -> Option<(&mut PageTableEntry, usize)> {
