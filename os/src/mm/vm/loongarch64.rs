@@ -1,9 +1,9 @@
 use core::ops::Range;
 
-use alloc::{collections::btree_map::BTreeMap, vec::Vec};
-use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
+use alloc::{collections::btree_map::BTreeMap, format, vec::Vec};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 
-use crate::{mm::{allocator::FrameAllocator, PageTable}, syscall::mm::MmapFlags};
+use crate::{fs::page, mm::{allocator::FrameAllocator, PageTable}, syscall::mm::MmapFlags};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -167,7 +167,7 @@ impl UserVmSpaceHal for UserVmSpace {
 
     fn push_area(&mut self, mut area: UserVmArea, data: Option<&[u8]>) {
         area.map(&mut self.page_table);
-        if let Some(data) = data{
+        if let Some(data) = data {
             area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(area);
@@ -179,11 +179,6 @@ impl UserVmSpaceHal for UserVmSpace {
         let range = heap.range_va.clone();
         if new_brk >= range.end {
             heap.range_va = range.start..new_brk;
-            for vpn in range.end.ceil()..new_brk.ceil() {
-                let frame = FrameAllocator.alloc_tracker(1).unwrap();
-                self.page_table.map(vpn, frame.range_ppn.start, heap.map_perm, PageLevel::Small);
-                heap.frames.insert(vpn, StrongArc::new(frame));
-            }
             new_brk
         } else if new_brk > range.start {
             let mut right = heap.split_off(new_brk.ceil());
@@ -222,7 +217,6 @@ impl UserVmSpaceHal for UserVmSpace {
                     }
                 }
             }
-            
         }
         ret
     }
@@ -342,51 +336,69 @@ impl UserVmArea {
 
     fn map(&mut self, page_table: &mut PageTable) {
         let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
-        
-        for vpn in range_vpn {
-            let frame = FrameAllocator.alloc_tracker(1).unwrap();
-            page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
-            self.frames.insert(vpn, StrongArc::new(frame));
+        if self.map_perm.contains(MapPerm::C) {
+            match self.vma_type {
+                UserVmAreaType::Data | 
+                UserVmAreaType::Heap |
+                UserVmAreaType::Stack => {                    
+                    for (&vpn, frame) in self.frames.iter() {
+                        let pte = page_table
+                            .find_pte_create(vpn, PageLevel::Small)
+                            .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                        *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
+                        pte.set_flags(pte.flags() | PTEFlags::C);
+                    }
+                }
+                UserVmAreaType::TrapContext => panic!("TrapContext Page cannot be Cow"),
+                UserVmAreaType::Mmap => todo!(),
+                UserVmAreaType::Shm => todo!(),
+            }
+        } else {
+            match self.vma_type {
+                UserVmAreaType::Data => {                    
+                    for vpn in range_vpn {
+                        let frame = FrameAllocator.alloc_tracker(1).unwrap();
+                        page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                        self.frames.insert(vpn, StrongArc::new(frame));
+                    }
+                }
+                UserVmAreaType::TrapContext => {
+                    for vpn in range_vpn {
+                        let frame = FrameAllocator.alloc_tracker(1).unwrap();
+                        let pte = page_table
+                            .find_pte_create(vpn, PageLevel::Small)
+                            .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                        *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
+                        pte.set_flags(pte.flags() | PTEFlags::D); // will not trigger PME
+                        self.frames.insert(vpn, StrongArc::new(frame));
+                    }
+                },
+                UserVmAreaType::Heap |
+                UserVmAreaType::Stack => {
+                },
+                UserVmAreaType::Mmap => todo!(),
+                UserVmAreaType::Shm => todo!(),
+            }
         }
-        // if self.map_perm.contains(MapPerm::C) {
-        //     for (&vpn, frame) in self.frames.iter() {
-        //         self.map_range_to(page_table, vpn..vpn+1, frame.range_ppn.start);
-        //     }
-        // } else {
-        //     match self.vma_type {
-        //         UserVmAreaType::Data |
-        //         UserVmAreaType::TrapContext => {
-        //             let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
-        //             for vpn in range_vpn {
-        //                 let frame = self.alloc.alloc_tracker(1).unwrap();
-        //                 page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
-        //                 self.frames.insert(vpn, StrongArc::new(frame));
-        //             }
-        //         },
-        //         UserVmAreaType::Heap |
-        //         UserVmAreaType::Stack => {
-        //         },
-        //     }
-        // }
     }
 
     fn unmap(&mut self, page_table: &mut PageTable) {
         let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
         match self.vma_type {
             UserVmAreaType::Data |
-                    UserVmAreaType::TrapContext => {
-                        for vpn in range_vpn {
-                            page_table.unmap(vpn);
-                        }
-                        self.frames.clear();
-                    },
+            UserVmAreaType::TrapContext => {
+                for vpn in range_vpn {
+                    page_table.unmap(vpn);
+                }
+                self.frames.clear();
+            },
             UserVmAreaType::Heap |
-                    UserVmAreaType::Stack => {
-                        for &vpn in self.frames.keys() {
-                            page_table.unmap(vpn);
-                        }
-                        self.frames.clear();
-                    },
+            UserVmAreaType::Stack => {
+                for &vpn in self.frames.keys() {
+                    page_table.unmap(vpn);
+                }
+                self.frames.clear();
+            },
             UserVmAreaType::Mmap => todo!(),
             UserVmAreaType::Shm => todo!(),
         }
@@ -394,15 +406,18 @@ impl UserVmArea {
 
     fn clone_cow(&mut self, page_table: &mut PageTable) -> Result<Self, Self> {
         // note: trap context cannot supprt COW
-        if true {
+        if self.vma_type == UserVmAreaType::TrapContext {
             return Err(self.clone());
         }
         if self.map_perm.contains(MapPerm::W) {
             self.map_perm.insert(MapPerm::C);
             self.map_perm.remove(MapPerm::W);
+            /// update flag bit
             for &vpn in self.frames.keys() {
                 let (pte, _) = page_table.find_pte(vpn).unwrap();
-                pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::DEFAULT);
+                pte.set_flags(pte.flags() | PTEFlags::C);
+                pte.set_flags(pte.flags() & !PTEFlags::W);
+                pte.set_flags(pte.flags() & !PTEFlags::D);
                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
             }
         } else {
@@ -420,62 +435,66 @@ impl UserVmArea {
     }
 
     fn handle_page_fault(&mut self, 
-        _page_table: &mut PageTable, 
-        _vpn: VirtPageNum,
-        _access_type: PageFaultAccessType
+        page_table: &mut PageTable, 
+        vpn: VirtPageNum,
+        access_type: PageFaultAccessType
     ) -> Result<(), ()> {
-        Err(())
-        // if !access_type.can_access(self.map_perm) {
-        //     log::warn!(
-        //         "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
-        //         self.map_perm
-        //     );
-        //     return Err(());
-        // }
-        // match page_table.find_pte(vpn).map(|(pte, i)| (pte, PageLevel::from(i)) ) {
-        //     Some((pte, level)) if pte.is_valid() => {
-        //         // Cow
-        //         let frame = self.frames.get(&vpn).ok_or(())?;
-        //         if frame.get_owners() == 1 {
-        //             self.map_perm.remove(MapPerm::C);
-        //             self.map_perm.insert(MapPerm::W);
-        //             pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::DEFAULT);
-        //             unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
-        //             Ok(())
-        //         } else {
-        //             let new_frame = StrongArc::new(self.alloc.alloc_tracker(level.page_count()).ok_or(())?);
-        //             let new_range_ppn = new_frame.range_ppn.clone();
+        if !access_type.can_access(self.map_perm) {
+            log::warn!(
+                "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
+                self.map_perm
+            );
+            return Err(());
+        }
+        match page_table.find_pte(vpn).map(|(pte, i)| (pte, PageLevel::from(i)) ) {
+            Some((pte, level)) if pte.is_valid() && pte.is_cow() => {
+                // Cow
+                let frame = self.frames.get(&vpn).ok_or(())?;
+                if frame.get_owners() == 1 {
+                    self.map_perm.remove(MapPerm::C);
+                    self.map_perm.insert(MapPerm::W);
+                    *pte = PageTableEntry::new(pte.ppn(), self.map_perm, true);
+                    pte.set_flags(pte.flags() | PTEFlags::D);
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
+                    Ok(())
+                } else {
+                    let new_frame = StrongArc::new(FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?);
+                    let new_range_ppn = new_frame.range_ppn.clone();
 
-        //             let old_data = &frame.range_ppn.get_slice::<u8>();
-        //             new_range_ppn.get_slice_mut::<u8>().copy_from_slice(old_data);
-                    
-        //             *self.frames.get_mut(&vpn).ok_or(())? = new_frame;
-
-        //             self.map_perm.remove(MapPerm::C);
-        //             self.map_perm.insert(MapPerm::W);
-        //             *pte = PageTableEntry::new(new_range_ppn.start, self.map_perm, true);
-                    
-        //             unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
-        //             Ok(())
-        //         }
-        //     }
-        //     _ => {
-        //         match self.vma_type {
-        //             UserVmAreaType::Data
-        //             | UserVmAreaType::TrapContext => {
-        //                 return Err(())
-        //             },
-        //             UserVmAreaType::Stack
-        //             | UserVmAreaType::Heap => {
-        //                 let new_frame = self.alloc.alloc_tracker(1).ok_or(())?;
-        //                 self.map_range_to(page_table, vpn..vpn+1, new_frame.range_ppn.start);
-        //                 self.frames.insert(vpn, StrongArc::new(new_frame));
-        //                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
-        //                 return Ok(());
-        //             }
-        //         }
-        //     }
-        // }
+                    let old_data = frame.range_ppn.get_slice::<u8>();
+                    new_range_ppn.get_slice_mut::<u8>().copy_from_slice(old_data);
+                    *self.frames.get_mut(&vpn).ok_or(())? = new_frame;
+                    self.map_perm.remove(MapPerm::C);
+                    self.map_perm.insert(MapPerm::W);
+                    *pte = PageTableEntry::new(new_range_ppn.start, self.map_perm, true);
+                    pte.set_flags(pte.flags() | PTEFlags::D);
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
+                    Ok(())
+                }
+            }
+            _ => {
+                // Lazy
+                match self.vma_type {
+                    UserVmAreaType::Data
+                    | UserVmAreaType::TrapContext => {
+                        return Err(())
+                    },
+                    UserVmAreaType::Stack
+                    | UserVmAreaType::Heap => {
+                        let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                        let pte = page_table
+                            .find_pte_create(vpn, PageLevel::Small)
+                            .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                        *pte = PageTableEntry::new(new_frame.range_ppn.start, self.map_perm, true);
+                        self.frames.insert(vpn, StrongArc::new(new_frame));
+                        unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) }; 
+                        return Ok(());
+                    }
+                    UserVmAreaType::Mmap => todo!(),
+                    UserVmAreaType::Shm => todo!(),
+                }
+            }
+        }
     }
 
 }
