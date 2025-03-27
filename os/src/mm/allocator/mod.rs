@@ -2,8 +2,8 @@ mod frame_allocator;
 mod heap_allocator;
 // mod slab_allocator;
 
-/// Kernel Virtual Memory Allocator
-mod kvm_allocator;
+/// User Virtual Memory Allocator
+mod uvm_allocator;
 
 #[allow(unused)]
 pub use frame_allocator::{FrameAllocator, init_frame_allocator, frames_alloc, frames_alloc_clean, frames_dealloc};
