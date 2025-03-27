@@ -1,17 +1,5 @@
 //! VirtIO block device driver
 
-mod virtio_blk;
-#[allow(dead_code)]
-mod virtio_net;
-use core::ptr::NonNull;
-use crate::{mm::{allocator::{frames_dealloc, FrameAllocator}, FrameTracker, PageTable, INIT_VMSPACE}, sync::UPSafeCell};
-use hal::{pagetable::PageTableHal, println, vm::KernVmSpaceHal};
-use log::info;
-pub use virtio_blk::VirtIOBlock;
-use virtio_drivers::BufferDirection;
-use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
-use crate::{board::BlockDeviceImpl, mm::allocator::frames_alloc_clean};
-use alloc::{sync::Arc, vec::Vec};
 use crate::devices::BlockDevice;
 use crate::config::BLOCK_SIZE;
 use crate::mm::allocator::{frames_alloc_clean, frames_dealloc, FrameAllocator};
