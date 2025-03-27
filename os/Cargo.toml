@@ -22,6 +22,7 @@ hal = {path = "./hal" }
 async-trait = "0.1.88"
 hashbrown = "0.14"
 fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
+range-map = { path = "../utils/range-map" }
 
 [features]
 smp = []
