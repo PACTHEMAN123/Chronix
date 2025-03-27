@@ -104,8 +104,8 @@ pub enum SysError {
 }
 
 impl SysError {
-    /// return the error code
-    pub const fn code(self) ->isize {
+    /// get the error code as isize
+    pub const fn code(self) -> isize {
         self as isize
     }
 }

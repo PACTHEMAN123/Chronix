@@ -38,6 +38,8 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
     "async",
 ] }
 rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_rng"]}
+fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
+
 [features]
 smp = []
 fat32 = []
