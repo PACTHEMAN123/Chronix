@@ -3,9 +3,10 @@ use core::{cmp, ops::Range};
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
-use log::info;
+use log::{info, Level};
+use range_map::RangeMap;
 
-use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable}};
+use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable}, syscall::SysError};
 use crate::syscall::{mm::MmapFlags, SysResult};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
@@ -19,8 +20,8 @@ pub struct KernVmSpace {
 #[allow(missing_docs, unused)]
 pub struct UserVmSpace {
     page_table: PageTable,
-    areas: Vec<UserVmArea>,
-    heap: usize,
+    areas: RangeMap<VirtAddr, UserVmArea>,
+    heap_bottom_va: VirtAddr,
 }
 
 impl KernVmSpaceHal for KernVmSpace {
@@ -150,18 +151,7 @@ impl KernVmSpaceHal for KernVmSpace {
 
 impl UserVmSpace {
     fn find_heap(&mut self) -> Option<&mut UserVmArea> {
-        if self.areas[self.heap].vma_type == UserVmAreaType::Heap {
-            return Some(&mut self.areas[self.heap]);
-        } else {
-            self.areas.iter_mut().enumerate().find(|(i, vm)| {
-                if vm.vma_type == UserVmAreaType::Heap {
-                    self.heap = *i;
-                    true
-                } else {
-                    false
-                }
-            }).map(|(_, vm)| vm)
-        }
+        self.areas.get_mut(self.heap_bottom_va)
     }
 }
 
@@ -170,8 +160,8 @@ impl UserVmSpaceHal for UserVmSpace {
     fn new() -> Self {
         Self {
             page_table: PageTable::new_in(0, FrameAllocator),
-            areas: Vec::new(),
-            heap: 0
+            areas: RangeMap::new(),
+            heap_bottom_va: VirtAddr(0)
         }
     }
 
@@ -182,8 +172,8 @@ impl UserVmSpaceHal for UserVmSpace {
     fn from_kernel(kvm_space: &KernVmSpace) -> Self {
         let ret = Self {
             page_table: PageTable::new_in(0, FrameAllocator),
-            areas: Vec::new(),
-            heap: 0,
+            areas: RangeMap::new(),
+            heap_bottom_va: VirtAddr(0)
         };
 
         ret.page_table.root_ppn
@@ -241,12 +231,13 @@ impl UserVmSpaceHal for UserVmSpace {
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.start_addr();
         let user_heap_bottom: usize = max_end_va.0;
+        let user_heap_top: usize = max_end_va.0 + Constant::PAGE_SIZE; // RangeMap cannot support empty range
         // used in brk
         log::debug!("user_heap_bottom: {:#x}", user_heap_bottom);
-        ret.heap = ret.areas.len();
+        ret.heap_bottom_va = user_heap_bottom.into();
         ret.push_area(
             UserVmArea::new(
-                user_heap_bottom.into()..user_heap_bottom.into(),
+                user_heap_bottom.into()..user_heap_top.into(),
                 UserVmAreaType::Heap,
                 MapPerm::R | MapPerm::W | MapPerm::U,
             ),
@@ -286,12 +277,35 @@ impl UserVmSpaceHal for UserVmSpace {
         if let Some(data) = data{
             area.copy_data(&mut self.page_table, data);
         }
-        self.areas.push(area);
+        match self.areas.try_insert(area.range_va.clone(), area) {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("[range map insert error]");
+            }
+        }
     }
 
     fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr {
-        let heap = self.find_heap().unwrap();
+        let heap = match self.find_heap() {
+            Some(heap) => heap,
+            None => return VirtAddr(0)
+        };
         let range = heap.range_va.clone();
+        if new_brk >= range.end {
+            match self.areas.extend_back(range.start..new_brk) {
+                Ok(_) => {}
+                Err(_) => return range.end
+            }
+        } else if new_brk > range.start {
+            match self.areas.reduce_back(range.start..new_brk) {
+                Ok(_) => {}
+                Err(_) => return range.end
+            }
+        } else {
+            return range.end;
+        }
+
+        let heap = self.find_heap().unwrap();
         if new_brk >= range.end {
             heap.range_va = range.start..new_brk;
             new_brk
@@ -305,17 +319,13 @@ impl UserVmSpaceHal for UserVmSpace {
     }
 
     fn handle_page_fault(&mut self, va: VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
-        let area = self.areas
-            .iter_mut()
-            .find(|a| a.range_va.contains(&va))
-            .ok_or(())?;
-
+        let area = self.areas.get_mut(va).ok_or(())?;
         area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
     }
     
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self {
         let mut ret = Self::from_kernel(kvm_space);
-        for area in uvm_space.areas.iter_mut() {
+        for (_, area) in uvm_space.areas.iter_mut() {
             match area.clone_cow(&mut uvm_space.page_table) {
                 Ok(new_area) => {
                     ret.push_area(new_area, None);
@@ -343,7 +353,9 @@ impl UserVmSpaceHal for UserVmSpace {
         // just simply alloc mmap area from start of the mmap area
         // need to feat unmap vm area
         let start = VirtAddr::from(Constant::USER_FILE_BEG);
-        let range = start..start + len;
+        let range = self.areas
+            .find_free_range(start..Constant::USER_FILE_END.into(), len)
+            .ok_or(SysError::ENOMEM)?;
         let page_table = &mut self.page_table;
         let inode = file.inode().unwrap();
         let mut vma = UserVmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
@@ -364,8 +376,7 @@ impl UserVmSpaceHal for UserVmSpace {
                     page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
                     vma.frames.insert(vpn, StrongArc::clone(&page.frame()));
                     vma.map_perm.insert(MapPerm::C);
-                    // update tlb
-                    unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                    // update tlb                     unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
                 } else {
                     // share mode
                     info!("[alloc_mmap_area]: mapping vpn:{:x} to ppn:{:x}", vpn.0, page.ppn().0);
@@ -386,7 +397,9 @@ impl UserVmSpaceHal for UserVmSpace {
         assert!(va.0 % PAGE_SIZE == 0);
         // need to support fixed map
         let start = VirtAddr::from(Constant::USER_SHARE_BEG);
-        let range = start..start + len;
+        let range = self.areas
+            .find_free_range(start..Constant::USER_SHARE_END.into(), len)
+            .ok_or(SysError::ENOMEM)?;
         if is_share {
             let vma = UserVmArea::new(range, UserVmAreaType::Shm, perm);
             self.push_area(vma, None);
@@ -397,6 +410,24 @@ impl UserVmSpaceHal for UserVmSpace {
         }
         Ok(start.0 as isize)
     }
+
+    fn unmap(&mut self, va: VirtAddr, len: usize) -> SysResult {
+        let mut left: UserVmArea;
+        let right: UserVmArea;
+        if let Some(area) = self.areas.get_mut(va) {
+            let range_va = area.range_va.clone();
+            left = self.areas.force_remove_one(range_va);
+            let mut mid = left.split_off(va.floor());
+            mid.unmap(&mut self.page_table);
+            right = mid.split_off((va + len).ceil());
+        } else {
+            return Ok(0);
+        }
+        self.areas.try_insert(left.range_va.clone(), left).map_err(|_| SysError::EFAULT)?;
+        self.areas.try_insert(right.range_va.clone(), right).map_err(|_| SysError::EFAULT)?;
+        Ok(0)
+    }
+
 }
 
 #[allow(missing_docs, unused)]
@@ -508,7 +539,18 @@ impl UserVmArea {
     fn map(&mut self, page_table: &mut PageTable) {
         if self.map_perm.contains(MapPerm::C) {
             for (&vpn, frame) in self.frames.iter() {
-                self.map_range_to(page_table, vpn..vpn+1, frame.range_ppn.start);
+                let count = frame.range_ppn.clone().count();
+                let level;
+                if count == PageLevel::Small.page_count() {
+                    level = PageLevel::Small;
+                } else if count == PageLevel::Big.page_count() {
+                    level = PageLevel::Big;
+                } else if count == PageLevel::Huge.page_count() {
+                    level = PageLevel::Huge;
+                } else {
+                    panic!("incorrect frame size");
+                }
+                page_table.map(vpn, frame.range_ppn.start, self.map_perm, level);
             }
         } else {
             match self.vma_type {

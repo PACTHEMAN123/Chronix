@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::{fs::page::{cache::PageCache, page::Page}, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -76,6 +76,8 @@ pub trait Inode {
     fn truncate(&self, size: u64) -> Result<usize, i32>;
     /// get attributes of a file
     fn getattr(&self) -> Kstat;
+    /// get extra attributes of a file
+    fn getxattr(&self, mask: XstatMask) -> Xstat;
     /// called by the unlink system call
     fn unlink(&self) -> Result<usize, i32>;
     /// remove inode current inode

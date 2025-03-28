@@ -50,6 +50,7 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_MMAP: usize = 222;
+const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
 pub mod process;
@@ -116,6 +117,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
+        SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     };
     match result {
