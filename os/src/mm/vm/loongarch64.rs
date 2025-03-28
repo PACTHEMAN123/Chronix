@@ -45,7 +45,12 @@ impl KernVmSpaceHal for KernVmSpace {
 #[allow(missing_docs, unused)]
 impl UserVmSpace {
     fn find_heap(&mut self) -> Option<&mut UserVmArea> {
-        self.areas.get_mut(self.heap_bottom_va)
+        let area = self.areas.get_mut(self.heap_bottom_va)?;
+        if area.vma_type == UserVmAreaType::Heap {
+            Some(area)
+        } else {
+            None
+        }
     }
 }
 
@@ -169,8 +174,22 @@ impl UserVmSpaceHal for UserVmSpace {
             Some(heap) => heap,
             None => return VirtAddr(0)
         };
-        assert!(heap.vma_type == UserVmAreaType::Heap);
         let range = heap.range_va.clone();
+        if new_brk >= range.end {
+            match self.areas.extend_back(range.start..new_brk) {
+                Ok(_) => {}
+                Err(_) => return range.end
+            }
+        } else if new_brk > range.start {
+            match self.areas.reduce_back(range.start..new_brk) {
+                Ok(_) => {}
+                Err(_) => return range.end
+            }
+        } else {
+            return range.end;
+        }
+
+        let heap = self.find_heap().unwrap();
         if new_brk >= range.end {
             heap.range_va = range.start..new_brk;
             new_brk
@@ -190,6 +209,7 @@ impl UserVmSpaceHal for UserVmSpace {
     
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self {
         let mut ret = Self::from_kernel(kvm_space);
+        ret.heap_bottom_va = uvm_space.heap_bottom_va;
         for (_, area) in uvm_space.areas.iter_mut() {
             match area.clone_cow(&mut uvm_space.page_table) {
                 Ok(new_area) => {

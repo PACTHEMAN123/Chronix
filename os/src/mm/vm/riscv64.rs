@@ -151,7 +151,12 @@ impl KernVmSpaceHal for KernVmSpace {
 
 impl UserVmSpace {
     fn find_heap(&mut self) -> Option<&mut UserVmArea> {
-        self.areas.get_mut(self.heap_bottom_va)
+        let area = self.areas.get_mut(self.heap_bottom_va)?;
+        if area.vma_type == UserVmAreaType::Heap {
+            Some(area)
+        } else {
+            None
+        }
     }
 }
 
@@ -325,6 +330,7 @@ impl UserVmSpaceHal for UserVmSpace {
     
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self {
         let mut ret = Self::from_kernel(kvm_space);
+        ret.heap_bottom_va = uvm_space.heap_bottom_va;
         for (_, area) in uvm_space.areas.iter_mut() {
             match area.clone_cow(&mut uvm_space.page_table) {
                 Ok(new_area) => {
