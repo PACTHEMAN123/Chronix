@@ -9,7 +9,9 @@ pub mod superblock;
 
 use fatfs::Error;
 
-use crate::syscall::SysError;
+pub use sys_error::SysError;
+
+use crate::syscall::sys_error;
 
 /// match fat32 error to sys error
 /// (todo): match more error

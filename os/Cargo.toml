@@ -21,6 +21,22 @@ paste = "1.0"
 hal = {path = "./hal" }
 async-trait = "0.1.88"
 hashbrown = "0.14"
+
+smoltcp = { version = "0.12.0", default-features = false, features = [
+    "alloc",
+    "log",
+    "medium-ethernet",
+    "medium-ip",
+    "proto-ipv4",
+    "proto-ipv6",
+    "proto-dhcpv4",
+    "proto-ipv4-fragmentation",
+    "socket-udp",
+    "socket-tcp",
+    "socket-dhcpv4",
+    "async",
+] }
+rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_rng"]}
 fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
 range-map = { path = "../utils/range-map" }
 
