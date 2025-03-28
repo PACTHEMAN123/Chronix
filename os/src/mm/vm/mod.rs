@@ -1,10 +1,10 @@
 use core::ops::Range;
-use alloc::{collections::btree_map::BTreeMap, sync::Arc};
+use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 
-use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}};
+use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}, task::utils::AuxHeader};
 
 use super::{allocator::FrameAllocator, PageTable, FrameTracker};
 
@@ -171,7 +171,7 @@ pub trait UserVmSpaceHal: Sized {
 
     fn from_kernel(kvm_space: &KernVmSpace) -> Self;
 
-    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint);
+    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
 
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self;
 

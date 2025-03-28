@@ -16,6 +16,7 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
+use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use alloc::collections::btree_map::BTreeMap;
@@ -44,9 +45,9 @@ use core::{
     cell::RefMut,
     task::Waker,
 };
-use crate::{generate_atomic_accessors, generate_with_methods, generate_state_methods};
+use crate::{generate_atomic_accessors, generate_state_methods, generate_upsafecell_accessors, generate_with_methods};
 use log::*;
-use super::tid::{PGid,Pid, Tid, TidHandle};
+use super::tid::{PGid, Pid, Tid, TidAddress, TidHandle};
 /// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
 /// pack FDtable as a struct
@@ -69,6 +70,8 @@ pub struct TaskControlBlock {
     pub trap_cx_ppn: UPSafeCell<PhysPageNum>,
     /// waker for waiting on events
     pub waker: UPSafeCell<Option<Waker>>,
+    /// address of task's thread ID
+    pub tid_address: UPSafeCell<TidAddress>,
     /// time recorder for a task
     pub time_recorder: UPSafeCell<TimeRecorder>,
     // ! mutable only in self context, can be accessed by other tasks
@@ -140,6 +143,12 @@ impl Drop for TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    generate_upsafecell_accessors!(
+        //trap_cx_ppn: PhysPageNum,
+        waker: Option<Waker>,
+        tid_address: TidAddress,
+        time_recorder: TimeRecorder
+    );
     generate_with_methods!(
         fd_table: FDTable,
         children: BTreeMap<Pid, Arc<TaskControlBlock>>,
@@ -190,22 +199,6 @@ impl TaskControlBlock {
     /// get task id
     pub fn tid(&self) -> Tid {
         self.tid.0
-    }
-    /// get waker of the task
-    pub fn waker(&self) -> &mut Option<Waker> {
-        self.waker.exclusive_access()
-    }
-    /// get reference of waker of the task
-    pub fn waker_ref(&self) -> &Option<Waker> {
-        self.waker.get_ref()
-    }
-    /// get mut ref of time_recorder of the task
-    pub fn time_recorder(&self) -> &mut TimeRecorder {
-        self.time_recorder.exclusive_access()
-    }
-    /// get ref of time_recorder of the task
-    pub fn time_recorder_ref(&self) -> &TimeRecorder {
-        self.time_recorder.get_ref()
     }
     /// get trap_cx_ppn of the task
     pub fn get_trap_cx_ppn_access(&self) -> &mut PhysPageNum {
@@ -276,7 +269,7 @@ impl TaskControlBlock {
         let tid_handle = tid_alloc();
         let pgid = tid_handle.0;
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
+        let (vm_space, mut user_sp, entry_point, _auxv) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
 
         let trap_cx_ppn = vm_space.get_page_table()
             .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
@@ -299,6 +292,7 @@ impl TaskControlBlock {
             is_leader: true,
             trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
             waker: UPSafeCell::new(None),
+            tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicI32::new(0),
             base_size: AtomicUsize::new(user_sp),
@@ -327,6 +321,9 @@ impl TaskControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
+            0,
+            0,
+            0,
         );
         task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
         task_control_block
@@ -344,10 +341,9 @@ impl TaskControlBlock {
         waker.as_ref().unwrap().wake_by_ref();
     }
     /// 
-    pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
-        const SIZE_OF_USIZE: usize = core::mem::size_of::<usize>();
+    pub fn exec(&self, elf_data: &[u8], argv: Vec<String>, envp: Vec<String>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (mut vm_space, mut user_sp, entry_point) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
+        let (mut vm_space, mut user_sp, entry_point, auxv) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
         // update trap_cx ppn
         let trap_cx_ppn = vm_space
             .get_page_table()
@@ -371,26 +367,8 @@ impl TaskControlBlock {
         vm_space.enable();
         // todo: close fdtable when exec
         // alloc user resource for main thread again since vm_space has changed
-         // push argument to user_stack
-        let tot_len: usize = args.iter().map(|s| s.as_bytes().len()+1).sum();
-        let new_user_sp = ((user_sp - tot_len) / SIZE_OF_USIZE) * SIZE_OF_USIZE - SIZE_OF_USIZE * (args.len() + 1);
-        let frames_num = ((user_sp - new_user_sp) + PAGE_SIZE - 1) / PAGE_SIZE;
-        
-        for i in 1..frames_num+1 {
-            let _ = vm_space.handle_page_fault(VirtAddr::from(user_sp - PAGE_SIZE * i), PageFaultAccessType::WRITE);
-        }
-
-        let mut meta_data = vec![0usize; args.len()+1];
-        meta_data[0] = args.len();
-
-        let mut data_va= user_sp;
-        for (i, s) in args.iter().map(|s| s.as_str()).enumerate() {
-            data_va -= s.as_bytes().len() + 1;
-            copy_out_str(vm_space.get_page_table(), VirtAddr(data_va), s);
-            meta_data[i+1] = data_va;
-        }
-
-        copy_out(vm_space.get_page_table(), VirtAddr(new_user_sp), meta_data.as_slice());
+        // push argument to user_stack
+        let (new_user_sp, argc, argv, envp) = user_stack_init(&mut vm_space, user_sp, argv, envp, auxv);
 
         user_sp = new_user_sp;
         // substitute memory_set
@@ -401,8 +379,12 @@ impl TaskControlBlock {
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
+            argc,
+            argv,
+            envp,
         );
-        trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
+        //trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
+        info!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
         *self.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
@@ -475,6 +457,7 @@ impl TaskControlBlock {
             is_leader,
             trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
             waker: UPSafeCell::new(None),
+            tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicI32::new(0),
             base_size: AtomicUsize::new(0),

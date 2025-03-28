@@ -20,6 +20,7 @@ pub mod schedule;
 mod tid;
 /// manger for task
 pub mod manager;
+pub mod utils;
 
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
@@ -114,6 +115,25 @@ macro_rules! generate_with_methods {
                 pub fn [<with_mut_ $name>]<T>(&self, f: impl FnOnce(&mut $ty) -> T) -> T {
                     log::trace!("with_mut_{}", stringify!($name));
                     f(&mut self.$name.lock())
+                }
+            )+
+        }
+    };
+}
+
+/// quick macro to genrate method to access upsafecell
+#[macro_export]
+macro_rules! generate_upsafecell_accessors {
+    ($($field_name:ident : $field_type:ty),+) => {
+        paste::paste! {
+            $(
+                #[allow(unused)]
+                pub fn $field_name(&self) -> &mut $field_type {
+                    self.$field_name.exclusive_access()
+                }
+                #[allow(unused)]
+                pub fn [<$field_name _ref>](&self) -> &$field_type {
+                    self.$field_name.get_ref()
                 }
             )+
         }
