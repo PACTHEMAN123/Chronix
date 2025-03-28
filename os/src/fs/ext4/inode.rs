@@ -17,7 +17,7 @@ use crate::fs::page::cache::PageCache;
 use crate::fs::page::page::{Page, PAGE_SIZE};
 use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{InodeInner, Inode};
-use crate::fs::{Kstat, SuperBlock};
+use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::sync::UPSafeCell;
 
 use lwext4_rust::bindings::{
@@ -371,7 +371,66 @@ impl Inode for Ext4Inode {
             st_mtime_nsec: inner.mtime.tv_nsec as _,
             st_ctime_sec: inner.ctime.tv_sec as _,
             st_ctime_nsec: inner.ctime.tv_nsec as _,
+        }
+    }
 
+    fn getxattr(&self, mask: crate::fs::XstatMask) -> crate::fs::Xstat {
+        const SUPPORTED_MASK: XstatMask = XstatMask::from_bits_truncate({
+            XstatMask::STATX_BLOCKS.bits |
+            XstatMask::STATX_ATIME.bits |
+            XstatMask::STATX_CTIME.bits |
+            XstatMask::STATX_MTIME.bits |
+            XstatMask::STATX_NLINK.bits |
+            XstatMask::STATX_MODE.bits |
+            XstatMask::STATX_SIZE.bits |
+            XstatMask::STATX_INO.bits
+        });
+        let mask = mask & SUPPORTED_MASK;
+        let inner = self.inner();
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let _r = file.file_open(&path.to_str().unwrap(), O_RDONLY);
+        let size = file.file_size() as usize;
+        Xstat {
+            stx_mask: mask.bits,
+            stx_blksize: BLOCK_SIZE as _,
+            stx_attributes: 0,
+            stx_nlink: inner.nlink as u32,
+            stx_uid: 0,
+            stx_gid: 0,
+            stx_mode: inner.mode.bits() as _,
+            stx_ino: inner.ino as u64,
+            stx_size: size as _,
+            stx_blocks: (size / BLOCK_SIZE) as _,
+            stx_attributes_mask: 0,
+            stx_atime: StatxTimestamp {
+                tv_sec: inner.atime.tv_sec as _,
+                tv_nsec: inner.atime.tv_nsec as _,
+            },
+            stx_btime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_ctime: StatxTimestamp {
+                tv_sec: inner.ctime.tv_sec as _,
+                tv_nsec: inner.ctime.tv_nsec as _,
+            },
+            stx_mtime: StatxTimestamp {
+                tv_sec: inner.mtime.tv_sec as _,
+                tv_nsec: inner.mtime.tv_nsec as _,
+            },
+            stx_rdev_major: 0,
+            stx_rdev_minor: 0,
+            stx_dev_major: 0,
+            stx_dev_minor: 0,
+            stx_mnt_id: 0,
+            stx_dio_mem_align: 0,
+            std_dio_offset_align: 0,
+            stx_subvol: 0,
+            stx_atomic_write_unit_min: 0,
+            stx_atomic_write_unit_max: 0,
+            stx_atomic_write_segments_max: 0,
+            stx_dio_read_offset_align: 0,
         }
     }
 
