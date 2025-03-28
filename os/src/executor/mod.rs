@@ -1,11 +1,15 @@
 use alloc::collections::VecDeque;
+use alloc::task;
 use lazy_static::*;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use log::info;
+use alloc::sync::Arc;
 use core::future::Future;
 use crate::processor;
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::processor::processor::{current_processor, PROCESSORS};
+use crate::syscall::process;
+use crate::task::{schedule::UserTaskFuture,task::TaskControlBlock};
 #[cfg(not(feature = "smp"))]
 pub struct TaskQueue {
     queue: SpinNoIrqLock<VecDeque<Runnable>>,
@@ -48,11 +52,13 @@ static TASK_QUEUE: TaskQueue = TaskQueue::new();
 pub fn init() {
     TASK_QUEUE.init();
 }
-pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
+pub fn spawn<F>(future: UserTaskFuture<F>) -> (Runnable, Task<F::Output>)
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
 {
+    #[cfg(feature = "smp")]
+    let cpu_mask_id = <Arc<TaskControlBlock> as Clone>::clone(&(&future.task.clone())).turn_cpu_mask_id();
     let schedule= move |runnable:Runnable, info: ScheduleInfo | {
             #[cfg(not(feature = "smp"))]
             if info.woken_while_running{
@@ -63,13 +69,24 @@ pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
             #[cfg(feature = "smp")]
             if info.woken_while_running{
                 unsafe{
-                    PROCESSORS[crate::processor::schedule::select_run_queue_index()]
-                    .unwrap_with_mut_task_queue(|task_queue|task_queue.push_back(runnable))
+                    if cpu_mask_id == 4 {
+                        PROCESSORS[crate::processor::schedule::select_run_queue_index()]
+                        .unwrap_with_mut_task_queue(|task_queue|task_queue.push_back(runnable))
+                    } else {
+                        PROCESSORS[cpu_mask_id]
+                        .unwrap_with_mut_task_queue(|task_queue|task_queue.push_back(runnable))
+                    }
+                    
                 };
             }else {
                 unsafe{
-                    PROCESSORS[crate::processor::schedule::select_run_queue_index()]
-                    .unwrap_with_mut_task_queue(|task_queue|task_queue.push_front(runnable))
+                    if cpu_mask_id == 4 {
+                        PROCESSORS[crate::processor::schedule::select_run_queue_index()]
+                        .unwrap_with_mut_task_queue(|task_queue|task_queue.push_front(runnable))
+                    } else {
+                        PROCESSORS[cpu_mask_id]
+                        .unwrap_with_mut_task_queue(|task_queue|task_queue.push_front(runnable))
+                    }
                 }
             }
             
@@ -99,6 +116,15 @@ pub fn run_until_idle() -> usize{
         //info!("already fetch a runnable");
         runnable.run();
         len += 1;
+    }
+    #[cfg(feature = "smp")]
+    if current_processor().need_migrate_check() {
+        let processor = current_processor();
+        let migrate_id = processor.migrate_id();
+        processor.set_need_migrate(processor.id());
+        if let Some(migrate_runnable) = processor.unwrap_with_mut_task_queue(|task_queue| task_queue.pop_back()){
+            unsafe{PROCESSORS[migrate_id].unwrap_with_mut_task_queue(|task_queue| task_queue.push_back(migrate_runnable))};
+        }
     }
     #[cfg(feature = "smp")]
     while let Some(runnable) = current_processor().unwrap_with_mut_task_queue(|task_queue| task_queue.pop_front()) {
