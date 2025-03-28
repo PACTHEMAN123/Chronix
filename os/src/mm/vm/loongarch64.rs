@@ -3,7 +3,7 @@ use core::ops::Range;
 use alloc::{collections::btree_map::BTreeMap, format, vec::Vec};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 
-use crate::{fs::page, mm::{allocator::FrameAllocator, PageTable}, syscall::mm::MmapFlags};
+use crate::{fs::page, mm::{allocator::FrameAllocator, PageTable}, syscall::mm::MmapFlags, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -82,21 +82,35 @@ impl UserVmSpaceHal for UserVmSpace {
         ret
     }
 
-    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, super::VmSpaceUserStackTop, super::VmSpaceEntryPoint) {
+    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, super::VmSpaceUserStackTop, super::VmSpaceEntryPoint, Vec<AuxHeader>) {
         let mut ret = Self::from_kernel(kvm_space);
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
+        let entry = elf_header.pt2.entry_point() as usize;
         let ph_count = elf_header.pt2.ph_count();
+        let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
         let mut max_end_vpn = VirtPageNum(0);
+        let mut header_va = 0;
+        let mut has_found_header_va = false;
+
+        // extract the aux
+        let mut auxv = generate_early_auxv(ph_entry_size, ph_count as usize, entry);
+        auxv.push(AuxHeader::new(AT_BASE, 0));
         
+        // map the elf data to user space
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
                 log::debug!("start_va: {:#x}, end_va: {:#x}", start_va.0, end_va.0);
+
+                if !has_found_header_va {
+                    header_va = start_va.0;
+                    has_found_header_va = true;
+                }
 
                 let mut map_perm = MapPerm::U;
                 let ph_flags = ph.flags();
@@ -121,6 +135,11 @@ impl UserVmSpaceHal for UserVmSpace {
                 );
             }
         };
+
+        let ph_head_addr = header_va + elf.header.pt2.ph_offset() as usize;
+        auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
+        log::debug!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
+        auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
         
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.start_addr();
@@ -152,7 +171,7 @@ impl UserVmSpaceHal for UserVmSpace {
         // map TrapContext
         ret.push_area(
             UserVmArea::new(
-                Constant::USER_TRAP_CONTEXT_BOTTOM.into()..Constant::USER_TRAP_CONTEXT_TOP.into(),
+                Constant::USER_TRAP_CONTEXT_BOTTOM.into()..(Constant::USER_TRAP_CONTEXT_TOP).into(),
                 UserVmAreaType::TrapContext,
                 MapPerm::R | MapPerm::W,
             ),
@@ -161,7 +180,8 @@ impl UserVmSpaceHal for UserVmSpace {
         (
             ret,
             user_stack_top,
-            elf.header.pt2.entry_point() as usize,
+            entry,
+            auxv,
         )
     }
 

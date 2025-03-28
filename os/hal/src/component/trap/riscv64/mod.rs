@@ -1,6 +1,7 @@
 use core::arch::asm;
 
-use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
+use log::info;
+use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sepc, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
 use crate::instruction::{Instruction, InstructionHal};
 
@@ -86,6 +87,9 @@ impl TrapContextHal for TrapContext {
     fn app_init_context(
         entry: usize,
         sp: usize,
+        argc: usize,
+        argv: usize,
+        envp: usize,
     ) -> Self {
         // set CPU privilege to User after trapping back
         unsafe {
@@ -106,6 +110,9 @@ impl TrapContextHal for TrapContext {
             stored: 0,
         };
         *cx.sp() = sp;
+        cx.set_arg_nth(0, argc);
+        cx.set_arg_nth(1, argv);
+        cx.set_arg_nth(2, envp);
         cx
     }
     
@@ -318,7 +325,10 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(stval),
         Trap::Exception(Exception::InstructionPageFault) => TrapType::InstructionPageFault(stval),
         Trap::Interrupt(Interrupt::SupervisorTimer) => TrapType::Timer,
-        _ => TrapType::Other
+        _ => {
+            info!("scause: {:?}, stval: {:x} sepc: {:x}", scause.cause(), stval, sepc::read());
+            TrapType::Other
+        }
     }
 }
 

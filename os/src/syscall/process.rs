@@ -14,7 +14,7 @@ use crate::task::{exit_current_and_run_next, INITPROC};
 use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::signal::SigSet;
-use crate::utils::suspend_now;
+use crate::utils::{suspend_now, user_path_to_string};
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
@@ -99,6 +99,16 @@ pub fn sys_exit(exit_code: i32) -> SysResult {
     Ok(0)
 }
 
+/// syscall: set tid address
+/// set_tid_address() always returns the caller's thread ID.
+/// set_tid_address() always succeeds.
+pub fn sys_set_tid_address(tid_ptr: usize) -> SysResult {
+    let _sum_guard = SumGuard::new();
+    let task = current_task().unwrap().clone();
+    task.tid_address().clear_child_tid = Some(tid_ptr);
+    Ok(task.tid() as isize)
+}
+
 /// fork a new process
 pub fn sys_fork() -> isize {
     let current_task = current_task().unwrap();
@@ -142,7 +152,10 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
         unsafe  {
             (child_tid.0 as *mut usize).write_volatile(new_tid);
         }
-        // todo: write new_tid into child memory(?)
+        new_task.tid_address().set_child_tid = Some(child_tid.0);
+    }
+    if flags.contains(CloneFlags::CHILD_CLEARTID) {
+        new_task.tid_address().clear_child_tid = Some(child_tid.0);
     }
     // todo: more flags...
     if flags.contains(CloneFlags::SETTLS) {
@@ -151,22 +164,49 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     spawn_user_task(new_task);
     Ok(new_tid as isize)
 }
-/// execute a new program
-pub async fn sys_exec(path: usize, args: usize) -> SysResult {
-    let mut args = args as *const usize;
-    let token = current_user_token(&current_processor());
-    let path = translated_str(token, path as *const u8);
 
-    // parse arguments
-    let mut args_vec: Vec<String> = Vec::new();
+
+/// execve() executes the program referred to by pathname.  This
+/// causes the program that is currently being run by the calling
+/// process to be replaced with a new program, with newly initialized
+/// stack, heap, and (initialized and uninitialized) data segments.
+/// more details, see: https://man7.org/linux/man-pages/man2/execve.2.html
+pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
+    let path = user_path_to_string(path as *const u8).unwrap();
+    let token = current_user_token(&current_processor());
+    let mut argv = argv as *const usize;
+    let mut envp = envp as *const usize;
+
+    // parse argv
+    let mut argv_vec: Vec<String> = Vec::new();
     loop {
-        let arg_str_ptr = *translated_ref(token, args as *const usize);
-        if arg_str_ptr == 0 {
+        // argv can be specified as null
+        if argv == core::ptr::null() {
             break;
         }
-        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
+        let argv_str_ptr = *translated_ref(token, argv as *const usize);
+        if argv_str_ptr == 0 {
+            break;
+        }
+        argv_vec.push(translated_str(token, argv_str_ptr as *const u8));
         unsafe {
-            args = args.add(1);
+            argv = argv.add(1);
+        }
+    }
+    // parse envp
+    let mut envp_vec: Vec<String> = Vec::new();
+    loop {
+        // envp can be specified as null
+        if envp == core::ptr::null() {
+            break;
+        }
+        let envp_str_ptr = *translated_ref(token, envp as *const usize);
+        if envp_str_ptr == 0 {
+            break;
+        }
+        envp_vec.push(translated_str(token, envp_str_ptr as *const u8));
+        unsafe {
+            envp = envp.add(1);
         }
     }
     // open file
@@ -175,7 +215,7 @@ pub async fn sys_exec(path: usize, args: usize) -> SysResult {
         let task = current_task().unwrap();
         
         // let argc = args_vec.len();
-        task.exec(all_data.as_slice(), args_vec);
+        task.exec(all_data.as_slice(), argv_vec, envp_vec);
         
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
@@ -184,7 +224,6 @@ pub async fn sys_exec(path: usize, args: usize) -> SysResult {
         Err(SysError::ENOENT)
     }
 }
-
 
 
 /// The waitpid() system call suspends execution of the calling thread
