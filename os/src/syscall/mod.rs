@@ -60,7 +60,6 @@ pub mod mm;
 pub mod sche;
 /// syscall error code
 pub mod sys_error;
-pub mod mm;
 
 pub use fs::*;
 use hal::addr::VirtAddr;
