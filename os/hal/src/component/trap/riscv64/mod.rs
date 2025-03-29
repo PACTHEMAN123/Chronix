@@ -245,7 +245,7 @@ impl FloatContextHal for FloatContext {
             return;
         }
         self.need_restore = 0;
-        log::warn!("FP restore");
+        //log::warn!("FP restore");
         //println!("{:#x}", self as *mut Self as usize);
         unsafe {
             let mut _t: usize = 1; // as long as not x0

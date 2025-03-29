@@ -137,6 +137,7 @@ pub fn user_stack_init(
     let mut new_sp = sp;
     // args string end with '/0'
     new_sp -= argv.iter().map(|s|s.as_bytes().len() + 1).sum::<usize>();
+    let program_name_ptr = new_sp;
     // env strings end with '/0'
     new_sp -= envp.iter().map(|s|s.as_bytes().len() + 1).sum::<usize>();
     // random aligned (use 0 aligned here)
@@ -174,7 +175,10 @@ pub fn user_stack_init(
     align16(&mut new_sp);
     // aux
     push_aux(&mut new_sp, &AuxHeader::new(AT_NULL, 0));
-    auxv.iter().rev().for_each(|aux| {push_aux(&mut new_sp, &aux);});
+    push_aux(&mut new_sp, &AuxHeader::new(AT_EXECFN, program_name_ptr));
+    for aux in auxv.into_iter().rev() {
+        push_aux(&mut new_sp, &aux);
+    }
     // env
     push_usize(&mut new_sp, 0);
     env_ptrs.iter().for_each(|ptr| {push_usize(&mut new_sp, *ptr);});
