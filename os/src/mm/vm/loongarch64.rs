@@ -105,7 +105,7 @@ impl UserVmSpaceHal for UserVmSpace {
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
-                log::debug!("start_va: {:#x}, end_va: {:#x}", start_va.0, end_va.0);
+                log::debug!("i: {}, start_va: {:#x}, end_va: {:#x}", i, start_va.0, end_va.0);
 
                 if !has_found_header_va {
                     header_va = start_va.0;
@@ -129,18 +129,26 @@ impl UserVmSpaceHal for UserVmSpace {
                     map_perm,
                 );
                 max_end_vpn = map_area.range_vpn().end;
+                log::debug!("{:?}", &elf.input[ph.offset() as usize..ph.offset() as usize + 4]);
+                let elf_offset_start = PhysAddr::from(ph.offset() as usize).floor().start_addr().0;
+                let elf_offset_end = (ph.offset() + ph.file_size()) as usize;
+                log::debug!("{:x} aligned to {:x}, now pushing ({:x}, {:x})", ph.offset() as usize, elf_offset_start, elf_offset_start, elf_offset_end);
+                // warning: now only aligned the load data to page.
+                // will same page have different usage?
                 ret.push_area(
                     map_area,
-                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    Some(&elf.input[elf_offset_start..elf_offset_end]),
                 );
             }
         };
 
         let ph_head_addr = header_va + elf.header.pt2.ph_offset() as usize;
         auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
-        log::debug!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
         
+        // todo: should check if a elf file is dynamic link
+        auxv.push(AuxHeader::new(AT_BASE, 0));
+
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.start_addr();
         let user_heap_bottom: usize = max_end_va.0;

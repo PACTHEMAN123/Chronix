@@ -384,7 +384,7 @@ impl TaskControlBlock {
             envp,
         );
         //trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
-        info!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
+        log::debug!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
         *self.get_trap_cx() = trap_cx;
         // **** release current PCB
     }
