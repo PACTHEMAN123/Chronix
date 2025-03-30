@@ -221,7 +221,7 @@ impl UserVmSpaceHal for UserVmSpace {
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
-                log::info!("i: {}, start_va: {:#x}, end_va: {:#x}", i, start_va.0, end_va.0);
+                log::debug!("i: {}, start_va: {:#x}, end_va: {:#x}", i, start_va.0, end_va.0);
 
                 if !has_found_header_va {
                     header_va = start_va.0;
@@ -245,18 +245,21 @@ impl UserVmSpaceHal for UserVmSpace {
                     map_perm,
                 );
                 max_end_vpn = map_area.range_vpn().end;
-                let _init_array_ptr = ph.offset() as usize;
-                info!("{:?}", &elf.input[ph.offset() as usize..ph.offset() as usize + 4]);
+                log::debug!("{:?}", &elf.input[ph.offset() as usize..ph.offset() as usize + 4]);
+                let elf_offset_start = PhysAddr::from(ph.offset() as usize).floor().start_addr().0;
+                let elf_offset_end = (ph.offset() + ph.file_size()) as usize;
+                log::debug!("{:x} aligned to {:x}, now pushing ({:x}, {:x})", ph.offset() as usize, elf_offset_start, elf_offset_start, elf_offset_end);
+                // warning: now only aligned the load data to page.
+                // will same page have different usage?
                 ret.push_area(
                     map_area,
-                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                    Some(&elf.input[elf_offset_start..elf_offset_end]),
                 );
             }
         };
 
         let ph_head_addr = header_va + elf.header.pt2.ph_offset() as usize;
         auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
-        log::info!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {:x}",ph_head_addr);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
         
         // todo: should check if a elf file is dynamic link
@@ -278,7 +281,7 @@ impl UserVmSpaceHal for UserVmSpace {
         );
         let user_stack_bottom = Constant::USER_STACK_BOTTOM;
         let user_stack_top = Constant::USER_STACK_TOP;
-        log::info!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
+        log::debug!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
         ret.push_area(
             UserVmArea::new(
                 user_stack_bottom.into()..user_stack_top.into(),
@@ -499,9 +502,6 @@ impl UserVmArea {
                 .start_addr()
                 .get_mut::<[u8; Constant::PAGE_SIZE]>()[..src.len()];
             dst.copy_from_slice(src);
-            info!("dst: {:#x}", unsafe {
-                *(dst.as_ptr() as *const u64)
-            });
             start += Constant::PAGE_SIZE;
             if start >= len {
                 break;
