@@ -100,7 +100,7 @@ pub fn sys_mmap(
             } else {
                 let file = task.with_fd_table(|table| table[fd].clone()).unwrap();
                 let start_va = task.with_mut_vm_space(|m| {
-                    m.alloc_mmap_area(addr.into(), length, perm, flags, file, offset)
+                    m.alloc_mmap_area(addr, length, perm, flags, file, offset)
                 })?;
                 Ok(start_va)
             }
@@ -125,7 +125,11 @@ pub fn sys_mmap(
 }
 
 /// syscall munmap
-pub fn sys_munmap(_addr: VirtAddr, _length: usize) -> SysResult {
+pub fn sys_munmap(addr: VirtAddr, length: usize) -> SysResult {
     // (todo) unmap the area in task's vm space
+    let task = current_task().unwrap().clone();
+    task.with_mut_vm_space(|m| {
+        m.unmap(addr, length)
+    })?;
     Ok(0)
 }
