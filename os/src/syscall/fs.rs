@@ -1,9 +1,10 @@
 //! File and filesystem-related syscalls
 use alloc::string::ToString;
+use hal::addr::VirtAddr;
 use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
 use crate::{drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, AT_FDCWD, AT_REMOVEDIR
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard};
 use crate::utils::{
     path::*,
@@ -301,6 +302,85 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
         return Err(SysError::EBADF);
     }
     return Ok(0);
+}
+
+/// syscall statx
+pub fn sys_statx(dirfd: isize, path: *const u8, _flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
+    let _sum_guard = SumGuard::new();
+    let mask = XstatMask::from_bits_truncate(mask);
+
+    match user_path_to_string(path) {
+        Some(path) => {
+            if path.starts_with('/') {
+                let dentry = global_find_dentry(&path);
+                let inode = dentry.inode().unwrap();
+                let statx = inode.getxattr(mask);
+                let statx_ptr = statx_buf.0 as *mut Xstat;
+                unsafe { statx_ptr.write(statx); }
+                Ok(0)
+            } else {
+                if dirfd == AT_FDCWD {
+                    let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
+                    let dentry;
+                    if path.is_empty() {
+                        dentry = cw_dentry;
+                    } else {
+                        dentry = cw_dentry.find(&path).ok_or(SysError::EBADF)?;
+                    }
+                    let inode = dentry.inode().unwrap();
+                    let statx = inode.getxattr(mask);
+                    let statx_ptr = statx_buf.0 as *mut Xstat;
+                    unsafe { statx_ptr.write(statx); }
+                    return Ok(0)
+                } else {
+                    // lookup in the current task's fd table
+                    let task = current_task().unwrap();
+                    let file = match task
+                        .with_fd_table(|table| table[dirfd as usize].clone()) 
+                    {
+                        Some(file) => file,
+                        None => {
+                            info!("[sys_statx]: the dirfd not exist");
+                            return Err(SysError::EBADF)
+                        }
+                    };
+                    let inode = file.inode().unwrap();
+                    let statx = inode.getxattr(mask);
+                    let statx_ptr = statx_buf.0 as *mut Xstat;
+                    unsafe { statx_ptr.write(statx); }
+                    return Ok(0)
+                }
+            }
+        }
+        None => {
+            if dirfd == AT_FDCWD {
+                let dentry = current_task().unwrap().with_cwd(|d|d.clone());
+                let inode = dentry.inode().unwrap();
+                let statx = inode.getxattr(mask);
+                let statx_ptr = statx_buf.0 as *mut Xstat;
+                unsafe { statx_ptr.write(statx); }
+                return Ok(0)
+            } else {
+                // lookup in the current task's fd table
+                let task = current_task().unwrap();
+                let file = match task
+                    .with_fd_table(|table| table[dirfd as usize].clone()) 
+                {
+                    Some(file) => file,
+                    None => {
+                        info!("[sys_statx]: the dirfd not exist");
+                        return Err(SysError::EBADF)
+                    }
+                };
+                let inode = file.inode().unwrap();
+                let statx = inode.getxattr(mask);
+                let statx_ptr = statx_buf.0 as *mut Xstat;
+                unsafe { statx_ptr.write(statx); }
+                return Ok(0)
+            }
+        }
+    }
+
 }
 
 /// syscall uname

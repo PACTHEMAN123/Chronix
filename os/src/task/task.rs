@@ -8,7 +8,7 @@ use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
 use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
-use crate::processor::processor::PROCESSORS;
+use crate::processor::processor::{current_processor, PROCESSORS};
 #[cfg(feature = "smp")]
 use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
@@ -104,6 +104,12 @@ pub struct TaskControlBlock {
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
+    #[cfg(feature = "smp")]
+    /// the cpu allowed to run this task
+    pub cpu_allowed: AtomicUsize,
+    #[cfg(feature = "smp")]
+    /// the processor id of the task
+    pub processor_id: AtomicUsize,
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -165,6 +171,11 @@ impl TaskControlBlock {
     generate_atomic_accessors!(
         exit_code: i32,
         sig_ucontext_ptr: usize
+    );
+    #[cfg(feature = "smp")]
+    generate_atomic_accessors!(
+        cpu_allowed: usize,
+        processor_id: usize
     );
     generate_state_methods!(
         Ready,
@@ -258,7 +269,18 @@ impl TaskControlBlock {
             self.leader.as_ref().unwrap().upgrade().unwrap()
         }
     }
-    
+    #[cfg(feature = "smp")]
+    pub fn turn_cpu_mask_id(self: Arc<Self>) -> usize {
+        let ret = match self.cpu_allowed() {
+            1 => 0,
+            2 => 1,
+            4 => 2,
+            8 => 3,
+            15 => 4,
+            _ => {panic!("cpu_allowed should be 1, 2, 4, 8 or 15")}
+        };
+        ret
+    }
 }
 
 impl TaskControlBlock {
@@ -314,8 +336,13 @@ impl TaskControlBlock {
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
             #[cfg(feature = "smp")]
-            sche_entity: new_shared(TaskLoadTracker::new()),        
+            sche_entity: new_shared(TaskLoadTracker::new()),
+            #[cfg(feature = "smp")]
+            cpu_allowed: AtomicUsize::new(15), 
+            #[cfg(feature = "smp")]
+            processor_id: AtomicUsize::new(current_processor().id())  
         };
+        info!("in new");
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
@@ -473,6 +500,10 @@ impl TaskControlBlock {
             cwd,
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
+            #[cfg(feature = "smp")]
+            cpu_allowed: AtomicUsize::new(15),
+            #[cfg(feature = "smp")]
+            processor_id: AtomicUsize::new(self.processor_id())
         });
         // add child except when creating a thread
         if !flag.contains(CloneFlags::THREAD) {
@@ -703,4 +734,37 @@ pub enum TaskStatus {
     Interruptable,
     /// task is waiting for an event but cannot be interrupt
     UnInterruptable,
+}
+
+bitflags! {
+    #[repr(C)]
+    pub struct CpuMask: usize {
+        const CPU0 = 0b0001;
+        const CPU1 = 0b0010;
+        const CPU2 = 0b0100;
+        const CPU3 = 0b1000;
+        const CPU_ALL = 0b1111; 
+    }
+}
+/// a cpum mask converter
+pub fn get_cpu_mask(id: usize ) -> usize {
+    match id {
+        0 => 1,
+        1 => 2,
+        2 => 4,
+        3 => 8,
+        4 => 15,
+        _ => 0,
+    }
+}
+/// turn a cpu mask to id
+pub fn turn_cpu_mask_to_id(mask: usize) -> usize {
+    match mask {
+        1 => 0,
+        2 => 1,
+        4 => 2,
+        8 => 3,
+        15 => 4,
+        _ => 0,
+    }
 }

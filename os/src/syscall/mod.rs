@@ -27,7 +27,12 @@ const SYSCALL_WRITE: usize = 64;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
+const SYSCALL_EXIT_GROUP: usize = 94;
 const SYSCALL_NANOSLEEP: usize = 101;
+#[cfg(feature = "smp")]
+const SYSCALL_SCHED_SETAFFINITY: usize = 122;
+#[cfg(feature = "smp")]
+const SYSCALL_SCHED_GETAFFINITY:usize = 123;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_RT_SIGACTION: usize = 134;
@@ -46,20 +51,25 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_MMAP: usize = 222;
+const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
 pub mod process;
 pub mod time;
 pub mod signal;
 pub mod mm;
+/// syscall concerning scheduler
+pub mod sche;
+/// syscall error code
+pub mod sys_error;
 
-mod sys_error;
 pub use fs::*;
 use hal::addr::VirtAddr;
 use mm::{sys_mmap, sys_munmap};
 pub use process::*;
 pub use time::*;
 pub use signal::*;
+pub use sche::*;
 pub use self::sys_error::SysError;
 use crate::{signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
@@ -85,7 +95,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
+        SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,
+        #[cfg(feature = "smp")]
+        SYSCALL_SCHED_SETAFFINITY => sys_sched_setaffinity(args[0] , args[1] , args[2] ),
+        #[cfg(feature = "smp")]
+        SYSCALL_SCHED_GETAFFINITY => sys_sched_getaffinity(args[0] , args[1] , args[2] ),
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(args[0] as i32, args[1] as *const SigAction, args[2] as *mut SigAction),
@@ -104,6 +119,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
+        SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     };
     match result {

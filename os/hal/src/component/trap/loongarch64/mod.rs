@@ -239,7 +239,7 @@ impl FloatContextHal for FloatContext {
             return;
         }
         self.need_restore = 0;
-        warn!("FP restore");
+        //warn!("FP restore");
         let last_fpe = register::euen::read().fpe();
         register::euen::set_fpe(true);
         unsafe {

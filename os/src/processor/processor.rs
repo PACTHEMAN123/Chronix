@@ -2,7 +2,7 @@
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, AtomicUsize};
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::task::task::{TaskStatus,TaskControlBlock,Shared,new_shared};
+use crate::task::task::{get_cpu_mask, new_shared, turn_cpu_mask_to_id, Shared, TaskControlBlock, TaskStatus};
 use crate::sync::UPSafeCell;
 use crate::processor::context::EnvContext;
 use alloc::collections::vec_deque::VecDeque;
@@ -38,6 +38,9 @@ pub struct Processor {
     #[cfg(feature = "smp")]
     /// sche_entity for rq
     pub sche_entity: Option<Shared<TaskLoadTracker>>,
+    #[cfg(feature = "smp")]
+    /// mark whether there is a task need to be migrate
+    pub need_migrate: AtomicUsize,
     /// the cpu timeline
     pub timeline: AtomicU64
 }
@@ -79,6 +82,8 @@ impl Processor {
             #[cfg(feature = "smp")]
             sche_entity: None,
             timeline: AtomicU64::new(0),
+            #[cfg(feature = "smp")]
+            need_migrate: AtomicUsize::new(0),
         }
     }
     /// Get the id of the current processor
@@ -132,6 +137,21 @@ impl Processor {
     /// initialize sche entity for rq
     pub fn initial_sche_entity(&mut self){
         self.sche_entity = Some(new_shared(TaskLoadTracker::new()));
+    }
+    #[cfg(feature = "smp")]
+    /// get migrate id
+    pub fn migrate_id(&self) -> usize {
+        self.need_migrate.load(core::sync::atomic::Ordering::SeqCst)
+    }
+    #[cfg(feature = "smp")]
+    /// get need_migrate flag
+    pub fn need_migrate_check(&self) -> bool {
+        self.need_migrate.load(core::sync::atomic::Ordering::SeqCst) != self.id()
+    }
+    #[cfg(feature = "smp")]
+    /// set need_migrate flag to true
+    pub fn set_need_migrate(&mut self, need_migrate: usize) {
+        self.need_migrate.store(need_migrate, core::sync::atomic::Ordering::SeqCst);
     } 
     /// get current cpu timeline 
     pub fn get_current_timeline(&self) -> u64 {
@@ -181,7 +201,14 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
     unsafe{ Instruction::disable_interrupt();}
     unsafe {env.auto_sum();}
     //info!("already in switch");
+    #[cfg(feature = "smp")]
+    if task.cpu_allowed() != 4 && task.cpu_allowed() != get_cpu_mask(processor.id()) {
+        processor.set_need_migrate(turn_cpu_mask_to_id(task.cpu_allowed()));
+    }
     processor.set_current(Arc::clone(task));
+    #[cfg(feature = "smp")]
+    task.set_processor_id(processor.id());
+    //info!("[in switch to current task] processor id: {}, task id: {}", processor.id(),task.tid.0);
     task.time_recorder().record_switch_in();
     //info!("[in switch to current task] task id: {}kernel_time:{:?}",task.tid(),task.time_recorder().kernel_time());
     if processor.current().is_none() {
@@ -234,6 +261,8 @@ pub fn set_processor(id:usize) {
     processor.set_task_queue();
     #[cfg(feature = "smp")]
     processor.initial_sche_entity();
+    #[cfg(feature = "smp")]
+    processor.set_need_migrate(id);
     let processor_addr = processor as *const _ as usize;
     Instruction::set_tp(processor_addr);
 }

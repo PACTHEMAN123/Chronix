@@ -13,7 +13,7 @@ use log::{debug, info};
 use crate::fs::vfs::inode::InodeMode;
 use crate::fs::page::cache::PageCache;
 use crate::fs::page::page::Page;
-use crate::fs::{Kstat, SuperBlock};
+use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::{fs::vfs::{Inode, InodeInner}, sync::UPSafeCell};
 
 use super::disk::DiskCursor;
@@ -142,6 +142,58 @@ impl Inode for FatFileInode {
         }
     }
 
+    fn getxattr(&self, mask: crate::fs::XstatMask) -> crate::fs::Xstat {
+        const SUPPORTED_MASK: XstatMask = XstatMask::from_bits_truncate({
+            XstatMask::STATX_BLOCKS.bits |
+            XstatMask::STATX_NLINK.bits |
+            XstatMask::STATX_MODE.bits |
+            XstatMask::STATX_SIZE.bits |
+            XstatMask::STATX_INO.bits
+        });
+        let mask = mask & SUPPORTED_MASK;
+        Xstat {
+            stx_mask: mask.bits,
+            stx_blksize: 512,
+            stx_attributes: 0,
+            stx_nlink: 1,
+            stx_uid: 0,
+            stx_gid: 0,
+            stx_mode: InodeMode::FILE.bits() as _,
+            stx_ino: 1,
+            stx_size: self.file.exclusive_access().size as u64,
+            stx_blocks: self.file.exclusive_access().size as u64 / 512,
+            stx_attributes_mask: 0,
+            stx_atime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_btime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_ctime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_mtime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_rdev_major: 0,
+            stx_rdev_minor: 0,
+            stx_dev_major: 0,
+            stx_dev_minor: 0,
+            stx_mnt_id: 0,
+            stx_dio_mem_align: 0,
+            std_dio_offset_align: 0,
+            stx_subvol: 0,
+            stx_atomic_write_unit_min: 0,
+            stx_atomic_write_unit_max: 0,
+            stx_atomic_write_segments_max: 0,
+            stx_dio_read_offset_align: 0,
+        }
+    }
+
     fn lookup(&self, _name: &str) -> Option<Arc<dyn Inode>> {
         panic!("fat32 file inode dont support lookup!")
     }
@@ -242,6 +294,57 @@ impl Inode for FatDirInode {
             st_uid: 0,
             _pad0: 0,
             _pad1: 0,
+        }
+    }
+    fn getxattr(&self, mask: crate::fs::XstatMask) -> crate::fs::Xstat {
+        const SUPPORTED_MASK: XstatMask = XstatMask::from_bits_truncate({
+            XstatMask::STATX_BLOCKS.bits |
+            XstatMask::STATX_NLINK.bits |
+            XstatMask::STATX_MODE.bits |
+            XstatMask::STATX_SIZE.bits |
+            XstatMask::STATX_INO.bits
+        });
+        let mask = mask & SUPPORTED_MASK;
+        Xstat {
+            stx_mask: mask.bits,
+            stx_blksize: 512,
+            stx_attributes: 0,
+            stx_nlink: 1,
+            stx_uid: 0,
+            stx_gid: 0,
+            stx_mode: InodeMode::DIR.bits() as _,
+            stx_ino: 1,
+            stx_size: self.dir.exclusive_access().size as u64,
+            stx_blocks: self.dir.exclusive_access().size as u64 / 512,
+            stx_attributes_mask: 0,
+            stx_atime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_btime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_ctime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_mtime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_rdev_major: 0,
+            stx_rdev_minor: 0,
+            stx_dev_major: 0,
+            stx_dev_minor: 0,
+            stx_mnt_id: 0,
+            stx_dio_mem_align: 0,
+            std_dio_offset_align: 0,
+            stx_subvol: 0,
+            stx_atomic_write_unit_min: 0,
+            stx_atomic_write_unit_max: 0,
+            stx_atomic_write_segments_max: 0,
+            stx_dio_read_offset_align: 0,
         }
     }
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
