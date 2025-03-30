@@ -172,7 +172,7 @@ pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> isize {
     let mut envp = envp.iter().map(|s| s.as_ptr() as usize).collect::<Vec<_>>();
     argv.push(0);
     envp.push(0);
-    sys_execve(path.as_ptr(), argv.as_ptr() as usize, envp.as_ptr() as usize)
+    sys_execve(path.as_ptr() as *const u8, argv.as_ptr() as usize, envp.as_ptr() as usize)
 }
 
 pub fn wait(exit_code: &mut i32) -> isize {
