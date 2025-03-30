@@ -6,7 +6,8 @@ use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal
 use log::{info, Level};
 use range_map::RangeMap;
 
-use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, syscall::SysError};
+use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, syscall::SysError};
+
 use crate::syscall::{mm::MmapFlags, SysResult};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
@@ -594,7 +595,7 @@ impl UserVmArea {
                     for vpn in range_vpn {
                         let frame = FrameAllocator.alloc_tracker(1).unwrap();
                         page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                        self.frames.insert(vpn, StrongArc::new(frame));
+                        self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
                     }
                 },
                 UserVmAreaType::Heap |
@@ -678,7 +679,10 @@ impl UserVmArea {
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
-                    let new_frame = StrongArc::new(FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?);
+                    let new_frame = StrongArc::new_in(
+                        FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?,
+                        SlabAllocator
+                    );
                     new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                     let new_range_ppn = new_frame.range_ppn.clone();
 
@@ -705,7 +709,7 @@ impl UserVmArea {
                     | UserVmAreaType::Heap => {
                         let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
                         self.map_range_to(page_table, vpn..vpn+1, new_frame.range_ppn.start);
-                        self.frames.insert(vpn, StrongArc::new(new_frame));
+                        self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                         return Ok(());
                     },
