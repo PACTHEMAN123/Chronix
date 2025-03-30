@@ -4,7 +4,7 @@ use alloc::{collections::btree_map::BTreeMap, format, vec::Vec};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 use range_map::RangeMap;
 
-use crate::{fs::page, mm::{allocator::FrameAllocator, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}};
+use crate::{fs::page, mm::{allocator::{FrameAllocator, SlabAllocator}, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -416,7 +416,7 @@ impl UserVmArea {
                     for vpn in range_vpn {
                         let frame = FrameAllocator.alloc_tracker(1).unwrap();
                         page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                        self.frames.insert(vpn, StrongArc::new(frame));
+                        self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
                     }
                 }
                 UserVmAreaType::TrapContext => {
@@ -427,7 +427,7 @@ impl UserVmArea {
                             .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
                         *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
                         pte.set_flags(pte.flags() | PTEFlags::D); // will not trigger PME
-                        self.frames.insert(vpn, StrongArc::new(frame));
+                        self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
                     }
                 },
                 UserVmAreaType::Heap |
@@ -515,7 +515,10 @@ impl UserVmArea {
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
-                    let new_frame = StrongArc::new(FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?);
+                    let new_frame = StrongArc::new_in(
+                        FrameAllocator.alloc_tracker(level.page_count()).ok_or(())?,
+                        SlabAllocator
+                    );
                     let new_range_ppn = new_frame.range_ppn.clone();
 
                     let old_data = frame.range_ppn.get_slice::<u8>();
@@ -543,7 +546,7 @@ impl UserVmArea {
                             .find_pte_create(vpn, PageLevel::Small)
                             .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
                         *pte = PageTableEntry::new(new_frame.range_ppn.start, self.map_perm, true);
-                        self.frames.insert(vpn, StrongArc::new(new_frame));
+                        self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) }; 
                         return Ok(());
                     }
