@@ -404,7 +404,7 @@ impl<T: LinkedNode> LinkedStack<T> {
             if !t.next().is_null() {
                 unsafe { *(**t.next()).last() = *t.last() };
             }
-        }         
+        }
     }
 }
 

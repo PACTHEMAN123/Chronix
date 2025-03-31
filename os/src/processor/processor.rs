@@ -16,7 +16,7 @@ use crate::mm::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
 use crate::mm::{self, INIT_VMSPACE};
-use crate::board::MAX_PROCESSORS;
+use hal::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
 pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
 #[cfg(feature = "smp")]
