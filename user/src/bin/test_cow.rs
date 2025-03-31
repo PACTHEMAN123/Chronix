@@ -20,15 +20,10 @@ pub fn main() -> i32 {
         *x = 169;
         println!("child: x = {}", x);
     } else {
-        loop {
-            let mut exit_code: i32 = 0;
-            let pid = wait(&mut exit_code);
-            if pid == -1 {
-                yield_();
-                continue;
-            } else {
-                break;
-            }
+        let mut exit_code: i32 = 0;
+        let pid = wait(&mut exit_code);
+        if pid == -1 {
+            return -1;
         }
         println!("parent: x = {}", x);
     }

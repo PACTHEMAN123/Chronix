@@ -1,7 +1,7 @@
 use crate::util::mutex::Mutex;
 
 const UART_ADDR: usize = 0x800000001FE001E0;
-// 0x800000001fe20000ULL
+
 static COM1: Mutex<Uart> = Mutex::new(Uart::new(UART_ADDR));
 
 pub struct Uart {

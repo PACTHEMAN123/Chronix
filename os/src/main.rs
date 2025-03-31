@@ -37,15 +37,12 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use board::MAX_PROCESSORS;
 extern crate hal;
-use hal::{constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
+use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::*;
 use mm::{vm::KernVmSpaceHal, INIT_VMSPACE};
 use processor::processor::current_processor;
 
-#[path = "boards/qemu.rs"]
-mod board;
 #[allow(unused)]
 mod net;
 mod config;
