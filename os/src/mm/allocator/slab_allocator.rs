@@ -1,6 +1,6 @@
-use core::{mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}};
+use core::{marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}};
 
-use alloc::alloc::{AllocError, Allocator};
+use alloc::{alloc::{AllocError, Allocator, Global}, collections::btree_map::BTreeMap};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, println, util::mutex::Mutex};
 
 use crate::sync::mutex::{spin_mutex::SpinMutex, Spin};
@@ -195,12 +195,12 @@ pub union FreeNode<const S: usize> {
 #[repr(C)]
 #[allow(missing_docs)]
 struct SlabBlock<const S: usize> {
+    /// last block
+    last: *mut SlabBlock<S>,
     /// next block
     next: *mut SlabBlock<S>,
     /// size
     size: usize,
-    /// belong
-    belong: *const SlabCache<S>,
     /// node list head
     head: *mut FreeNode<S>
 }
@@ -212,53 +212,74 @@ impl<const S: usize> SlabBlock<S> {
     }
 
     pub fn cap() -> usize {
-        ((Self::page_cnt() << Constant::PAGE_SIZE_BITS) - size_of::<SlabBlock<S>>()) / S
+        (Self::page_cnt() << Constant::PAGE_SIZE_BITS) / S
+    }
+
+    pub fn floor(addr: PhysAddr) -> PhysPageNum {
+        PhysAddr(addr.0 & !((Self::page_cnt() << Constant::PAGE_SIZE_BITS)-1)).floor()
     }
 
     fn dealloc(&mut self) {
-        let start_ppn = PhysAddr(self as *mut Self as usize).floor();
+        let start_ppn = Self::floor((self.head as usize).into());
         let end_ppn = start_ppn + Self::page_cnt();
         FrameAllocator.dealloc(start_ppn..end_ppn);
     }
 }
 
-#[allow(unused, missing_docs)]
-pub struct SlabCache<const S: usize = 0> {
-    empty_blk_list: *mut SlabBlock<S>,
-    free_blk_list: *mut SlabBlock<S>,
-    full_blk_list: *mut SlabBlock<S>,
+impl<const S: usize> LinkedNode for SlabBlock<S> {
+    fn last(&mut self) -> &mut *mut Self {
+        &mut self.last
+    }
+
+    fn next(&mut self) -> &mut *mut Self {
+        &mut self.next
+    }
 }
 
 #[allow(unused, missing_docs)]
-impl<const S: usize> SlabCache<S>
-{
+pub struct SlabCache<const S: usize> {
+    blocks: BTreeMap<PhysPageNum, SlabBlock<S>>,
+    empty_blk_list: LinkedStack<SlabBlock<S>>,
+    free_blk_list: LinkedStack<SlabBlock<S>>,
+    full_blk_list: LinkedStack<SlabBlock<S>>,
+    _marker: PhantomPinned,
+}
+
+#[allow(unused, missing_docs)]
+impl<const S: usize> SlabCache<S> {
     pub const fn new() -> Self {
         Self {
-            empty_blk_list: null_mut(),
-            free_blk_list: null_mut(),
-            full_blk_list: null_mut(),
+            blocks: BTreeMap::new(),
+            empty_blk_list: LinkedStack::new(),
+            free_blk_list: LinkedStack::new(),
+            full_blk_list: LinkedStack::new(),
+            _marker: PhantomPinned,
         }
     }
 
     pub fn alloc(&mut self) -> Option<NonNull<u8>> {
         loop {
-            if self.free_blk_list.is_null() {
-                if !self.empty_blk_list.is_null() {
-                    let blk = unsafe { &mut *self.empty_blk_list };
-                    self.empty_blk_list = blk.next;
-                    blk.next = self.free_blk_list;
-                    self.free_blk_list = blk;
+            if self.free_blk_list.is_empty() {
+                if let Some(t) = self.empty_blk_list.pop() {
+                    self.free_blk_list.push(t);
                     continue;
                 }
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
                     log2(SlabBlock::<S>::page_cnt())
                 )?;
-                let blk = frames.start.start_addr().get_mut::<SlabBlock<S>>();
-                blk.size = 0;
-                blk.belong = self;
-                blk.next = self.free_blk_list;
-                let free_nodes_ptr = (frames.start.start_addr() + size_of::<SlabBlock<S>>()).get_ptr::<FreeNode<S>>();
+                let free_nodes_ptr = frames.start.start_addr().get_ptr::<FreeNode<S>>();
+
+                let blk = SlabBlock::<S> {
+                    last: null_mut(),
+                    next: null_mut(),
+                    size: 0,
+                    head: free_nodes_ptr,
+                };
+
+                self.blocks.insert(frames.start, blk);
+                let blk = self.blocks.get_mut(&frames.start).unwrap();
+
                 let free_nodes = unsafe {
                     &mut *slice_from_raw_parts_mut(free_nodes_ptr, SlabBlock::<S>::cap())
                 };
@@ -269,16 +290,15 @@ impl<const S: usize> SlabCache<S>
                     last = node;
                 }
                 last.next = null_mut();
-                blk.next = self.free_blk_list;
-                self.free_blk_list = blk;
+                
+                self.free_blk_list.push(blk);
                 continue;
             }
 
-            let blk = unsafe { &mut *self.free_blk_list };
+            let blk = unsafe { &mut *self.free_blk_list.head };
             if blk.head.is_null() {
-                self.free_blk_list = blk.next;
-                blk.next = self.full_blk_list;
-                self.full_blk_list = blk;
+                self.free_blk_list.pop();
+                self.full_blk_list.push(blk);
                 continue;
             }
             let ret = blk.head;
@@ -294,41 +314,99 @@ impl<const S: usize> SlabCache<S>
     pub fn dealloc(&mut self, ptr: NonNull<u8>) -> Option<()> {
         let mut ptr: NonNull<FreeNode<S>> = ptr.cast();
         let addr = ptr.addr().get();
-        let blk_addr = addr & !((SlabBlock::<S>::page_cnt() << Constant::PAGE_SIZE_BITS)-1);
-        let blk = unsafe { &mut *(blk_addr as *mut SlabBlock<S>) };
-        if blk.belong != self {
-            return None;
-        }
+        let ppn = SlabBlock::<S>::floor(addr.into());
+        let blk = self.blocks.get_mut(&ppn)?;
+
         let free_node = unsafe { ptr.as_mut() };
         free_node.next = blk.head;
         blk.head = free_node;
+
         if blk.size == SlabBlock::<S>::cap() {
             blk.size -= 1;
-            self.full_blk_list = blk.next;
-            blk.next = self.free_blk_list;
-            self.free_blk_list = blk;
+            self.full_blk_list.remove(blk);
+            self.free_blk_list.push(blk);
         } else if blk.size == 1 {
             blk.size -= 1;
-            self.free_blk_list = blk.next;
-            blk.next = self.empty_blk_list;
-            self.empty_blk_list = blk;
+            self.free_blk_list.remove(blk);
+            self.empty_blk_list.push(blk);
         }
-        
         Some(())
     }
 
     pub fn shrink(&mut self) {
-        let mut blk_ptr = self.free_blk_list;
+        let mut blk_ptr = self.free_blk_list.head;
         while !blk_ptr.is_null() {
             let blk = unsafe {&mut *blk_ptr};
             let next = blk.next;
             blk.dealloc();
+            let ppn = SlabBlock::<S>::floor((blk.head as usize).into());
+            self.blocks.remove(&ppn).unwrap();
             blk_ptr = next;
         };
-        self.free_blk_list = null_mut();
+        self.free_blk_list.head = null_mut();
     }
 }
 
+/// linked node
+#[allow(unused, missing_docs)]
+trait LinkedNode {
+    fn last(&mut self) -> &mut *mut Self;
+    fn next(&mut self) -> &mut *mut Self;
+}
+
+/// linked stack
+#[allow(unused, missing_docs)]
+struct LinkedStack<T: LinkedNode> {
+    head: *mut T,
+}
+
+#[allow(unused, missing_docs)]
+impl<T: LinkedNode> LinkedStack<T> {
+
+    const fn new() -> Self {
+        Self { head: null_mut() }
+    }
+
+    fn push(&mut self, val: &mut T) {
+        *val.next() = self.head;
+        if self.head.is_null() {
+            unsafe { *(*self.head).last() = val };
+        }
+        self.head = val;
+    }
+
+    fn pop(&mut self) -> Option<&mut T> {
+        if self.head.is_null() {
+            return None;
+        }
+        let ret = self.head;
+        self.head = unsafe { *(*self.head).next() };
+        if !self.head.is_null() {
+            unsafe { *(*self.head).last() = null_mut() };
+        }
+        Some(unsafe { &mut *ret })
+    }
+
+    fn is_empty(&self) -> bool {
+        self.head.is_null()
+    }
+
+    fn remove(&mut self, t: &mut T) {
+        if t.last().is_null() {
+            debug_assert!(self.head == t);
+            self.head = *t.next();
+            if !self.head.is_null() {
+                unsafe { *(*self.head).last() = null_mut() };
+            }
+        } else {
+            debug_assert!(self.head != t);
+            unsafe { *(**t.last()).next() = *t.next() };
+            if !t.next().is_null() {
+                unsafe { *(**t.next()).last() = *t.last() };
+            }
+        }         
+    }
+}
 
 #[cfg(target_pointer_width="32")]
 const fn next_power_of_two(mut x: usize) -> usize {
