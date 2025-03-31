@@ -1,7 +1,7 @@
 use crate::devices::{net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, NetDevice};
 use log::info;
 use smoltcp::phy::{DeviceCapabilities, Medium};
-use super::{VirtioHal,NET_QUEUE_SIZE};
+use crate::drivers::dma::VirtioHal;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use smoltcp::phy::Device;
 use virtio_drivers::{
@@ -9,6 +9,8 @@ use virtio_drivers::{
     transport::{mmio::MmioTransport, Transport},
 };
 use crate::devices::net::EthernetAddress;
+
+pub const NET_QUEUE_SIZE: usize = 32;
 pub struct VirtIoNetDev<T: Transport> {
     rx_buffers: [Option<NetBufBox>; NET_QUEUE_SIZE],
     tx_buffers: [Option<NetBufBox>; NET_QUEUE_SIZE],

@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
+use fatfs::{info, warn};
 use core::{
     ops::{Deref, DerefMut},
     task::Waker,
@@ -46,6 +47,14 @@ impl ListenEntry {
     }
 }
 
+impl Drop for ListenEntry {
+    fn drop(&mut self) {
+        for &handle in &self.syn_queue {
+            SOCKET_SET.remove(handle);
+        }
+    }
+}
+
 /// A table for managing TCP listen ports.
 /// Each index corresponds to a specific port number.
 pub struct ListenTable {
@@ -86,5 +95,45 @@ impl ListenTable {
             entry.wake()
         }
     }
+    /// accept a connection, check the syn queue and find the available connection
+    pub fn accept(&self, port: u16) -> SockResult<(SocketHandle, (IpEndpoint, IpEndpoint))> {
+        if let Some(entry) = self.inner[port as usize].lock().deref_mut() {
+            let syn_queue = &mut entry.syn_queue;
+            let (idx, addr_tuple) = syn_queue.iter()
+            .enumerate()
+            .find_map(|(idx, &handle)| {
+                is_connected(handle).then(||(idx, get_addr_tuple(handle)))
+            }).ok_or(SysError::EAGAIN)?;     
+            
+            let handle = syn_queue.swap_remove_front(idx).unwrap();
+            Ok((handle,addr_tuple))
+        }else {
+            log::warn!("[listen table] failed: not listen");
+            Err(SysError::EINVAL)
+        }
+    }
+    pub fn can_accept(&self,port: u16) -> bool {
+        if let Some(entry) = self.inner[port as usize].lock().deref(){
+            entry.syn_queue.iter().any(|&handle| is_connected(handle))
+        }else{
+            log::info!("have been set as listening, wouldn't happen");
+            false
+        }    
+    }
 
+}
+
+fn is_connected(handle: SocketHandle) -> bool {
+    SOCKET_SET.with_socket::<tcp::Socket,_,_>(handle, |socket| {
+        !matches!(socket.state(), State::Listen | State::SynReceived)
+    })
+}
+
+fn get_addr_tuple(handle: SocketHandle) -> (IpEndpoint, IpEndpoint) {
+    SOCKET_SET.with_socket::<tcp::Socket, _, _>(handle, |socket| {
+        (
+            socket.local_endpoint().unwrap(),
+            socket.remote_endpoint().unwrap(),
+        )
+    })
 }

@@ -67,7 +67,7 @@ impl ProcessGroupManager {
     }
     /// add a task to a group
     pub fn add_task_to_group(&self,pgid: PGid, task: &Arc<TaskControlBlock>) {
-        info!("add task {} to group {}, processor id {}", task.tid(), pgid, current_processor().id() );
+        //info!("add task {} to group {}, processor id {}", task.tid(), pgid, current_processor().id() );
         task.set_pgid(pgid);
         self.0.lock().get_mut(&pgid).unwrap()
         .push(Arc::downgrade(task));

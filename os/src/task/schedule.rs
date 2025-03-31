@@ -7,7 +7,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::{task::exit_current_and_run_next, trap::user_trap_handler};
+use crate::{task::exit_current_and_run_next, timer::get_current_time_duration, trap::user_trap_handler};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::utils::async_utils::{get_waker,suspend_now};

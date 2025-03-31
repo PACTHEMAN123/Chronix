@@ -1,12 +1,12 @@
 use core::{ops::DerefMut, time::Duration};
 
-use alloc::{boxed::Box, vec};
+use alloc::{boxed::Box, vec::Vec, vec};
 use listen_table::ListenTable;
 use log::info;
-use smoltcp::{iface::{Config, Interface, SocketHandle, SocketSet,PollResult}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress}};
+use smoltcp::{iface::{Config, Interface, PollResult, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr}};
 use spin::{Lazy, Once};
 
-use crate::{devices::{net::NetDeviceWrapper, NetDevice}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
+use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::loopback::LoopbackDevice, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
 #[allow(dead_code)]
 /// Network Address Module
 pub mod addr;
@@ -87,7 +87,13 @@ impl InterfaceWrapper {
             iface,
         }
     }
+    pub fn name(&self) -> &str {
+        self.name
+    }
 
+    pub fn ethernet_address(&self) -> EthernetAddress {
+        self.ether_addr
+    }
     fn current_time() -> Instant {
         Instant::from_micros_const(get_current_time_us() as i64)
     }
@@ -100,7 +106,7 @@ impl InterfaceWrapper {
         iface.poll(timestamp, dev.deref_mut(), &mut sockets);
         timestamp
     }
-
+    /// check the interface and call poll sockethandle if necessary
     pub fn check_poll(&self, timestamp: Instant, sockets: &SpinNoIrqLock<SocketSet>) {
         let mut iface = self.iface.lock();
         let mut sockets = sockets.lock();
@@ -127,10 +133,10 @@ impl InterfaceWrapper {
                 TIMER_MANAGER.add_timer(empty_timer);
             }
         }
-
     }
 
 }
+
 impl <'a> SocketSetWrapper<'a> {
     fn new() -> Self {
         let socket_set = SocketSet::new(vec![]);
@@ -196,4 +202,37 @@ impl TimerEvent for NetPollTimer {
 }
 pub fn smol_dur_to_core_cur(duration: smoltcp::time::Duration) -> core::time::Duration {
     core::time::Duration::from_micros(duration.micros())
+}
+
+pub fn init_network_loopback() {
+    info!("Initialize network loopback");
+    let dev = LoopbackDevice::new();
+    let ehter_addr = EthernetAddress(dev.mac_address().0);
+    let eth0 = InterfaceWrapper::new("eth0", dev, ehter_addr);
+    let gateway: IpAddress = match option_env!("GATEWAY") {
+        Some(gw) => {
+            gw.parse().unwrap()
+        },
+        None => {
+            "".parse().unwrap()
+        }
+    };
+    let ip = "127.0.0.1".parse().unwrap();
+    let ip_addrs = vec![IpCidr::new(ip,8)];
+    eth0.iface.lock().update_ip_addrs(|inner_ip_addrs|{
+        inner_ip_addrs.extend(ip_addrs);
+    });
+    match gateway {
+        IpAddress::Ipv4(gateway_v4) => {
+            eth0.iface.lock().routes_mut().add_default_ipv4_route(gateway_v4).unwrap();
+        }
+        _ => {}
+    }
+    ETH0.call_once(|| eth0);
+
+    info!("created net interface {:?}:", ETH0.get().unwrap().name());
+    info!("  ether:    {}", ETH0.get().unwrap().ethernet_address());
+    info!("  ip:       {}", ip);
+    info!("  gateway:  {}", gateway);
+    
 }
