@@ -36,7 +36,7 @@ pub trait TrapContextHal {
 
     fn sepc(&mut self) -> &mut usize;
 
-    fn app_init_context(entry: usize, sp: usize) -> Self;
+    fn app_init_context(entry: usize, sp: usize, argc: usize, argv: usize, envp: usize) -> Self;
 
     fn save_to(&mut self, idx: usize, v: usize);
 

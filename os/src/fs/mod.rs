@@ -197,3 +197,135 @@ impl UtsName {
         data
     }
 }
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct Xstat {
+    /// Mask of bits indicating
+    /// filled fields
+    pub stx_mask: u32,
+    /// Block size for filesystem I/O
+    pub stx_blksize: u32,
+    /// Extra file attribute indicators
+    pub stx_attributes: u64,
+    /// Number of hard links
+    pub stx_nlink: u32,
+    /// User ID of owner
+    pub stx_uid: u32,
+    /// Group ID of owner
+    pub stx_gid: u32,
+    /// File type and mode
+    pub stx_mode: u16,
+    /// Inode number
+    pub stx_ino: u64,
+    /// Total size in byte
+    pub stx_size: u64,
+    /// Number of 512B blocks allocated
+    pub stx_blocks: u64,
+    /// Mask to show what's supported
+    /// in stx_attributes
+    pub stx_attributes_mask: u64,
+
+    // The following fields are file timestamps
+    /// Last access
+    pub stx_atime: StatxTimestamp,
+    /// Creation 
+    pub stx_btime: StatxTimestamp,
+    /// Last status change
+    pub stx_ctime: StatxTimestamp,
+    /// Last modification
+    pub stx_mtime: StatxTimestamp,
+
+    // If this file represents a device, then the next two
+    // fields contain the ID of the device
+    /// Major ID
+    pub stx_rdev_major: u32,
+    /// Minor ID
+    pub stx_rdev_minor: u32,
+
+    // The next two fields contain the ID of the device
+    // containing the filesystem where the file resides
+    /// Major ID
+    pub stx_dev_major: u32,
+    /// Minor ID
+    pub stx_dev_minor: u32,
+
+    /// Mount ID
+    pub stx_mnt_id: u64,
+
+    // Direct I/O alignment restrictions
+    pub stx_dio_mem_align: u32,
+    pub std_dio_offset_align: u32,
+
+    /// Subvolume identifier
+    pub stx_subvol: u64,
+
+    // Direct I/O atomic write limits
+    pub stx_atomic_write_unit_min: u32,
+    pub stx_atomic_write_unit_max: u32,
+    pub stx_atomic_write_segments_max: u32,
+
+    /// File offset alignment for direct I/O reads
+    pub stx_dio_read_offset_align: u32,
+}
+
+#[derive(Debug, Clone)]
+#[repr(C)]
+pub struct StatxTimestamp {
+    /// Seconds since the Epoch (UNIX time)
+    pub tv_sec: i64, 
+    /// Nanoseconds since tv_sec
+    pub tv_nsec: u32,
+}
+
+bitflags! {
+    /// Statx Mask
+    pub struct XstatMask: u32 {
+        /// Want stx_mode & S_IFMT
+        const STATX_TYPE = 1 << 0;
+        /// Want stx_mode & !S_IFMT
+        const STATX_MODE = 1 << 1;
+        /// Want stx_nlink
+        const STATX_NLINK = 1 << 2;
+        /// Want stx_uid
+        const STATX_UID = 1 << 3;
+        /// Want stx_gid
+        const STATX_GID = 1 << 4;
+        /// Want stx_atime
+        const STATX_ATIME = 1 << 5;
+        /// Want stx_mtime
+        const STATX_MTIME = 1 << 6;
+        /// Want stx_ctime
+        const STATX_CTIME = 1 << 7;
+        /// Want stx_ino
+        const STATX_INO = 1 << 8;
+        /// Want stx_size
+        const STATX_SIZE = 1 << 9;
+        /// Want stx_blocks
+        const STATX_BLOCKS = 1 << 10;
+        /// [All of the above]
+        const STATX_BASIC_STATS = 1 << 11;
+        /// Want stx_btime
+        const STATX_BTIME = 1 << 12;
+        /// The same as STATX_BASIC_STATS | STATX_BTIME.
+        /// It is deprecated and should not be used.
+        #[deprecated]
+        const STATX_ALL = Self::STATX_BASIC_STATS.bits | Self::STATX_BTIME.bits;
+        /// Want stx_mnt_id (since Linux 5.8)
+        const STATX_MNT_ID = 1 << 13;
+        /// Want stx_dio_mem_align and stx_dio_offset_align.
+        /// (since Linux 6.1; support varies by filesystem)
+        const STATX_DIOALIGN = 1 << 14;
+        ///  Want stx_subvol
+        /// (since Linux 6.10; support varies by filesystem)
+        const STATX_SUBVOL = 1 << 15;
+        /// Want stx_atomic_write_unit_min,
+        /// stx_atomic_write_unit_max,
+        /// and stx_atomic_write_segments_max.
+        /// (since Linux 6.11; support varies by filesystem)
+        const STATX_WRITE_ATOMIC = 1 << 16;
+        /// Want stx_dio_read_offset_align.
+        /// (since Linux 6.14; support varies by filesystem)
+        const STATX_DIO_READ_ALIGN = 1 << 17;
+    }
+}

@@ -5,7 +5,7 @@ use core::{cmp, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use alloc::sync::{Arc, Weak};
 use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, util::smart_point::StrongArc};
 
-use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator}, FrameTracker}};
+use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker}};
 
 pub struct Page {
     /// page frame state or attribute
@@ -13,7 +13,7 @@ pub struct Page {
     /// offset in a file (if is owned by file)
     pub index: usize, 
     /// the physical frame it owns
-    pub frame: StrongArc<FrameTracker>,
+    pub frame: StrongArc<FrameTracker, SlabAllocator>,
 }
 
 unsafe impl Send for Page {}
@@ -29,7 +29,7 @@ impl Page {
         Arc::new(Self {
             is_dirty: AtomicBool::new(false), // need more flags
             index: index,
-            frame: StrongArc::new(frame),
+            frame: StrongArc::new_in(frame, SlabAllocator),
         })
     }
     /// return the mutable slice of the raw data the page points to
@@ -45,7 +45,7 @@ impl Page {
         self.frame.range_ppn.start
     }
     /// return the physical frame
-    pub fn frame(&self) -> StrongArc<FrameTracker> {
+    pub fn frame(&self) -> StrongArc<FrameTracker, SlabAllocator> {
         self.frame.clone()
     }
     /// write the page at a specific offset

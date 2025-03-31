@@ -27,7 +27,7 @@ pub struct StrongArc<
 unsafe impl<T: Sized, A: Allocator + Clone> Send for StrongArc<T, A> {}
 unsafe impl<T: Sized, A: Allocator + Clone> Sync for StrongArc<T, A> {}
 
-impl<T: Sized> Clone for StrongArc<T> {
+impl<T: Sized, A: Allocator + Clone> Clone for StrongArc<T, A> {
     fn clone(&self) -> Self {
         unsafe {
             (&mut (*self.payload.as_ptr()).rc).fetch_add(1, Ordering::Release);

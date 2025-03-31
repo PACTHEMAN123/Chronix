@@ -188,14 +188,14 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
     /// # Panic
     ///
     /// The segment pointed by `start` must exist.
-    pub fn reduce_back(&mut self, start: U, new_end: U) -> Result<(), ()> {
-        let node = self.0.get_mut(&start).unwrap();
+    pub fn reduce_back(&mut self, range: Range<U>) -> Result<(), ()> {
+        let node = self.0.get_mut(&range.start).unwrap();
         let _node_end = node.end;
-        if start <= new_end && new_end < node.end {
-            if start == new_end {
-                self.0.remove(&start).unwrap();
+        if range.start <= range.end && range.end < node.end {
+            if range.start == range.end {
+                self.0.remove(&range.start).unwrap();
             } else {
-                node.end = new_end;
+                node.end = range.end;
             }
             Ok(())
         } else {

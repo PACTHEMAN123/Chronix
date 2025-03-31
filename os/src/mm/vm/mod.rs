@@ -1,12 +1,12 @@
 use core::ops::Range;
-use alloc::{collections::btree_map::BTreeMap, sync::Arc};
+use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 
-use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}};
+use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}, task::utils::AuxHeader};
 
-use super::{allocator::FrameAllocator, PageTable, FrameTracker};
+use super::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable};
 
 /// Type of Kernel's Virtual Memory Area
 #[derive(Debug, Clone, Copy,  PartialEq, Eq)]
@@ -43,10 +43,11 @@ pub struct UserVmArea {
     range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
     pub map_perm: MapPerm,
-    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
+    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
     pub file: Option<Arc<dyn File>>,
     pub mmap_flags: MmapFlags,
+    /// offset in file
     pub offset: usize,
 }
 
@@ -171,10 +172,11 @@ pub trait UserVmSpaceHal: Sized {
 
     fn from_kernel(kvm_space: &KernVmSpace) -> Self;
 
-    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint);
+    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
 
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self;
 
+    /// warning: data must must be page-aligned
     fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>);
 
     fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr;
@@ -184,6 +186,8 @@ pub trait UserVmSpaceHal: Sized {
     fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult;
 
     fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult;
+
+    fn unmap(&mut self, va: VirtAddr, len: usize) -> SysResult;
 }
 
 #[cfg(target_arch = "riscv64")]

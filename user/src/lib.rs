@@ -11,7 +11,7 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use alloc::vec::Vec;
+use alloc::{ffi::CString, vec::Vec};
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
 
@@ -163,6 +163,18 @@ pub fn clone(flags: usize, stack: usize, tls: usize) -> isize {
 pub fn exec(path: &str, args: &[*const u8]) -> isize {
     sys_exec(path, args)
 }
+
+pub fn execve(path: &str, argv: &[&str], envp: &[&str]) -> isize {
+    let path = CString::new(path).unwrap();
+    let argv: Vec<_> = argv.iter().map(|s| CString::new(*s).unwrap()).collect();
+    let envp: Vec<_> = envp.iter().map(|s| CString::new(*s).unwrap()).collect();
+    let mut argv = argv.iter().map(|s| s.as_ptr() as usize).collect::<Vec<_>>();
+    let mut envp = envp.iter().map(|s| s.as_ptr() as usize).collect::<Vec<_>>();
+    argv.push(0);
+    envp.push(0);
+    sys_execve(path.as_ptr() as *const u8, argv.as_ptr() as usize, envp.as_ptr() as usize)
+}
+
 pub fn wait(exit_code: &mut i32) -> isize {
     loop {
         match sys_waitpid(-1, exit_code as *mut _) {
