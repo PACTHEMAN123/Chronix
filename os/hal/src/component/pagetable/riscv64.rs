@@ -15,7 +15,7 @@ pub enum PageLevel {
 }
 
 impl PageLevel {
-    pub const fn page_count(&self) -> usize {
+    pub const fn page_count(self) -> usize {
         match self {
             PageLevel::Huge => 512 * 512,
             PageLevel::Big => 512,
@@ -23,7 +23,7 @@ impl PageLevel {
         }
     }
 
-    pub const fn lower(&self) -> Self {
+    pub const fn lower(self) -> Self {
         match self {
             PageLevel::Huge => PageLevel::Big,
             PageLevel::Big => PageLevel::Small,
@@ -31,7 +31,7 @@ impl PageLevel {
         }
     }
 
-    pub const fn higher(&self) -> Self {
+    pub const fn higher(self) -> Self {
         match self {
             PageLevel::Huge => PageLevel::Huge,
             PageLevel::Big => PageLevel::Huge,
@@ -39,14 +39,14 @@ impl PageLevel {
         }
     }
 
-    pub const fn lowest(&self) -> bool {
+    pub const fn lowest(self) -> bool {
         match self {
             PageLevel::Small => true,
             _ => false
         }
     }
 
-    pub const fn highest(&self) -> bool {
+    pub const fn highest(self) -> bool {
         match self {
             PageLevel::Huge => true,
             _ => false

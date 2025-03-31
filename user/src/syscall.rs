@@ -18,7 +18,7 @@ const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_CLONE: usize = 220;
-const SYSCALL_EXEC: usize = 221;
+const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
 
 #[cfg(target_arch="riscv64")]
@@ -108,10 +108,18 @@ pub fn sys_clone(flags: usize, stack: usize, tls: usize) -> isize {
         [flags, stack, tls], 
     )
 }
+
 pub fn sys_exec(path: &str, args: &[*const u8]) -> isize {
     syscall(
-        SYSCALL_EXEC,
+        SYSCALL_EXECVE,
         [path.as_ptr() as usize, args.as_ptr() as usize, 0],
+    )
+}
+
+pub fn sys_execve(path: *const u8, argv: usize, envp: usize) -> isize {
+    syscall(
+        SYSCALL_EXECVE,
+        [path as usize, argv, envp]
     )
 }
 

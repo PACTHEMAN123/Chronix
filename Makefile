@@ -29,16 +29,26 @@ endif
 MODE := debug
 USER_MODE := $(MODE)
 
+# Kernel
 KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := $(KERNEL_ELF).asm
 
+# User
 USER_APPS_DIR := ./user/src/bin
 USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
 USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
 USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
 
-BASIC_TEST_DIR := ./vendor/testsuits-for-oskernel/basic/user/build/${ARCH}
+# test-suite
+TEST_SUITE_DIR := ./vendor/testsuits-for-oskernel
+
+# Basic test
+BASIC_TEST_DIR := $(TEST_SUITE_DIR)/basic/user/build/${ARCH}
+
+# Busy box
+BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
+BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
 
 # BOARD
 BOARD := qemu
@@ -126,9 +136,23 @@ basic_test:
 	@rm -rf cross-compiler/kendryte-toolchain
 	@echo "clean up the cross compiler dir"
 
+ifeq ($(ARCH), riscv64)
+CC := riscv64-linux-musl-gcc
+STRIP := riscv64-linux-musl-strip
+else ifeq ($(ARCH), loongarch64)
+CC := loongarch64-linux-musl-gcc
+STRIP := loongarch64-linux-musl-strip
+endif
+
+busybox:
+	@echo "building busybox"
+	@make -C $(BUSY_BOX_DIR) clean
+	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
+	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
+
 FS_IMG_DIR := .
 FS_IMG := $(FS_IMG_DIR)/fs.img
-fs-img: user basic_test
+fs-img: user basic_test busybox
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)
@@ -148,9 +172,11 @@ endif
 #	@sudo dd if=/dev/zero of=mnt/swap bs=1M count=128
 #	@sudo chmod 0600 mnt/swap
 #	@sudo mkswap -L swap mnt/swap
-	@echo "copying user apps and tests to the fs.img"
+	@echo "copying user apps and tests to the $(FS_IMG)"
 	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt
+	@echo "copying busybox to the $(FS_IMG)"
+	@sudo cp $(BUSY_BOX) mnt/busybox
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
@@ -162,6 +188,7 @@ clean:
 	@sudo rm -f $(FS_IMG)
 	@sudo rm -rf mnt
 	@sudo rm -rf cross-compiler/kendryte-toolchain
+	@make -C $(BUSY_BOX_DIR) clean
 
 disasm: kernel
 	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
@@ -228,4 +255,4 @@ gdbserver: qemu-version-check build
 gdbclient:
 	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel
+.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel busybox

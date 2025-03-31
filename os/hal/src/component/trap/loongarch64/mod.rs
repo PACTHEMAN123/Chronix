@@ -127,7 +127,7 @@ impl TrapContextHal for TrapContext {
         &mut self.era
     }
 
-    fn app_init_context(entry: usize, sp: usize) -> Self {
+    fn app_init_context(entry: usize, sp: usize, argc: usize, argv: usize, envp: usize) -> Self {
         // set CPU privilege to User after trapping back
         unsafe {
             register::prmd::set_pplv(register::CpuMode::Ring3);
@@ -142,6 +142,9 @@ impl TrapContextHal for TrapContext {
             stored: 0
         };
         *cs.sp() = sp;
+        cs.set_arg_nth(0, argc);
+        cs.set_arg_nth(1, argv);
+        cs.set_arg_nth(2, envp);
         cs
     }
 

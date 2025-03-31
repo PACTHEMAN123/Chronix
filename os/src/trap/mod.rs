@@ -15,6 +15,7 @@
 use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
+use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
 use crate::mm::vm::{UserVmSpaceHal, PageFaultAccessType};

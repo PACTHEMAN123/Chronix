@@ -45,8 +45,12 @@ pub struct FrameAllocator;
 pub type FrameTracker = hal::common::FrameTracker<FrameAllocator>;
 
 impl FrameAllocatorHal for FrameAllocator {
-    fn alloc(&self, cnt: usize) -> Option<Range<PhysPageNum>> {
-        let mut start = FRAME_ALLOCATOR.lock().inner.alloc_contiguous(None, cnt, 0)?;
+
+    fn alloc_with_align(&self, cnt: usize, align_log2: usize) -> Option<Range<PhysPageNum>> {
+        if cnt == 0 {
+            return None
+        }
+        let mut start = FRAME_ALLOCATOR.lock().inner.alloc_contiguous(None, cnt, align_log2)?;
         start += FRAME_ALLOCATOR.lock().range.start.0;
         Some(PhysPageNum(start)..PhysPageNum(start + cnt))
     }
