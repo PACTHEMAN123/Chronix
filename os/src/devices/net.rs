@@ -16,7 +16,7 @@ pub struct EthernetAddress(pub [u8; 6]);
 /// for each buffer set a NetBufPtr
 pub struct NetBufPtr {
     /// the header part bytes length
-    header_len: usize,
+    pub header_len: usize,
     /// the packet length
     packet_len: usize,
     /// the whole buffer size

@@ -1,11 +1,12 @@
-use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{AtomicBool, AtomicU8, Ordering}};
+use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{AtomicBool, AtomicU8, Ordering}, time::{self, Duration}};
 
-use crate::{ sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, utils::yield_now};
+use crate::{ sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{SockAddr, ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::Sock, SocketSetWrapper, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED};
+use super::{addr::{SockAddr, ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
+use fatfs::warn;
 use smoltcp::{
-    iface::SocketHandle,
+    iface::{SocketHandle, SocketSet},
     socket::tcp::{self, ConnectError, State},
     wire::{IpAddress, IpEndpoint, IpListenEndpoint},
 };
@@ -151,13 +152,59 @@ impl TcpSocket {
     }
 }
 
-impl Sock for TcpSocket {
-    async fn connect(&self, _addr: IpEndpoint) ->SockResult<()>{
-        // todo
-        Ok(())
+impl TcpSocket {
+    pub async fn connect(&self, addr: IpEndpoint) ->SockResult<()>{
+        // first yield now 
+        yield_now().await;
+        // now change the state to connecting , wait for poll connect event
+        self.update_state(SocketState::Closed, SocketState::Connecting, ||{
+            let handle = unsafe {
+                self.handle.get().read()}
+                .unwrap_or_else(||SOCKET_SET.add_socket(SocketSetWrapper::new_tcp_socket()));
+            
+            let robust_endpoint = self.robost_port_endpoint()?;
+            let (local_endpoint, remote_endpoint) = SOCKET_SET.with_socket_mut::<tcp::Socket, _, _>(handle, |socket|{
+                socket.connect(ETH0.get().unwrap().iface.lock().context(),addr,robust_endpoint)
+                .or_else(|e| match e {
+                    ConnectError::InvalidState => {
+                        Err(SysError::EBADF)
+                    }
+                    ConnectError::Unaddressable => {
+                        Err(SysError::EADDRNOTAVAIL)
+                    }
+                })?;
+                Ok((socket.local_endpoint(), socket.remote_endpoint()))
+            })?;
+            self.local_endpoint.exclusive_access().replace(local_endpoint.unwrap());
+            self.remote_endpoint.exclusive_access().replace(remote_endpoint.unwrap());
+            self.handle.exclusive_access().replace(handle);
+            Ok(())
+        }).unwrap_or_else(|_|{
+            log::warn!("[TcpSocket::connect] failed to connect for alreay connected socket");
+            Err(SysError::EEXIST)
+        })?;
+        
+        // up to now the state is connecting, wait for poll connect event
+        if self.nonblock() {
+            Err(SysError::EINPROGRESS)
+        }else {
+            self.block_on_future(|| async {
+                let connection_info = self.poll_concect().await;
+                if connection_info {
+                    if self.state() == SocketState::Connected {
+                        Ok(())
+                    }else {
+                        Err(SysError::ECONNREFUSED)
+                    }
+                }else {
+                    log::warn!("[TcpSocket::connect] failed to connect, try again later");
+                    Err(SysError::EAGAIN)
+                }
+            }).await
+        }
     }
     
-    fn bind(&self, _sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>  {
+    pub fn bind(&self, _sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>  {
         let inner_addr = if addr.addr.is_some(){
             addr.addr.unwrap()
         }else {
@@ -190,12 +237,12 @@ impl Sock for TcpSocket {
         })
     }
     
-    fn listen(&self) -> SockResult<()> {
+    pub fn listen(&self) -> SockResult<()> {
         let waker = current_task().unwrap().waker_ref().as_ref().unwrap();
         self.update_state(SocketState::Closed, SocketState::Listening, ||{
             let inner_endpoint = self.robost_port_endpoint().unwrap();
             self.set_local_endpoint_with_port(inner_endpoint.port);
-            LISTEN_TABLE.listen(inner_endpoint, waker);
+            LISTEN_TABLE.listen(inner_endpoint, waker)?;
             info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
             Ok(())
         }).unwrap_or_else(|_| {
@@ -203,11 +250,11 @@ impl Sock for TcpSocket {
         })
     }
     
-    fn set_nonblcoking(&self) {
+    pub fn set_nonblcoking(&self) {
         self.set_nonblock(true);
     }
     
-    fn peer_addr(&self) -> Option<IpEndpoint> {
+    pub fn peer_addr(&self) -> Option<IpEndpoint> {
         match self.state() {
             SocketState::Connected | SocketState::Listening => {
                 let remote_endpoint = self.remote_endpoint().clone();
@@ -217,7 +264,7 @@ impl Sock for TcpSocket {
         }
     }
     
-    fn local_addr(&self) -> Option<IpEndpoint> {
+    pub fn local_addr(&self) -> Option<IpEndpoint> {
         match self.state() {
             SocketState::Connected | SocketState::Listening => {
                 let local_endpoint = self.local_endpoint().clone();
@@ -227,12 +274,134 @@ impl Sock for TcpSocket {
         }
     }
     
-    async fn send(&self, data: &[u8], remote_addr: IpEndpoint) -> usize {
-        todo!()
+    pub async fn send(&self, data: &[u8], _remote_addr: IpEndpoint) -> SockResult<usize> {
+        if self.state() == SocketState::Connecting {
+            return Err(SysError::EAGAIN);
+        }else if self.state() != SocketState::Connected {
+            return Err(SysError::ENOTCONN);
+        }else {
+            let handle = *self.handle().unwrap();
+            let waker = get_waker().await;
+            let ret = self.block_on(|| {
+                SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>( handle, |socket| {
+                    if !socket.is_active() || !socket.may_send() {
+                        return Err(SysError::ECONNRESET);
+                    }else if socket.can_send() {
+                        let len = socket.send_slice(data).map_err(|_| {
+                            SysError::EBADF
+                        })?;
+                        Ok(len)
+                    }else {
+                         // tx buffer is full
+                        log::info!("[TcpSocket::send] handle{handle} send buffer is full, register waker and suspend");
+                        socket.register_send_waker(&waker);
+                        Err(SysError::EAGAIN)
+                    }
+                })
+            }).await; 
+            if let Ok(bytes) = ret {
+                if bytes > TCP_TX_BUF_LEN / 2 {
+                    ksleep(Duration::from_millis(3)).await;
+                } else {
+                    yield_now().await;
+                }
+            }
+            SOCKET_SET.poll_interfaces();
+            ret
+        }
     }
     
-    async fn recv(&self, data: &mut [u8]) -> (usize, IpEndpoint) {
-        todo!()
+    pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)> {
+        let peer_addr = self.peer_addr().unwrap();
+        if self.state() == SocketState::Connecting {
+            return Err(SysError::EAGAIN);
+        }
+        else if self.state() != SocketState::Connected {
+            return Err(SysError::ENOTCONN);
+        }
+        else {
+            let handle = self.handle().unwrap();
+            let waker = get_waker().await;
+            self.block_on(|| {
+                SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(*handle, |socket|{
+                    if !socket.is_active() {
+                        // not open 
+                        log::warn!("[TcpSocket::recv] socket recv() failed because handle is not active");
+                        return Err(SysError::ECONNREFUSED);
+                    }else if !socket.may_recv() {
+                        return Ok((0,peer_addr));
+                    }else if socket.recv_queue() > 0 {
+                        //data available
+                        let len = socket.recv_slice(data).map_err(|_|{
+                            log::warn!("socket recv failed becasue of bad state");
+                            SysError::EBADF
+                        })?;
+                        return Ok((len, peer_addr))
+                    }else {
+                        // no more data
+                        log::info!("[TcpSocket::recv] handle{handle} has no data to recv, register waker and suspend");
+                        socket.register_recv_waker(&waker);
+                        Err(SysError::EAGAIN)
+                    }
+                })
+            }).await
+        }
+        
+    }
+
+    pub fn shutdown(&self) -> SockResult<()> {
+        // for stream socket
+        self.update_state(SocketState::Connected, SocketState::Closed, ||  {
+            let handle = self.handle().unwrap();
+            SOCKET_SET.with_socket_mut::<tcp::Socket, _, _,>(*handle, |socket| {
+                info!("tcp socket shutdown, before state is {}", socket.state());
+                socket.close();
+                info!("tcp socket shutdown, after state is {}" , socket.state());
+            });
+            let time_instance = SOCKET_SET.poll_interfaces();
+            SOCKET_SET.check_poll(time_instance);
+            Ok(())
+        }).unwrap_or(Ok(()))?;
+        // for listener socket
+        self.update_state(SocketState::Listening, SocketState::Closed, ||{
+            let local_port = self.local_endpoint().port;
+            self.local_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
+            LISTEN_TABLE.unlisten(local_port);
+            let time_instance = SOCKET_SET.poll_interfaces();
+            SOCKET_SET.check_poll(time_instance);
+            Ok(())
+        }).unwrap_or(Ok(()))?;
+        Ok(()) 
+    }
+    pub async fn poll(&self) -> PollState {
+        match self.state() {
+            SocketState::Connecting => {
+                let writable = self.poll_concect().await;
+                PollState {
+                    readable: false,
+                    writable: writable,
+                    hangup: false,
+                }
+            },
+            SocketState::Closed => {
+                let hangup = self.poll_closed();
+                PollState {
+                    readable: false,
+                    writable: false,
+                    hangup: hangup,
+                }
+            },
+            SocketState::Busy => PollState { readable: false, writable: false, hangup: false },
+            SocketState::Connected => self.poll_stream().await,
+            SocketState::Listening => {
+                let readable = self.poll_listener();
+                PollState {
+                    readable,
+                    writable: false,
+                    hangup: false,
+                }
+            },
+        }
     }
 }
 
@@ -308,5 +477,153 @@ impl TcpSocket {
             addr,
             port,
         })
+    }
+    /// block_on a future and wait for poll_connect to check its connection state
+    async fn block_on_future<F, T, Future> (&self, mut f: F) -> SockResult<T>
+    where 
+        F: FnMut() -> Future,
+        Future: core::future::Future<Output = SockResult<T>>,
+        {
+            if self.nonblock() {
+                f().await
+            }else {
+                loop {
+                    let time_instance = SOCKET_SET.poll_interfaces();
+                    let ret = f().await;
+                    SOCKET_SET.check_poll(time_instance);
+                    match ret {
+                        Ok(res) => {
+                            return Ok(res);
+                        }
+                        Err(SysError::EAGAIN) => {
+                            suspend_now().await;
+                            // TODO: check if the socket is still valid
+                            continue;
+                        }
+                        Err(e) => {
+                            return Err(e);
+                    }
+                }
+            }
+        }
+    }
+    async fn block_on<F, T>(&self, mut f: F) -> SockResult<T>
+    where 
+        F: FnMut() -> SockResult<T>,
+    {
+        if self.nonblock() {
+            f()
+        }else {
+            loop {
+                let time_instance = SOCKET_SET.poll_interfaces();
+                let ret = f();
+                SOCKET_SET.check_poll(time_instance);
+                match ret {
+                    Ok(res) => {
+                        return Ok(res);
+                    }
+                    Err(SysError::EAGAIN) => {
+                        suspend_now().await;
+                        continue;
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+    /// poll the tcp connect event and return true if the socket is connected
+    async fn poll_concect(&self) -> bool {
+        let handle = unsafe{self.handle.get().read()}.unwrap();
+        let waker = get_waker().await;
+        SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(handle, |socket|{
+            match socket.state() {
+                State::SynSent => {
+                    // this means the request is sent, but not yet received by the remote endpoint
+                    socket.register_recv_waker(&waker);
+                    false
+                }
+                State::Established => {
+                    // this means the connection is established
+                    self.set_state(SocketState::Connected as u8);
+                    info!("[TcpSocket::poll_concect] socket is connected");
+                    true
+                }
+                _ => {
+                    // wrong state, back to zero state
+                    self.local_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
+                    self.remote_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
+                    self.set_state(SocketState::Closed as u8);
+                    true
+                }
+            } 
+        })
+    }
+    async fn poll_stream(&self) -> PollState {
+        let handle = unsafe {
+            self.handle.get().read().unwrap()
+        };
+        let waker = get_waker().await;
+        SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(handle, |socket|{
+            let readable = !socket.may_recv()  || socket.can_recv();
+            let writable = !socket.may_send() || socket.can_send();
+            if !readable {
+                socket.register_recv_waker(&waker);
+            }  
+            if !writable {
+                socket.register_send_waker(&waker);
+            }
+            PollState {
+                readable,
+                writable,
+                hangup: false,
+            }
+        })
+    }
+
+    fn poll_listener(&self) -> bool {
+        let local_addr = self.local_addr().unwrap();
+        let readable = LISTEN_TABLE.can_accept(local_addr.port);
+        readable
+    }
+
+    fn poll_closed(&self) -> bool {
+        let handle = unsafe {
+            self.handle.get().read()
+        };
+        if let Some(handle) = handle {
+            SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(handle, |socket| {
+                log::warn!(
+                    "[TcpSocket::poll_closed] handle {handle} state {}",
+                    socket.state()
+                );
+                matches!(socket.state(), State::CloseWait| State::FinWait2 | State::TimeWait)
+            })
+        }else {
+            false
+        }
+    }
+    /// accept method for listener socket, only for tcp socket
+    pub async fn accecpt(&self) -> SockResult<TcpSocket> {
+        if self.state() != SocketState::Listening {
+            log::warn!("socket accept state is not listening");
+            return Err(SysError::EINVAL);
+        }
+        let local_port = self.local_endpoint().port;
+        self.block_on(|| {
+            let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
+            Ok(TcpSocket::new_v4_connected(handle, local_endpoint, remote_endpoint))
+        }).await
+    }
+}
+
+impl Drop for TcpSocket {
+    fn drop (&mut self) {
+        log::info!("[TcpSocket::drop]");
+        self.shutdown().ok();
+        if let Some(handle) = unsafe{self.handle.get().read()} {
+            SOCKET_SET.remove(handle);
+        }
     }
 }

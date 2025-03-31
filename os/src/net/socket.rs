@@ -1,22 +1,127 @@
+use alloc::{boxed::Box, sync::Arc};
+use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
-use crate::syscall::sys_error::SysError;
+use crate::{fs::vfs::{File, FileInner}, mm::UserBuffer, syscall::sys_error::SysError};
+
+use super::tcp::TcpSocket;
 pub type SockResult<T> = Result<T, SysError>;
 /// a trait for differnt socket types
-pub trait Sock {
+/// net poll results.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PollState {
+    /// Object can be read now.
+    pub readable: bool,
+    /// Object can be writen now.
+    pub writable: bool,
+    /// object has been hanguped waiting for polling.
+    pub hangup: bool,
+}
+pub enum Sock {
+    TCP(TcpSocket),
+}
+impl Sock {
     /// connect method for socket connect to remote socket, for user socket
-    async fn connect(&self, addr: IpEndpoint) -> SockResult<()>;
+    pub async fn connect(&self, addr: IpEndpoint) -> SockResult<()>{
+        match self {
+            Sock::TCP(tcp) => tcp.connect(addr).await
+        }
+    }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
-    fn bind(&self, sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>;
+    pub fn bind(&self, sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>{
+        match self {
+            Sock::TCP(tcp) => tcp.bind(sock_fd, addr)
+        }
+    }
     /// listen method for socket to listen for incoming connections, for server socket
-    fn listen(&self) -> SockResult<()>; 
+    pub fn listen(&self) -> SockResult<()>{
+        match self {
+            Sock::TCP(tcp) => tcp.listen()
+        }
+    }
     /// set socket non-blocking, 
-    fn set_nonblcoking(&self);
+    pub fn set_nonblcoking(&self){
+        match self {
+            Sock::TCP(tcp) => tcp.set_nonblcoking()
+        }
+    }
     /// get the peer_addr of the socket
-    fn peer_addr(&self) -> Option<IpEndpoint>;
+    pub fn peer_addr(&self) -> Option<IpEndpoint>{
+        match self {
+            Sock::TCP(tcp) => tcp.peer_addr()
+        }
+    }
     /// get the local_addr of the socket
-    fn local_addr(&self) -> Option<IpEndpoint>;
+    pub fn local_addr(&self) -> Option<IpEndpoint>{
+        match self {
+            Sock::TCP(tcp) => tcp.local_addr()
+        }
+    }
     /// send data to the socket
-    async fn send(&self, data: &[u8], remote_addr: IpEndpoint) -> usize;
+    pub async fn send(&self, data: &[u8], remote_addr: IpEndpoint) -> SockResult<usize>{
+        match self {
+            Sock::TCP(tcp) => tcp.send(data, remote_addr).await
+        }
+    }
     /// recv data from the socket
-    async fn recv(&self, data: &mut [u8]) -> (usize, IpEndpoint);
+    pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)>{
+        match self {
+            Sock::TCP(tcp) => tcp.recv(data).await
+        }
+    }
+    /// shutdown a connection
+    pub fn shutdown(&self) -> SockResult<()>{
+        match self {
+            Sock::TCP(tcp) => tcp.shutdown()
+        }
+    }
+    /// poll the socket for events
+    pub async fn poll(&self) -> PollState{
+        match self {
+            Sock::TCP(tcp) => tcp.poll().await
+        }
+    }
+    /// for tcp socket listener, accept a connection
+    pub async fn accept(&self) -> SockResult<TcpSocket> {
+        match self {
+            Sock::TCP(tcp) => {
+                let new  = tcp.accecpt().await?;
+                Ok(new)
+            }
+        }
+    }
+}
+/// socket for user space,Related to network protocols and communication modes
+pub struct Socket {
+    /// sockets inner
+    pub sk: Sock,
+}
+
+#[async_trait]
+impl File for Socket {
+    #[doc ="get basic File object"]
+    fn inner(&self) ->  &FileInner {
+        unreachable!()
+    }
+
+    #[doc = " If readable"]
+    fn readable(&self) -> bool {
+        unreachable!()
+    }
+
+    #[doc = " If writable"]
+    fn writable(&self) -> bool {
+        unreachable!()
+    }
+
+    #[doc ="Read file to `UserBuffer`"]
+    #[must_use]
+    async fn read(&self, _buf: UserBuffer) -> usize {
+        todo!()
+    }
+
+    #[doc = " Write `UserBuffer` to file"]
+    #[must_use]
+    async fn write(& self, _buf:UserBuffer) -> usize {
+        todo!()
+    }
 }
