@@ -80,7 +80,7 @@ impl File for PipeFile {
         !self.operate
     }
 
-    async fn read(&self, buf: UserBuffer) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> usize {
         assert!(self.readable());
         //info!("[Pipe]: start to read {} bytes", buf.len());
         // create a read future
@@ -93,7 +93,7 @@ impl File for PipeFile {
         read_size
     }
 
-    async fn write(&self, buf: UserBuffer) -> usize {
+    async fn write(&self, buf: &[u8]) -> usize {
         assert!(self.writable());
         //info!("[Pipe]: start to write {} bytes", buf.len());
         // create a write future
@@ -130,17 +130,17 @@ impl Drop for PipeFile {
 }
 
 /// read future
-struct PipeReadFuture {
+struct PipeReadFuture<'a> {
     buffer: Arc<SpinNoIrqLock<RingBuffer>>,
-    user_buf: UserBuffer,
+    user_buf: &'a mut [u8],
     already_put: usize,
     pipe: Arc<SpinNoIrqLock<Pipe>>,
 }
 
-impl PipeReadFuture {
+impl<'a> PipeReadFuture<'a> {
     pub fn new(
         ringbuf: Arc<SpinNoIrqLock<RingBuffer>>,
-        user_buf: UserBuffer,
+        user_buf: &'a mut [u8],
         pipe: Arc<SpinNoIrqLock<Pipe>>,
     ) -> Self {
         Self {
@@ -152,7 +152,7 @@ impl PipeReadFuture {
     }
 }
 
-impl Future for PipeReadFuture {
+impl<'a> Future for PipeReadFuture<'a> {
     type Output = usize;
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
         let _sum_guard = SumGuard::new();
@@ -165,12 +165,9 @@ impl Future for PipeReadFuture {
         let mut ring_buf = this.buffer.lock();
         // trying to read
         //info!("[PipeReadFuture]: read");
-        let mut total_read_size: usize = 0;
-        for slice in this.user_buf.buffers.iter_mut() {
-            total_read_size += ring_buf.read(slice);
-        }
-        this.already_put += total_read_size;
-        if total_read_size == 0 {
+        let read_size: usize = ring_buf.read(this.user_buf);
+        this.already_put += read_size;
+        if read_size == 0 {
             if this.pipe.lock().write_close {
                 //info!("[PipeWriteFuture]: all write closed");
                 return Poll::Ready(this.already_put);
@@ -186,17 +183,17 @@ impl Future for PipeReadFuture {
 }
 
 /// write future
-struct PipeWriteFuture {
+struct PipeWriteFuture<'a> {
     buffer: Arc<SpinNoIrqLock<RingBuffer>>,
-    user_buf: UserBuffer,
+    user_buf: &'a [u8],
     already_put: usize,
     pipe: Arc<SpinNoIrqLock<Pipe>>,
 }
 
-impl PipeWriteFuture {
+impl<'a> PipeWriteFuture<'a> {
     pub fn new(
         ringbuf: Arc<SpinNoIrqLock<RingBuffer>>,
-        user_buf: UserBuffer,
+        user_buf: &'a [u8],
         pipe: Arc<SpinNoIrqLock<Pipe>>
     ) -> Self {
         Self {
@@ -208,7 +205,7 @@ impl PipeWriteFuture {
     }
 }
 
-impl Future for PipeWriteFuture {
+impl<'a> Future for PipeWriteFuture<'a> {
     type Output = usize;
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
         let _sum_guard = SumGuard::new();
@@ -221,12 +218,9 @@ impl Future for PipeWriteFuture {
         let mut ring_buf = this.buffer.lock();
         // trying to write
         //info!("[PipeWriteFuture]: write");
-        let mut total_write_size: usize = 0;
-        for slice in this.user_buf.buffers.iter_mut() {
-            total_write_size += ring_buf.write(slice);
-        }
-        this.already_put += total_write_size;
-        if total_write_size == 0 {
+        let write_size: usize = ring_buf.write(this.user_buf);
+        this.already_put += write_size;
+        if write_size == 0 {
             if this.pipe.lock().read_close {
                 //info!("[PipeWriteFuture]: all read closed");
                 return Poll::Ready(this.already_put);

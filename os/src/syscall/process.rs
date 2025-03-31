@@ -418,3 +418,18 @@ pub fn sys_exit_group(exit_code: i32) -> SysResult {
     Ok(0)
 }
 
+/// syscall: getuid
+/// returns the real user ID of the calling process.
+/// These functions are always successful and never modify errno.
+/// todo
+pub fn sys_getuid() -> SysResult {
+    Ok(0)
+}
+
+/// syscall: geteuid
+/// returns the effective user ID of the calling process.
+/// todo
+pub fn sys_geteuid() -> SysResult {
+    Ok(0)
+}
+
