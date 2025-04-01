@@ -261,13 +261,16 @@ impl UserVmSpaceHal for UserVmSpace {
     
     fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: crate::syscall::mm::MmapFlags, file: alloc::sync::Arc<dyn crate::fs::vfs::File>, offset: usize) -> crate::syscall::SysResult {
         assert!(va.0 % Constant::PAGE_SIZE == 0);
-        // todo: now we dont support fixed addr mmap
         // just simply alloc mmap area from start of the mmap area
         // need to feat unmap vm area
-        let start = VirtAddr::from(Constant::USER_FILE_BEG);
-        let range = self.areas
-            .find_free_range(start..Constant::USER_FILE_END.into(), len)
-            .ok_or(SysError::ENOMEM)?;
+        let range = if flags.contains(MmapFlags::MAP_FIXED) {
+            va..va + len
+        } else {
+            self.areas
+            .find_free_range(VirtAddr::from(Constant::USER_FILE_BEG)..Constant::USER_FILE_END.into(), len)
+            .ok_or(SysError::ENOMEM)?
+        };
+        let start = range.start;
         let page_table = &mut self.page_table;
         let inode = file.inode().unwrap();
         let mut vma = UserVmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
@@ -309,10 +312,14 @@ impl UserVmSpaceHal for UserVmSpace {
     fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: crate::syscall::mm::MmapFlags, is_share: bool) -> crate::syscall::SysResult {
         assert!(va.0 % Constant::PAGE_SIZE == 0);
         // need to support fixed map
-        let start = VirtAddr::from(Constant::USER_SHARE_BEG);
-        let range = self.areas
-            .find_free_range(start..Constant::USER_SHARE_END.into(), len)
-            .ok_or(SysError::ENOMEM)?;
+        let range = if flags.contains(MmapFlags::MAP_FIXED) {
+            va..va + len
+        } else {
+            self.areas
+            .find_free_range(VirtAddr::from(Constant::USER_SHARE_BEG)..Constant::USER_SHARE_END.into(), len)
+            .ok_or(SysError::ENOMEM)?
+        };
+        let start = range.start;
         if is_share {
             let vma = UserVmArea::new(range, UserVmAreaType::Shm, perm);
             self.push_area(vma, None);
