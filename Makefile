@@ -86,6 +86,10 @@ else ifeq ($(ARCH), loongarch64)
 KERNEL_ENTRY_PA := 0x1c000000
 endif
 
+# net
+IP ?= 10.0.2.15
+GW ?= 10.0.2.2
+export GATEWAY=$(GW)
 # Binutils
 OBJDUMP := rust-objdump --arch-name=${ARCH}
 OBJCOPY := rust-objcopy --binary-architecture=${ARCH}

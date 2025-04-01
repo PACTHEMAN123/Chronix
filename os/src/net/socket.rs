@@ -1,10 +1,11 @@
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
-use crate::{fs::vfs::{File, FileInner}, mm::UserBuffer, syscall::sys_error::SysError};
-
-use super::tcp::TcpSocket;
+use crate::{fs::{vfs::{File, FileInner}, OpenFlags}, mm::UserBuffer, syscall::sys_error::SysError};
+use crate::syscall::net::SocketType;
+use super::{tcp::TcpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;
+use spin::Mutex;
 /// a trait for differnt socket types
 /// net poll results.
 #[derive(Debug, Default, Clone, Copy)]
@@ -39,9 +40,9 @@ impl Sock {
         }
     }
     /// set socket non-blocking, 
-    pub fn set_nonblcoking(&self){
+    pub fn set_nonblocking(&self){
         match self {
-            Sock::TCP(tcp) => tcp.set_nonblcoking()
+            Sock::TCP(tcp) => tcp.set_nonblocking()
         }
     }
     /// get the peer_addr of the socket
@@ -94,6 +95,43 @@ impl Sock {
 pub struct Socket {
     /// sockets inner
     pub sk: Sock,
+    /// socket type
+    pub sk_type: SocketType,
+    /// fd flags
+    pub fd_flags: Mutex<OpenFlags>,
+}
+
+impl Socket {
+    pub fn new(domain: SaFamily, sk_type: SocketType, non_block: bool) -> Self {
+        let sk = match domain {
+            SaFamily::AfInet | SaFamily::AfInet6 => {
+                match sk_type {
+                    SocketType::STREAM => Sock::TCP(TcpSocket::new_v4_without_handle()),
+                    _ => unimplemented!(),
+                }
+            }
+        };
+        let fd_flags = if non_block {
+            sk.set_nonblocking();
+            OpenFlags::RDWR | OpenFlags::NONBLOCK
+        }else {
+            OpenFlags::RDWR
+        };
+
+        Self {
+            sk_type: sk_type,
+            sk: sk,
+            fd_flags: Mutex::new(fd_flags),
+        }
+    }
+    /// new a socket with a given socket 
+    pub fn from_another(another: &Self, sk: Sock) -> Self {
+        Self {
+            sk: sk,
+            sk_type: another.sk_type,
+            fd_flags: Mutex::new(OpenFlags::RDWR),
+        }
+    }
 }
 
 #[async_trait]
@@ -115,13 +153,13 @@ impl File for Socket {
 
     #[doc ="Read file to `UserBuffer`"]
     #[must_use]
-    async fn read(&self, _buf: UserBuffer) -> usize {
+    async fn read(&self, _buf: &mut [u8]) -> usize {
         todo!()
     }
 
     #[doc = " Write `UserBuffer` to file"]
     #[must_use]
-    async fn write(& self, _buf:UserBuffer) -> usize {
+    async fn write(& self, _buf: &[u8]) -> usize {
         todo!()
     }
 }

@@ -1,11 +1,12 @@
-use core::panic;
+use core::{fmt::Display, panic};
 
+use alloc::{fmt, format};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint,Ipv4Address, Ipv6Address};
 
 use super::SaFamily;
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 /// IPv4 Address
 pub struct SockAddrIn4 {
@@ -41,6 +42,40 @@ impl From<IpEndpoint> for SockAddrIn4 {
     }
 }
 
+impl Into<IpListenEndpoint> for SockAddrIn4 {
+    fn into(self) -> IpListenEndpoint {
+        let inner_addr = if self.sin_addr == Ipv4Address::UNSPECIFIED {
+            None
+        } else {
+            Some(IpAddress::Ipv4(self.sin_addr))
+        };
+        IpListenEndpoint{
+            addr: inner_addr,
+            port: self.sin_port,
+        }
+    }
+}
+
+impl fmt::Display for SockAddrIn4 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let port = self.sin_port;
+        let addr = format!(
+            "{}.{}.{}.{}",
+            self.sin_addr.octets()[0],
+            self.sin_addr.octets()[1],
+            self.sin_addr.octets()[2],
+            self.sin_addr.octets()[3]
+        );
+        write!(f, "IPv4:{}:{}", addr, port)
+    }
+}
+
+impl fmt::Debug for SockAddrIn4 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 /// const zero IPV4 address
 pub const ZERO_IPV4_ADDR: IpAddress = IpAddress::v4(0, 0, 0, 0);
 /// const zero IpEndPoint
@@ -70,7 +105,19 @@ impl Into<IpEndpoint> for SockAddrIn6 {
         IpEndpoint::new(IpAddress::Ipv6(self.sin_addr),self.sin_port)
     }
 }
-
+impl Into<IpListenEndpoint> for SockAddrIn6 {
+    fn into(self) -> IpListenEndpoint {
+        let inner_addr = if self.sin_addr == Ipv6Address::UNSPECIFIED {
+            None
+        } else {
+            Some(IpAddress::Ipv6(self.sin_addr))
+        };
+        IpListenEndpoint{
+            addr: inner_addr,
+            port: self.sin_port,
+        }
+    }
+}
 impl From<IpEndpoint> for SockAddrIn6 {
     fn from (v6: IpEndpoint) -> Self {
         if let IpAddress::Ipv6(v6_addr) = v6.addr{
@@ -87,13 +134,89 @@ impl From<IpEndpoint> for SockAddrIn6 {
         
     }
 }
+
+impl fmt::Display for SockAddrIn6 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let port = self.sin_port;
+        let addr = format!(
+            "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
+            self.sin_addr.segments()[0],
+            self.sin_addr.segments()[1],
+            self.sin_addr.segments()[2],
+            self.sin_addr.segments()[3],
+            self.sin_addr.segments()[4],
+            self.sin_addr.segments()[5],
+            self.sin_addr.segments()[6],
+            self.sin_addr.segments()[7]
+        );
+
+        write!(f, "AF_INET6: [{}]:{}", addr, port)
+    }
+}
 /// const zero IPV6 address
 pub const ZERO_IPV6_ADDR: IpAddress = IpAddress::Ipv6(Ipv6Address::UNSPECIFIED);
 /// const zero IpEndPoint
 pub const ZERO_IPV6_ENDPOINT: IpEndpoint = IpEndpoint::new(ZERO_IPV6_ADDR, 0);
 
-/// Socket Address Struct wrapped both ipv4 and ipv6 address
-pub enum SockAddr {
-    SockAddrIn4(SockAddrIn4),
-    SockAddrIn6(SockAddrIn6),
+/// a superset of `SocketAddr` in `core::net` since it also
+/// includes the address for socket communication between Unix processes. 
+/// a user oriented program with a C language structure layout.
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub union SockAddr {
+    pub family: u16,
+    pub ipv4: SockAddrIn4,
+    pub ipv6: SockAddrIn6,
+}
+
+impl SockAddr {
+    /// convert SockAddr wrapper into `IpEndpoint`
+    pub fn into_endpoint(&self) -> IpEndpoint {
+        unsafe {
+            match SaFamily::try_from(self.family).unwrap() {
+                SaFamily::AfInet => IpEndpoint::new(
+                    IpAddress::Ipv4(self.ipv4.sin_addr), 
+                    self.ipv4.sin_port
+                ),
+                SaFamily::AfInet6 => IpEndpoint::new(
+                    IpAddress::Ipv6(self.ipv6.sin_addr), 
+                    self.ipv6.sin_port
+                ),
+            }
+        }   
+    }
+    /// SockAddr -> IpListenEndpoint
+    pub fn into_listen_endpoint(&self) -> IpListenEndpoint {
+        unsafe {
+            match SaFamily::try_from(self.family).unwrap() {
+                SaFamily::AfInet => self.ipv4.into(),
+                SaFamily::AfInet6 => self.ipv6.into(),
+            }
+        }
+    }
+    /// IpEndpoint -> SockAddr
+    pub fn from_endpoint(endpoint: IpEndpoint) -> Self {
+        unsafe {
+            match endpoint.addr {
+                IpAddress::Ipv4(v4_addr) => Self {
+                    ipv4: endpoint.into(),
+                },
+                IpAddress::Ipv6(v6_addr) => Self {
+                    ipv6: endpoint.into(),
+                },
+            }
+        }
+    }
+}
+
+impl fmt::Debug for SockAddr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        unsafe  {
+            match self.family {
+                2 => fmt::Display::fmt(&self.ipv4,f),
+                10 => fmt::Display::fmt(&self.ipv6,f),
+                _ => write!(f,"Unknown SockAddr family: {}",self.family),
+            }
+        }
+    }
 }

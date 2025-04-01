@@ -1,11 +1,14 @@
 //! virtual file system file object
 
+use core::any::Any;
+
 use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
 use async_trait::async_trait;
 
 use alloc::{
     boxed::Box, sync::Arc, vec::Vec
 };
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use log::info;
 use hal::println;
 use super::{Dentry, Inode, DCACHE};
@@ -20,7 +23,7 @@ pub struct FileInner {
 
 #[async_trait]
 /// File trait
-pub trait File: Send + Sync {
+pub trait File: Send + Sync + DowncastSync {
     /// get basic File object
     fn inner(&self) -> &FileInner;
     /// If readable
@@ -111,6 +114,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
     }
 }
 
+impl_downcast!(sync File);
 
 /// helper function: List all files in the ext4 filesystem
 pub fn list_apps() {

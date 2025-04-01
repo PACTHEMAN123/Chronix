@@ -35,6 +35,7 @@ use crate::mm::{ translated_refmut, translated_str};
 use alloc::slice;
 use alloc::{vec::*, string::String, };
 use virtio_drivers::PAGE_SIZE;
+use core::any::Any;
 use core::arch::global_asm;
 use core::ops::Deref;
 use core::time::Duration;
@@ -51,7 +52,7 @@ use super::tid::{PGid, Pid, Tid, TidAddress, TidHandle};
 /// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
 /// pack FDtable as a struct
-pub type FDTable = Vec<Option<Arc<dyn File + Send + Sync>>>;
+pub type FDTable = Vec<Option<Arc<dyn File>>>;
 /// new a shared object
 pub fn new_shared<T>(data: T) -> Shared<T> {
     Arc::new(SpinNoIrqLock::new(data))
@@ -90,7 +91,7 @@ pub struct TaskControlBlock {
     /// child tasks
     pub children: Shared<BTreeMap<Pid, Arc<TaskControlBlock>>>,
     /// file descriptor table
-    pub fd_table: Shared<Vec<Option<Arc<dyn File + Send + Sync>>>>,
+    pub fd_table: Shared<Vec<Option<Arc<dyn File>>>>,
     /// thread group which contains this task
     pub thread_group: Shared<ThreadGroup>,
     /// process group id

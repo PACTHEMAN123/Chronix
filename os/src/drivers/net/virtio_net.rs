@@ -1,4 +1,6 @@
-use crate::devices::{net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, NetDevice};
+use core::any::Any;
+
+use crate::devices::{net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, NetBufPtrTrait, NetDevice};
 use log::info;
 use smoltcp::phy::{DeviceCapabilities, Medium};
 use crate::drivers::dma::VirtioHal;
@@ -72,7 +74,7 @@ impl<T: Transport> VirtIoNetDev<T> {
         cap.medium = Medium::Ethernet;
         cap
     }
-    fn receive(&mut self) ->  Box<NetBufPtr> {
+    fn receive(&mut self) ->  Box<dyn NetBufPtrTrait> {
         if let Some(token) = self.raw_device.poll_receive() {
             let mut rx_buf = self.rx_buffers[token as usize]
             .take().unwrap();
@@ -88,17 +90,21 @@ impl<T: Transport> VirtIoNetDev<T> {
             panic!("no rx buffer available, try again");
         }
     }
-    fn transmit(&mut self, tx_buf: Box<NetBufPtr>) {
+    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) {
+        let tx_buf =
+            unsafe { core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(tx_buf) };
+        let tx_buf = unsafe {
+            tx_buf.downcast::<NetBufPtr>().unwrap()
+        };
         let token = unsafe {
             self.raw_device.transmit_begin(tx_buf.packet_with_header()).unwrap()
         };
         self.tx_buffers[token as usize] = Some(tx_buf);
     }
      /// alocate a tx buffer
-    fn alloc_tx_buffer(&mut self, size: usize) -> Box<NetBufPtr> {
+    fn alloc_tx_buffer(&mut self, size: usize) -> Box<dyn NetBufPtrTrait> {
         let mut net_buf = self.free_tx_bufs.pop().unwrap();
         let packet_len = size;
-
         let head_len = net_buf.header_len();
         if packet_len + head_len > net_buf.capacity() {
             panic!("tx buffer too small");
@@ -107,7 +113,13 @@ impl<T: Transport> VirtIoNetDev<T> {
         net_buf
     }
     ///recycle buf when rx complete
-    fn recycle_rx_buffer(&mut self, rx_buf: Box<NetBufPtr>) {
+    fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) {
+        let rx_buf_ptr = unsafe {
+            core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(rx_buf)
+        };
+        let rx_buf = unsafe {
+            rx_buf_ptr.downcast::<NetBufPtr>().unwrap()
+        };
         let new_token = unsafe {
             self.raw_device.receive_begin(rx_buf.as_mut_slice())
         }

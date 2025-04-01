@@ -47,6 +47,13 @@ const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
+const SYSCALL_SOCKET: usize = 198;
+const SYSCALL_BIND: usize = 200;
+const SYSCALL_LISTEN: usize = 201;
+const SYSCALL_ACCEPT: usize = 202;
+const SYSCALL_CONNECT: usize = 203;
+const SYSCALL_GETSOCKNAME: usize = 204;
+const SYSCALL_GETPEERNAME: usize = 205;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
@@ -64,10 +71,12 @@ pub mod mm;
 pub mod sche;
 /// syscall error code
 pub mod sys_error;
-
+/// syscall concerning network
+pub mod net;
 pub use fs::*;
 use hal::addr::VirtAddr;
 use mm::{sys_mmap, sys_munmap};
+use net::*;
 pub use process::*;
 pub use time::*;
 pub use signal::*;
@@ -124,6 +133,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
+        SYSCALL_SOCKET => sys_socket(args[0], args[1], args[2]),
+        SYSCALL_BIND => sys_bind(args[0], args[1], args[2]),
+        SYSCALL_LISTEN => sys_listen(args[0], args[1]),
+        SYSCALL_ACCEPT => sys_accept(args[0], args[1], args[2]).await,
+        SYSCALL_CONNECT => sys_connect(args[0], args[1], args[2]).await,
+        SYSCALL_GETSOCKNAME => sys_getsockname(args[0], args[1], args[2]),
+        SYSCALL_GETPEERNAME => sys_getpeername(args[0], args[1], args[2]),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     };
     match result {
