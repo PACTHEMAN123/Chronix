@@ -118,7 +118,7 @@ impl KernVmSpaceHal for KernVmSpace {
             None
         );
         
-        for pair in crate::board::MMIO {
+        for pair in hal::board::MMIO {
             ret.push_area(
                 KernVmArea::new(
                     ((*pair).0 + Constant::KERNEL_ADDR_SPACE.start).into()..((*pair).0 + Constant::KERNEL_ADDR_SPACE.start + (*pair).1).into(),

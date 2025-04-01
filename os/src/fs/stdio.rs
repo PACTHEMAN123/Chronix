@@ -23,8 +23,7 @@ impl File for Stdin {
     fn writable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> usize {
-        assert_eq!(user_buf.len(), 1);
+    async fn read(&self, buf: &mut [u8]) -> usize {
         // busy loop
         let mut c: usize;
         loop {
@@ -38,11 +37,11 @@ impl File for Stdin {
         }
         let ch = c as u8;
         unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
+            buf.as_mut_ptr().write_volatile(ch);
         }
         1
     }
-    async fn write(&self, _user_buf: UserBuffer) -> usize {
+    async fn write(&self, _user_buf: &[u8]) -> usize {
         panic!("Cannot write to stdin!");
     }
 }
@@ -58,13 +57,11 @@ impl File for Stdout {
     fn writable(&self) -> bool {
         true
     }
-    async fn read(&self, mut _user_buf: UserBuffer) -> usize {
+    async fn read(&self, _buf: &mut [u8]) -> usize {
         panic!("Cannot read from stdout!");
     }
-    async fn write(&self, user_buf: UserBuffer) -> usize {
-        for buffer in user_buf.buffers.iter() {
-            print!("{}", core::str::from_utf8(*buffer).unwrap());
-        }
-        user_buf.len()
+    async fn write(&self, buf: &[u8]) -> usize {
+        print!("{}", core::str::from_utf8(buf).unwrap());
+        buf.len()
     }
 }

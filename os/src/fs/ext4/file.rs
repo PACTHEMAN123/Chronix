@@ -84,31 +84,21 @@ impl File for Ext4File {
     fn writable(&self) -> bool {
         self.writable
     }
-    async fn read(&self, mut buf: UserBuffer) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> usize {
         let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
-        let mut total_read_size = 0usize;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = inode.read_at(inner.offset, *slice).unwrap();
-            if read_size == 0 {
-                break;
-            }
-            inner.offset += read_size;
-            total_read_size += read_size;
-        }
-        total_read_size
+
+        let size = inode.read_at(inner.offset, buf).unwrap();
+        inner.offset += size;
+        size
     }
-    async fn write(&self, buf: UserBuffer) -> usize {
+    async fn write(&self, buf: &[u8]) -> usize {
         let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
-        let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = inode.write_at(inner.offset, *slice).unwrap();
-            assert_eq!(write_size, slice.len());
-            inner.offset += write_size;
-            total_write_size += write_size;
-        }
-        total_write_size
+        
+        let size = inode.write_at(inner.offset, buf).unwrap();
+        inner.offset += size;
+        size
     }
 }
 

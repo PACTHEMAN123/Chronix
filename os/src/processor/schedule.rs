@@ -8,7 +8,7 @@ use crate::task::task::TaskControlBlock;
 use crate::task::Processor;
 use crate::timer::{get_current_time, get_current_time_us};
 use lazy_static::lazy_static;
-use crate::board::MAX_PROCESSORS;
+use hal::board::MAX_PROCESSORS;
 use crate::processor::processor::PROCESSORS;
 use alloc::vec::Vec;
 const LOAD_THRESHOLD: u32 = 10;

@@ -1,6 +1,6 @@
 //! virtual file system file object
 
-use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, utils::{abs_path_to_name, abs_path_to_parent}};
+use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
 use async_trait::async_trait;
 
 use alloc::{
@@ -28,9 +28,9 @@ pub trait File: Send + Sync {
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    async fn read(&self, mut buf: UserBuffer) -> usize;
+    async fn read(&self, buf: &mut [u8]) -> usize;
     /// Write `UserBuffer` to file
-    async fn write(&self, buf: UserBuffer) -> usize;
+    async fn write(&self, buf: &[u8]) -> usize;
     /// get the dentry it points to
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
         Some(self.inner().dentry.clone())
@@ -39,6 +39,10 @@ pub trait File: Send + Sync {
     /// notice that maybe unsafe!
     fn inode(&self) -> Option<Arc<dyn Inode>> {
         self.dentry().unwrap().inode().clone()
+    }
+    /// call by ioctl syscall
+    fn ioctl(&self, _cmd: usize, _arg: usize) -> SysResult {
+        Err(SysError::ENOTTY)
     }
 }
 

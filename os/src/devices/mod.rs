@@ -1,12 +1,57 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
 pub mod net;
 use core::any::Any;
-use alloc::boxed::Box;
+use alloc::{boxed::Box, string::String};
+use async_trait::async_trait;
 use net::{EthernetAddress, NetBufPtr};
 use smoltcp::phy::{DeviceCapabilities,RxToken, TxToken};
+
+
+/// General Device Operations
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum DeviceType {
+    Block,
+    Char,
+    Net,
+    Display,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(usize)]
+pub enum DeviceMajor {
+    Serial = 4,
+    Block = 8,
+    Net = 9,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DevId {
+    /// Major Device Number
+    pub major: DeviceMajor,
+    /// Minor Device Number. It Identifies different device instances of the
+    /// same type
+    pub minor: usize,
+}
+
+/// meta data for any devices
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceMeta {
+    /// Device id.
+    pub dev_id: DevId,
+    /// Name of the device.
+    pub name: String,
+    /// Mmio start address.
+    pub mmio_base: usize,
+    /// Mmio size.
+    pub mmio_size: usize,
+    /// Interrupt number.
+    pub irq_no: Option<usize>,
+    /// Device type.
+    pub dtype: DeviceType,
+}
+
 /// Trait for block devices
 /// which reads and writes data in the unit of blocks
-
 pub trait BlockDevice: Send + Sync + Any {
     fn size(&self) -> u64;
 
@@ -40,3 +85,16 @@ pub trait NetDevice: Send + Sync + Any {
     fn mac_address(&self) -> EthernetAddress;
 }
 
+
+#[async_trait]
+pub trait CharDevice: Send + Sync + Any {
+    /// read data to given buffer
+    async fn read(&self, buf: &mut [u8]) -> usize;
+    /// write data using given buffer
+    async fn write(&self, buf: &[u8]) -> usize;
+    /// if there is data waiting to be read
+    async fn poll_in(&self) -> bool;
+    #[allow(unused)]
+    /// if device is writable
+    async fn poll_out(&self) -> bool;
+}
