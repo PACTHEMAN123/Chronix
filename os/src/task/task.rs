@@ -4,6 +4,7 @@
 
 use super::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use super::{tid_alloc, schedule, INITPROC};
+use crate::fs::devfs::tty::TTY;
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
@@ -323,12 +324,12 @@ impl TaskControlBlock {
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
             fd_table: new_shared(vec![
-                // 0 -> stdin
+                // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
                 Some(Arc::new(Stdin)),
                 // 1 -> stdout
-                Some(Arc::new(Stdout)),
+                Some(TTY.clone()),
                 // 2 -> stderr
-                Some(Arc::new(Stdout)),
+                Some(TTY.clone()),
             ]),
             thread_group: new_shared(ThreadGroup::new()),
             pgid: new_shared(pgid),

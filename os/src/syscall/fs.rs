@@ -551,3 +551,14 @@ pub fn sys_mount(
 pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
     Ok(0)
 }
+
+/// syscall: ioctl
+pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
+        let _sum_guard = SumGuard::new();
+        file.ioctl(cmd, arg)
+    } else {
+        return Err(SysError::EBADF);
+    }
+}
