@@ -6,7 +6,7 @@ use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal
 use log::{info, Level};
 use range_map::RangeMap;
 
-use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, syscall::SysError};
+use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
 
 use crate::syscall::{mm::MmapFlags, SysResult};
 
@@ -720,7 +720,51 @@ impl UserVmArea {
                         return Ok(());
                     },
                     UserVmAreaType::Mmap => {
-                        panic!("do something");
+                        if !self.mmap_flags.contains(MmapFlags::MAP_ANONYMOUS) {
+                            // file mapping
+                            let file = self.file.as_ref().unwrap();
+                            let inode = file.inode().unwrap().clone();
+                            let offset = self.offset + (vpn.0 - self.range_va.start.floor().0) * PAGE_SIZE;
+                            let offset_aligned = round_down_to_page(offset);
+                            
+
+                            if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+                                // share file mapping
+                                let page = inode.read_page_at(offset_aligned).unwrap();
+                                // map a single page
+                                page_table.map(vpn, page.ppn(), self.map_perm, PageLevel::Small);
+                                self.frames.insert(vpn, StrongArc::clone(&page.frame()));
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            } else {
+                                // private file mapping
+                                let page = inode.read_page_at(offset_aligned).unwrap();
+                                if access_type.contains(PageFaultAccessType::WRITE) {
+                                    // TODO: when and how to write back ?
+                                    // need a new page
+                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                } else {
+                                    // COW
+                                    let mut new_perm = self.map_perm;
+                                    new_perm.insert(MapPerm::C);
+                                    new_perm.remove(MapPerm::W);
+                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                }
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            }
+                        } else if self.mmap_flags.contains(MmapFlags::MAP_PRIVATE) {
+                            if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+                                panic!("should not reach here")
+                            } else {
+                                // private anonymous area
+                                let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            }
+                        }
+                        Ok(())
                     },
                     UserVmAreaType::Shm => {
                         panic!("do something");

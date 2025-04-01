@@ -4,7 +4,7 @@ use alloc::{collections::btree_map::BTreeMap, format, vec::Vec};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 use range_map::RangeMap;
 
-use crate::{fs::page, mm::{allocator::{FrameAllocator, SlabAllocator}, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}};
+use crate::{fs::page, mm::{allocator::{FrameAllocator, SlabAllocator}, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page, config::PAGE_SIZE};
 
 use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -557,8 +557,70 @@ impl UserVmArea {
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) }; 
                         return Ok(());
                     }
-                    UserVmAreaType::Mmap => todo!(),
-                    UserVmAreaType::Shm => todo!(),
+                    UserVmAreaType::Mmap => {
+                        if !self.mmap_flags.contains(MmapFlags::MAP_ANONYMOUS) {
+                            // file mapping
+                            let file = self.file.as_ref().unwrap();
+                            let inode = file.inode().unwrap().clone();
+                            let offset = self.offset + (vpn.0 - self.range_va.start.floor().0) * PAGE_SIZE;
+                            let offset_aligned = round_down_to_page(offset);
+                            
+
+                            if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+                                // share file mapping
+                                let page = inode.read_page_at(offset_aligned).unwrap();
+                                // map a single page
+                                let pte = page_table
+                                    .find_pte_create(vpn, PageLevel::Small)
+                                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                                *pte = PageTableEntry::new(page.ppn(), self.map_perm, true);
+                                pte.set_flags(pte.flags() | PTEFlags::D);
+                                self.frames.insert(vpn, StrongArc::clone(&page.frame()));   
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            } else {
+                                // private file mapping
+                                let page = inode.read_page_at(offset_aligned).unwrap();
+                                if access_type.contains(PageFaultAccessType::WRITE) {
+                                    // TODO: when and how to write back ?
+                                    // need a new page
+                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                    let pte = page_table
+                                        .find_pte_create(vpn, PageLevel::Small)
+                                        .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                                    *pte = PageTableEntry::new(new_frame.range_ppn.start, self.map_perm, true);
+                                    pte.set_flags(pte.flags() | PTEFlags::D);
+                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                } else {
+                                    // COW
+                                    let mut new_perm = self.map_perm;
+                                    new_perm.insert(MapPerm::C);
+                                    new_perm.remove(MapPerm::W);
+                                    let pte = page_table
+                                        .find_pte_create(vpn, PageLevel::Small)
+                                        .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                                    *pte = PageTableEntry::new(page.ppn(), new_perm, true);
+                                    pte.set_flags(pte.flags() | PTEFlags::D);
+                                }
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            }
+                        } else if self.mmap_flags.contains(MmapFlags::MAP_PRIVATE) {
+                            if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+                                panic!("should not reach here")
+                            } else {
+                                // private anonymous area
+                                let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                let pte = page_table
+                                    .find_pte_create(vpn, PageLevel::Small)
+                                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                                *pte = PageTableEntry::new(new_frame.range_ppn.start, self.map_perm, true);
+                                pte.set_flags(pte.flags() | PTEFlags::D);
+                                self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                            }
+                        }
+                        Ok(())
+                    },
+                    _ => todo!(),
                 }
             }
         }
