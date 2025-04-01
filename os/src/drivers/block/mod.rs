@@ -5,10 +5,11 @@ mod virtio_blk;
 use hal::println;
 pub use virtio_blk::VirtIOBlock;
 
-use crate::board::BlockDeviceImpl;
 use alloc::sync::Arc;
 use crate::devices::BlockDevice;
 use lazy_static::*;
+
+pub type BlockDeviceImpl = crate::drivers::block::VirtIOBlock;
 
 lazy_static! {
     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());

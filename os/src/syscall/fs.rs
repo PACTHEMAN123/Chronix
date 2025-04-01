@@ -16,7 +16,6 @@ use crate::processor::processor::{current_processor,current_task,current_user_to
 
 /// syscall: write
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
-    let token = current_user_token(&current_processor());
     let task = current_task().unwrap().clone();
     //info!("task {} trying to write fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
@@ -29,7 +28,11 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
             return Err(SysError::EBADF);
         }
         // release current task TCB manually to avoid multi-borrow
-        return Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await as isize);
+        let _sum_guard = SumGuard::new();
+        let buf = unsafe {
+            core::slice::from_raw_parts::<u8>(buf as *const u8, len)
+        };
+        return Ok(file.write(buf).await as isize);
     } else {
         return Err(SysError::EBADF);
     }
@@ -38,7 +41,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
-    let token = current_user_token(&current_processor());
     let task = current_task().unwrap().clone();
     //info!("task {} trying to read fd {}", task.gettid(), fd);
     let table_len = task.with_fd_table(|table|table.len());
@@ -51,7 +53,11 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
         }
         // release current task TCB manually to avoid multi-borrow
         //drop(inner);
-        let ret = file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await;
+        let _sum_guard = SumGuard::new();
+        let buf = unsafe {
+            core::slice::from_raw_parts_mut::<u8>(buf as *mut u8, len)
+        };
+        let ret = file.read(buf).await;
         return Ok(ret as isize);
     } else {
         return Err(SysError::EBADF);
