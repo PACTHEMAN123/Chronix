@@ -3,10 +3,11 @@
 #![allow(unused)]
 
 use async_trait::async_trait;
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use strum::FromRepr;
+use lazy_static::lazy_static;
 
-use crate::{drivers::serial::UART0, fs::vfs::{File, FileInner}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::vfs::{File, FileInner}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -136,8 +137,24 @@ impl Termios {
     }
 }
 
+
+lazy_static! {
+    pub static ref TTY: Arc<dyn File> = TtyFile::new();
+}
+
 pub struct TtyFile {
     pub(crate) meta: SpinNoIrqLock<TtyMeta>,
+}
+
+impl TtyFile {
+    pub fn new() -> Arc<Self> {
+        let meta = SpinNoIrqLock::new(TtyMeta {
+            fg_pgid: 1 as u32,
+            win_size: WinSize::new(),
+            termios: Termios::new(),
+        });
+        Arc::new(Self {meta})
+    }
 }
 
 pub struct TtyMeta {
