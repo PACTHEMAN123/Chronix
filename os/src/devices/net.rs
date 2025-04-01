@@ -6,7 +6,7 @@ use smoltcp::{phy::{Device, DeviceCapabilities, RxToken, TxToken}, time::Instant
 
 use crate::sync::{mutex::SpinLock, UPSafeCell};
 
-use super::NetDevice;
+use super::{NetBufPtrTrait, NetDevice};
 /// NET_BUF_LEN
 pub const NET_BUF_LEN: usize = 1526;
 const MIN_BUFFER_LEN: usize = 1526;
@@ -84,6 +84,20 @@ impl NetBufPool {
     }
 }
 
+impl NetBufPtrTrait for NetBufPtr {
+    fn packet_len(&self) -> usize {
+        self.get_packet_len()
+    }
+    
+    fn packet(&self) -> &[u8] {
+        self.packet()
+    }
+    
+    fn packet_mut(&mut self) -> &mut [u8] {
+        self.packet_mut()
+    }
+    
+}
 impl NetBufPtr {
     /// retruns a slice of memory give start and len
     const fn get_slice(&self, start: usize, len: usize) -> &[u8] {
@@ -105,6 +119,10 @@ impl NetBufPtr {
     pub fn set_packet_len(&mut self, len: usize) {
         self.packet_len = len;
     }
+    /// returns the packet length
+    pub fn get_packet_len(&self) -> usize {
+        self.packet_len
+    }
     /// returns header part of the buffer
     pub fn header(&self) -> &[u8] {
         self.get_slice(0, self.header_len)
@@ -118,7 +136,7 @@ impl NetBufPtr {
         self.get_slice(self.header_len, self.packet_len)
     }
     /// returns mutable packet part of the buffer
-    pub fn packet_mut(&self) -> &mut [u8] {
+    pub fn packet_mut(&mut self) -> &mut [u8] {
         self.get_mut_slice(self.header_len, self.packet_len)
     }
     /// Returns both the header and the packet parts, as a contiguous slice.
@@ -170,7 +188,7 @@ impl NetDeviceWrapper {
     }
 }
 /// rx token and tx token needed for smoltcp
-pub struct NetRxToken<'a>(&'a UPSafeCell<Box<dyn NetDevice>>, Box<NetBufPtr>);
+pub struct NetRxToken<'a>(&'a UPSafeCell<Box<dyn NetDevice>>, Box<dyn NetBufPtrTrait>);
 pub struct NetTxToken<'a>(&'a UPSafeCell<Box<dyn NetDevice>>);
 
 impl <'a> RxToken for NetRxToken<'a> {
@@ -179,7 +197,7 @@ impl <'a> RxToken for NetRxToken<'a> {
         where
             F: FnOnce(&[u8]) -> R 
     {
-        let rx_buf = self.1;
+        let mut rx_buf = self.1;
         let result = f(rx_buf.packet_mut());
         self.0.exclusive_access().recycle_rx_buffer(rx_buf);
         result
@@ -192,7 +210,7 @@ impl <'a> TxToken for NetTxToken<'a> {
         where
             F: FnOnce(&mut [u8]) -> R 
     {
-        let tx_buf = self.0.exclusive_access().alloc_tx_buffer(len);
+        let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len);
         let result = f(tx_buf.packet_mut());
         self.0.exclusive_access().transmit(tx_buf);
         result

@@ -2,7 +2,7 @@ use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{Atomic
 
 use crate::{ sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{SockAddr, ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
+use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
 use fatfs::warn;
 use smoltcp::{
@@ -250,7 +250,7 @@ impl TcpSocket {
         })
     }
     
-    pub fn set_nonblcoking(&self) {
+    pub fn set_nonblocking(&self) {
         self.set_nonblock(true);
     }
     
