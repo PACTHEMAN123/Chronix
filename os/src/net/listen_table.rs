@@ -10,7 +10,7 @@ use smoltcp::{
     wire::{IpAddress, IpEndpoint, IpListenEndpoint},
 };
 
-use crate::{sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError};
+use crate::{net::SocketSetWrapper, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError};
 
 use super::{socket::SockResult, LISTEN_QUEUE_SIZE,SOCKET_SET};
 /// u16 num 
@@ -120,6 +120,29 @@ impl ListenTable {
             false
         }    
     }
+    pub fn handle_coming_tcp(&self, src: IpEndpoint, dst: IpEndpoint, sockets: &mut SocketSet<'_>) {
+        if let Some(entry) = self.inner[dst.port as usize].lock().deref_mut() {
+            if !entry.can_accept(dst.addr) {
+                log::warn!("[LISTEN_TABLE] not listening on addr {}", dst.addr);
+                return;;
+            }
+            if entry.syn_queue.len() >= LISTEN_QUEUE_SIZE {
+                log::warn!("[LISTEN_TABLE] syn_queue overflow!");
+                return;
+            }
+            entry.waker.wake_by_ref();
+            log::info!(
+                "[ListenTable::incoming_tcp_packet] wake the socket who listens port {}",
+                dst.port
+            );
+            let mut socket = SocketSetWrapper::new_tcp_socket();
+            if socket.listen(entry.listen_endpoint).is_ok() {
+                let handle = sockets.add(socket);
+                log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
+                entry.syn_queue.push_back(handle);
+            }
+        }
+    } 
 
 }
 

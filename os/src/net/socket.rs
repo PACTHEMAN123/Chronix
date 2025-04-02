@@ -1,11 +1,12 @@
+use core::task::Poll;
+
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
-use crate::{fs::{vfs::{File, FileInner}, OpenFlags}, mm::UserBuffer, syscall::sys_error::SysError};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError};
 use crate::syscall::net::SocketType;
-use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, tcp::TcpSocket, SaFamily};
+use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;
-use spin::Mutex;
 /// a trait for differnt socket types
 /// net poll results.
 #[derive(Debug, Default, Clone, Copy)]
@@ -66,7 +67,7 @@ impl Sock {
         }
     }
     /// send data to the socket
-    pub async fn send(&self, data: &[u8], remote_addr: IpEndpoint) -> SockResult<usize>{
+    pub async fn send(&self, data: &[u8], remote_addr: Option<IpEndpoint>) -> SockResult<usize>{
         match self {
             Sock::TCP(tcp) => tcp.send(data, remote_addr).await
         }
@@ -106,7 +107,7 @@ pub struct Socket {
     /// socket type
     pub sk_type: SocketType,
     /// fd flags
-    pub fd_flags: Mutex<OpenFlags>,
+    pub fd_flags: SpinNoIrqLock<OpenFlags>,
 }
 
 impl Socket {
@@ -129,7 +130,7 @@ impl Socket {
         Self {
             sk_type: sk_type,
             sk: sk,
-            fd_flags: Mutex::new(fd_flags),
+            fd_flags: SpinNoIrqLock::new(fd_flags),
         }
     }
     /// new a socket with a given socket 
@@ -137,7 +138,7 @@ impl Socket {
         Self {
             sk: sk,
             sk_type: another.sk_type,
-            fd_flags: Mutex::new(OpenFlags::RDWR),
+            fd_flags: SpinNoIrqLock::new(OpenFlags::RDWR),
         }
     }
 }
@@ -151,23 +152,49 @@ impl File for Socket {
 
     #[doc = " If readable"]
     fn readable(&self) -> bool {
-        unreachable!()
+        true
     }
 
     #[doc = " If writable"]
     fn writable(&self) -> bool {
-        unreachable!()
+        true
     }
 
     #[doc ="Read file to `UserBuffer`"]
     #[must_use]
-    async fn read(&self, _buf: &mut [u8]) -> usize {
-        todo!()
+    async fn read(&self, buf: &mut [u8]) -> usize {
+        if buf.len() == 0 {
+            return 0;
+        }
+        let bytes = self.sk.recv(buf).await.map(|e|e.0).unwrap();
+        bytes
     }
 
     #[doc = " Write `UserBuffer` to file"]
     #[must_use]
-    async fn write(& self, _buf: &[u8]) -> usize {
-        todo!()
+    async fn write(& self, buf: &[u8]) -> usize {
+        if buf.len() == 0 {
+            return 0;
+        }
+        let bytes = self.sk.send(buf, None).await.unwrap();
+        bytes
+    }
+
+    async fn base_poll(&self, events:PollEvents) -> PollEvents {
+        let mut res = PollEvents::empty();
+        poll_interfaces();
+        let netstate = self.sk.poll().await;
+        if events.contains(PollEvents::IN) && netstate.readable {
+            res |= PollEvents::IN;
+        }
+        if events.contains(PollEvents::OUT) && netstate.writable {
+            res |= PollEvents::OUT;
+        }
+        if netstate.hangup {
+            log::warn!("[Socket::bask_poll] PollEvents is hangup");
+            res |= PollEvents::HUP;
+        }
+        log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
+        res
     }
 }

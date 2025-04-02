@@ -1,6 +1,6 @@
 //! virtual file system file object
 
-use core::any::Any;
+use core::{any::Any, task::Poll};
 
 use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
 use async_trait::async_trait;
@@ -19,6 +19,31 @@ pub struct FileInner {
     pub dentry: Arc<dyn Dentry>,
     /// the current pos 
     pub offset: usize,
+}
+
+bitflags! {
+    // Defined in <bits/poll.h>.
+    pub struct PollEvents: i16 {
+        // Event types that can be polled for. These bits may be set in `events' to
+        // indicate the interesting event types; they will appear in `revents' to
+        // indicate the status of the file descriptor.
+        /// There is data to read.
+        const IN = 0x001;
+        /// There is urgent data to read.
+        const PRI = 0x002;
+        ///  Writing now will not block.
+        const OUT = 0x004;
+
+        // Event types always implicitly polled for. These bits need not be set in
+        // `events', but they will appear in `revents' to indicate the status of the
+        // file descriptor.
+        /// Error condition.
+        const ERR = 0x008;
+        /// Hang up.
+        const HUP = 0x010;
+        /// Invalid poll request.
+        const INVAL = 0x020;
+    }
 }
 
 #[async_trait]
@@ -47,6 +72,17 @@ pub trait File: Send + Sync + DowncastSync {
     fn ioctl(&self, _cmd: usize, _arg: usize) -> SysResult {
         Err(SysError::ENOTTY)
     }
+    /// base poll 
+    async fn base_poll(&self, events: PollEvents) -> PollEvents{
+        let mut res = PollEvents::empty();
+        if events.contains(PollEvents::IN) {
+            res |= PollEvents::IN
+        }
+        if events.contains(PollEvents::OUT) {
+            res |= PollEvents::OUT;
+        }
+        res
+    }
 }
 
 impl dyn File {
@@ -66,6 +102,10 @@ impl dyn File {
         }
         //info!("read total size: {}", v.len());
         v
+    }
+    // given the event and track the event async, returns the event if is ready
+    pub async fn poll(&self, events: PollEvents) -> PollEvents {
+        self.base_poll(events).await
     }
 }
 

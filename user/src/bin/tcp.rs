@@ -59,7 +59,7 @@ fn server() -> ! {
         close(sockfd as usize);
         panic!("server: accept failed");
     }
-
+    println!("[SERVER]: accpet client_fd {}",client_fd);
     let mut buf = [0u8; 1024];
     loop {
         let n = read(client_fd as usize, buf.as_mut_slice());
@@ -68,7 +68,7 @@ fn server() -> ! {
             panic!("server: read failed");
         }
         println!("[Server] Received {} bytes, echoing back...", n);
-        let write_res = write(client_fd as usize, &buf);
+        let write_res = write(client_fd as usize, &buf, n as usize);
         if write_res != n {
             panic!("[Server] Failed to write all bytes, {}/{}", write_res, n);
         }
@@ -100,11 +100,12 @@ fn client() -> ! {
     }
     println!("[Client] Connected to server");
     // send data
-    write(sockfd as usize, TEST_DATA);
+    write(sockfd as usize, TEST_DATA, TEST_DATA.len());
     println!("[Client] Sent bytes ");
     // receive data
     let mut buf = [0u8; 1024];
     let n = read(sockfd as usize, buf.as_mut_slice());
+    println!("[client ]read {} bytes",n);
     if n < 0 {
         panic!("client: read failed");
     }

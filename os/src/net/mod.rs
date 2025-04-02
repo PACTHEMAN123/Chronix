@@ -103,7 +103,8 @@ impl InterfaceWrapper {
         let mut iface = self.iface.lock();
         let mut sockets = sockets.lock();
         let timestamp = Self::current_time();
-        iface.poll(timestamp, dev.deref_mut(), &mut sockets);
+        let res = iface.poll(timestamp, dev.deref_mut(), &mut sockets);
+        log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
         timestamp
     }
     /// check the interface and call poll sockethandle if necessary
@@ -190,7 +191,35 @@ impl <'a> SocketSetWrapper<'a> {
     }
 }
 
+/// Poll the network stack.
+///
+/// It may receive packets from the NIC and process them, and transmit queued
+/// packets to the NIC.
+pub fn poll_interfaces() -> smoltcp::time::Instant {
+    SOCKET_SET.poll_interfaces()
+}
 
+pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
+    use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
+
+    let ipv4_packet = if is_ethernet {
+        let ether_frame = EthernetFrame::new_checked(buf)?;
+        Ipv4Packet::new_checked(ether_frame.payload())?
+    }else {
+        Ipv4Packet::new_checked(buf)?
+    };
+    if ipv4_packet.next_header() == IpProtocol::Tcp {
+        let tcp_packet = TcpPacket::new_checked(ipv4_packet.payload())?;
+        let src_addr = (ipv4_packet.src_addr(), tcp_packet.src_port()).into();
+        let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
+        let first_flag = tcp_packet.syn() && !tcp_packet.ack();
+        if first_flag {
+            info!("[modify tcp packet]receive tcp");
+            LISTEN_TABLE.handle_coming_tcp(src_addr, dst_addr, sockets);
+        }
+    }
+    Ok(())
+}
 // function or struct concerning time ,from microseconds to smoltcp::time::Instant, from core::time::Duration to smoltcp::time::Duration
 /// from core::time::Duration to smoltcp::time::Duration
 struct NetPollTimer;
