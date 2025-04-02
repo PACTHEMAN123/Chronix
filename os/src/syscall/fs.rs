@@ -153,6 +153,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 
     if let Some(path) = user_path_to_string(pathname) {
         let dentry = at_helper(task.clone(), dirfd, pathname)?;
+        info!("trying to open {}", dentry.path());
         if flags.contains(OpenFlags::CREATE) {
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::EXCL) && dentry.state() != DentryState::NEGATIVE {
@@ -212,6 +213,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
 /// syscall: fstatat
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
     let _sum_guard = SumGuard::new();
+    info!("[sys_fstatat]: into");
     const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
     if flags == AT_SYMLINK_NOFOLLOW {
         panic!("[sys_fstatat]: not support for symlink now");
@@ -221,11 +223,13 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::EBADF);
     }
+
     let stat = dentry.inode().unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
         *stat_ptr = stat;
     }
+    info!("mamba out");
     Ok(0)
 }
 
