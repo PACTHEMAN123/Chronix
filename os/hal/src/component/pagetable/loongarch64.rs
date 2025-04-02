@@ -386,7 +386,11 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         }
     }
 
-    unsafe fn enable(&self) {
+    unsafe fn enable_high(&self) {
+        register::pgdh::set_base(self.get_token());
+    }
+
+    unsafe fn enable_low(&self) {
         register::pgdl::set_base(self.get_token());
     }
 }

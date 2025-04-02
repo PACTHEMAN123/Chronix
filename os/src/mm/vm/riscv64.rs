@@ -7,7 +7,7 @@ use log::{info, Level};
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::vfs::{inode::FileReader, File}, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
+use crate::{config::PAGE_SIZE, fs::{vfs::File, utils::FileReader}, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
 
 use crate::syscall::{mm::MmapFlags, SysResult};
 
@@ -26,11 +26,26 @@ pub struct UserVmSpace {
     heap_bottom_va: VirtAddr,
 }
 
+impl KernVmSpace {
+    /// The second-level page table in the kernel virtual mapping area is pre-allocated to avoid synchronization
+    fn map_vm_area_huge_pages(&mut self) {
+        let ptes = self.page_table.root_ppn
+            .start_addr().get_mut::<[PageTableEntry; Constant::PTES_PER_PAGE]>();
+
+        const HUGE_PAGES: usize = Constant::KERNEL_VM_SIZE / (Constant::PAGE_SIZE * 512 * 512);
+        const VM_START: usize = (Constant::KERNEL_VM_BOTTOM & ((1 << Constant::VA_WIDTH)-1)) / (Constant::PAGE_SIZE * 512 * 512);
+        let ppn = FrameAllocator.alloc(HUGE_PAGES).unwrap().start;
+        for (i, pte_i) in (VM_START..VM_START+HUGE_PAGES).enumerate() {
+            ptes[pte_i] = PageTableEntry::new(ppn+i, MapPerm::empty(), true);
+        }
+    }
+}
+
 impl KernVmSpaceHal for KernVmSpace {
 
     fn enable(&self) {
         unsafe {
-            self.page_table.enable();
+            self.page_table.enable_high();
         }
     }
 
@@ -55,13 +70,7 @@ impl KernVmSpaceHal for KernVmSpace {
             areas: RangeMap::new(),
         };
 
-        let ptes = ret.page_table.root_ppn.start_addr().get_mut::<[PageTableEntry; Constant::PTES_PER_PAGE]>();
-        const HUGE_PAGES: usize = Constant::KERNEL_VM_SIZE / (Constant::PAGE_SIZE * 512 * 512);
-        const VM_START: usize = (Constant::KERNEL_VM_BOTTOM & ((1 << Constant::VA_WIDTH)-1)) / (Constant::PAGE_SIZE * 512 * 512);
-        let ppn = FrameAllocator.alloc(HUGE_PAGES).unwrap().start;
-        for (i, pte_i) in (VM_START..VM_START+HUGE_PAGES).enumerate() {
-            ptes[pte_i] = PageTableEntry::new(ppn+i, MapPerm::empty(), true);
-        }
+        ret.map_vm_area_huge_pages();
 
         ret.push_area(KernVmArea::new(
                 (stext as usize).into()..(etext as usize).into(), 
@@ -918,41 +927,33 @@ impl UserVmArea {
                         return Err(())
                     },
                     UserVmAreaType::Data => {
-                        if let Some(file) = &self.file {
-                            let inode = file.inode().unwrap().clone();
-                            let area_offset = (vpn.0 - self.range_va.start.floor().0) * Constant::PAGE_SIZE;
-                            let offset = self.offset + area_offset;
-                            let offset_aligned = round_down_to_page(offset);
-                            if area_offset < self.len {
-                                if self.len - area_offset < Constant::PAGE_SIZE {
-                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-                                    let data = new_frame.range_ppn.get_slice_mut::<u8>();
-                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
-                                    let page_offset = self.len-area_offset;
-                                    data[..page_offset].copy_from_slice(
-                                        &page.get_slice::<u8>()[..page_offset]
-                                    );
-                                    data[page_offset..].fill(0);
-                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
-                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
-                                    Ok(())
-                                } else {
-                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
-                                    let mut new_perm = self.map_perm;
-                                    new_perm.insert(MapPerm::C);
-                                    new_perm.remove(MapPerm::W);
-                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
-                                    self.frames.insert(vpn, page.frame().clone());
-                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); };
-                                    Ok(())
-                                }
-                            } else {
+                        let file = self.file.as_ref().ok_or(())?;
+                        let inode = file.inode().unwrap().clone();
+                        let area_offset = (vpn.0 - self.range_va.start.floor().0) * Constant::PAGE_SIZE;
+                        let offset = self.offset + area_offset;
+                        let offset_aligned = round_down_to_page(offset);
+                        if area_offset < self.len {
+                            if self.len - area_offset < Constant::PAGE_SIZE {
                                 let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-                                new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
+                                let data = new_frame.range_ppn.get_slice_mut::<u8>();
+                                let page = inode.read_page_at(offset_aligned).ok_or(())?;
+                                let page_offset = self.len-area_offset;
+                                data[..page_offset].copy_from_slice(
+                                    &page.get_slice::<u8>()[..page_offset]
+                                );
+                                data[page_offset..].fill(0);
                                 page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
                                 self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                Ok(())
+                            } else {
+                                let page = inode.read_page_at(offset_aligned).ok_or(())?;
+                                let mut new_perm = self.map_perm;
+                                new_perm.insert(MapPerm::C);
+                                new_perm.remove(MapPerm::W);
+                                page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                self.frames.insert(vpn, page.frame().clone());
+                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); };
                                 Ok(())
                             }
                         } else {

@@ -160,7 +160,7 @@ pub trait KernVmSpaceHal {
 
     fn map_vm_area(&mut self, frames: Vec<StrongArc<FrameTracker, SlabAllocator>>, map_perm: MapPerm) -> Option<Range<VirtPageNum>>;
 
-    fn unmap_vm_area(&mut self, vpn: Range<VirtPageNum>);
+    fn unmap_vm_area(&mut self, range_vpn: Range<VirtPageNum>);
 
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
 
@@ -176,7 +176,7 @@ pub trait UserVmSpaceHal: Sized {
 
     fn enable(&self) {
         unsafe {
-            self.get_page_table().enable();
+            self.get_page_table().enable_low();
             Instruction::tlb_flush_all();
         }
     }
