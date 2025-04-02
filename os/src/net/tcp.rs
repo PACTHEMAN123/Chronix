@@ -5,6 +5,7 @@ use crate::{ sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysE
 use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
 use fatfs::warn;
+use hal::println;
 use smoltcp::{
     iface::{SocketHandle, SocketSet},
     socket::tcp::{self, ConnectError, State},
@@ -114,12 +115,16 @@ impl TcpSocket {
         self.handle.exclusive_access().as_mut()
     }
     /// get the socket handle ref
-    pub fn handle(&self) -> Option<&SocketHandle> {
-        self.handle.get_ref().as_ref()
+    pub fn handle(&self) -> Option<SocketHandle> {
+        unsafe{
+            self.handle.get().read()
+        }
     }
     /// set the socket handle
     pub fn set_handle(&self, handle: SocketHandle) {
-        self.handle.exclusive_access().replace(handle);
+        unsafe {
+            self.handle.get().write(Some(handle));
+        }
     }
     /// get the local endpoint ref
     pub fn local_endpoint(&self) -> &IpEndpoint {
@@ -127,20 +132,26 @@ impl TcpSocket {
     }
     /// set the local endpoint
     pub fn set_local_endpoint(&self, endpoint: IpEndpoint) {
-        self.local_endpoint.exclusive_access().replace(endpoint);
+        unsafe{
+            self.local_endpoint.get().write(Some(endpoint));
+        }
     }
     pub fn set_local_endpoint_with_port(&self, port: u16) {
         let inner_endpoint = self.local_endpoint.exclusive_access().clone().unwrap();
         let addr = inner_endpoint.addr;
-        self.local_endpoint.exclusive_access().replace(IpEndpoint::new(addr, port));
+        unsafe {
+            self.local_endpoint.get().write(Some(IpEndpoint::new(addr, port)));
+        }
     }
     /// get the remote endpoint ref
     pub fn remote_endpoint(&self) -> &IpEndpoint {
         self.remote_endpoint.get_ref().as_ref().unwrap()
     }
     /// set the remote endpoint
-    pub fn set_remote_endpoint(&mut self, endpoint: IpEndpoint) {
-        self.remote_endpoint.exclusive_access().replace(endpoint);
+    pub fn set_remote_endpoint(&self, endpoint: IpEndpoint) {
+        unsafe{
+            self.remote_endpoint.get().write(Some(endpoint));
+        }
     }
     /// set non-blocking mode
     pub fn set_nonblock(&self, nonblock: bool) {
@@ -158,26 +169,26 @@ impl TcpSocket {
         yield_now().await;
         // now change the state to connecting , wait for poll connect event
         self.update_state(SocketState::Closed, SocketState::Connecting, ||{
-            let handle = unsafe {
-                self.handle.get().read()}
-                .unwrap_or_else(||SOCKET_SET.add_socket(SocketSetWrapper::new_tcp_socket()));
-            
+            let handle = self.handle().unwrap_or_else(||SOCKET_SET.add_socket(SocketSetWrapper::new_tcp_socket()));
             let robust_endpoint = self.robost_port_endpoint()?;
             let (local_endpoint, remote_endpoint) = SOCKET_SET.with_socket_mut::<tcp::Socket, _, _>(handle, |socket|{
                 socket.connect(ETH0.get().unwrap().iface.lock().context(),addr,robust_endpoint)
                 .or_else(|e| match e {
                     ConnectError::InvalidState => {
+                        log::warn!("[TcpSocket::connect] failed: InvalidState");
                         Err(SysError::EBADF)
                     }
                     ConnectError::Unaddressable => {
+                        log::warn!("[TcpSocket::connect] failed: Unaddressable");
                         Err(SysError::EADDRNOTAVAIL)
                     }
                 })?;
                 Ok((socket.local_endpoint(), socket.remote_endpoint()))
             })?;
-            self.local_endpoint.exclusive_access().replace(local_endpoint.unwrap());
-            self.remote_endpoint.exclusive_access().replace(remote_endpoint.unwrap());
-            self.handle.exclusive_access().replace(handle);
+            self.set_local_endpoint(local_endpoint.unwrap());
+            self.set_remote_endpoint(remote_endpoint.unwrap());
+            self.set_handle(handle);
+            log::info!("[TCP CONNCECT], local_endpoint_port: {}, remote_endpoint_port:{}", self.local_endpoint().port,self.remote_endpoint().port);
             Ok(())
         }).unwrap_or_else(|_|{
             log::warn!("[TcpSocket::connect] failed to connect for alreay connected socket");
@@ -190,45 +201,44 @@ impl TcpSocket {
         }else {
             self.block_on_future(|| async {
                 let connection_info = self.poll_concect().await;
-                if connection_info {
-                    if self.state() == SocketState::Connected {
-                        Ok(())
-                    }else {
-                        Err(SysError::ECONNREFUSED)
-                    }
-                }else {
-                    log::warn!("[TcpSocket::connect] failed to connect, try again later");
+                if !connection_info {
+                    log::warn!("[TcpSocket::connect] try agian");
                     Err(SysError::EAGAIN)
+                }else if self.state() == SocketState::Connected {
+                    Ok(())
+                }else {
+                    log::warn!("[TcpSocket::connect] connection refused");
+                    Err(SysError::ECONNREFUSED)
                 }
             }).await
         }
     }
     
-    pub fn bind(&self, _sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>  {
-        let inner_addr = if addr.addr.is_some(){
-            addr.addr.unwrap()
-        }else {
-            ZERO_IPV4_ADDR
-        };
-        let mut new_endpoint = IpEndpoint::new(inner_addr, addr.port);
+    pub fn bind(&self, mut new_endpoint: IpEndpoint) -> SockResult<()>  {
         self.update_state(SocketState::Closed, SocketState::Closed,||{
+            info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
                 let port = self.get_ephemeral_port().unwrap();
                 new_endpoint.port = port;
                 info!("[TcpSocket::bind] local port is 0, use port {}",port);
             }
-            let old = self.local_endpoint().clone();
+            let old = unsafe {
+                self.local_endpoint.get().read().unwrap()
+            };
             if old != ZERO_IPV4_ENDPOINT {
                 // already bind
                 return Err(SysError::EADDRINUSE); 
             }
-            if let IpAddress::Ipv6(v6) = inner_addr {
+            if let IpAddress::Ipv6(v6) = new_endpoint.addr {
                 if v6.is_unspecified() {
                     // change unspecified v6 address to v4 address
                     new_endpoint.addr = ZERO_IPV4_ADDR;
                 }
-            }
+            }  
             self.set_local_endpoint(new_endpoint);
+            info!("now self local endpoint port {}",unsafe {
+                self.local_endpoint.get().read().unwrap().port
+            });
             Ok(())
         })
         .unwrap_or_else(|_|{
@@ -280,7 +290,7 @@ impl TcpSocket {
         }else if self.state() != SocketState::Connected {
             return Err(SysError::ENOTCONN);
         }else {
-            let handle = *self.handle().unwrap();
+            let handle = self.handle().unwrap();
             let waker = get_waker().await;
             let ret = self.block_on(|| {
                 SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>( handle, |socket| {
@@ -323,7 +333,7 @@ impl TcpSocket {
             let handle = self.handle().unwrap();
             let waker = get_waker().await;
             self.block_on(|| {
-                SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(*handle, |socket|{
+                SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(handle, |socket|{
                     if !socket.is_active() {
                         // not open 
                         log::warn!("[TcpSocket::recv] socket recv() failed because handle is not active");
@@ -353,7 +363,7 @@ impl TcpSocket {
         // for stream socket
         self.update_state(SocketState::Connected, SocketState::Closed, ||  {
             let handle = self.handle().unwrap();
-            SOCKET_SET.with_socket_mut::<tcp::Socket, _, _,>(*handle, |socket| {
+            SOCKET_SET.with_socket_mut::<tcp::Socket, _, _,>(handle, |socket| {
                 info!("tcp socket shutdown, before state is {}", socket.state());
                 socket.close();
                 info!("tcp socket shutdown, after state is {}" , socket.state());
@@ -462,12 +472,14 @@ impl TcpSocket {
     }
     /// read current endpoint and make it robust if it lack port or anything else
     fn  robost_port_endpoint(&self) -> SockResult<IpListenEndpoint> {
-        let local_endpoint = self.local_endpoint().clone();
+        let local_endpoint = self.local_endpoint();
         let port = if local_endpoint.port == 0 {
+            info!("get a random port");
             self.get_ephemeral_port()?
         }else {
             local_endpoint.port
         };
+        info!("[robost_port_endpoint] now port is {} ",port);
         let addr = if local_endpoint.addr.is_unspecified() {
             None
         }else {
@@ -484,6 +496,7 @@ impl TcpSocket {
         F: FnMut() -> Future,
         Future: core::future::Future<Output = SockResult<T>>,
         {
+            log::info!("in block on future");
             if self.nonblock() {
                 f().await
             }else {
@@ -496,6 +509,7 @@ impl TcpSocket {
                             return Ok(res);
                         }
                         Err(SysError::EAGAIN) => {
+                            log::warn!("[block_on_future] ret state:EAGAIN!");
                             suspend_now().await;
                             // TODO: check if the socket is still valid
                             continue;
@@ -541,6 +555,7 @@ impl TcpSocket {
             match socket.state() {
                 State::SynSent => {
                     // this means the request is sent, but not yet received by the remote endpoint
+                    info!("[TcpSocket::poll_concect]:the request is sent, but not yet received by the remote endpoint ");
                     socket.register_recv_waker(&waker);
                     false
                 }
@@ -551,7 +566,7 @@ impl TcpSocket {
                     true
                 }
                 _ => {
-                    // wrong state, back to zero state
+                    log::warn!("wrong state, back to zero state");
                     self.local_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
                     self.remote_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
                     self.set_state(SocketState::Closed as u8);
@@ -611,6 +626,7 @@ impl TcpSocket {
             return Err(SysError::EINVAL);
         }
         let local_port = self.local_endpoint().port;
+        log::info!("[accept]: local_port is {}", local_port);
         self.block_on(|| {
             let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
             Ok(TcpSocket::new_v4_connected(handle, local_endpoint, remote_endpoint))

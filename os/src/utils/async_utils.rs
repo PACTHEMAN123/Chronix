@@ -235,7 +235,7 @@ impl Future for SuspendFuture {
         }
     }
 }
-#[allow(dead_code)]
+
 pub async fn suspend_now() {
     SuspendFuture::new().await
 }

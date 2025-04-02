@@ -1,6 +1,6 @@
 use core::any::Any;
 
-use crate::devices::{net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, NetBufPtrTrait, NetDevice};
+use crate::devices::{net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, DevError, DevResult, NetBufPtrTrait, NetDevice};
 use log::info;
 use smoltcp::phy::{DeviceCapabilities, Medium};
 use crate::drivers::dma::VirtioHal;
@@ -74,7 +74,7 @@ impl<T: Transport> VirtIoNetDev<T> {
         cap.medium = Medium::Ethernet;
         cap
     }
-    fn receive(&mut self) ->  Box<dyn NetBufPtrTrait> {
+    fn receive(&mut self) ->  DevResult<Box<dyn NetBufPtrTrait>> {
         if let Some(token) = self.raw_device.poll_receive() {
             let mut rx_buf = self.rx_buffers[token as usize]
             .take().unwrap();
@@ -85,12 +85,12 @@ impl<T: Transport> VirtIoNetDev<T> {
             };
             rx_buf.set_header_len(head_len);
             rx_buf.set_packet_len(packet_len);
-            rx_buf
+            Ok(rx_buf)
         }else {
-            panic!("no rx buffer available, try again");
+            Err(DevError::Again)
         }
     }
-    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) {
+    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) -> DevResult{
         let tx_buf =
             unsafe { core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(tx_buf) };
         let tx_buf = unsafe {
@@ -100,9 +100,10 @@ impl<T: Transport> VirtIoNetDev<T> {
             self.raw_device.transmit_begin(tx_buf.packet_with_header()).unwrap()
         };
         self.tx_buffers[token as usize] = Some(tx_buf);
+        Ok(())
     }
      /// alocate a tx buffer
-    fn alloc_tx_buffer(&mut self, size: usize) -> Box<dyn NetBufPtrTrait> {
+    fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<Box<dyn NetBufPtrTrait>> {
         let mut net_buf = self.free_tx_bufs.pop().unwrap();
         let packet_len = size;
         let head_len = net_buf.header_len();
@@ -110,10 +111,10 @@ impl<T: Transport> VirtIoNetDev<T> {
             panic!("tx buffer too small");
         }
         net_buf.set_packet_len(packet_len);
-        net_buf
+        Ok(net_buf)
     }
     ///recycle buf when rx complete
-    fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) {
+    fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) -> DevResult {
         let rx_buf_ptr = unsafe {
             core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(rx_buf)
         };
@@ -125,9 +126,10 @@ impl<T: Transport> VirtIoNetDev<T> {
         }
         .unwrap();
         self.rx_buffers[new_token as usize] = Some(rx_buf);
+        Ok(())
     }
     /// recycle used tx buffer
-    fn recycle_tx_buffer(&mut self) {
+    fn recycle_tx_buffer(&mut self) -> DevResult {
         while let Some(token) = self.raw_device.poll_transmit() {
             let tx_buf = self.tx_buffers[token as usize].take().unwrap();
             unsafe {
@@ -135,6 +137,7 @@ impl<T: Transport> VirtIoNetDev<T> {
             };
             self.free_tx_bufs.push(tx_buf);
         }
+        Ok(())
     }
     fn mac_address(&self) -> EthernetAddress {
         EthernetAddress(self.raw_device.mac_address())

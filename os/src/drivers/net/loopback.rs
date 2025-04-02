@@ -1,9 +1,9 @@
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc, vec,vec::Vec};
-use fatfs::warn;
+use fatfs::{info, warn};
 use smoltcp::phy::{DeviceCapabilities, Medium};
 use spin::Lazy;
 
-use crate::devices::{net::{EthernetAddress, NetBufPool, NetBufPtr}, NetBufPtrTrait, NetDevice};
+use crate::devices::{net::{EthernetAddress, NetBufPool, NetBufPtr}, DevError, DevResult, NetBufPtrTrait, NetDevice};
 
 /// A loopback device that sends packets back to the same device.
 pub struct LoopbackDevice {
@@ -12,9 +12,11 @@ pub struct LoopbackDevice {
 
 impl LoopbackDevice {
     pub fn new() -> Box<Self> {
-        Box::new(Self {
+        let inner =Box::new(Self {
             queue: VecDeque::with_capacity(512),
-        })
+        });
+        log::info!("queue length: {} ", inner.queue.len());
+        inner
     }
 }
 
@@ -43,37 +45,37 @@ impl NetDevice for LoopbackDevice {
         cp
     }
 
-    fn receive(&mut self) ->  Box<dyn NetBufPtrTrait> {
+    fn receive(&mut self) ->  DevResult<Box<dyn NetBufPtrTrait>> {
         if let Some(buf) = self.queue.pop_front() {
             log::warn!(
                 "[NetDriverOps::receive] now receive {} bytes from LoopbackDev.queue",
                 buf.len()
             );
-            Box::new(LoopbackBuf(buf))
+            Ok(Box::new(LoopbackBuf(buf)))
         }else {
-            panic!("no rx buffer available, try again");
+            Err(DevError::Again)
         }
     }
 
-    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) {
+    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) -> DevResult {
         let data = tx_buf.packet().to_vec();
         log::warn!("[NetDriverOps::transmit] now transmit {} bytes", data.len());
         self.queue.push_back(data);
-
+        Ok(())
     }
 
-    fn alloc_tx_buffer(&mut self, size: usize) -> Box<dyn NetBufPtrTrait> {
+    fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<Box<dyn NetBufPtrTrait>> {
         let mut buffer = vec![0;size];
         buffer.resize(size, 0);
-        Box::new(LoopbackBuf(buffer))
+        Ok(Box::new(LoopbackBuf(buffer)))
     }
 
-    fn recycle_rx_buffer(&mut self, _rx_buf: Box<dyn NetBufPtrTrait>) {
-        unimplemented!()
+    fn recycle_rx_buffer(&mut self, _rx_buf: Box<dyn NetBufPtrTrait>) -> DevResult{
+        Ok(())
     }
 
-    fn recycle_tx_buffer(&mut self) {
-        unimplemented!()
+    fn recycle_tx_buffer(&mut self) -> DevResult{
+        Ok(())
     }
 
     fn mac_address(&self) -> crate::devices::net::EthernetAddress {

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 use crate::{fs::{vfs::{File, FileInner}, OpenFlags}, mm::UserBuffer, syscall::sys_error::SysError};
 use crate::syscall::net::SocketType;
-use super::{tcp::TcpSocket, SaFamily};
+use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, tcp::TcpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;
 use spin::Mutex;
 /// a trait for differnt socket types
@@ -28,9 +28,17 @@ impl Sock {
         }
     }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
-    pub fn bind(&self, sock_fd: usize, addr: IpListenEndpoint) -> SockResult<()>{
+    pub fn bind(&self, sock_fd: usize, local_addr: SockAddr) -> SockResult<()>{
         match self {
-            Sock::TCP(tcp) => tcp.bind(sock_fd, addr)
+            Sock::TCP(tcp) => {
+                let local_addr = local_addr.into_listen_endpoint();
+                let addr = if local_addr.addr.is_none(){
+                    ZERO_IPV4_ADDR
+                }else{
+                    local_addr.addr.unwrap()
+                };
+                tcp.bind(IpEndpoint::new(addr, local_addr.port))
+            }
         }
     }
     /// listen method for socket to listen for incoming connections, for server socket
