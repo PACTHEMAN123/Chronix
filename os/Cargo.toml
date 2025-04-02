@@ -22,28 +22,34 @@ hal = {path = "./hal" }
 async-trait = "0.1.88"
 hashbrown = "0.14"
 strum = { version = "0.26", default_features = false, features = ["derive"] }
-
-smoltcp = { version = "0.12.0", default-features = false, features = [
-    "alloc",
-    "log",
-    "medium-ethernet",
-    "medium-ip",
-    "proto-ipv4",
-    "proto-ipv6",
-    "proto-dhcpv4",
-    "proto-ipv4-fragmentation",
-    "socket-udp",
-    "socket-tcp",
-    "socket-dhcpv4",
-    "async",
-] }
 rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_rng"]}
 fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
 range-map = { path = "../utils/range-map" }
 downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
+
+[dependencies.smoltcp]
+git = "https://github.com/lullabyeoytl/smoltcp.git"
+default-features = false
+features = [
+    "alloc",
+    "log",             # no std
+    "medium-ethernet",
+    "medium-ip",       # used for Loopback device
+    "proto-ipv4",
+    "proto-ipv6",
+    "socket-raw",
+    "socket-icmp",
+    "socket-udp",
+    "socket-tcp",
+    "socket-dns",
+    "proto-ipv6",
+    "async",
+]
+
 [features]
 smp = []
 fat32 = []
+
 
 
 [profile.release]

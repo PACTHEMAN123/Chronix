@@ -284,7 +284,7 @@ impl TcpSocket {
         }
     }
     
-    pub async fn send(&self, data: &[u8], _remote_addr: IpEndpoint) -> SockResult<usize> {
+    pub async fn send(&self, data: &[u8], _remote_addr: Option<IpEndpoint>) -> SockResult<usize> {
         if self.state() == SocketState::Connecting {
             return Err(SysError::EAGAIN);
         }else if self.state() != SocketState::Connected {

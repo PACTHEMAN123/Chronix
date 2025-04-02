@@ -23,7 +23,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
         return Err(SysError::EBADF);
     }
     if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
-        // info!("write to file");
+        //info!("write to file");
         if !file.writable() {
             return Err(SysError::EBADF);
         }

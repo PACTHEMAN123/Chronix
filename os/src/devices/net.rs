@@ -2,9 +2,9 @@ use core::{panic, ptr::NonNull};
 
 use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::info;
-use smoltcp::{phy::{Device, DeviceCapabilities, RxToken, TxToken}, time::Instant};
+use smoltcp::{phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken}, time::Instant};
 
-use crate::sync::{mutex::SpinLock, UPSafeCell};
+use crate::{net::modify_tcp_packet, sync::{mutex::SpinLock, UPSafeCell}};
 
 use super::{DevError, NetBufPtrTrait, NetDevice};
 /// NET_BUF_LEN
@@ -197,10 +197,17 @@ impl <'a> RxToken for NetRxToken<'a> {
         where
             F: FnOnce(&[u8]) -> R 
     {
+        // need preprocess
         let mut rx_buf = self.1;
         let result = f(rx_buf.packet_mut());
         self.0.exclusive_access().recycle_rx_buffer(rx_buf).unwrap();
         result
+    }
+
+    fn preprocess(&self, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+        let medium = self.0.exclusive_access().capabilities().medium;
+        let is_ethernet = medium==Medium::Ethernet;
+        modify_tcp_packet(self.1.packet(),sockets,is_ethernet).ok();
     }
 }
 

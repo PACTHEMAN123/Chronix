@@ -140,8 +140,8 @@ pub fn pipe(pipe_fd: &mut [usize]) -> isize {
 pub fn read(fd: usize, buf: &mut [u8]) -> isize {
     sys_read(fd, buf)
 }
-pub fn write(fd: usize, buf: &[u8]) -> isize {
-    sys_write(fd, buf)
+pub fn write(fd: usize, buf: &[u8], len: usize) -> isize {
+    sys_write(fd, buf, len)
 }
 pub fn exit(exit_code: i32) -> ! {
     sys_exit(exit_code);

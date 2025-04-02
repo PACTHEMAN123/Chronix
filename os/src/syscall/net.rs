@@ -4,7 +4,6 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
-use smoltcp::socket::dhcpv4::Socket;
 
 use crate::{fs::OpenFlags, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, SaFamily}, signal::SigSet, task::current_task, utils::yield_now};
 
@@ -188,7 +187,6 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         })
     });
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
-    yield_now().await;
     Ok(0)
 }
 
@@ -223,7 +221,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
     let accept_sk = socket_file.sk.accept().await?;
     task.set_running();
-
+    log::info!("get accept correct");
     let peer_addr_endpoint = accept_sk.peer_addr().unwrap();
     let peer_addr = SockAddr::from_endpoint(peer_addr_endpoint);
     log::info!("Accept a connection from {:?}", peer_addr);
