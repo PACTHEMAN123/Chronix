@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::{panic, ptr::NonNull};
 
 use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::info;
@@ -6,7 +6,7 @@ use smoltcp::{phy::{Device, DeviceCapabilities, RxToken, TxToken}, time::Instant
 
 use crate::sync::{mutex::SpinLock, UPSafeCell};
 
-use super::{NetBufPtrTrait, NetDevice};
+use super::{DevError, NetBufPtrTrait, NetDevice};
 /// NET_BUF_LEN
 pub const NET_BUF_LEN: usize = 1526;
 const MIN_BUFFER_LEN: usize = 1526;
@@ -199,7 +199,7 @@ impl <'a> RxToken for NetRxToken<'a> {
     {
         let mut rx_buf = self.1;
         let result = f(rx_buf.packet_mut());
-        self.0.exclusive_access().recycle_rx_buffer(rx_buf);
+        self.0.exclusive_access().recycle_rx_buffer(rx_buf).unwrap();
         result
     }
 }
@@ -210,9 +210,9 @@ impl <'a> TxToken for NetTxToken<'a> {
         where
             F: FnOnce(&mut [u8]) -> R 
     {
-        let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len);
+        let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len).unwrap();
         let result = f(tx_buf.packet_mut());
-        self.0.exclusive_access().transmit(tx_buf);
+        self.0.exclusive_access().transmit(tx_buf).unwrap();
         result
     }
 }
@@ -226,13 +226,31 @@ impl Device for NetDeviceWrapper {
     }
     fn receive(&mut self, _: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let inner = self.inner.exclusive_access();
-        inner.recycle_tx_buffer();
-        let rx_buf = inner.receive();
+        if let Err(e) = inner.recycle_tx_buffer(){
+            log::warn!("recycle_tx_buffers failed: {:?}", e);
+            return None;
+        };
+        let rx_buf = match inner.receive(){
+            Ok(buf) => buf,
+            Err(e) => {
+                if !matches!(e, DevError::Again){
+                    log::warn!("received failed!, Error: {:?}",e);
+                }
+                return None;
+            }
+        };
         Some((NetRxToken(&self.inner, rx_buf), NetTxToken(&self.inner)))
     }
     fn transmit(&mut self, _: Instant) -> Option<Self::TxToken<'_>> {
         let inner = self.inner.exclusive_access();
-        inner.recycle_tx_buffer();
-        Some(NetTxToken(&self.inner))
+        match inner.recycle_tx_buffer(){
+            Err(e) => {
+                log::warn!("[transmit] recycle buffer failed: {:?}",e );
+                return None;    
+            }
+            Ok(_) => {
+                Some(NetTxToken(&self.inner))
+            },
+        }
     }
 }

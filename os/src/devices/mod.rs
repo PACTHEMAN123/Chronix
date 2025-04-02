@@ -50,6 +50,30 @@ pub struct DeviceMeta {
     pub dtype: DeviceType,
 }
 
+/// The error type for device operation failures.
+#[derive(Debug)]
+pub enum DevError {
+    /// An entity already exists.
+    AlreadyExists,
+    /// Try again, for non-blocking APIs.
+    Again,
+    /// Bad internal state.
+    BadState,
+    /// Invalid parameter/argument.
+    InvalidParam,
+    /// Input/output error.
+    Io,
+    /// Not enough space/cannot allocate memory (DMA).
+    NoMemory,
+    /// Device or resource is busy.
+    ResourceBusy,
+    /// This operation is unsupported or unimplemented.
+    Unsupported,
+}
+
+/// A specialized `Result` type for device operations.
+pub type DevResult<T = ()> = Result<T, DevError>;
+
 /// Trait for block devices
 /// which reads and writes data in the unit of blocks
 pub trait BlockDevice: Send + Sync + Any {
@@ -64,22 +88,21 @@ pub trait BlockDevice: Send + Sync + Any {
     fn write_block(&self, block_id: usize, buf: &[u8]);
 }
 
-
 pub trait NetDevice: Send + Sync + Any {
     // ! smoltcp demands that the device must have below trait
     ///Get a description of device capabilities.
     fn capabilities(&self) -> DeviceCapabilities;
     /// Construct a token pair consisting of one receive token and one transmit token.
-    fn receive(&mut self) ->  Box<dyn NetBufPtrTrait>;
+    fn receive(&mut self) ->  DevResult<Box<dyn NetBufPtrTrait>>;
     /// Transmits a packet in the buffer to the network, without blocking,
-    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>); 
+    fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) -> DevResult; 
     // ! method in implementing a network device concering buffer management
     /// allocate a tx buffer
-    fn alloc_tx_buffer(&mut self, size: usize) -> Box<dyn NetBufPtrTrait>;
+    fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<Box<dyn NetBufPtrTrait>>;
     /// recycle buf when rx complete
-    fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>);
+    fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) -> DevResult;
     /// recycle used tx buffer
-    fn recycle_tx_buffer(&mut self);
+    fn recycle_tx_buffer(&mut self) -> DevResult;
     #[allow(dead_code)]
     /// ethernet address of the NIC
     fn mac_address(&self) -> EthernetAddress;

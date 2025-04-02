@@ -16,6 +16,11 @@ const SYSCALL_SIGPROCMASK: usize = 135;
 const SYSCALL_SIGRETURN: usize = 139;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
+const SYSCALL_SOCKET: usize = 198;
+const SYSCALL_BIND: usize = 200;
+const SYSCALL_LISTEN: usize = 201;
+const SYSCALL_ACCEPT: usize = 202;
+const SYSCALL_CONNECT: usize = 203;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
@@ -158,4 +163,24 @@ pub fn sys_sigreturn() -> isize {
 
 pub fn sys_brk(new_brk: usize) -> isize {
     syscall(SYSCALL_BRK, [new_brk, 0, 0])
+}
+
+pub fn sys_socket(domain: usize, sock_type: usize, protocal: usize) -> isize {
+    syscall(SYSCALL_SOCKET, [domain,sock_type,protocal])
+}
+
+pub fn sys_bind(fd: usize, addr: *const u8, addr_len: u32) -> isize {
+    syscall(SYSCALL_BIND, [fd, addr as usize, addr_len as usize])
+}
+
+pub fn sys_listen(fd: usize, backlog: i32) -> isize {
+    syscall(SYSCALL_LISTEN, [fd, backlog as usize, 0])
+}
+
+pub fn sys_connect(fd: usize, addr: *const u8, addr_len: u32) -> isize {
+    syscall(SYSCALL_CONNECT, [fd, addr as usize, addr_len as usize])
+}
+
+pub fn sys_accept(fd: usize, addr: *mut u8, addr_len: *mut u32) -> isize {
+    syscall(SYSCALL_ACCEPT, [fd, addr as usize, addr_len as usize])
 }

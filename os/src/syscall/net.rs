@@ -1,11 +1,12 @@
 use core::{any::Any, panic};
 
 use alloc::sync::Arc;
-use hal::addr;
+use fatfs::info;
+use hal::{addr, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::socket::dhcpv4::Socket;
 
-use crate::{fs::OpenFlags, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, SaFamily}, signal::SigSet, task::current_task};
+use crate::{fs::OpenFlags, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, SaFamily}, signal::SigSet, task::current_task, utils::yield_now};
 
 use super::{SysError, SysResult};
 
@@ -115,6 +116,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             })
         },
     }?;
+    log::info!("[sys_bind] local_addr's port is: {}",unsafe {
+        local_addr.ipv4.sin_port
+    });
     let socket_file = task.with_fd_table(|table| {
         table[fd]
         .clone()
@@ -122,7 +126,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .downcast_arc::<socket::Socket>()}).unwrap_or_else(|_| {
         panic!("Failed to downcast to socket::Socket")
     });
-    socket_file.sk.bind(fd, local_addr.into_listen_endpoint())?;
+    socket_file.sk.bind(fd, local_addr)?;
     Ok(0)
 }
 
@@ -170,6 +174,10 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             })
         }
     }?;
+    log::info!("[sys_connect] remote_addr's port is: {}",
+        unsafe {
+            remote_addr.ipv4.sin_port
+    });
     let socket_file = task.with_fd_table(|table| {
         table[fd]
         .clone()
@@ -180,6 +188,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         })
     });
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
+    yield_now().await;
     Ok(0)
 }
 

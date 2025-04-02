@@ -13,6 +13,7 @@ extern crate bitflags;
 
 use alloc::{ffi::CString, vec::Vec};
 use buddy_system_allocator::LockedHeap;
+use riscv::addr;
 use syscall::*;
 
 const USER_HEAP_SIZE: usize = 32768;
@@ -323,4 +324,32 @@ pub fn sigreturn() -> isize {
 
 pub fn brk(new_brk: usize) -> isize {
     sys_brk(new_brk)
+}
+
+#[repr(C)]
+pub struct SockaddrIn {
+    pub sin_family: u16,
+    pub sin_port: u16,
+    pub sin_addr: u32,
+    pub sin_zero: [u8; 8],
+}
+
+pub fn socket(domain: i32, sock_type: i32, protocol: i32) -> isize {
+    sys_socket(domain as usize, sock_type as usize, protocol as usize)
+}
+
+pub fn bind(fd: usize, addr: *const SockaddrIn, addr_len: u32) -> isize {
+    sys_bind(fd, addr as *const _ as *const u8, addr_len)
+}
+
+pub fn listen (fd: usize, backlog: i32) -> isize {
+    sys_listen(fd, backlog )
+}
+
+pub fn accept (fd: usize, addr: *mut SockaddrIn, addr_len: *mut u32) -> isize {
+    sys_accept(fd, addr as *mut _ as *mut u8, addr_len)
+}
+
+pub fn connect(fd: usize, addr: *const SockaddrIn, addr_len: u32) -> isize {
+    sys_connect(fd, addr as *const _ as *const u8, addr_len)
 }
