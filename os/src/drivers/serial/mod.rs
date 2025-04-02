@@ -17,7 +17,7 @@ lazy_static! {
     pub static ref UART0: Arc<dyn CharDevice> = {
         let size = UART_MMIO_SIZE;
         let base_paddr = UART_MMIO_BASE_PADDR;
-        let base_vaddr = base_paddr + Constant::KERNEL_ADDR_SPACE.start;
+        let base_vaddr = base_paddr | Constant::KERNEL_ADDR_SPACE.start;
         let irq_no = UART_IRQ_NUM;
         let clk_feq = UART_CLK_FEQ;
         let baud_rate = UART_BAUD_RATE;
@@ -32,7 +32,7 @@ lazy_static! {
             reg_shift,
             false,
         )};
-
+        log::info!("mapping uart mmio paddr {:x} to vaddr {:x}", base_paddr, base_vaddr);
         Arc::new(Serial::new(base_paddr, size, irq_no, Box::new(uart)))
     };
 }

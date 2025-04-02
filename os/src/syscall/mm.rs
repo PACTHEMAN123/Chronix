@@ -73,6 +73,7 @@ pub fn sys_mmap(
     let flags = MmapFlags::from_bits_truncate(flags);
     let prot = MmapProt::from_bits_truncate(prot);
     let perm = MapPerm::from(prot);
+    let task = current_task().unwrap().clone();
 
     if length == 0 {
         return Err(SysError::EINVAL);
@@ -83,10 +84,10 @@ pub fn sys_mmap(
     }
 
     if flags.contains(MmapFlags::MAP_FIXED) {
-        panic!("not support fix map");
+        task.with_mut_vm_space(|m| m.unmap(addr, length))?;
     }
 
-    let task = current_task().unwrap().clone();
+    
 
     match flags.intersection(MmapFlags::MAP_TYPE_MASK) {
         MmapFlags::MAP_SHARED => {

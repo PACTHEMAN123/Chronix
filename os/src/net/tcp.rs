@@ -629,6 +629,7 @@ impl TcpSocket {
         log::info!("[accept]: local_port is {}", local_port);
         self.block_on(|| {
             let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
+            info!("TCP socket accepted a new connection {}", remote_endpoint);
             Ok(TcpSocket::new_v4_connected(handle, local_endpoint, remote_endpoint))
         }).await
     }

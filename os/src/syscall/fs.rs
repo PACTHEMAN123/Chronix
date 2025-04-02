@@ -1,11 +1,11 @@
 //! File and filesystem-related syscalls
-use alloc::string::ToString;
+use alloc::{string::ToString, sync::Arc};
 use hal::addr::VirtAddr;
 use log::{info, warn};
 use virtio_drivers::PAGE_SIZE;
 use crate::{drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
-}, processor::context::SumGuard};
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+}, processor::context::SumGuard, task::task::TaskControlBlock};
 use crate::utils::{
     path::*,
     string::*,
@@ -149,50 +149,33 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> SysResult {
 /// If pathname is absolute, then dirfd is ignored.
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> SysResult {
     let flags = OpenFlags::from_bits(flags).unwrap();
-    let task = current_task().unwrap();
-    if let Some(path) = user_path_to_string(pathname) {
-        if path.starts_with("/") {
-            // absolute path, ignore the dirfd
-            let mut ret: isize = -1;
-            if let Some(file) = open_file(path.as_str(), flags) {
-                task.with_mut_fd_table(|table| {
-                    let fd = task.alloc_fd();
-                    table[fd] = Some(file);
-                    ret = fd as isize;
-                });
-            }
-            return Ok(ret);
-        } else {
-            let fpath = if dirfd == AT_FDCWD {
-                //info!("[sys_openat]: using current working dir");
-                let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
-            } else {
-                // lookup in the current task's fd table
-                // the inode fd points to should be a dir
-                let task = current_task().unwrap();
-                if let Some(dirfile) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
-                    let dentry = dirfile.dentry().unwrap();
-                    rel_path_to_abs(&dentry.path(), &path).unwrap()
-                } else {
-                    info!("[sys_openat]: the dirfd not exist");
-                    return Err(SysError::EBADF);
-                }
-            };
+    let task = current_task().unwrap().clone();
 
-            let mut ret: isize = -1;
-            info!("fpath: {}", fpath);
-            if let Some(file) = open_file(fpath.as_str(), flags) {
-                let fd = task.alloc_fd();
-                task.with_mut_fd_table(|table| {
-                    table[fd] = Some(file);
-                    ret = fd as isize;
-                });
-            } else {
-                info!("[sys_openat]: {} not found!", fpath);
+    if let Some(path) = user_path_to_string(pathname) {
+        let dentry = at_helper(task.clone(), dirfd, pathname)?;
+        if flags.contains(OpenFlags::CREATE) {
+            // inode not exist, create it as a regular file
+            if flags.contains(OpenFlags::EXCL) && dentry.state() != DentryState::NEGATIVE {
+                return Err(SysError::EEXIST);
             }
-            return Ok(ret);
+            let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
+            let name = abs_path_to_name(&path).unwrap();
+            info!("name: {}", name);
+            let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
+            dentry.set_inode(new_inode);
+            dentry.set_state(DentryState::USED);
         }
+        if dentry.state() == DentryState::NEGATIVE {
+            return Err(SysError::ENOENT);
+        }
+        let inode = dentry.inode().unwrap();
+        if flags.contains(OpenFlags::DIRECTORY) && inode.inner().mode.get_type() != InodeMode::DIR {
+            return Err(SysError::ENOTDIR);
+        }
+        let file = dentry.open(flags).unwrap();
+        let fd = task.alloc_fd();
+        task.with_mut_fd_table(|table|table[fd] = Some(file));
+        return Ok(fd as isize)
     } else {
         info!("[sys_openat]: pathname is empty!");
         return Err(SysError::ENOENT);
@@ -209,38 +192,41 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 /// If pathname is absolute, then dirfd is ignored.
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
     if let Some(path) = user_path_to_string(pathname) {
-        if path.starts_with("/") {
-            // absolute path, ignore the dirfd
-            let dentry = global_find_dentry(&path);
-            let parent = dentry.parent().unwrap();
-            let parent_inode = parent.inode().unwrap();
-            let name = abs_path_to_name(&path).unwrap();
-            let new_inode = parent_inode.create(&name, InodeMode::DIR).unwrap();
-            dentry.set_inode(new_inode);
-            dentry.set_state(dentry::DentryState::USED);
-            return Ok(0);
-        } else {
-            if dirfd == AT_FDCWD {
-                let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                cw_dentry.inode().unwrap().create(&path, InodeMode::DIR);
-            } else {
-                // lookup in the current task's fd table
-                let task = current_task().unwrap();
-                if let Some(file) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
-                    let inode = file.inode().unwrap();
-                    inode.create(&path, InodeMode::DIR);
-                    // todo: use dentry, create a new dentry and insert iode
-                } else {
-                    info!("[sys_mkdirat]: the dirfd not exist");
-                    return Err(SysError::EBADF);
-                }
-            }
+        let task = current_task().unwrap().clone();
+        let dentry = at_helper(task, dirfd, pathname)?;
+        if dentry.state() != DentryState::NEGATIVE {
+            return Err(SysError::EEXIST);
         }
-        return Ok(0);
+        let parent = dentry.parent().unwrap();
+        let name = abs_path_to_name(&path).unwrap();
+        let new_inode = parent.inode().unwrap().create(&name, InodeMode::DIR).unwrap();
+        dentry.set_inode(new_inode);
+        dentry.set_state(DentryState::USED);
     } else {
-        info!("[sys_mkdirat]: pathname is empty!");
+        warn!("[sys_mkdirat]: pathname is empty!");
         return Err(SysError::ENOENT);
     }
+    Ok(0)
+}
+
+/// syscall: fstatat
+pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
+    let _sum_guard = SumGuard::new();
+    const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
+    if flags == AT_SYMLINK_NOFOLLOW {
+        panic!("[sys_fstatat]: not support for symlink now");
+    }
+    let task = current_task().unwrap().clone();
+    let dentry = at_helper(task.clone(), dirfd, pathname)?;
+    if dentry.state() == DentryState::NEGATIVE {
+        return Err(SysError::EBADF);
+    }
+    let stat = dentry.inode().unwrap().getattr();
+    let stat_ptr = stat_buf as *mut Kstat;
+    unsafe {
+        *stat_ptr = stat;
+    }
+    Ok(0)
 }
 
 /// chdir() changes the current working directory of the calling
@@ -311,82 +297,18 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
 }
 
 /// syscall statx
-pub fn sys_statx(dirfd: isize, path: *const u8, _flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
+pub fn sys_statx(dirfd: isize, pathname: *const u8, _flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
     let _sum_guard = SumGuard::new();
     let mask = XstatMask::from_bits_truncate(mask);
-
-    match user_path_to_string(path) {
-        Some(path) => {
-            if path.starts_with('/') {
-                let dentry = global_find_dentry(&path);
-                let inode = dentry.inode().unwrap();
-                let statx = inode.getxattr(mask);
-                let statx_ptr = statx_buf.0 as *mut Xstat;
-                unsafe { statx_ptr.write(statx); }
-                Ok(0)
-            } else {
-                if dirfd == AT_FDCWD {
-                    let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                    let dentry;
-                    if path.is_empty() {
-                        dentry = cw_dentry;
-                    } else {
-                        dentry = cw_dentry.find(&path).ok_or(SysError::EBADF)?;
-                    }
-                    let inode = dentry.inode().unwrap();
-                    let statx = inode.getxattr(mask);
-                    let statx_ptr = statx_buf.0 as *mut Xstat;
-                    unsafe { statx_ptr.write(statx); }
-                    return Ok(0)
-                } else {
-                    // lookup in the current task's fd table
-                    let task = current_task().unwrap();
-                    let file = match task
-                        .with_fd_table(|table| table[dirfd as usize].clone()) 
-                    {
-                        Some(file) => file,
-                        None => {
-                            info!("[sys_statx]: the dirfd not exist");
-                            return Err(SysError::EBADF)
-                        }
-                    };
-                    let inode = file.inode().unwrap();
-                    let statx = inode.getxattr(mask);
-                    let statx_ptr = statx_buf.0 as *mut Xstat;
-                    unsafe { statx_ptr.write(statx); }
-                    return Ok(0)
-                }
-            }
-        }
-        None => {
-            if dirfd == AT_FDCWD {
-                let dentry = current_task().unwrap().with_cwd(|d|d.clone());
-                let inode = dentry.inode().unwrap();
-                let statx = inode.getxattr(mask);
-                let statx_ptr = statx_buf.0 as *mut Xstat;
-                unsafe { statx_ptr.write(statx); }
-                return Ok(0)
-            } else {
-                // lookup in the current task's fd table
-                let task = current_task().unwrap();
-                let file = match task
-                    .with_fd_table(|table| table[dirfd as usize].clone()) 
-                {
-                    Some(file) => file,
-                    None => {
-                        info!("[sys_statx]: the dirfd not exist");
-                        return Err(SysError::EBADF)
-                    }
-                };
-                let inode = file.inode().unwrap();
-                let statx = inode.getxattr(mask);
-                let statx_ptr = statx_buf.0 as *mut Xstat;
-                unsafe { statx_ptr.write(statx); }
-                return Ok(0)
-            }
-        }
+    let task = current_task().unwrap().clone();
+    let dentry = at_helper(task, dirfd, pathname)?;
+    let inode = dentry.inode().unwrap();
+    let statx_ptr = statx_buf.0 as *mut Xstat;
+    let statx = inode.getxattr(mask);
+    unsafe {
+        statx_ptr.write(statx);
     }
-
+    Ok(0)
 }
 
 /// syscall uname
@@ -481,29 +403,9 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 /// is removed but processes which have the object open may continue to use it.
 /// (todo): now only remove, but not check for remaining referred.
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
     let path = user_path_to_string(pathname).unwrap();
-    let dentry = if path.starts_with("/") {
-        global_find_dentry(&path)
-    } else {
-        let fpath = if dirfd == AT_FDCWD {
-            //info!("[sys_openat]: using current working dir");
-            let cw_dentry = current_task().unwrap().with_cwd(|d|d.clone());
-            rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
-        } else {
-            // lookup in the current task's fd table
-            // the inode fd points to should be a dir
-            let task = current_task().unwrap();
-            if let Some(dirfile) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
-                let dentry = dirfile.dentry().unwrap();
-                rel_path_to_abs(&dentry.path(), &path).unwrap()
-            } else {
-                info!("[sys_unlinkat]: the dirfd not exist");
-                return Err(SysError::EBADF);
-            }
-        };
-        //info!("[sys_unlinkat]: fpath: {}", fpath);
-        global_find_dentry(&fpath)
-    };
+    let dentry = at_helper(task, dirfd, pathname)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
@@ -550,4 +452,66 @@ pub fn sys_mount(
 /// fake unmount
 pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
     Ok(0)
+}
+
+/// syscall: ioctl
+pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
+        let _sum_guard = SumGuard::new();
+        file.ioctl(cmd, arg)
+    } else {
+        return Err(SysError::EBADF);
+    }
+}
+
+/// at helper:
+/// since many "xxxat" type file system syscalls will use the same logic of getting dentry,
+/// we need to write a helper function to reduce code duplication
+/// warning: for supporting more "at" syscall, emptry path is allowed here,
+/// caller should check the path before calling at_helper if it doesnt expect empty path
+pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8) -> Result<Arc<dyn Dentry>, SysError> {
+    let _sum_guard = SumGuard::new();
+    match user_path_to_string(pathname) {
+        Some(path) => {
+            if path.starts_with("/") {
+                Ok(global_find_dentry(&path))
+            } else {
+                // getting full path (absolute path)
+                let fpath = if dirfd == AT_FDCWD {
+                    // look up in the current dentry
+                    let cw_dentry = task.with_cwd(|d| d.clone());
+                    rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
+                } else {
+                    // look up in the current task's fd table
+                    // which the inode fd points to should be a dir
+                    if let Some(dir) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
+                        let dentry = dir.dentry().unwrap();
+                        rel_path_to_abs(&dentry.path(), &path).unwrap()
+                    } else {
+                        info!("[at_helper]: the dirfd not exist!");
+                        return Err(SysError::EBADF)
+                    }
+                };
+                Ok(global_find_dentry(&fpath))
+            }
+        }
+        None => {
+            warn!("[at_helper]: using empty path!");
+            if dirfd == AT_FDCWD {
+                Ok(task.with_cwd(|d| d.clone()))
+            } else {
+                let file = match task
+                    .with_fd_table(|table| table[dirfd as usize].clone()) 
+                {
+                    Some(file) => file,
+                    None => {
+                        info!("[at_helper]: the dirfd not exist");
+                        return Err(SysError::EBADF)
+                    }
+                };
+                Ok(file.dentry().unwrap())
+            }
+        }
+    } 
 }

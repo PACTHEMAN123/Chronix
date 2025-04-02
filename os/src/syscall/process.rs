@@ -211,11 +211,10 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
     }
     // open file
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
+        // let all_data = app_inode.read_all();
         let task = current_task().unwrap();
         
-        // let argc = args_vec.len();
-        task.exec(all_data.as_slice(), argv_vec, envp_vec);
+        task.exec_from_file(app_inode, argv_vec, envp_vec);
         
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later

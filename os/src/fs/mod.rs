@@ -10,6 +10,7 @@ pub mod vfs;
 pub mod pipe;
 pub mod page;
 pub mod devfs;
+pub mod utils;
 
 use ext4::Ext4FSType;
 use fatfs::FatType;
