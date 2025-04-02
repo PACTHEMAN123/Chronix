@@ -19,6 +19,7 @@ use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{InodeInner, Inode};
 use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::sync::UPSafeCell;
+use crate::utils::rel_path_to_abs;
 
 use lwext4_rust::bindings::{
     O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
@@ -57,6 +58,7 @@ impl Ext4Inode {
         }
     }
 
+    #[allow(unused)]
     fn path_deal_with(&self, path: &str) -> String {
         if path.starts_with('/') {
             warn!("path_deal_with: {}", path);
@@ -97,9 +99,12 @@ impl Inode for Ext4Inode {
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
         let page_cache = self.cache();
-        let size = self.file.exclusive_access().file_size() as usize;
+        
+        let file = self.file.exclusive_access();
+        let _r = file.file_open(&file.get_path().to_str().unwrap(), O_RDONLY);
+        let size = file.file_size() as usize;
         if offset >= size {
-            info!("[Ext4 INode]: read_page_at: reach EOF");
+            info!("[Ext4 INode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
 
@@ -305,9 +310,9 @@ impl Inode for Ext4Inode {
         let ty: InodeTypes = mode.into();
         let file = self.file.exclusive_access();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
-        let fpath = parent_path + "/" + name;
+        let fpath = rel_path_to_abs(&parent_path, name).unwrap();
         info!("create {:?} on Ext4fs: {}", ty, fpath);
-        let fpath = self.path_deal_with(&fpath);
+        //let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
         if fpath.is_empty() {
             info!("given path is empty");
@@ -351,7 +356,6 @@ impl Inode for Ext4Inode {
         let path = file.get_path();
         let _r = file.file_open(&path.to_str().unwrap(), O_RDONLY);
         let size = file.file_size() as usize;
-        info!("file size: {}", size);
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -457,19 +461,24 @@ impl Inode for Ext4Inode {
         let ty = InodeTypes::from(mode);
         let file = self.file.exclusive_access();
         let parent_path = String::from(file.get_path().to_str().unwrap());
-        let fpath = parent_path + "/" + name;
+        let fpath = rel_path_to_abs(&parent_path, name).unwrap();
 
         info!("remove ext4fs: {}", fpath);
-        let fpath = self.path_deal_with(&fpath);
+        //let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
 
         assert!(!fpath.is_empty()); // already check at `root.rs`
 
-        if file.check_inode_exist(fpath, ty) {
-            // Recursive directory remove
-            file.dir_rm(fpath)
-        } else {
-            file.file_remove(fpath)
+        match ty {
+            InodeTypes::EXT4_DE_REG_FILE => {
+                file.file_remove(fpath)
+            }
+            InodeTypes::EXT4_DE_DIR => {
+                file.dir_rm(fpath)
+            }
+            _ => {
+                panic!("not support");
+            }
         }
     }
 
@@ -510,6 +519,10 @@ impl InodeMode {
             _ => InodeMode::TYPE_MASK,
         };
         file_mode | perm_mode
+    }
+
+    pub fn get_type(self) -> Self {
+        self.intersection(InodeMode::TYPE_MASK)
     }
 }
 

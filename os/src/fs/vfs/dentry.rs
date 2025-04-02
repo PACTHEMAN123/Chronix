@@ -185,7 +185,6 @@ impl dyn Dentry {
                     self.superblock(),
                     Some(current_dentry)
                 );
-                neg_dentry.set_inode(current_inode);
                 neg_dentry.set_state(DentryState::NEGATIVE);
                 //info!("[DCACHE]: insert key: {}", neg_dentry.path());
                 DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());

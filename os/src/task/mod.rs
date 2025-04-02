@@ -86,8 +86,9 @@ lazy_static! {
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         //info!("trying to open initproc");
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
-        let v = inode.read_all();
-        TaskControlBlock::new(v.as_slice())
+        TaskControlBlock::new_from_file(inode)
+        // let v = inode.read_all();
+        // TaskControlBlock::new(v.as_slice())
     });
 }
 ///Add init process to the manager

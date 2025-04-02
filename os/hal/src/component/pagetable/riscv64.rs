@@ -320,8 +320,12 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
             None => panic!("vpn: {:#x} has not mapped", vpn.0)
         }
     }
+    
+    unsafe fn enable_high(&self) {
+        asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
+    }
 
-    unsafe fn enable(&self) {
+    unsafe fn enable_low(&self) {
         asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
     }
     
