@@ -576,7 +576,7 @@ impl UserVmArea {
                                 *pte = PageTableEntry::new(page.ppn(), self.map_perm, true);
                                 pte.set_flags(pte.flags() | PTEFlags::D);
                                 self.frames.insert(vpn, StrongArc::clone(&page.frame()));   
-                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             } else {
                                 // private file mapping
                                 let page = inode.read_page_at(offset_aligned).unwrap();
@@ -601,7 +601,7 @@ impl UserVmArea {
                                     *pte = PageTableEntry::new(page.ppn(), new_perm, true);
                                     pte.set_flags(pte.flags() | PTEFlags::D);
                                 }
-                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             }
                         } else if self.mmap_flags.contains(MmapFlags::MAP_PRIVATE) {
                             if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
@@ -615,7 +615,7 @@ impl UserVmArea {
                                 *pte = PageTableEntry::new(new_frame.range_ppn.start, self.map_perm, true);
                                 pte.set_flags(pte.flags() | PTEFlags::D);
                                 self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
-                                unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             }
                         }
                         Ok(())
