@@ -126,7 +126,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
-        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        _ => { 
+            log::warn!("Unsupported syscall_id: {}", syscall_id);
+            Err(SysError::ENOSYS)
+        }
     };
     match result {
         Ok(ret ) => {

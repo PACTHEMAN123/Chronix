@@ -1,12 +1,13 @@
-use core::{cmp, ops::Range};
+use core::{cmp, ops::{Deref, Range}};
 
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
-use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, util::smart_point::StrongArc};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 use log::{info, Level};
 use range_map::RangeMap;
+use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::vfs::File, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
+use crate::{config::PAGE_SIZE, fs::vfs::{inode::FileReader, File}, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
 
 use crate::syscall::{mm::MmapFlags, SysResult};
 
@@ -15,7 +16,7 @@ use super::{KernVmArea, KernVmSpaceHal, PageFaultAccessType, UserVmArea, UserVmA
 #[allow(missing_docs, unused)]
 pub struct KernVmSpace {
     page_table: PageTable,
-    areas: Vec<KernVmArea>,
+    areas: RangeMap<VirtAddr, KernVmArea>,
 }
 
 #[allow(missing_docs, unused)]
@@ -51,8 +52,16 @@ impl KernVmSpaceHal for KernVmSpace {
 
         let mut ret = Self {
             page_table: PageTable::new_in(0, FrameAllocator),
-            areas: Vec::new(),
+            areas: RangeMap::new(),
         };
+
+        let ptes = ret.page_table.root_ppn.start_addr().get_mut::<[PageTableEntry; Constant::PTES_PER_PAGE]>();
+        const HUGE_PAGES: usize = Constant::KERNEL_VM_SIZE / (Constant::PAGE_SIZE * 512 * 512);
+        const VM_START: usize = (Constant::KERNEL_VM_BOTTOM & ((1 << Constant::VA_WIDTH)-1)) / (Constant::PAGE_SIZE * 512 * 512);
+        let ppn = FrameAllocator.alloc(HUGE_PAGES).unwrap().start;
+        for (i, pte_i) in (VM_START..VM_START+HUGE_PAGES).enumerate() {
+            ptes[pte_i] = PageTableEntry::new(ppn+i, MapPerm::empty(), true);
+        }
 
         ret.push_area(KernVmArea::new(
                 (stext as usize).into()..(etext as usize).into(), 
@@ -128,7 +137,6 @@ impl KernVmSpaceHal for KernVmSpace {
                 None
             );
         }
-        
         ret
     }
     
@@ -137,7 +145,7 @@ impl KernVmSpaceHal for KernVmSpace {
         if let Some(data) = data{
             area.copy_data(&mut self.page_table, data);
         }
-        self.areas.push(area);
+        let _ = self.areas.try_insert(area.range_va.clone(), area);
     }
     
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>{
@@ -146,6 +154,48 @@ impl KernVmSpaceHal for KernVmSpace {
     
     fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
         self.page_table.translate_va(va)
+    }
+    
+    fn map_vm_area(&mut self, frames: Vec<StrongArc<crate::mm::FrameTracker, SlabAllocator>>, map_perm: MapPerm) -> Option<Range<VirtPageNum>> {
+        let range_va = self.areas.find_free_range(
+            Constant::KERNEL_VM_BOTTOM.into()..Constant::KERNEL_VM_TOP.into(), 
+            frames.len() << Constant::PAGE_SIZE_BITS
+        )?;
+        assert!(range_va.start.0 % Constant::PAGE_SIZE == 0);
+        let range_vpn = range_va.start.floor()..range_va.end.ceil();
+
+        let mut vma = KernVmArea::new(range_va, KernVmAreaType::VirtMemory, map_perm);
+
+        range_vpn.clone()
+            .enumerate()
+            .map(|(i, vpn)| (vpn, &frames[i]) )
+            .for_each(|(vpn, frame)| {
+                vma.frames.insert(vpn, frame.clone());
+            });
+
+        self.push_area(vma, None);
+            
+        Some(range_vpn)
+    }
+    
+    fn unmap_vm_area(&mut self, range_vpn: Range<VirtPageNum>) {
+        let mut left: KernVmArea;
+        let right: KernVmArea;
+        if let Some(area) = self.areas.get_mut(range_vpn.start.start_addr()) {
+            let range_va = area.range_va.clone();
+            left = self.areas.force_remove_one(range_va);
+            let mut mid = left.split_off(range_vpn.start);
+            mid.unmap(&mut self.page_table);
+            right = mid.split_off(range_vpn.end);
+        } else {
+            return;
+        }
+        if !left.range_va.is_empty() {
+            let _ = self.areas.try_insert(left.range_va.clone(), left);
+        }
+        if !right.range_va.is_empty() {
+            let _ = self.areas.try_insert(right.range_va.clone(), right);
+        }
     }
 
 }
@@ -241,7 +291,7 @@ impl UserVmSpaceHal for UserVmSpace {
                     map_perm,
                 );
                 max_end_vpn = map_area.range_vpn().end;
-                log::debug!("{:?}", &elf.input[ph.offset() as usize..ph.offset() as usize + 4]);
+                log::debug!("{:?}", &elf.input.read(ph.offset() as usize, 4));
                 let elf_offset_start = PhysAddr::from(ph.offset() as usize).floor().start_addr().0;
                 let elf_offset_end = (ph.offset() + ph.file_size()) as usize;
                 log::debug!("{:x} aligned to {:x}, now pushing ({:x}, {:x})", ph.offset() as usize, elf_offset_start, elf_offset_start, elf_offset_end);
@@ -250,6 +300,122 @@ impl UserVmSpaceHal for UserVmSpace {
                 ret.push_area(
                     map_area,
                     Some(&elf.input[elf_offset_start..elf_offset_end]),
+                );
+            }
+        };
+
+        let ph_head_addr = header_va + elf.header.pt2.ph_offset() as usize;
+        auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
+        auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
+        
+        // todo: should check if a elf file is dynamic link
+        auxv.push(AuxHeader::new(AT_BASE, 0));
+
+        // map user stack with U flags
+        let max_end_va: VirtAddr = max_end_vpn.start_addr();
+        let user_heap_bottom: usize = max_end_va.0;
+        let user_heap_top: usize = max_end_va.0 + Constant::PAGE_SIZE; // RangeMap cannot support empty range
+        // used in brk
+        log::debug!("user_heap_bottom: {:#x}", user_heap_bottom);
+        ret.heap_bottom_va = user_heap_bottom.into();
+        ret.push_area(
+            UserVmArea::new(
+                user_heap_bottom.into()..user_heap_top.into(),
+                UserVmAreaType::Heap,
+                MapPerm::R | MapPerm::W | MapPerm::U,
+            ),
+            None,
+        );
+        let user_stack_bottom = Constant::USER_STACK_BOTTOM;
+        let user_stack_top = Constant::USER_STACK_TOP;
+        log::debug!("user_stack_bottom: {:#x}, user_stack_top: {:#x}", user_stack_bottom, user_stack_top);
+        ret.push_area(
+            UserVmArea::new(
+                user_stack_bottom.into()..user_stack_top.into(),
+                UserVmAreaType::Stack,
+                MapPerm::R | MapPerm::W | MapPerm::U,
+            ),
+            None,
+        );
+        
+        log::debug!("trap_context: {:#x}", Constant::USER_TRAP_CONTEXT_BOTTOM);
+        // map TrapContext
+        ret.push_area(
+            UserVmArea::new(
+                Constant::USER_TRAP_CONTEXT_BOTTOM.into()..(Constant::USER_TRAP_CONTEXT_TOP).into(),
+                UserVmAreaType::TrapContext,
+                MapPerm::R | MapPerm::W,
+            ),
+            None,
+        );
+        (
+            ret,
+            user_stack_top,
+            entry,
+            auxv,
+        )
+    }
+
+    fn from_elf_file(elf_file: Arc<dyn File>, kvm_space: &SpinMutex<KernVmSpace, impl MutexSupport>) -> (Self, super::VmSpaceUserStackTop, super::VmSpaceEntryPoint, Vec<AuxHeader>) {
+        let mut ret = Self::from_kernel(kvm_space.lock().deref());
+        let reader = FileReader::new(elf_file.inode().unwrap());
+        let elf = xmas_elf::ElfFile::new(&reader).unwrap();
+        let elf_header = elf.header;
+        let magic = elf_header.pt1.magic;
+        assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
+        let entry = elf_header.pt2.entry_point() as usize;
+        let ph_count = elf_header.pt2.ph_count();
+        let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
+        let mut max_end_vpn = VirtPageNum(0);
+        let mut header_va = 0;
+        let mut has_found_header_va = false;
+
+        // extract the aux
+        let mut auxv = generate_early_auxv(ph_entry_size, ph_count as usize, entry);
+        auxv.push(AuxHeader::new(AT_BASE, 0));
+        
+        // map the elf data to user space
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
+                let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
+                log::debug!("i: {}, start_va: {:#x}, end_va: {:#x}", i, start_va.0, end_va.0);
+
+                if !has_found_header_va {
+                    header_va = start_va.0;
+                    has_found_header_va = true;
+                }
+
+                let mut map_perm = MapPerm::U;
+                let ph_flags = ph.flags();
+                if ph_flags.is_read() {
+                    map_perm |= MapPerm::R;
+                }
+                if ph_flags.is_write() {
+                    map_perm |= MapPerm::W;
+                }
+                if ph_flags.is_execute() {
+                    map_perm |= MapPerm::X;
+                }
+               
+                log::debug!("{:?}", &elf.input.read(ph.offset() as usize, 4));                
+                let elf_offset_start = PhysAddr::from(ph.offset() as usize).floor().start_addr().0;
+                let elf_offset_end = (ph.offset() + ph.file_size()) as usize;
+                log::debug!("{:x} aligned to {:x}, now pushing ({:x}, {:x})", ph.offset() as usize, elf_offset_start, elf_offset_start, elf_offset_end);
+                
+                let mut map_area = UserVmArea::new(
+                    start_va..end_va, 
+                    UserVmAreaType::Data,
+                    map_perm,
+                );
+                map_area.file = Some(elf_file.clone());
+                map_area.offset = elf_offset_start;
+                map_area.len = elf_offset_end - elf_offset_start;
+                max_end_vpn = map_area.range_vpn().end;
+                ret.push_area(
+                    map_area,
+                    None
                 );
             }
         };
@@ -384,9 +550,8 @@ impl UserVmSpaceHal for UserVmSpace {
     
     fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult {
         assert!(va.0 % PAGE_SIZE == 0);
-        // just simply alloc mmap area from start of the mmap area
-        // need to feat unmap vm area
-        let range = if flags.contains(MmapFlags::MAP_FIXED) {
+        let range = if flags.contains(MmapFlags::MAP_FIXED) && 
+        self.areas.is_range_free(va..va+len).is_ok() {
             va..va + len
         } else {
             self.areas
@@ -396,7 +561,7 @@ impl UserVmSpaceHal for UserVmSpace {
         let start = range.start;
         let page_table = &mut self.page_table;
         let inode = file.inode().unwrap();
-        let mut vma = UserVmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
+        let mut vma = UserVmArea::new_mmap(range, perm, flags, Some(file.clone()), offset, len);
         let mut range_vpn = vma.range_vpn();
         let length = cmp::min(len, Constant::USER_FILE_PER_PAGES * PAGE_SIZE);
         // the offset is already page aligned
@@ -445,7 +610,7 @@ impl UserVmSpaceHal for UserVmSpace {
             let vma = UserVmArea::new(range, UserVmAreaType::Shm, perm);
             self.push_area(vma, None);
         } else {
-            let vma = UserVmArea::new_mmap(range, perm, flags, None, 0);
+            let vma = UserVmArea::new_mmap(range, perm, flags, None, 0, len);
             self.push_area(vma, None);
 
         }
@@ -464,8 +629,12 @@ impl UserVmSpaceHal for UserVmSpace {
         } else {
             return Ok(0);
         }
-        self.areas.try_insert(left.range_va.clone(), left).map_err(|_| SysError::EFAULT)?;
-        self.areas.try_insert(right.range_va.clone(), right).map_err(|_| SysError::EFAULT)?;
+        if !left.range_va.is_empty() {
+            self.areas.try_insert(left.range_va.clone(), left).map_err(|_| SysError::EFAULT)?;
+        }
+        if !right.range_va.is_empty() {
+            self.areas.try_insert(right.range_va.clone(), right).map_err(|_| SysError::EFAULT)?;
+        }
         Ok(0)
     }
 
@@ -496,6 +665,18 @@ impl KernVmArea {
         }
     }
 
+    fn split_off(&mut self, p: VirtPageNum) -> Self {
+        debug_assert!(self.range_va.contains(&p.start_addr()));
+        let ret = Self {
+            range_va: p.start_addr()..self.range_va.end,
+            frames: self.frames.split_off(&p),
+            map_perm: self.map_perm,
+            vma_type: self.vma_type,
+        };
+        self.range_va = self.range_va.start..p.start_addr();
+        ret
+    }
+
     fn map_range_to(&self, page_table: &mut PageTable, range_vpn: Range<VirtPageNum>, mut start_ppn: PhysPageNum) {
         VpnPageRangeIter::new(range_vpn)
         .for_each(|(vpn, level)| {
@@ -524,7 +705,20 @@ impl KernVmArea {
                     PhysPageNum(range_vpn.start.0 & (Constant::KERNEL_ADDR_SPACE.start >> 12))
                 );
             },
+            KernVmAreaType::VirtMemory => {
+                for (&vpn, frame) in self.frames.iter() {
+                    page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                }
+            },
         }
+    }
+
+    fn unmap(&mut self, page_table: &mut PageTable) {
+        let range_vpn = self.range_vpn();
+        for vpn in range_vpn {
+            page_table.unmap(vpn);
+        }
+        self.frames.clear();
     }
 }
 
@@ -555,14 +749,23 @@ impl UserVmArea {
 
     fn split_off(&mut self, p: VirtPageNum) -> Self {
         debug_assert!(self.range_va.contains(&p.start_addr()));
+
+        let new_offset = self.offset + (p.0 - self.range_vpn().start.0) * Constant::PAGE_SIZE;
+        let new_len = if new_offset - self.offset > self.len {
+            0
+        } else {
+            self.len - (new_offset - self.offset)
+        };
+
         let ret = Self {
             range_va: p.start_addr()..self.range_va.end,
             frames: self.frames.split_off(&p),
             map_perm: self.map_perm,
             vma_type: self.vma_type,
             file: self.file.clone(),
-            offset: self.offset,
+            offset: new_offset,
             mmap_flags: self.mmap_flags,
+            len: new_len
         };
         self.range_va = self.range_va.start..p.start_addr();
         ret
@@ -595,7 +798,6 @@ impl UserVmArea {
             }
         } else {
             match self.vma_type {
-                UserVmAreaType::Data |
                 UserVmAreaType::TrapContext => {
                     let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
                     for vpn in range_vpn {
@@ -604,6 +806,7 @@ impl UserVmArea {
                         self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
                     }
                 },
+                UserVmAreaType::Data |
                 UserVmAreaType::Heap |
                 UserVmAreaType::Stack |
                 UserVmAreaType::Mmap |
@@ -616,13 +819,13 @@ impl UserVmArea {
     fn unmap(&mut self, page_table: &mut PageTable) {
         let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
         match self.vma_type {
-            UserVmAreaType::Data |
             UserVmAreaType::TrapContext => {
                 for vpn in range_vpn {
                     page_table.unmap(vpn);
                 }
                 self.frames.clear();
             },
+            UserVmAreaType::Data |
             UserVmAreaType::Heap |
             UserVmAreaType::Stack | 
             UserVmAreaType::Mmap | 
@@ -659,6 +862,7 @@ impl UserVmArea {
             file: self.file.clone(),
             mmap_flags: self.mmap_flags.clone(),
             offset: self.offset,
+            len: self.len
         })
     }
 
@@ -667,21 +871,23 @@ impl UserVmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType
     ) -> Result<(), ()> {
-        if !access_type.can_access(self.map_perm) {
-            log::warn!(
-                "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
-                self.map_perm
-            );
-            return Err(());
-        }
+        
         match page_table.find_pte(vpn).map(|(pte, i)| (pte, PageLevel::from(i)) ) {
             Some((pte, level)) if pte.is_valid() => {
+                if !access_type.can_access(pte.map_perm()) {
+                    log::warn!(
+                        "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
+                        self.map_perm
+                    );
+                    return Err(());
+                }
                 // Cow
                 let frame = self.frames.get(&vpn).ok_or(())?;
                 if frame.get_owners() == 1 {
-                    self.map_perm.remove(MapPerm::C);
-                    self.map_perm.insert(MapPerm::W);
-                    pte.set_flags(PTEFlags::from(self.map_perm) | PTEFlags::V);
+                    let mut new_perm = self.map_perm;
+                    new_perm.remove(MapPerm::C);
+                    new_perm.insert(MapPerm::W);
+                    pte.set_flags(PTEFlags::from(new_perm) | PTEFlags::V);
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
                 } else {
@@ -697,9 +903,10 @@ impl UserVmArea {
                     
                     *self.frames.get_mut(&vpn).ok_or(())? = new_frame;
 
-                    self.map_perm.remove(MapPerm::C);
-                    self.map_perm.insert(MapPerm::W);
-                    *pte = PageTableEntry::new(new_range_ppn.start, self.map_perm, true);
+                    let mut new_perm = self.map_perm;
+                    new_perm.remove(MapPerm::C);
+                    new_perm.insert(MapPerm::W);
+                    *pte = PageTableEntry::new(new_range_ppn.start, new_perm, true);
                     
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
                     Ok(())
@@ -707,9 +914,55 @@ impl UserVmArea {
             }
             _ => {
                 match self.vma_type {
-                    UserVmAreaType::Data
-                    | UserVmAreaType::TrapContext => {
+                    UserVmAreaType::TrapContext => {
                         return Err(())
+                    },
+                    UserVmAreaType::Data => {
+                        if let Some(file) = &self.file {
+                            let inode = file.inode().unwrap().clone();
+                            let area_offset = (vpn.0 - self.range_va.start.floor().0) * Constant::PAGE_SIZE;
+                            let offset = self.offset + area_offset;
+                            let offset_aligned = round_down_to_page(offset);
+                            if area_offset < self.len {
+                                if self.len - area_offset < Constant::PAGE_SIZE {
+                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                    let data = new_frame.range_ppn.get_slice_mut::<u8>();
+                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
+                                    let page_offset = self.len-area_offset;
+                                    data[..page_offset].copy_from_slice(
+                                        &page.get_slice::<u8>()[..page_offset]
+                                    );
+                                    data[page_offset..].fill(0);
+                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                    Ok(())
+                                } else {
+                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
+                                    let mut new_perm = self.map_perm;
+                                    new_perm.insert(MapPerm::C);
+                                    new_perm.remove(MapPerm::W);
+                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, page.frame().clone());
+                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); };
+                                    Ok(())
+                                }
+                            } else {
+                                let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
+                                page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                Ok(())
+                            }
+                        } else {
+                            let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                            new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
+                            page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                            self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                            unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                            Ok(())
+                        }
                     },
                     UserVmAreaType::Stack
                     | UserVmAreaType::Heap => {
@@ -726,8 +979,7 @@ impl UserVmArea {
                             let inode = file.inode().unwrap().clone();
                             let offset = self.offset + (vpn.0 - self.range_va.start.floor().0) * PAGE_SIZE;
                             let offset_aligned = round_down_to_page(offset);
-                            
-
+                        
                             if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                                 // share file mapping
                                 let page = inode.read_page_at(offset_aligned).unwrap();
@@ -738,19 +990,11 @@ impl UserVmArea {
                             } else {
                                 // private file mapping
                                 let page = inode.read_page_at(offset_aligned).unwrap();
-                                if access_type.contains(PageFaultAccessType::WRITE) {
-                                    // TODO: when and how to write back ?
-                                    // need a new page
-                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
-                                } else {
-                                    // COW
-                                    let mut new_perm = self.map_perm;
-                                    new_perm.insert(MapPerm::C);
-                                    new_perm.remove(MapPerm::W);
-                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
-                                }
+                                let mut new_perm = self.map_perm;
+                                new_perm.insert(MapPerm::C);
+                                new_perm.remove(MapPerm::W);
+                                page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                self.frames.insert(vpn, page.frame().clone());
                                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             }
                         } else if self.mmap_flags.contains(MmapFlags::MAP_PRIVATE) {
@@ -786,6 +1030,7 @@ impl Clone for UserVmArea {
             file: self.file.clone(),
             mmap_flags: self.mmap_flags.clone(),
             offset: self.offset,
+            len: self.len
         }
     }
 }

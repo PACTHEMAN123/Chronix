@@ -1,11 +1,14 @@
 //! VFS Inode
 
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
 
-use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
+use alloc::{collections::btree_map::BTreeMap, string::String, sync::{Arc, Weak}, vec::Vec};
+use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtPageNum, VirtPageNumHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapPerm, println};
+use range_map::RangeMap;
+use xmas_elf::reader::Reader;
 
 use super::SuperBlock;
-use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, mm::{vm::{KernVmArea, KernVmSpaceHal}, INIT_VMSPACE}, sync::{mutex::{spin_mutex::SpinMutex, Spin}, UPSafeCell}, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -142,5 +145,87 @@ bitflags::bitflags! {
         const OTHER_WRITE = 0o2;
         /// Execute/search permission, others.
         const OTHER_EXEC = 0o1;
+    }
+}
+
+pub struct FileReader<T: Inode + ?Sized> {
+    inode: Arc<T>,
+    mapped: UPSafeCell<RangeMap<usize, Range<VirtPageNum>>>,
+}
+
+impl<T: Inode + ?Sized> FileReader<T> {
+    pub fn new(inode: Arc<T>) -> Self {
+        Self { 
+            inode,
+            mapped: UPSafeCell::new(RangeMap::new())
+        }
+    }
+}
+
+impl<T: Inode + ?Sized> Reader for FileReader<T> {
+    fn len(&self) -> usize {
+        self.inode.getattr().st_size as usize
+    }
+
+    fn read(&self, offset: usize, len: usize) -> &[u8] {
+        const MASK: usize = (1 << Constant::PAGE_SIZE_BITS) - 1;
+
+        let mut start = offset & !MASK;
+        let mut end = (offset + len - 1 + Constant::PAGE_SIZE) & !MASK;
+
+        loop {
+            
+            if let Some((range, range_vpn)) = self.mapped
+                .exclusive_access()
+                .range_contain_key_value(start..end) 
+            {
+                let area_offset = offset - range.start;
+                return unsafe { 
+                    core::slice::from_raw_parts(
+                        (range_vpn.start.start_addr().0 + area_offset) as *const u8,
+                        len
+                    )
+                };
+            }
+
+            loop {
+                match self.mapped.exclusive_access().try_insert(start..end, 0.into()..0.into()) {
+                    Ok(range_vpn_ref) => {
+                        let mut frames = Vec::new();
+                        for offset in (start..end).step_by(Constant::PAGE_SIZE) {
+                            let page = self.inode.clone().read_page_at(offset).unwrap();
+                            frames.push(page.frame().clone());
+                        }
+                        
+                        let range_vpn = INIT_VMSPACE.lock().map_vm_area(frames, MapPerm::R).unwrap();
+                        for vpn in range_vpn.clone() {
+                            unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                        }
+
+                        *range_vpn_ref = range_vpn;
+                        break;
+                    },
+                    Err(_) => {
+                        while let Some((range, range_vpn)) = self.mapped
+                            .exclusive_access()
+                            .range_contain_key_value(start..end) 
+                        {
+                            start = core::cmp::min(start, range.start);
+                            end = core::cmp::max(end, range.end);
+                            INIT_VMSPACE.lock().unmap_vm_area(range_vpn.clone());
+                            self.mapped.exclusive_access().force_remove_one(range);
+                        }
+                    },
+                }
+            }
+        }
+    }
+}
+
+impl<T: Inode + ?Sized> Drop for FileReader<T> {
+    fn drop(&mut self) {
+        for (_, range_vpn) in self.mapped.exclusive_access().iter() {
+            INIT_VMSPACE.lock().unmap_vm_area(range_vpn.clone());
+        }
     }
 }

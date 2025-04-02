@@ -321,7 +321,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         let offset = vpn.0 % level.page_count();
         Some(PhysPageNum(ppn.0 + offset))
     }
-
+ 
     fn new_in(_asid: usize, alloc: A) -> Self {
         let frame = alloc.alloc(1).unwrap();
         frame.get_slice_mut::<u8>().fill(0);

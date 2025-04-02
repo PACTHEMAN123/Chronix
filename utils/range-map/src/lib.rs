@@ -35,7 +35,6 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
             // xstart.......xend
             //        start.........end
             if *xend > range.start {
-                log::error!("[range map] try_insert error");
                 return Err(value);
             }
         }
@@ -135,12 +134,32 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
         None
     }
 
+    /// Return the key and value whose key is a range that contains the `range` passed
+    /// in.
+    pub fn range_contain_key_value(&self, range: Range<U>) -> Option<(Range<U>, &V)> {
+        let (start, Node { end, value }) = self.0.range(..=range.start).next_back()?;
+        if *end >= range.end {
+            return Some((*start..*end, value));
+        }
+        None
+    }
+
     /// Return the mut value whose key has a range that contains the `range`
     /// passed in.
     pub fn range_contain_mut(&mut self, range: Range<U>) -> Option<&mut V> {
         let (_, Node { end, value }) = self.0.range_mut(..=range.start).next_back()?;
         if *end >= range.end {
             return Some(value);
+        }
+        None
+    }
+
+    /// Return the key and mut value whose key has a range that contains the `range`
+    /// passed in.
+    pub fn range_contain_key_value_mut(&mut self, range: Range<U>) -> Option<(Range<U>, &mut V)> {
+        let (start, Node { end, value }) = self.0.range_mut(..=range.start).next_back()?;
+        if *end >= range.end {
+            return Some((*start..*end, value));
         }
         None
     }
@@ -201,6 +220,42 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
         } else {
             Err(())
         }
+    }
+
+    pub fn range_intersect(&self, range: Range<U>) -> Option<&V> {
+        if let Some((_, Node { end, value })) = self.0.range(..range.end).next_back() {
+            if *end > range.start {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    pub fn range_intersect_key_value(&self, range: Range<U>) -> Option<(Range<U>, &V)> {
+        if let Some((start, Node { end, value })) = self.0.range(..range.end).next_back() {
+            if *end > range.start {
+                return Some((*start..*end, value));
+            }
+        }
+        None
+    }
+
+    pub fn range_intersect_mut(&mut self, range: Range<U>) -> Option<&mut V> {
+        if let Some((_, Node { end, value })) = self.0.range_mut(..range.end).next_back() {
+            if *end > range.start {
+                return Some(value);
+            }
+        }
+        None
+    }
+
+    pub fn range_intersect_key_value_mut(&mut self, range: Range<U>) -> Option<(Range<U>, &mut V)> {
+        if let Some((start, Node { end, value })) = self.0.range_mut(..range.end).next_back() {
+            if *end > range.start {
+                return Some((*start..*end, value));
+            }
+        }
+        None
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (Range<U>, &V)> {
