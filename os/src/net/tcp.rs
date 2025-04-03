@@ -188,7 +188,7 @@ impl TcpSocket {
             self.set_local_endpoint(local_endpoint.unwrap());
             self.set_remote_endpoint(remote_endpoint.unwrap());
             self.set_handle(handle);
-            log::info!("[TCP CONNCECT], local_endpoint_port: {}, remote_endpoint_port:{}", self.local_endpoint().port,self.remote_endpoint().port);
+            // log::info!("[TCP CONNCECT], local_endpoint_port: {}, remote_endpoint_port:{}", self.local_endpoint().port,self.remote_endpoint().port);
             Ok(())
         }).unwrap_or_else(|_|{
             log::warn!("[TcpSocket::connect] failed to connect for alreay connected socket");
@@ -216,7 +216,7 @@ impl TcpSocket {
     
     pub fn bind(&self, mut new_endpoint: IpEndpoint) -> SockResult<()>  {
         self.update_state(SocketState::Closed, SocketState::Closed,||{
-            info!("new end point port {}", new_endpoint.port);
+            // info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
                 let port = self.get_ephemeral_port().unwrap();
                 new_endpoint.port = port;
@@ -236,9 +236,9 @@ impl TcpSocket {
                 }
             }  
             self.set_local_endpoint(new_endpoint);
-            info!("now self local endpoint port {}",unsafe {
-                self.local_endpoint.get().read().unwrap().port
-            });
+            // info!("now self local endpoint port {}",unsafe {
+                // self.local_endpoint.get().read().unwrap().port
+            // });
             Ok(())
         })
         .unwrap_or_else(|_|{
@@ -253,7 +253,7 @@ impl TcpSocket {
             let inner_endpoint = self.robost_port_endpoint().unwrap();
             self.set_local_endpoint_with_port(inner_endpoint.port);
             LISTEN_TABLE.listen(inner_endpoint, waker)?;
-            info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
+            // info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
             Ok(())
         }).unwrap_or_else(|_| {
             Ok(())
@@ -364,9 +364,9 @@ impl TcpSocket {
         self.update_state(SocketState::Connected, SocketState::Closed, ||  {
             let handle = self.handle().unwrap();
             SOCKET_SET.with_socket_mut::<tcp::Socket, _, _,>(handle, |socket| {
-                info!("tcp socket shutdown, before state is {}", socket.state());
+                // info!("tcp socket shutdown, before state is {}", socket.state());
                 socket.close();
-                info!("tcp socket shutdown, after state is {}" , socket.state());
+                // info!("tcp socket shutdown, after state is {}" , socket.state());
             });
             let time_instance = SOCKET_SET.poll_interfaces();
             SOCKET_SET.check_poll(time_instance);
@@ -474,12 +474,12 @@ impl TcpSocket {
     fn  robost_port_endpoint(&self) -> SockResult<IpListenEndpoint> {
         let local_endpoint = self.local_endpoint();
         let port = if local_endpoint.port == 0 {
-            info!("get a random port");
+            // info!("get a random port");
             self.get_ephemeral_port()?
         }else {
             local_endpoint.port
         };
-        info!("[robost_port_endpoint] now port is {} ",port);
+        // info!("[robost_port_endpoint] now port is {} ",port);
         let addr = if local_endpoint.addr.is_unspecified() {
             None
         }else {
@@ -496,7 +496,7 @@ impl TcpSocket {
         F: FnMut() -> Future,
         Future: core::future::Future<Output = SockResult<T>>,
         {
-            log::info!("in block on future");
+            // log::info!("in block on future");
             if self.nonblock() {
                 f().await
             }else {
@@ -626,10 +626,10 @@ impl TcpSocket {
             return Err(SysError::EINVAL);
         }
         let local_port = self.local_endpoint().port;
-        log::info!("[accept]: local_port is {}", local_port);
+        // log::info!("[accept]: local_port is {}", local_port);
         self.block_on(|| {
             let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
-            info!("TCP socket accepted a new connection {}", remote_endpoint);
+            // info!("TCP socket accepted a new connection {}", remote_endpoint);
             Ok(TcpSocket::new_v4_connected(handle, local_endpoint, remote_endpoint))
         }).await
     }

@@ -35,6 +35,7 @@ impl ListenEntry {
             waker: waker.clone(),
         }
     }
+    /// check if the listen entry can accept incoming connection
     fn can_accept(&self, dst: IpAddress) -> bool {
         match self.listen_endpoint.addr {
             Some(addr) => addr == dst,
@@ -86,10 +87,11 @@ impl ListenTable {
             Ok(())
         }
         else {
+            // the entry shouldn't be listened before
             Err(SysError::EADDRINUSE)
         }
     }
-    /// unlisten a port
+    /// unlisten a port, used in shutdown a socket
     pub fn unlisten(&self, port: u16) {
         if let Some(entry) = self.inner[port as usize].lock().take() {
             entry.wake()
@@ -103,8 +105,17 @@ impl ListenTable {
             .enumerate()
             .find_map(|(idx, &handle)| {
                 is_connected(handle).then(||(idx, get_addr_tuple(handle)))
-            }).ok_or(SysError::EAGAIN)?;     
-            
+            }).ok_or_else(||{
+                log::warn!("[Listen Table] no available socket_handle");
+                SysError::EAGAIN
+            })?; 
+            if idx > 0 {
+                log::warn!(
+                    "slow SYN queue enumeration: index = {}, len = {}!",
+                    idx,
+                    syn_queue.len()
+                );
+            }
             let handle = syn_queue.swap_remove_front(idx).unwrap();
             Ok((handle,addr_tuple))
         }else {
@@ -120,6 +131,8 @@ impl ListenTable {
             false
         }    
     }
+    /// handle incoming tcp packet, check if the packet is for a listening port,
+    /// and add the connection to the syn queue if possible.
     pub fn handle_coming_tcp(&self, src: IpEndpoint, dst: IpEndpoint, sockets: &mut SocketSet<'_>) {
         if let Some(entry) = self.inner[dst.port as usize].lock().deref_mut() {
             if !entry.can_accept(dst.addr) {
@@ -131,14 +144,14 @@ impl ListenTable {
                 return;
             }
             entry.waker.wake_by_ref();
-            log::info!(
-                "[ListenTable::incoming_tcp_packet] wake the socket who listens port {}",
-                dst.port
-            );
+            // log::info!(
+                // "[ListenTable::incoming_tcp_packet] wake the socket who listens port {}",
+                // dst.port
+            // );
             let mut socket = SocketSetWrapper::new_tcp_socket();
             if socket.listen(entry.listen_endpoint).is_ok() {
                 let handle = sockets.add(socket);
-                log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
+                // log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
                 entry.syn_queue.push_back(handle);
             }
         }

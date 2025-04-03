@@ -30,20 +30,20 @@ downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]
 
 [dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp.git"
+rev = "46f1c2a95f359a67d1e1f49ead672c2d77e73df4"  
 default-features = false
 features = [
     "alloc",
-    "log",             # no std
+    "log",             
     "medium-ethernet",
-    "medium-ip",       # used for Loopback device
+    "medium-ip",       
     "proto-ipv4",
-    "proto-ipv6",
+    "proto-ipv6",      
     "socket-raw",
     "socket-icmp",
     "socket-udp",
     "socket-tcp",
     "socket-dns",
-    "proto-ipv6",
     "async",
 ]
 

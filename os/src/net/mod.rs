@@ -21,7 +21,7 @@ pub mod tcp;
 pub mod listen_table;
 #[repr(u16)]
 #[derive(Debug, Clone, Copy)]
-/// socket address family
+/// socket address family, used for syscalls
 pub enum SaFamily {
     /// ipv4
     AfInet = 2,
@@ -64,9 +64,9 @@ struct InterfaceWrapper {
     name: &'static str,
     /// The Ethernet address of the network interface.
     ether_addr: EthernetAddress,
-    /// The device wrapper protected by a `Mutex` to ensure thread-safe access.
+    /// The device wrapper protected by a SpinNoIrqLock to ensure thread-safe access.
     dev: SpinNoIrqLock<NetDeviceWrapper>,
-    /// The network interface protected by a `Mutex` to ensure thread-safe
+    /// The network interface protected by a SpinNoIrqLock to ensure thread-safe
     /// access.
     iface: SpinNoIrqLock<Interface>,
 }
@@ -97,17 +97,17 @@ impl InterfaceWrapper {
     fn current_time() -> Instant {
         Instant::from_micros_const(get_current_time_us() as i64)
     }
-    /// poll the interface 
+    /// poll the interface to detect device status then poll sockets
     pub fn poll(&self, sockets: &SpinNoIrqLock<SocketSet>) -> Instant {
         let mut dev =  self.dev.lock();
         let mut iface = self.iface.lock();
         let mut sockets = sockets.lock();
         let timestamp = Self::current_time();
         let res = iface.poll(timestamp, dev.deref_mut(), &mut sockets);
-        log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
+        // log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
         timestamp
     }
-    /// check the interface and call poll sockethandle if necessary
+    /// check the interface and call poll socket_handle to detect device status then poll sockets
     pub fn check_poll(&self, timestamp: Instant, sockets: &SpinNoIrqLock<SocketSet>) {
         let mut iface = self.iface.lock();
         let mut sockets = sockets.lock();
@@ -152,7 +152,7 @@ impl <'a> SocketSetWrapper<'a> {
     /// add a socket to the set , return a socket_handle
     pub fn add_socket<T:AnySocket<'a>>(&self, socket: T) -> SocketHandle {
         let handle = self.0.lock().add(socket);
-        info!("[SocketSetWrapper] add_socket handle {:?}" , handle);
+        // info!("[SocketSetWrapper] add_socket handle {:?}" , handle);
         handle
     }
     /// use a ref of socket and do something with it
@@ -173,12 +173,13 @@ impl <'a> SocketSetWrapper<'a> {
         let socket = set.get_mut(handle);
         f(socket)
     }
+    /// wrapper for eth timed poll
     pub fn poll_interfaces(&self) -> Instant {
         ETH0.get()
         .unwrap()
         .poll(&self.0)
     }
-
+    /// wrapper for eth timed check_polled
     pub fn check_poll(&self, timestamp: Instant) {
         ETH0.get()
         .unwrap()
@@ -198,7 +199,7 @@ impl <'a> SocketSetWrapper<'a> {
 pub fn poll_interfaces() -> smoltcp::time::Instant {
     SOCKET_SET.poll_interfaces()
 }
-
+/// modify the socket first, a helper method for use smoltcp consume
 pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
     use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
 
@@ -214,14 +215,14 @@ pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: b
         let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
         let first_flag = tcp_packet.syn() && !tcp_packet.ack();
         if first_flag {
-            info!("[modify tcp packet]receive tcp");
+            // info!("[modify tcp packet]receive tcp");
             LISTEN_TABLE.handle_coming_tcp(src_addr, dst_addr, sockets);
         }
     }
     Ok(())
 }
 // function or struct concerning time ,from microseconds to smoltcp::time::Instant, from core::time::Duration to smoltcp::time::Duration
-/// from core::time::Duration to smoltcp::time::Duration
+/// timer for network poll
 struct NetPollTimer;
 impl TimerEvent for NetPollTimer {
     fn callback(self: Box<Self>) -> Option<Timer> {
@@ -229,6 +230,7 @@ impl TimerEvent for NetPollTimer {
         None
     }
 }
+/// from core::time::Duration to smoltcp::time::Duration
 pub fn smol_dur_to_core_cur(duration: smoltcp::time::Duration) -> core::time::Duration {
     core::time::Duration::from_micros(duration.micros())
 }
