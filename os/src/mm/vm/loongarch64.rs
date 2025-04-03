@@ -605,8 +605,6 @@ impl UserVmArea {
     }
 
     fn split_off(&mut self, p: VirtPageNum) -> Self {
-        debug_assert!(self.range_va.contains(&p.start_addr()));
-
         let new_offset = self.offset + (p.0 - self.range_vpn().start.0) * Constant::PAGE_SIZE;
         let new_len = if new_offset - self.offset > self.len {
             0
@@ -639,47 +637,43 @@ impl UserVmArea {
     }
 
     fn map(&mut self, page_table: &mut PageTable) {
-        let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
-        if self.map_perm.contains(MapPerm::C) {                 
-            for (&vpn, frame) in self.frames.iter() {
-                let pte = page_table
-                    .find_pte_create(vpn, PageLevel::Small)
-                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
-                pte.set_flags(pte.flags() | PTEFlags::C);
-            }
-        } else {
-            match self.vma_type {
-                UserVmAreaType::TrapContext => {
-                    for vpn in range_vpn {
-                        let frame = FrameAllocator.alloc_tracker(1).unwrap();
-                        let pte = page_table
-                            .find_pte_create(vpn, PageLevel::Small)
-                            .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                        *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
-                        pte.set_flags(pte.flags() | PTEFlags::D); // will not trigger PME
-                        self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
-                    }
-                },
-                UserVmAreaType::Data |
-                UserVmAreaType::Heap |
-                UserVmAreaType::Stack |
-                UserVmAreaType::Mmap |
-                UserVmAreaType::Shm => {}
+        match self.vma_type {
+            UserVmAreaType::TrapContext => {
+                for vpn in self.range_vpn() {
+                    let frame = FrameAllocator.alloc_tracker(1).unwrap();
+                    let pte = page_table
+                        .find_pte_create(vpn, PageLevel::Small)
+                        .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                    *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
+                    pte.set_flags(pte.flags() | PTEFlags::D); // will not trigger PME
+                    self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+                }
+            },
+            UserVmAreaType::Data |
+            UserVmAreaType::Heap |
+            UserVmAreaType::Stack |
+            UserVmAreaType::Mmap |
+            UserVmAreaType::Shm => {
+                for (&vpn, frame) in self.frames.iter() {
+                    let pte = page_table
+                        .find_pte_create(vpn, PageLevel::Small)
+                        .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+                    *pte = PageTableEntry::new(frame.range_ppn.start, self.map_perm, true);
+                    pte.set_flags(pte.flags() | PTEFlags::C);
+                }
             }
         }
     }
 
     fn unmap(&mut self, page_table: &mut PageTable) {
-        let range_vpn = self.range_va.start.floor()..self.range_va.end.ceil();
         match self.vma_type {
-            UserVmAreaType::Data |
             UserVmAreaType::TrapContext => {
-                for vpn in range_vpn {
+                for vpn in self.range_vpn() {
                     page_table.unmap(vpn);
                 }
                 self.frames.clear();
             },
+            UserVmAreaType::Data |
             UserVmAreaType::Heap |
             UserVmAreaType::Stack |
             UserVmAreaType::Mmap |
@@ -698,6 +692,7 @@ impl UserVmArea {
         if self.vma_type == UserVmAreaType::TrapContext {
             return Err(self.clone());
         }
+        // note: don't set C flag for readonly frames
         if self.map_perm.contains(MapPerm::W) {
             self.map_perm.insert(MapPerm::C);
             self.map_perm.remove(MapPerm::W);
@@ -709,8 +704,15 @@ impl UserVmArea {
                 pte.set_flags(pte.flags() & !PTEFlags::D);
                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
             }
-        } else {
-            self.map_perm.insert(MapPerm::C);
+        } else if self.map_perm.contains(MapPerm::C) {
+            /// update flag bit
+            for &vpn in self.frames.keys() {
+                let (pte, _) = page_table.find_pte(vpn).unwrap();
+                pte.set_flags(pte.flags() | PTEFlags::C);
+                pte.set_flags(pte.flags() & !PTEFlags::W);
+                pte.set_flags(pte.flags() & !PTEFlags::D);
+                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+            }
         }
         Ok(Self {
             range_va: self.range_va.clone(), 
@@ -729,17 +731,20 @@ impl UserVmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType
     ) -> Result<(), ()> {
-
+        if !access_type.can_access(self.map_perm) {
+            log::warn!(
+                "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
+                self.map_perm
+            );
+            return Err(());
+        }
         match page_table.find_pte(vpn).map(|(pte, i)| (pte, PageLevel::from(i)) ) {
             Some((pte, level)) if pte.is_valid() && pte.is_cow() => {
-                if !access_type.can_access(pte.map_perm()) {
-                    log::warn!(
-                        "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
-                        self.map_perm
-                    );
+                // Cow
+                if access_type != PageFaultAccessType::WRITE 
+                || !pte.map_perm().contains(MapPerm::C) {
                     return Err(());
                 }
-                // Cow
                 let frame = self.frames.get(&vpn).ok_or(())?;
                 if frame.get_owners() == 1 {
                     let mut new_perm = self.map_perm;
@@ -801,8 +806,10 @@ impl UserVmArea {
                             } else {
                                 let page = inode.read_page_at(offset_aligned).ok_or(())?;
                                 let mut new_perm = self.map_perm;
-                                new_perm.insert(MapPerm::C);
-                                new_perm.remove(MapPerm::W);
+                                if self.map_perm.contains(MapPerm::C) {
+                                    new_perm.insert(MapPerm::C);
+                                    new_perm.remove(MapPerm::W);
+                                }
                                 page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
                                 self.frames.insert(vpn, page.frame().clone());
                                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); };
@@ -840,7 +847,6 @@ impl UserVmArea {
                             let offset = self.offset + (vpn.0 - self.range_va.start.floor().0) * PAGE_SIZE;
                             let offset_aligned = round_down_to_page(offset);
                             
-
                             if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                                 // share file mapping
                                 let page = inode.read_page_at(offset_aligned).unwrap();
@@ -856,8 +862,10 @@ impl UserVmArea {
                                 // private file mapping
                                 let page = inode.read_page_at(offset_aligned).unwrap();
                                 let mut new_perm = self.map_perm;
-                                new_perm.insert(MapPerm::C);
-                                new_perm.remove(MapPerm::W);
+                                if self.map_perm.contains(MapPerm::C) {
+                                    new_perm.insert(MapPerm::C);
+                                    new_perm.remove(MapPerm::W);
+                                }
                                 let pte = page_table
                                     .find_pte_create(vpn, PageLevel::Small)
                                     .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());

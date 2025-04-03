@@ -134,8 +134,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
-    new_task.get_trap_cx().set_arg_nth(0, 0);
-    println!("sepc: {:#x} {:#x}", task.get_trap_cx().sepc(), new_task.get_trap_cx().sepc());
+    new_task.get_trap_cx().set_ret_nth(0, 0);
     let new_tid = new_task.tid();
 
     // set new stack
