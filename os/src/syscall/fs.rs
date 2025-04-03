@@ -1,11 +1,12 @@
 //! File and filesystem-related syscalls
 use alloc::{string::ToString, sync::Arc};
-use hal::addr::VirtAddr;
+use hal::{addr::VirtAddr, instruction::{Instruction, InstructionHal}};
 use log::{info, warn};
+use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{drivers::BLOCK_DEVICE, fs::{
     get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
-}, processor::context::SumGuard, task::task::TaskControlBlock};
+}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}};
 use crate::utils::{
     path::*,
     string::*,
@@ -18,24 +19,12 @@ use crate::processor::processor::{current_processor,current_task,current_user_to
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     //info!("task {} trying to write fd {}", task.gettid(), fd);
-    let table_len = task.with_fd_table(|table|table.len());
-    if fd >= table_len {
-        return Err(SysError::EBADF);
-    }
-    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
-        // info!("write to file");
-        if !file.writable() {
-            return Err(SysError::EBADF);
-        }
-        // release current task TCB manually to avoid multi-borrow
-        let _sum_guard = SumGuard::new();
-        let buf = unsafe {
-            core::slice::from_raw_parts::<u8>(buf as *const u8, len)
-        };
-        return Ok(file.write(buf).await as isize);
-    } else {
-        return Err(SysError::EBADF);
-    }
+    let file = task.with_fd_table(|table| table.get_file(fd))?;
+    let _sum_guard = SumGuard::new();
+    let buf = unsafe {
+        core::slice::from_raw_parts::<u8>(buf as *const u8, len)
+    };
+    return Ok(file.write(buf).await as isize);
 }
 
 
@@ -43,38 +32,20 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     //info!("task {} trying to read fd {}", task.gettid(), fd);
-    let table_len = task.with_fd_table(|table|table.len());
-    if fd >= table_len{
-        return Err(SysError::EBADF);
-    }
-    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
-        if !file.readable() {
-            return Err(SysError::EBADF);
-        }
-        // release current task TCB manually to avoid multi-borrow
-        //drop(inner);
-        let _sum_guard = SumGuard::new();
-        let buf = unsafe {
-            core::slice::from_raw_parts_mut::<u8>(buf as *mut u8, len)
-        };
-        let ret = file.read(buf).await;
-        return Ok(ret as isize);
-    } else {
-        return Err(SysError::EBADF);
-    }
+    let file = task.with_fd_table(|table| table.get_file(fd))?;
+    let _sum_guard = SumGuard::new();
+    let buf = unsafe {
+        core::slice::from_raw_parts_mut::<u8>(buf as *mut u8, len)
+    };
+    let ret = file.read(buf).await;
+    return Ok(ret as isize);
 }
 
 /// syscall: close
 pub fn sys_close(fd: usize) -> SysResult {
     let task = current_task().unwrap();
-    let table_len = task.with_fd_table(|table|table.len());
-    if fd >= table_len {
-        return Err(SysError::EBADF);
-    }
-    match task.with_mut_fd_table(|table| table[fd].take()){
-        Some(_) => {return Ok(0);},
-        None => {return Err(SysError::EBADF);},
-    }
+    task.with_mut_fd_table(|table| table.remove(fd))?;
+    Ok(0)
 }
 
 /// syscall: getcwd
@@ -109,34 +80,20 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
 /// syscall: dup
 pub fn sys_dup(old_fd: usize) -> SysResult {
     let task = current_task().unwrap();
-    let new_fd= task.alloc_fd() as isize;
-    if let Some(file) = task.with_fd_table(|table| table[old_fd].clone()) {
-        task.with_mut_fd_table(|table| table[new_fd as usize] = Some(file));  
-    }
+    let new_fd = task.with_mut_fd_table(|table| table.dup_no_flag(old_fd))?;
     Ok(new_fd as isize)
 }
 
 /// syscall: dup3
-pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> SysResult {
+pub fn sys_dup3(old_fd: usize, new_fd: usize, flags: u32) -> SysResult {
     //info!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
     let task = current_task().unwrap();
-    let table_len = task.with_fd_table(|table|table.len());
-    if old_fd >= table_len {
-        return Err(SysError::EBADF);
+    let flags = OpenFlags::from_bits(flags as i32).ok_or(SysError::EINVAL)?;
+    if old_fd == new_fd {
+        return Err(SysError::EINVAL);
     }
-    if let Some(file) = task.with_fd_table(|table| table[old_fd].clone()) {
-        if new_fd < table_len {
-            task.with_mut_fd_table(|table| table[new_fd] = Some(file));
-        } else {
-            task.with_mut_fd_table(|table| {
-                table.resize(new_fd + 1, None);
-                table[new_fd] = Some(file);
-            });
-        }
-        Ok(new_fd as isize)
-    } else {
-        Err(SysError::EBADF)
-    }
+    let new_fd = task.with_mut_fd_table(|table| table.dup3(old_fd, new_fd, flags.into()))?;
+    Ok(new_fd as isize)
 }
 
 /// syscall: openat
@@ -148,15 +105,15 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, _flags: u32) -> SysResult {
 /// then pathname is interpreted relative to the current working directory of the calling process (like open(2)).
 /// If pathname is absolute, then dirfd is ignored.
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> SysResult {
-    let flags = OpenFlags::from_bits(flags).unwrap();
+    let flags = OpenFlags::from_bits(flags as i32).unwrap();
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
         let dentry = at_helper(task.clone(), dirfd, pathname)?;
         info!("trying to open {}", dentry.path());
-        if flags.contains(OpenFlags::CREATE) {
+        if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
-            if flags.contains(OpenFlags::EXCL) && dentry.state() != DentryState::NEGATIVE {
+            if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
                 return Err(SysError::EEXIST);
             }
             let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
@@ -170,12 +127,14 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
-        if flags.contains(OpenFlags::DIRECTORY) && inode.inner().mode.get_type() != InodeMode::DIR {
+        if flags.contains(OpenFlags::O_DIRECTORY) && inode.inner().mode.get_type() != InodeMode::DIR {
             return Err(SysError::ENOTDIR);
         }
         let file = dentry.open(flags).unwrap();
-        let fd = task.alloc_fd();
-        task.with_mut_fd_table(|table|table[fd] = Some(file));
+        file.set_flags(flags);
+        let fd = task.with_mut_fd_table(|table| table.alloc_fd());
+        let fd_info = FdInfo { file, flags: flags.into() };
+        task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
         return Ok(fd as isize)
     } else {
         info!("[sys_openat]: pathname is empty!");
@@ -212,7 +171,6 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
 
 /// syscall: fstatat
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
-    let _sum_guard = SumGuard::new();
     info!("[sys_fstatat]: into");
     const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
     if flags == AT_SYMLINK_NOFOLLOW {
@@ -227,7 +185,8 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     let stat = dentry.inode().unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
-        *stat_ptr = stat;
+        Instruction::set_sum();
+        stat_ptr.write(stat);
     }
     info!("mamba out");
     Ok(0)
@@ -261,17 +220,14 @@ const PIPE_BUF_LEN: usize = PAGE_SIZE;
 /// Data written to the write end of the pipe is buffered by the kernel 
 /// until it is read from the read end of the pipe.
 /// todo: support flags
-pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> SysResult {
+pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SysResult {
     let task = current_task().unwrap().clone();
+    let flags = OpenFlags::from_bits(flags as i32).unwrap();
     let (read_file, write_file) = make_pipe(PIPE_BUF_LEN);
-    let read_fd = task.alloc_fd();
-    task.with_mut_fd_table(|table| {
-        table[read_fd] = Some(read_file);
-    });
-    let write_fd = task.alloc_fd();
-    task.with_mut_fd_table(|table| {
-        table[write_fd] = Some(write_file);
-    });
+    let read_fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    task.with_mut_fd_table(|t| t.put_file(read_fd, FdInfo { file: read_file, flags: flags.into() }))?;
+    let write_fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    task.with_mut_fd_table(|t| t.put_file(write_fd, FdInfo { file: write_file, flags: flags.into() }))?;
 
     let _sum = SumGuard::new();
     let pipefd = unsafe { core::slice::from_raw_parts_mut(pipe, 2 * core::mem::size_of::<i32>()) };
@@ -285,17 +241,12 @@ pub fn sys_pipe2(pipe: *mut i32, _flags: u32) -> SysResult {
 pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let task = current_task().unwrap().clone();
-    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
-        if !file.readable() {
-            return Err(SysError::EBADF);
-        }
-        let stat = file.dentry().unwrap().inode().unwrap().getattr();
-        let stat_ptr = stat_buf as *mut Kstat;
-        unsafe {
-            *stat_ptr = stat;
-        }
-    } else {
-        return Err(SysError::EBADF);
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let stat = file.dentry().unwrap().inode().unwrap().getattr();
+    let stat_ptr = stat_buf as *mut Kstat;
+    unsafe {
+        Instruction::set_sum();
+        *stat_ptr = stat;
     }
     return Ok(0);
 }
@@ -355,7 +306,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 
     // get the dentry the fd points to
     if let Some(dentry) = task.with_fd_table(|table| {
-        let file = table[fd].clone().unwrap();
+        let file = table.get_file(fd).expect("dir not found");
         file.dentry()
     }) {
         let mut buf_it = buf_slice;
@@ -461,11 +412,74 @@ pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
 /// syscall: ioctl
 pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    if let Some(file) = task.with_fd_table(|table| table[fd].clone()) {
-        let _sum_guard = SumGuard::new();
-        file.ioctl(cmd, arg)
-    } else {
-        return Err(SysError::EBADF);
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    unsafe {
+        Instruction::set_sum();
+    }
+    file.ioctl(cmd, arg)
+}
+
+#[derive(FromRepr, Debug, Eq, PartialEq, Clone, Copy, Default)]
+#[allow(non_camel_case_types)]
+#[allow(missing_docs)]
+#[repr(isize)]
+pub enum FcntlOp {
+    F_DUPFD = 0,
+    F_DUPFD_CLOEXEC = 1030,
+    F_GETFD = 1,
+    F_SETFD = 2,
+    F_GETFL = 3,
+    F_SETFL = 4,
+    #[default]
+    F_UNIMPL,
+}
+
+/// syscall: fcntl
+pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
+    let op = FcntlOp::from_repr(op).unwrap_or_default();
+    let task = current_task().unwrap().clone();
+    match op {
+        FcntlOp::F_DUPFD => {
+            // Duplicate the file descriptor fd using the lowest-numbered
+            // available file descriptor greater than or equal to arg.
+            let new_fd = task.with_mut_fd_table(|t| t.dup_with_bound(fd, arg, OpenFlags::empty().into()))?;
+            Ok(new_fd as isize)
+        }
+        FcntlOp::F_DUPFD_CLOEXEC => {
+            // As for F_DUPFD, but additionally set the close-on-exec flag
+            // for the duplicate file descriptor.
+            let new_fd = task.with_mut_fd_table(|t| t.dup_with_bound(fd, arg, FdFlags::CLOEXEC))?;
+            Ok(new_fd as isize)
+        }
+        FcntlOp::F_GETFD => {
+            // Return (as the function result) the file descriptor flags;
+            // arg is ignored.
+            let fd_info = task.with_fd_table(|t| t.get_fd_info(fd))?;
+            Ok(fd_info.flags().bits() as isize)
+        }
+        FcntlOp::F_SETFD => {
+            let arg = OpenFlags::from_bits_truncate(arg as i32);
+            let fd_flags = FdFlags::from(arg);
+            task.with_mut_fd_table(|table| {
+                let fd_info = table.get_mut_fd_info(fd)?;
+                fd_info.set_flags(fd_flags);
+                Ok(0)
+            })
+        }
+        FcntlOp::F_GETFL => {
+            let file = task.with_fd_table(|table| table.get_file(fd))?;
+            Ok(file.flags().bits() as _)
+        }
+        FcntlOp::F_SETFL => {
+            let flags = OpenFlags::from_bits_truncate(arg as _);
+            let file = task.with_fd_table(|table| table.get_file(fd))?;
+            file.set_flags(flags.status());
+            Ok(0)
+        }
+        _ => {
+            log::warn!("fcntl cmd: {op:?} not implemented");
+            Ok(0)
+        }
     }
 }
 
@@ -489,13 +503,9 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8)
                 } else {
                     // look up in the current task's fd table
                     // which the inode fd points to should be a dir
-                    if let Some(dir) = task.with_fd_table(|table| table[dirfd as usize].clone()) {
-                        let dentry = dir.dentry().unwrap();
-                        rel_path_to_abs(&dentry.path(), &path).unwrap()
-                    } else {
-                        info!("[at_helper]: the dirfd not exist!");
-                        return Err(SysError::EBADF)
-                    }
+                    let dir = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
+                    let dentry = dir.dentry().unwrap();
+                    rel_path_to_abs(&dentry.path(), &path).unwrap()
                 };
                 Ok(global_find_dentry(&fpath))
             }
@@ -505,15 +515,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8)
             if dirfd == AT_FDCWD {
                 Ok(task.with_cwd(|d| d.clone()))
             } else {
-                let file = match task
-                    .with_fd_table(|table| table[dirfd as usize].clone()) 
-                {
-                    Some(file) => file,
-                    None => {
-                        info!("[at_helper]: the dirfd not exist");
-                        return Err(SysError::EBADF)
-                    }
-                };
+                let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
                 Ok(file.dentry().unwrap())
             }
         }

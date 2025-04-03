@@ -99,7 +99,14 @@ impl Inode for Ext4Inode {
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
         let page_cache = self.cache();
-        let size = self.file.exclusive_access().file_size() as usize;
+        let file = self.file.exclusive_access();
+        let size = {
+            let path = file.get_path();
+            file.file_open(path.to_str().unwrap(), O_RDONLY).unwrap();
+            let fsize = file.file_size() as usize;
+            file.file_close().unwrap();
+            fsize
+        };
         if offset >= size {
             info!("[Ext4 INode]: read_page_at: reach EOF");
             return None;

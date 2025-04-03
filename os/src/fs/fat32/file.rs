@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
 
-use crate::{fs::{page::page::PAGE_SIZE, vfs::{Dentry, File, FileInner}}, mm::UserBuffer, sync::UPSafeCell};
+use crate::{fs::{page::page::PAGE_SIZE, vfs::{Dentry, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::{mutex::SpinNoIrqLock, UPSafeCell}};
 
 
 pub struct FatFile {
@@ -19,7 +19,11 @@ impl FatFile {
         Self {
             readable,
             writable,
-            inner: UPSafeCell::new(FileInner { offset: 0, dentry }) ,
+            inner: UPSafeCell::new(FileInner { 
+                offset: 0, 
+                dentry,
+                flags: SpinNoIrqLock::new(OpenFlags::empty())
+            }) ,
         }
     }
 }

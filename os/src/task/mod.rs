@@ -21,6 +21,7 @@ mod tid;
 /// manger for task
 pub mod manager;
 pub mod utils;
+pub mod fs;
 
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
@@ -85,7 +86,7 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         //info!("trying to open initproc");
-        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let inode = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
         let v = inode.read_all();
         TaskControlBlock::new(v.as_slice())
     });

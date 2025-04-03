@@ -414,13 +414,14 @@ impl UserVmSpaceHal for UserVmSpace {
                     page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
                     vma.frames.insert(vpn, StrongArc::clone(&page.frame()));
                     vma.map_perm.insert(MapPerm::C);
-                    // update tlb                     unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                    // update tlb                     
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                 } else {
                     // share mode
                     info!("[alloc_mmap_area]: mapping vpn:{:x} to ppn:{:x}", vpn.0, page.ppn().0);
                     page_table.map(vpn, page.ppn(), perm, PageLevel::Small);
                     vma.frames.insert(vpn, StrongArc::clone(&page.frame()));
-                    unsafe { Instruction::tlb_flush_addr(vpn.0.into()); }
+                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                 }
             } else {
                 // reach EOF
