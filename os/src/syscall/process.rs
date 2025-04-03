@@ -18,6 +18,7 @@ use crate::utils::{suspend_now, user_path_to_string};
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
+use hal::println;
 use hal::trap::{TrapContext, TrapContextHal};
 use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
@@ -129,11 +130,12 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
-    //info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
+    // info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
     new_task.get_trap_cx().set_arg_nth(0, 0);
+    println!("sepc: {:#x} {:#x}", task.get_trap_cx().sepc(), new_task.get_trap_cx().sepc());
     let new_tid = new_task.tid();
 
     // set new stack
