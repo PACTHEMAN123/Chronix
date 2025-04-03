@@ -383,14 +383,7 @@ impl TaskControlBlock {
             vm_space: new_shared(vm_space),
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
-            fd_table: new_shared(vec![
-                // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
-                Some(Arc::new(Stdin)),
-                // 1 -> stdout
-                Some(TTY.clone()),
-                // 2 -> stderr
-                Some(TTY.clone()),
-            ]),
+            fd_table: new_shared(FdTable::new()),
             thread_group: new_shared(ThreadGroup::new()),
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
