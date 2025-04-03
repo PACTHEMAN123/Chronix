@@ -68,9 +68,6 @@ pub async fn user_trap_handler()  {
             // cx is changed during sys_exec, so we have to call it again
             cx.save_to(0, cx.ret_nth(0));
             cx.set_ret_nth(0, result as usize);
-            if cx.syscall_id() == 260 {
-                println!("syscall return: {}", cx.ret_nth(0));
-            }
         }
         TrapType::StorePageFault(stval)
         | TrapType::InstructionPageFault(stval)
