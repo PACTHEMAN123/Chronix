@@ -2,6 +2,7 @@
 
 use core::time::Duration;
 
+use hal::instruction::{Instruction, InstructionHal};
 use log::info;
 
 use crate::{
@@ -18,6 +19,7 @@ pub fn sys_gettimeofday(tv: *mut TimeVal) -> SysResult {
     };
     
     unsafe {
+        Instruction::set_sum();
         tv.write_volatile(time_val);
     }
     Ok(0)

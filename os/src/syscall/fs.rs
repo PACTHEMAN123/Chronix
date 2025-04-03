@@ -172,16 +172,21 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
 /// syscall: fstatat
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
     info!("[sys_fstatat]: into");
+    let _sum_guard= SumGuard::new();
     const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
     if flags == AT_SYMLINK_NOFOLLOW {
+        info!("reach panic");
         panic!("[sys_fstatat]: not support for symlink now");
     }
     let task = current_task().unwrap().clone();
+    info!("reach here");
     let dentry = at_helper(task.clone(), dirfd, pathname)?;
+    info!("not here");
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::EBADF);
     }
 
+    info!("stat_buf: {:#x}", stat_buf);
     let stat = dentry.inode().unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
