@@ -1,6 +1,6 @@
 //! VFS Inode
 
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
 
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
