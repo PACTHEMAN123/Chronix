@@ -2,7 +2,7 @@
 
 use core::{cmp, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 
-use alloc::sync::{Arc, Weak};
+use alloc::{alloc::Global, sync::{Arc, Weak}};
 use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, util::smart_point::StrongArc};
 
 use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker}};
