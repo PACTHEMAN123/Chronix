@@ -10,6 +10,7 @@ use crate::fs::vfs::dentry::global_find_dentry;
 use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{Dentry, DentryState, Inode, DCACHE};
 use crate::fs::FS_MANAGER;
+use crate::sync::mutex::SpinNoIrqLock;
 use crate::utils::{abs_path_to_name, abs_path_to_parent};
 
 use alloc::vec;
@@ -51,7 +52,11 @@ impl Ext4File {
         Self {
             readable,
             writable,
-            inner: UPSafeCell::new(FileInner { offset: 0, dentry }) ,
+            inner: UPSafeCell::new(FileInner { 
+                offset: 0, 
+                dentry, 
+                flags: SpinNoIrqLock::new(OpenFlags::empty()), 
+            }),
         }
     }
 

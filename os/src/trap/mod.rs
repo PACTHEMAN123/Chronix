@@ -77,8 +77,8 @@ pub async fn user_trap_handler()  {
             );
 
             let access_type = match trap_type {
-                TrapType::StorePageFault(_) => PageFaultAccessType::READ,
-                TrapType::LoadPageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::StorePageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::LoadPageFault(_) => PageFaultAccessType::READ,
                 TrapType::InstructionPageFault(_) => PageFaultAccessType::EXECUTE,
                 _ => unreachable!(),
             };

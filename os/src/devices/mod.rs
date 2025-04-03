@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 pub mod net;
 use core::any::Any;
-use alloc::{boxed::Box, string::String};
+use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
+use downcast_rs::DowncastSync;
 use net::{EthernetAddress, NetBufPtr};
 use smoltcp::phy::{DeviceCapabilities,RxToken, TxToken};
 
@@ -48,6 +49,50 @@ pub struct DeviceMeta {
     pub irq_no: Option<usize>,
     /// Device type.
     pub dtype: DeviceType,
+}
+
+pub trait Device: Sync + Send + DowncastSync {
+    fn meta(&self) -> &DeviceMeta;
+
+    fn init(&self);
+
+    fn handle_irq(&self);
+
+    fn dev_id(&self) -> DevId {
+        self.meta().dev_id
+    }
+
+    fn name(&self) -> &str {
+        &self.meta().name
+    }
+
+    fn mmio_base(&self) -> usize {
+        self.meta().mmio_base
+    }
+
+    fn mmio_size(&self) -> usize {
+        self.meta().mmio_size
+    }
+
+    fn irq_no(&self) -> Option<usize> {
+        self.meta().irq_no
+    }
+
+    fn dtype(&self) -> DeviceType {
+        self.meta().dtype
+    }
+
+    fn as_blk(self: Arc<Self>) -> Option<Arc<dyn BlockDevice>> {
+        None
+    }
+
+    fn as_char(self: Arc<Self>) -> Option<Arc<dyn CharDevice>> {
+        None
+    }
+
+    fn as_net(self: Arc<Self>) -> Option<Arc<dyn NetDevice>> {
+        None
+    }
 }
 
 /// Trait for block devices
