@@ -321,7 +321,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         let offset = vpn.0 % level.page_count();
         Some(PhysPageNum(ppn.0 + offset))
     }
-
+ 
     fn new_in(_asid: usize, alloc: A) -> Self {
         let frame = alloc.alloc(1).unwrap();
         frame.get_slice_mut::<u8>().fill(0);
@@ -386,7 +386,11 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         }
     }
 
-    unsafe fn enable(&self) {
+    unsafe fn enable_high(&self) {
+        register::pgdh::set_base(self.get_token());
+    }
+
+    unsafe fn enable_low(&self) {
         register::pgdl::set_base(self.get_token());
     }
 }

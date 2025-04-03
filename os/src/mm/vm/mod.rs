@@ -1,10 +1,10 @@
 use core::ops::Range;
-use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{alloc::Global, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 
-use crate::{fs::vfs::File, syscall::{mm::MmapFlags, SysResult}, task::utils::AuxHeader};
+use crate::{fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysResult}, task::utils::AuxHeader};
 
 use super::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable};
 
@@ -18,7 +18,9 @@ pub enum KernVmAreaType {
     /// mmio
     MemMappedReg,
     /// 
-    KernelStack
+    KernelStack,
+    ///
+    VirtMemory
 }
 
 /// Type of User's Virtual Memory Area
@@ -49,6 +51,8 @@ pub struct UserVmArea {
     pub mmap_flags: MmapFlags,
     /// offset in file
     pub offset: usize,
+    /// length of file
+    pub len: usize
 }
 
 #[allow(missing_docs, unused)]
@@ -66,6 +70,7 @@ impl UserVmArea {
             file: None,
             mmap_flags: MmapFlags::default(),
             offset: 0,
+            len: 0
         }
     }
 
@@ -75,15 +80,17 @@ impl UserVmArea {
         flags: MmapFlags,
         file: Option<Arc<dyn File>>,
         offset: usize,
+        len: usize,
     ) -> Self {
         Self {
             range_va,
             vma_type: UserVmAreaType::Mmap,
             map_perm,
             frames: BTreeMap::new(),
-            file: file,
+            file,
             mmap_flags: flags,
-            offset: 0,
+            offset,
+            len
         }
     }
 }
@@ -93,7 +100,7 @@ pub struct KernVmArea {
     range_va: Range<VirtAddr>,
     pub vma_type: KernVmAreaType,
     pub map_perm: MapPerm,
-    pub frames: BTreeMap<VirtPageNum, FrameTracker>,
+    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
 }
 
 #[allow(missing_docs, unused)]
@@ -151,6 +158,10 @@ pub trait KernVmSpaceHal {
 
     fn push_area(&mut self, area: KernVmArea, data: Option<&[u8]>);
 
+    fn map_vm_area(&mut self, frames: Vec<StrongArc<FrameTracker, SlabAllocator>>, map_perm: MapPerm) -> Option<Range<VirtPageNum>>;
+
+    fn unmap_vm_area(&mut self, range_vpn: Range<VirtPageNum>);
+
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
 
     fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
@@ -165,7 +176,7 @@ pub trait UserVmSpaceHal: Sized {
 
     fn enable(&self) {
         unsafe {
-            self.get_page_table().enable();
+            self.get_page_table().enable_low();
             Instruction::tlb_flush_all();
         }
     }
@@ -173,6 +184,9 @@ pub trait UserVmSpaceHal: Sized {
     fn from_kernel(kvm_space: &KernVmSpace) -> Self;
 
     fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
+
+    fn from_elf_file(elf_file: Arc<dyn File>, kvm_space: &SpinMutex<KernVmSpace, impl MutexSupport>) -> 
+        (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
 
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self;
 

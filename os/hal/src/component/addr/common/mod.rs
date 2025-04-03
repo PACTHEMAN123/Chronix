@@ -86,7 +86,11 @@ impl VirtAddr {
 
 impl From<usize> for VirtAddr {
     fn from(value: usize) -> Self {
-        Self(value & ((1usize << Constant::VA_WIDTH) - 1))
+        if value & (1usize << (Constant::VA_WIDTH-1)) == 0 {
+            Self(value & ((1usize << Constant::VA_WIDTH) - 1))
+        } else {
+            Self(value | !((1usize << Constant::VA_WIDTH) - 1))
+        }
     }
 }
 

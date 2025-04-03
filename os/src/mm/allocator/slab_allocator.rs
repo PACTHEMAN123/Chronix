@@ -8,11 +8,8 @@ use crate::sync::mutex::{spin_mutex::SpinMutex, Spin};
 use super::FrameAllocator;
 
 /// slab allocator
+#[allow(unused)]
 pub static SLAB_ALLOCATOR_INNER: SlabAllocatorInner = SlabAllocatorInner::new();
-
-/// Slab Allocator
-#[derive(Clone)]
-pub struct SlabAllocator;
 
 /// Slab Allocator's Inner
 pub struct SlabAllocatorInner {
@@ -32,6 +29,11 @@ pub struct SlabAllocatorInner {
 }
 
 unsafe impl Sync for SlabAllocatorInner {}
+
+/// Slab Allocator
+#[derive(Clone)]
+pub struct SlabAllocator;
+
 
 unsafe impl Allocator for SlabAllocator {
     fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
@@ -290,7 +292,6 @@ impl<const S: usize> SlabCache<S> {
                     last = node;
                 }
                 last.next = null_mut();
-                
                 self.free_blk_list.push(blk);
                 continue;
             }
@@ -369,7 +370,7 @@ impl<T: LinkedNode> LinkedStack<T> {
 
     fn push(&mut self, val: &mut T) {
         *val.next() = self.head;
-        if self.head.is_null() {
+        if !self.head.is_null() {
             unsafe { *(*self.head).last() = val };
         }
         self.head = val;

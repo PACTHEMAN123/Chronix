@@ -25,6 +25,10 @@ pub trait ConstantsHal {
     const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE + 1;
     const KERNEL_STACK_TOP: usize;
 
+    const KERNEL_VM_SIZE: usize;
+    const KERNEL_VM_BOTTOM: usize = Self::KERNEL_VM_TOP - Self::KERNEL_VM_SIZE + 1;
+    const KERNEL_VM_TOP: usize;
+
     const USER_STACK_SIZE: usize;
     const USER_STACK_BOTTOM: usize = Self::USER_STACK_TOP - Self::USER_STACK_SIZE;
     const USER_STACK_TOP: usize;

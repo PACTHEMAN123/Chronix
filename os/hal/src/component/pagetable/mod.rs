@@ -35,7 +35,8 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PTE>;
     fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapPerm, level: PageLevel);
     fn unmap(&mut self, vpn: VirtPageNum);
-    unsafe fn enable(&self);
+    unsafe fn enable_high(&self);
+    unsafe fn enable_low(&self);
 }
 
 #[cfg(target_arch = "riscv64")]

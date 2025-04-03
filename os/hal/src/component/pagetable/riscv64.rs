@@ -84,21 +84,9 @@ impl Iterator for VpnPageRangeIter {
         if self.range_vpn.is_empty() {
             None
         } else {
-            if self.range_vpn.start.0 % PageLevel::Huge.page_count() == 0 
-            && self.range_vpn.clone().count() >= PageLevel::Huge.page_count() {
-                let ret = (self.range_vpn.start, PageLevel::Huge);
-                self.range_vpn.start += PageLevel::Huge.page_count();
-                Some(ret)
-            } else if self.range_vpn.start.0 % PageLevel::Big.page_count() == 0
-            && self.range_vpn.clone().count() >= PageLevel::Big.page_count() {
-                let ret = (self.range_vpn.start, PageLevel::Big);
-                self.range_vpn.start += PageLevel::Big.page_count();
-                Some(ret)
-            } else {
-                let ret = (self.range_vpn.start, PageLevel::Small);
-                self.range_vpn.start += PageLevel::Small.page_count();
-                Some(ret)
-            }
+            let ret = (self.range_vpn.start, PageLevel::Small);
+            self.range_vpn.start += PageLevel::Small.page_count();
+            Some(ret)
         }
     }
 }
@@ -320,8 +308,12 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
             None => panic!("vpn: {:#x} has not mapped", vpn.0)
         }
     }
+    
+    unsafe fn enable_high(&self) {
+        asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
+    }
 
-    unsafe fn enable(&self) {
+    unsafe fn enable_low(&self) {
         asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
     }
     

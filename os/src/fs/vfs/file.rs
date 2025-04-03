@@ -8,6 +8,7 @@ use alloc::{
 };
 use log::info;
 use hal::println;
+use xmas_elf::reader::Reader;
 use super::{Dentry, Inode, DCACHE};
 
 /// basic File object

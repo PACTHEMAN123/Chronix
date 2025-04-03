@@ -108,7 +108,7 @@ impl Inode for Ext4Inode {
             fsize
         };
         if offset >= size {
-            info!("[Ext4 INode]: read_page_at: reach EOF");
+            info!("[Ext4 INode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
 
