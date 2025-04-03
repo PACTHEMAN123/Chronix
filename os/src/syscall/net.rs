@@ -115,9 +115,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             })
         },
     }?;
-    log::info!("[sys_bind] local_addr's port is: {}",unsafe {
-        local_addr.ipv4.sin_port
-    });
+    // log::info!("[sys_bind] local_addr's port is: {}",unsafe {
+        // local_addr.ipv4.sin_port
+    // });
     let socket_file = task.with_fd_table(|table| {
         table[fd]
         .clone()
@@ -173,10 +173,10 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             })
         }
     }?;
-    log::info!("[sys_connect] remote_addr's port is: {}",
-        unsafe {
-            remote_addr.ipv4.sin_port
-    });
+    // log::info!("[sys_connect] remote_addr's port is: {}",
+        // unsafe {
+            // remote_addr.ipv4.sin_port
+    // });
     let socket_file = task.with_fd_table(|table| {
         table[fd]
         .clone()
@@ -218,13 +218,13 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     });
     // moniter accept, allow sig_kill and sig_stop to interrupt
     task.set_interruptable();
-    task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
+    // task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
     let accept_sk = socket_file.sk.accept().await?;
     task.set_running();
-    log::info!("get accept correct");
+    // log::info!("get accept correct");
     let peer_addr_endpoint = accept_sk.peer_addr().unwrap();
     let peer_addr = SockAddr::from_endpoint(peer_addr_endpoint);
-    log::info!("Accept a connection from {:?}", peer_addr);
+    // log::info!("Accept a connection from {:?}", peer_addr);
     // write to pointer
     unsafe {
         match SaFamily::try_from(peer_addr.family).unwrap() {
