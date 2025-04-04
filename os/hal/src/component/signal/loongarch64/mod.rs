@@ -3,7 +3,7 @@
 ///// signal context
 
 use super::UContextHal;
-use crate::trap::TrapContext;
+use crate::{constant::{Constant, ConstantsHal}, trap::TrapContext};
 
 core::arch::global_asm!(include_str!("trampoline.S"));
 
@@ -76,11 +76,6 @@ impl UContextHal for UContext {
     }
 }
 
-#[allow(unused)]
-unsafe extern "C" {
-    unsafe fn sigreturn_trampoline();
-}
-
 pub fn sigreturn_trampoline_addr() -> usize {
-    sigreturn_trampoline as usize
+    Constant::SIGRET_TRAMPOLINE_BOTTOM
 }

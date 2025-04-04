@@ -1,5 +1,6 @@
 //! signal related syscall
 
+use hal::println;
 use hal::{
     trap::TrapContextHal,
     signal::*,
@@ -92,7 +93,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     let sig_manager = task.sig_manager.lock();
     let _sum_guard = SumGuard::new();
     info!("[sys_rt_sigaction]: writing old action");
-    if old_action as *const u8 != core::ptr::null::<u8>() {
+    if !old_action.is_null() {
         let k_sig_hand = &sig_manager.sig_handler[signo as usize];
         unsafe {
             if k_sig_hand.is_user {
@@ -107,7 +108,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     drop(sig_manager);
 
     info!("[sys_rt_sigaction]: reading new action");
-    if action as *const u8 != core::ptr::null::<u8>() {
+    if !action.is_null() {
         let mut sig_action = unsafe { *action };
         let new_sigaction = match sig_action.sa_handler as usize {
             SIG_DFL => KSigAction::new(signo as usize, false),

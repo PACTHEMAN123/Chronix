@@ -51,6 +51,7 @@ const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
+const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SOCKET: usize = 198;
 const SYSCALL_BIND: usize = 200;
 const SYSCALL_LISTEN: usize = 201;
@@ -78,7 +79,7 @@ pub mod sys_error;
 /// syscall concerning network
 pub mod net;
 pub use fs::*;
-use hal::addr::VirtAddr;
+use hal::{addr::VirtAddr, println};
 use mm::{sys_mmap, sys_munmap};
 use net::*;
 pub use process::*;
@@ -132,6 +133,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETEUID => sys_geteuid(),
+        SYSCALL_GETTID => sys_gettid(),
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
         SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into(), args[3].into(), args[4].into()),

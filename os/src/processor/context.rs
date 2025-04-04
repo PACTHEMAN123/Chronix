@@ -35,16 +35,16 @@ impl EnvContext{
             unsafe {
                 Instruction::set_sum();
             }
-            self.sum_flag = 1;
         }
+        self.sum_flag += 1;
     }
     /// decrease sum flag
     pub fn sum_dec(&mut self) {
-        if self.sum_flag == 1 {
+        self.sum_flag -= 1;
+        if self.sum_flag == 0 {
             unsafe {
                 Instruction::clear_sum();
             }
-            self.sum_flag = 0;
         }
     }
 }

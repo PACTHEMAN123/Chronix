@@ -353,20 +353,6 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
 fn get_trap_type() -> TrapType {
     let estat = register::estat::read();
     let badv = register::badv::read().raw();
-    // match estat.cause() {
-    //     Trap::Exception(Exception::LoadPageFault) |
-    //     Trap::Exception(Exception::StorePageFault) |
-    //     Trap::Exception(Exception::FetchPageFault) => {
-    //         warn!(
-    //             "TrapType::PageFault cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
-    //             estat.cause(), 
-    //             badv, 
-    //             register::badi::read().inst(),
-    //             register::era::read().raw()
-    //         );
-    //     }
-    //     _ => {}
-    // }
     match estat.cause() {
         Trap::Exception(Exception::Breakpoint) => TrapType::Breakpoint,
         Trap::Exception(Exception::Syscall) => TrapType::Syscall,

@@ -717,66 +717,67 @@ impl TaskControlBlock {
     pub fn check_and_handle(&self) {
         self.with_mut_sig_manager(|sig_manager| {
             // check the signal, try to find first handle signal
-        if sig_manager.pending_sigs.is_empty() {
-            return;
-        }
-        let len = sig_manager.pending_sigs.len();
-        let mut cnt = 0;
-        let mut signo: usize = 0;
-        while cnt < len {
-            signo = sig_manager.pending_sigs.pop_front().unwrap();
-            cnt += 1;
-            // block the signals
-            if signo != SIGKILL && signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo) {
-                //info!("[SIGHANDLER] signal {} blocked", signo);
-                sig_manager.pending_sigs.push_back(signo);
-                continue;
+            if sig_manager.pending_sigs.is_empty() {
+                return;
             }
-            //info!("[SIGHANDLER] receive signal {}", signo);
-            break;
-        }
-        // handle a signal
-        assert!(signo != 0);
-        let sig_action = sig_manager.sig_handler[signo];
-        let trap_cx = self.get_trap_cx();
-        if sig_action.is_user {
-            let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
-            sig_manager.blocked_sigs.add_sig(signo);
-            sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
-            // save fx state
-            trap_cx.fx_encounter_signal();
-            // push the current Ucontext into user stack
-            // (todo) notice that user may provide signal stack
-            // but now we dont support this flag
-            let sp = *trap_cx.sp();
-            let new_sp = sp - size_of::<UContext>();
-            let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
-            let ucontext_bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    &ucontext as *const UContext as *const u8,
-                    core::mem::size_of::<UContext>(),
-                )
-            };
-            copy_out(&self.vm_space.lock().get_page_table(), VirtAddr(new_sp), ucontext_bytes);
-            self.set_sig_ucontext_ptr(new_sp);
+            let len = sig_manager.pending_sigs.len();
+            let mut cnt = 0;
+            let mut signo: usize = 0;
+            while cnt < len {
+                signo = sig_manager.pending_sigs.pop_front().unwrap();
+                cnt += 1;
+                // block the signals
+                if signo != SIGKILL && signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo) {
+                    //info!("[SIGHANDLER] signal {} blocked", signo);
+                    sig_manager.pending_sigs.push_back(signo);
+                    continue;
+                }
+                //info!("[SIGHANDLER] receive signal {}", signo);
+                break;
+            }
+            // handle a signal
+            assert!(signo != 0);
+            let sig_action = sig_manager.sig_handler[signo];
+            let trap_cx = self.get_trap_cx();
+            if sig_action.is_user {
+                let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
+                sig_manager.blocked_sigs.add_sig(signo);
+                sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
+                // save fx state
+                trap_cx.fx_encounter_signal();
+                // push the current Ucontext into user stack
+                // (todo) notice that user may provide signal stack
+                // but now we dont support this flag
+                let sp = *trap_cx.sp();
+                let new_sp = sp - size_of::<UContext>();
+                let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
+                let ucontext_bytes: &[u8] = unsafe {
+                    core::slice::from_raw_parts(
+                        &ucontext as *const UContext as *const u8,
+                        core::mem::size_of::<UContext>(),
+                    )
+                };
+                copy_out(&self.vm_space.lock().get_page_table(), VirtAddr(new_sp), ucontext_bytes);
+                self.set_sig_ucontext_ptr(new_sp);
 
-            // set the current trap cx sepc to reach user handler
-            *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
-            // a0
-            trap_cx.set_arg_nth(0, signo);
-            // sp used by sys_sigreturn to restore ucontext
-            *trap_cx.sp() = new_sp;
-            // ra: when user signal handler ended, return to sigreturn_trampoline
-            // which calls sys_sigreturn
-            *trap_cx.ra() = sigreturn_trampoline_addr();
-        } else {
-            let handler = unsafe {
-                core::mem::transmute::<*const (), fn(usize)>(
-                    sig_action.sa.sa_handler as *const (),
-                )
-            };
-            handler(signo);
-        }
+                // set the current trap cx sepc to reach user handler
+                *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
+                // a0
+                trap_cx.set_arg_nth(0, signo);
+                // sp used by sys_sigreturn to restore ucontext
+                *trap_cx.sp() = new_sp;
+                // ra: when user signal handler ended, return to sigreturn_trampoline
+                // which calls sys_sigreturn
+                println!("sigreturn_trampoline_addr: {:#x}", sigreturn_trampoline_addr());
+                *trap_cx.ra() = sigreturn_trampoline_addr();
+            } else {
+                let handler = unsafe {
+                    core::mem::transmute::<*const (), fn(usize)>(
+                        sig_action.sa.sa_handler as *const (),
+                    )
+                };
+                handler(signo);
+            }
         });
     }
 }

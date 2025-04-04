@@ -53,7 +53,6 @@ pub async fn user_trap_handler()  {
             // jump to next instruction anyway
             *cx.sepc() += 4;
             // get system call return value
-
             let result = syscall(
                 cx.syscall_id(), 
                 [
@@ -126,7 +125,7 @@ pub async fn user_trap_handler()  {
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return(task: &Arc<TaskControlBlock>) {
-    unsafe{
+    unsafe {
         Instruction::disable_interrupt();  
     }
     set_user_trap_entry();
@@ -149,7 +148,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
 
     // set up time recorder for trap
     task.time_recorder().record_trap();
-    //info!("[in record trap] task id: {}kernel_time:{:?}",task.tid(),task.time_recorder().kernel_time());
+    // info!("[in record trap] task id: {}kernel_time:{:?}",task.tid(),task.time_recorder().kernel_time());
 }
 
 hal::define_kernel_trap_handler!(kernel_trap_handler);
@@ -166,8 +165,8 @@ fn kernel_trap_handler() {
             );
 
             let access_type = match trap_type {
-                TrapType::StorePageFault(_) => PageFaultAccessType::READ,
-                TrapType::LoadPageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::StorePageFault(_) => PageFaultAccessType::WRITE,
+                TrapType::LoadPageFault(_) => PageFaultAccessType::READ,
                 TrapType::InstructionPageFault(_) => PageFaultAccessType::EXECUTE,
                 _ => unreachable!(),
             };

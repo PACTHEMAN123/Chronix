@@ -21,12 +21,16 @@ pub trait ConstantsHal {
 
     const MEMORY_END: usize;
 
+    const SIGRET_TRAMPOLINE_SIZE: usize; 
+    const SIGRET_TRAMPOLINE_BOTTOM: usize = Self::SIGRET_TRAMPOLINE_TOP - Self::SIGRET_TRAMPOLINE_SIZE; 
+    const SIGRET_TRAMPOLINE_TOP: usize; 
+
     const KERNEL_STACK_SIZE: usize;
-    const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE + 1;
+    const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE;
     const KERNEL_STACK_TOP: usize;
 
     const KERNEL_VM_SIZE: usize;
-    const KERNEL_VM_BOTTOM: usize = Self::KERNEL_VM_TOP - Self::KERNEL_VM_SIZE + 1;
+    const KERNEL_VM_BOTTOM: usize = Self::KERNEL_VM_TOP - Self::KERNEL_VM_SIZE;
     const KERNEL_VM_TOP: usize;
 
     const USER_STACK_SIZE: usize;
@@ -44,7 +48,7 @@ pub trait ConstantsHal {
 
     const USER_TRAP_CONTEXT_SIZE: usize;
     const USER_TRAP_CONTEXT_TOP: usize;
-    const USER_TRAP_CONTEXT_BOTTOM: usize = Self::USER_TRAP_CONTEXT_TOP - Self::USER_TRAP_CONTEXT_SIZE + 1;
+    const USER_TRAP_CONTEXT_BOTTOM: usize = Self::USER_TRAP_CONTEXT_TOP - Self::USER_TRAP_CONTEXT_SIZE;
 
 }
 

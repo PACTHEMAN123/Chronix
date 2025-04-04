@@ -49,10 +49,6 @@ macro_rules! ImplFor {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysAddr(pub usize);
 
-impl PhysAddr {
-    const MAX: usize = 0x0000_ffff_ffff_ffff;
-}
-
 ImplFor!(PhysAddr);
 
 impl From<usize> for PhysAddr {
@@ -64,14 +60,9 @@ impl From<usize> for PhysAddr {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysPageNum(pub usize);
 
-
-impl PhysPageNum {
-    const MAX: usize = 0x0000_000f_ffff_ffff;
-}
-
 impl From<usize> for PhysPageNum {
     fn from(value: usize) -> Self {
-        Self(value & ((1usize << Constant::PPN_WIDTH) - 1))
+        Self(value & ((1 << Constant::PPN_WIDTH) - 1))
     }
 }
 
@@ -79,10 +70,6 @@ ImplFor!(PhysPageNum);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtAddr(pub usize);
-
-impl VirtAddr {
-    const MAX: usize = 0x0000_ffff_ffff_ffff;
-}
 
 impl From<usize> for VirtAddr {
     fn from(value: usize) -> Self {
@@ -110,11 +97,6 @@ impl From<usize> for VirtPageNum {
         Self(value & ((1 << Constant::VPN_WIDTH) - 1))
     }
 }
-
-impl VirtPageNum {
-    const MAX: usize = 0x0000_000f_ffff_ffff;
-}
-
 ImplFor!(VirtPageNum);
 
 pub trait VirtAddrHal {

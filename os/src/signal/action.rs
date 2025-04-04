@@ -1,12 +1,14 @@
 //! signal action
 
+use hal::println;
+
 use super::*;
 
 
 #[derive(Clone, Copy)]
 #[repr(C)]
 /// signal action struct under riscv-linux arch
-pub struct SigAction {
+pub struct  SigAction {
     pub sa_handler: usize,
     pub sa_flags: u32,
     pub sa_restorer: usize,
