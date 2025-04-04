@@ -369,7 +369,7 @@ impl Inode for Ext4Inode {
             // DIR size should be 0
             0
         };
-        info!("file size: {}", size);
+        debug!("file size: {}", size);
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,

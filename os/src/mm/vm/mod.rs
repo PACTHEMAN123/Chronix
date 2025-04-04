@@ -20,7 +20,9 @@ pub enum KernVmAreaType {
     /// 
     KernelStack,
     ///
-    VirtMemory
+    SigretTrampoline,
+    ///
+    VirtMemory,
 }
 
 /// Type of User's Virtual Memory Area

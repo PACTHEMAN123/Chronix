@@ -52,6 +52,15 @@ impl PageLevel {
             _ => false
         }
     }
+
+    pub const fn from_count(count: usize) -> Option<Self> {
+        match count {
+            0x1 => Some(Self::Small),
+            0x200 => Some(Self::Big),
+            0x40000 => Some(Self::Huge),
+            _ => None
+        }
+    }
 }
 
 impl From<usize> for PageLevel {

@@ -84,7 +84,7 @@ core::arch::global_asm!(
     .equ LA_CSR_TLBRELO1,      0x8d    /* TLB refill entrylo1 */
     .equ LA_CSR_TLBREHI,       0x8e    /* TLB refill entryhi */
     .globl _tlb_fill
-    .balign 4096
+    .align 12
     _tlb_fill:
         csrwr   $t0, LA_CSR_TLBRSAVE
         csrrd   $t0, LA_CSR_PGD
