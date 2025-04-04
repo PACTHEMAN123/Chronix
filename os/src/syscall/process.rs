@@ -18,6 +18,7 @@ use crate::utils::{suspend_now, user_path_to_string};
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
+use hal::println;
 use hal::trap::{TrapContext, TrapContextHal};
 use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
@@ -129,11 +130,11 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
-    //info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
+    // info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
-    new_task.get_trap_cx().set_arg_nth(0, 0);
+    new_task.get_trap_cx().set_ret_nth(0, 0);
     let new_tid = new_task.tid();
 
     // set new stack
@@ -210,7 +211,7 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
         }
     }
     // open file
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_WRONLY) {
         // let all_data = app_inode.read_all();
         let task = current_task().unwrap();
         

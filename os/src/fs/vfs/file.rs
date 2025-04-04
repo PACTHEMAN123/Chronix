@@ -2,7 +2,8 @@
 
 use core::{any::Any, task::Poll};
 
-use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
+
+use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, sync::mutex::{spin_mutex::SpinMutex, SpinNoIrqLock}, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
 use async_trait::async_trait;
 
 use alloc::{
@@ -20,6 +21,8 @@ pub struct FileInner {
     pub dentry: Arc<dyn Dentry>,
     /// the current pos 
     pub offset: usize,
+    /// file flags
+    pub flags: SpinNoIrqLock<OpenFlags>,
 }
 
 bitflags! {
@@ -84,6 +87,14 @@ pub trait File: Send + Sync + DowncastSync {
         }
         res
     }
+    /// get the file flags
+    fn flags(&self) -> OpenFlags {
+        self.inner().flags.lock().clone()
+    }
+    /// set the file flags
+    fn set_flags(&self, flags: OpenFlags) {
+        *self.inner().flags.lock() = flags
+    }
 }
 
 impl dyn File {
@@ -122,7 +133,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
         Arc::clone(dcache.get("/").unwrap())
     };
     
-    if flags.contains(OpenFlags::CREATE) {
+    if flags.contains(OpenFlags::O_CREAT) {
         if let Some(dentry) = root_dentry.find(path) {
             // clear size
             let inode = dentry.inode().unwrap();
@@ -144,7 +155,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
         if let Some(dentry) = root_dentry.find(path) {
             // get the dentry and it is valid (see dentry::find)
             let inode = dentry.inode().unwrap();
-            if flags.contains(OpenFlags::TRUNC) {
+            if flags.contains(OpenFlags::O_TRUNC) {
                 inode.truncate(0).expect("Error when truncating inode");
             }
             dentry.open(flags)

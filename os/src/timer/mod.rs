@@ -8,6 +8,7 @@ use hal::timer::{Timer, TimerHal};
 pub mod timer;
 /// time-limited task wrapper
 pub mod timed_task;
+pub mod clock;
 use core::time::Duration;
 
 const TICKS_PER_SEC: usize = 100;

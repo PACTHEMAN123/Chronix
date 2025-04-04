@@ -2,6 +2,7 @@
 //! 
 #![allow(missing_docs)]
 
+use super::fs::FdTable;
 use super::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use super::{tid_alloc, schedule, INITPROC};
 use crate::fs::devfs::tty::TTY;
@@ -17,6 +18,7 @@ use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
+use crate::syscall::SysError;
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
@@ -52,8 +54,6 @@ use log::*;
 use super::tid::{PGid, Pid, Tid, TidAddress, TidHandle};
 /// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
-/// pack FDtable as a struct
-pub type FDTable = Vec<Option<Arc<dyn File>>>;
 /// new a shared object
 pub fn new_shared<T>(data: T) -> Shared<T> {
     Arc::new(SpinNoIrqLock::new(data))
@@ -92,7 +92,7 @@ pub struct TaskControlBlock {
     /// child tasks
     pub children: Shared<BTreeMap<Pid, Arc<TaskControlBlock>>>,
     /// file descriptor table
-    pub fd_table: Shared<Vec<Option<Arc<dyn File>>>>,
+    pub fd_table: Shared<FdTable>,
     /// thread group which contains this task
     pub thread_group: Shared<ThreadGroup>,
     /// process group id
@@ -158,7 +158,7 @@ impl TaskControlBlock {
         time_recorder: TimeRecorder
     );
     generate_with_methods!(
-        fd_table: FDTable,
+        fd_table: FdTable,
         children: BTreeMap<Pid, Arc<TaskControlBlock>>,
         vm_space: UserVmSpace,
         thread_group: ThreadGroup,
@@ -228,16 +228,6 @@ impl TaskControlBlock {
     /// get task_status of the task
     fn get_status(&self) -> TaskStatus{
         *self.task_status.lock()
-    }
-    /// allocate a new fd for the task
-    pub fn alloc_fd(&self) -> usize {
-        let mut fd_table_inner = self.fd_table.lock();
-        if let Some (fd) = (0..fd_table_inner.len()).find(|fd| fd_table_inner[*fd].is_none()) {
-            fd
-        } else {
-            fd_table_inner.push(None);
-            fd_table_inner.len() - 1
-        }
     }
     /// switch to the task's page table
     pub unsafe fn switch_page_table(&self) {
@@ -324,14 +314,7 @@ impl TaskControlBlock {
             vm_space: new_shared(vm_space),
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
-            fd_table: new_shared(vec![
-                // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
-                Some(Arc::new(Stdin)),
-                // 1 -> stdout
-                Some(TTY.clone()),
-                // 2 -> stderr
-                Some(TTY.clone()),
-            ]),
+            fd_table: new_shared(FdTable::new()),
             thread_group: new_shared(ThreadGroup::new()),
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
@@ -401,14 +384,7 @@ impl TaskControlBlock {
             vm_space: new_shared(vm_space),
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
-            fd_table: new_shared(vec![
-                // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
-                Some(Arc::new(Stdin)),
-                // 1 -> stdout
-                Some(TTY.clone()),
-                // 2 -> stderr
-                Some(TTY.clone()),
-            ]),
+            fd_table: new_shared(FdTable::new()),
             thread_group: new_shared(ThreadGroup::new()),
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
@@ -838,18 +814,7 @@ impl TaskControlBlock {
     }
 }
 
-/// for file system
-impl TaskControlBlock {
-    /// get the current working dir
-    pub fn cwd(&self) -> Arc<dyn Dentry> {
-        self.cwd.lock().clone()
-    } 
-    /// change the current working dir
-    pub fn set_cwd(&self, dentry: Arc<dyn Dentry>) {
-        info!("switching task {}'s cwd to {}", self.gettid(), dentry.path());
-        *self.cwd.lock() = dentry;
-    }
-}
+
 
 #[derive(Copy, Clone, PartialEq)]
 /// 

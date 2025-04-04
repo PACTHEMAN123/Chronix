@@ -99,7 +99,7 @@ pub fn sys_mmap(
                 })?;
                 Ok(start_va)
             } else {
-                let file = task.with_fd_table(|table| table[fd].clone()).unwrap();
+                let file = task.with_fd_table(|t| t.get_file(fd))?;
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_mmap_area(addr, length, perm, flags, file, offset)
                 })?;
@@ -113,7 +113,7 @@ pub fn sys_mmap(
                 })?;
                 Ok(start_va)
             } else {
-                let file = task.with_fd_table(|table| table[fd].clone()).unwrap();
+                let file = task.with_fd_table(|t| t.get_file(fd))?;
                 // TODO: private copy on write
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_mmap_area(addr, length, perm, flags, file, offset)
