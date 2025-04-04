@@ -5,7 +5,7 @@ use fatfs::info;
 use hal::{addr, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 
-use crate::{fs::OpenFlags, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, SaFamily}, signal::SigSet, task::current_task, utils::yield_now};
+use crate::{fs::OpenFlags, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, SaFamily}, signal::SigSet, task::{current_task, fs::FdInfo}, utils::yield_now};
 
 use super::{SysError, SysResult};
 
@@ -70,23 +70,28 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     let mut types = types as i32;
     let mut nonblock = false;
     // file descriptor flags
-    // let flags = OpenFlags::empty();
+    let mut flags = OpenFlags::empty();
     if types & SOCK_NONBLOCK != 0 {
         nonblock = true;
         types &= !SOCK_NONBLOCK;
-        // flags |= OpenFlags::NONBLOCK;
+        flags |= OpenFlags::O_NONBLOCK;
     } 
     if types & SOCK_CLOEXEC != 0 {
         types &= !SOCK_CLOEXEC;
-        // flags |= OpenFlags::CLOEXEC;
+        flags |= OpenFlags::O_CLOEXEC;
     }
+
     let types = SocketType::try_from(types)?;
     let socket = socket::Socket::new(domain,types, nonblock);
+    let fd_info = FdInfo {
+        file: Arc::new(socket),
+        flags: flags.into(),
+    };
     let task = current_task().unwrap();
-    let fd = task.alloc_fd();
+    let fd = task.with_mut_fd_table(|t|t.alloc_fd());
     task.with_mut_fd_table(|t| {
-        t[fd] = Some(Arc::new(socket));
-    });
+        t.put_file(fd, fd_info).or_else(|e|Err(e))
+    })?;
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
@@ -119,7 +124,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         // local_addr.ipv4.sin_port
     // });
     let socket_file = task.with_fd_table(|table| {
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()}).unwrap_or_else(|_| {
@@ -135,7 +140,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
     let current_task = current_task().unwrap();
     let socket_file = current_task.with_fd_table(|table| {
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()
@@ -178,7 +183,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             // remote_addr.ipv4.sin_port
     // });
     let socket_file = task.with_fd_table(|table| {
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()
@@ -208,7 +213,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table|{
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()
@@ -244,10 +249,14 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     }
 
     let accept_socket = Arc::new(socket::Socket::from_another(&socket_file, Sock::TCP(accept_sk)));
-    let new_fd = task.alloc_fd();
+    let fd_info = FdInfo {
+        file: accept_socket,
+        flags: OpenFlags::empty().into(),
+    };
+    let new_fd = task.with_mut_fd_table(|t|t.alloc_fd());
     task.with_mut_fd_table(|t| {
-        t[new_fd] = Some(accept_socket);
-    });
+        t.put_file(fd, fd_info)
+    })?;
     Ok(new_fd as isize)
 }
 
@@ -255,7 +264,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()
@@ -289,7 +298,7 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
-        table[fd]
+        table.get_file(fd)
         .clone()
         .unwrap()
         .downcast_arc::<socket::Socket>()

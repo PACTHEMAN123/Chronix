@@ -122,9 +122,9 @@ impl Socket {
         };
         let fd_flags = if non_block {
             sk.set_nonblocking();
-            OpenFlags::RDWR | OpenFlags::NONBLOCK
+            OpenFlags::O_RDWR | OpenFlags::O_NONBLOCK
         }else {
-            OpenFlags::RDWR
+            OpenFlags::O_RDWR
         };
 
         Self {
@@ -138,7 +138,7 @@ impl Socket {
         Self {
             sk: sk,
             sk_type: another.sk_type,
-            fd_flags: SpinNoIrqLock::new(OpenFlags::RDWR),
+            fd_flags: SpinNoIrqLock::new(OpenFlags::O_RDWR),
         }
     }
 }
