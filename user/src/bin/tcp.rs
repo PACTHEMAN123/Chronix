@@ -72,13 +72,7 @@ fn server() -> ! {
         if write_res != n {
             panic!("[Server] Failed to write all bytes, {}/{}", write_res, n);
         }
-        for _ in 0..100 {
-            delay();
-        }
-        break;
-
     }
-    println!("[Server] Exiting...");
     close(client_fd as usize);
     close(sockfd as usize);
     exit(0);
