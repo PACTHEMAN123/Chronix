@@ -74,36 +74,38 @@ pub const AT_FDCWD: isize = -100;
 /// Remove directory instead of unlinking file.
 pub const AT_REMOVEDIR: i32 = 0x200;
 
-bitflags! {
-    ///Open file flags
-    pub struct OpenFlags: u32 {
-        const APPEND = 1 << 10;
-        const ASYNC = 1 << 13;
-        const DIRECT = 1 << 14;
-        const DSYNC = 1 << 12;
-        const EXCL = 1 << 7;
-        const NOATIME = 1 << 18;
-        const NOCTTY = 1 << 8;
-        const NOFOLLOW = 1 << 17;
-        const PATH = 1 << 21;
-        /// TODO: need to find 1 << 15
-        const TEMP = 1 << 15;
-        /// Read only
-        const RDONLY = 0;
-        /// Write only
-        const WRONLY = 1 << 0;
-        /// Read & Write
-        const RDWR = 1 << 1;
-        /// Allow create
-        const CREATE = 1 << 6;
-        /// Clear file and return an empty one
-        const TRUNC = 1 << 9;
-        /// Directory
-        const DIRECTORY = 1 << 16;
-        /// Enable the close-on-exec flag for the new file descriptor
-        const CLOEXEC = 1 << 19;
-        /// When possible, the file is opened in nonblocking mode
-        const NONBLOCK = 1 << 11;
+bitflags::bitflags! {
+    // Defined in <bits/fcntl-linux.h>.
+    // File access mode (O_RDONLY, O_WRONLY, O_RDWR).
+    // The file creation flags are O_CLOEXEC, O_CREAT, O_DIRECTORY, O_EXCL,
+    // O_NOCTTY, O_NOFOLLOW, O_TMPFILE, and O_TRUNC.
+    pub struct OpenFlags: i32 {
+        // reserve 3 bits for the access mode
+        // NOTE: bitflags do not encourage zero bit flag, we should not directly check `O_RDONLY`
+        // const O_RDONLY      = 0;
+        const O_WRONLY      = 1;
+        const O_RDWR        = 2;
+        const O_ACCMODE     = 3;
+        /// If pathname does not exist, create it as a regular file.
+        const O_CREAT       = 0o100;
+        const O_EXCL        = 0o200;
+        const O_NOCTTY      = 0o400;
+        const O_TRUNC       = 0o1000;
+        const O_APPEND      = 0o2000;
+        const O_NONBLOCK    = 0o4000;
+        const O_DSYNC       = 0o10000;
+        const O_SYNC        = 0o4010000;
+        const O_RSYNC       = 0o4010000;
+        const O_DIRECTORY   = 0o200000;
+        const O_NOFOLLOW    = 0o400000;
+        const O_CLOEXEC     = 0o2000000;
+
+        const O_ASYNC       = 0o20000;
+        const O_DIRECT      = 0o40000;
+        const O_LARGEFILE   = 0o100000;
+        const O_NOATIME     = 0o1000000;
+        const O_PATH        = 0o10000000;
+        const O_TMPFILE     = 0o20200000;
     }
 }
 
@@ -113,11 +115,40 @@ impl OpenFlags {
     pub fn read_write(&self) -> (bool, bool) {
         if self.is_empty() {
             (true, false)
-        } else if self.contains(Self::WRONLY) {
+        } else if self.contains(Self::O_WRONLY) {
             (false, true)
         } else {
             (true, true)
         }
+    }
+}
+
+impl OpenFlags {
+    pub const CREATION_FLAGS: Self = Self::O_CLOEXEC
+        .union(Self::O_CREAT)
+        .union(Self::O_DIRECTORY)
+        .union(Self::O_EXCL)
+        .union(Self::O_NOCTTY)
+        .union(Self::O_NOFOLLOW)
+        .union(Self::O_TMPFILE)
+        .union(Self::O_TRUNC);
+
+    pub fn readable(&self) -> bool {
+        !self.contains(Self::O_WRONLY) || self.contains(Self::O_RDWR)
+    }
+
+    pub fn writable(&self) -> bool {
+        self.contains(Self::O_WRONLY) || self.contains(Self::O_RDWR)
+    }
+
+    pub fn access_mode(&self) -> Self {
+        self.intersection(Self::O_ACCMODE)
+    }
+
+    pub fn status(&self) -> Self {
+        let mut ret = self.difference(Self::O_ACCMODE);
+        ret.remove(Self::CREATION_FLAGS);
+        ret
     }
 }
 

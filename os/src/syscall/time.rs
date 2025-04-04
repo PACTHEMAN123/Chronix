@@ -2,10 +2,11 @@
 
 use core::time::Duration;
 
+use hal::instruction::{Instruction, InstructionHal};
 use log::info;
 
 use crate::{
-    processor::context::SumGuard, task::current_task, timer::{ffi::{TimeSpec, TimeVal}, get_current_time_ms,timed_task::{ksleep,suspend_timeout}}, utils::Select2Futures
+    processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, timed_task::{ksleep,suspend_timeout}}, utils::Select2Futures
 };
 use super::{SysError, SysResult};
 /// get current time of day
@@ -18,6 +19,7 @@ pub fn sys_gettimeofday(tv: *mut TimeVal) -> SysResult {
     };
     
     unsafe {
+        Instruction::set_sum();
         tv.write_volatile(time_val);
     }
     Ok(0)
@@ -47,4 +49,35 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
         }
         Err(SysError::EINTR)
     }
+}
+
+/// syscall: clock_gettime
+pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
+    let _sum_guard = SumGuard::new();
+    if ts == 0 {
+        return Ok(0)
+    }
+    let ts_ptr = ts as *mut TimeSpec;
+
+    match clock_id {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            let current = get_current_time_duration();
+            unsafe {
+                ts_ptr.write((CLOCK_DEVIATION[clock_id] + current).into());
+            }
+        }
+        CLOCK_PROCESS_CPUTIME_ID => {
+            let cpu_time = current_task().unwrap().process_cpu_time();
+            unsafe { ts_ptr.write(cpu_time.into()); }
+        }
+        CLOCK_THREAD_CPUTIME_ID => {
+            let (user_time, kernel_time) = current_task().unwrap().time_recorder().time_pair();
+            let cpu_time = user_time + kernel_time;
+            unsafe { ts_ptr.write(cpu_time.into()); }
+        }
+        _ => {
+            panic!("unsupported clock id {}", clock_id);
+        }
+    }
+    Ok(0)
 }

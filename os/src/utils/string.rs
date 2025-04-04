@@ -10,7 +10,8 @@ pub fn c_str_to_string(ptr: *const u8) -> String {
     let mut ptr = ptr as usize;
     let mut ret = String::new();
     loop {
-        let ch: u8 = unsafe { *(ptr as *const u8) };
+        let ch = unsafe { (ptr as *const u8).read() };
+        //let ch: u8 = unsafe { *(ptr as *const u8) };
         if ch == 0 {
             break;
         }
