@@ -216,7 +216,7 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
         let task = current_task().unwrap();
         
         task.exec_from_file(app_inode, argv_vec, envp_vec);
-        
+        // task.exec(&app_inode.read_all(), argv_vec, envp_vec);
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
         Ok(p as isize)

@@ -3,7 +3,7 @@
 ///// signal context
 
 use super::UContextHal;
-use crate::{constant::{Constant, ConstantsHal}, trap::TrapContext};
+use crate::{addr::VirtAddr, constant::{Constant, ConstantsHal}, trap::TrapContext};
 
 core::arch::global_asm!(include_str!("trampoline.S"));
 
@@ -77,5 +77,5 @@ impl UContextHal for UContext {
 }
 
 pub fn sigreturn_trampoline_addr() -> usize {
-    Constant::SIGRET_TRAMPOLINE_BOTTOM
+    VirtAddr::from(Constant::SIGRET_TRAMPOLINE_BOTTOM).0
 }

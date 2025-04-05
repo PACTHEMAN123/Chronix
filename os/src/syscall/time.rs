@@ -19,7 +19,6 @@ pub fn sys_gettimeofday(tv: *mut TimeVal) -> SysResult {
     };
     
     unsafe {
-        Instruction::set_sum();
         tv.write_volatile(time_val);
     }
     Ok(0)
