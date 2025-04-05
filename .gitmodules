@@ -11,3 +11,9 @@
 [submodule "vendor/rust-fatfs"]
 	path = vendor/rust-fatfs
 	url = https://github.com/rafalh/rust-fatfs
+[submodule "xmas-elf"]
+	path = xmas-elf
+	url = https://github.com/zlc-dev/xmas-elf
+[submodule "vendor/xmas-elf"]
+	path = vendor/xmas-elf
+	url = https://github.com/zlc-dev/xmas-elf

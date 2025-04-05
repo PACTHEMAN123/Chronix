@@ -37,7 +37,6 @@ impl<T: Inode + ?Sized> Reader for FileReader<T> {
         let mut end = (offset + len - 1 + Constant::PAGE_SIZE) & !MASK;
 
         loop {
-            
             if let Some((range, range_vpn)) = self.mapped
                 .exclusive_access()
                 .range_contain_key_value(start..end) 
@@ -72,7 +71,7 @@ impl<T: Inode + ?Sized> Reader for FileReader<T> {
                     Err(_) => {
                         while let Some((range, range_vpn)) = self.mapped
                             .exclusive_access()
-                            .range_contain_key_value(start..end) 
+                            .range_intersect_key_value(start..end) 
                         {
                             start = core::cmp::min(start, range.start);
                             end = core::cmp::max(end, range.end);

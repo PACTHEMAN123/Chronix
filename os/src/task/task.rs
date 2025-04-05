@@ -768,7 +768,6 @@ impl TaskControlBlock {
                 *trap_cx.sp() = new_sp;
                 // ra: when user signal handler ended, return to sigreturn_trampoline
                 // which calls sys_sigreturn
-                println!("sigreturn_trampoline_addr: {:#x}", sigreturn_trampoline_addr());
                 *trap_cx.ra() = sigreturn_trampoline_addr();
             } else {
                 let handler = unsafe {

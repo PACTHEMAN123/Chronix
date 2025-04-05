@@ -193,7 +193,7 @@ pub trait UserVmSpaceHal: Sized {
     fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self;
 
     /// warning: data must must be page-aligned
-    fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>);
+    fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>) -> &mut UserVmArea;
 
     fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr;
 

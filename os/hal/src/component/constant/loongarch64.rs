@@ -22,7 +22,7 @@ impl ConstantsHal for Constant {
     const MEMORY_END: usize = 0x9000_0000_A000_0000;
 
     const SIGRET_TRAMPOLINE_SIZE: usize = Self::PAGE_SIZE;
-    const SIGRET_TRAMPOLINE_TOP: usize = 0x1_0000_0000_0000;
+    const SIGRET_TRAMPOLINE_TOP: usize = 0x0000_ffff_ffff_f000;
     
     const KERNEL_STACK_SIZE: usize = 16 * 4096;
     const KERNEL_STACK_TOP: usize = Self::KERNEL_ADDR_SPACE.end;
