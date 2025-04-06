@@ -90,7 +90,7 @@ pub async fn user_trap_handler()  {
                         Ok(()) => {},
                         Err(()) => {
                             log::warn!(
-                                "[user_trap_handler] cannot handle page fault, addr {stval:#x}",
+                                "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?}",
                             );
                             exit_current_and_run_next(-2);
                         }

@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::allocator::FrameAllocatorHal;
+use crate::{allocator::FrameAllocatorHal, println};
 
 use super::addr::PhysPageNum;
 
@@ -17,6 +17,7 @@ impl<A: FrameAllocatorHal> FrameTracker<A> {
     pub fn leak(mut self) -> Range<PhysPageNum> {
         let ret = self.range_ppn.clone();
         self.range_ppn.end = self.range_ppn.start;
+        core::mem::forget(self);
         ret
     }
 }

@@ -37,15 +37,17 @@ pub struct SlabAllocator;
 
 unsafe impl Allocator for SlabAllocator {
     fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
-        Ok(SLAB_ALLOCATOR_INNER.alloc_by_layout(layout).map(
-            |ptr| {
-                NonNull::slice_from_raw_parts(ptr, layout.size())
-            }
-        ).ok_or(AllocError)?)
+        // Ok(SLAB_ALLOCATOR_INNER.alloc_by_layout(layout).map(
+        //     |ptr| {
+        //         NonNull::slice_from_raw_parts(ptr, layout.size())
+        //     }
+        // ).ok_or(AllocError)?)
+        Global.allocate(layout)
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: core::alloc::Layout) {
-        SLAB_ALLOCATOR_INNER.dealloc_by_layout(ptr, layout);
+        // SLAB_ALLOCATOR_INNER.dealloc_by_layout(ptr, layout);
+        Global.deallocate(ptr, layout);
     }
 }
 

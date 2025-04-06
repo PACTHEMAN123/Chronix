@@ -98,7 +98,6 @@ impl Inode for Ext4Inode {
     }
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
-        let page_cache = self.cache();
         let file = self.file.exclusive_access();
         let size = {
             let path = file.get_path();
@@ -111,7 +110,7 @@ impl Inode for Ext4Inode {
             info!("[Ext4 INode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
-
+        let page_cache = self.cache();
         let page = if let Some(page) = page_cache.get_page(offset) {
             page.clone()
         } else {

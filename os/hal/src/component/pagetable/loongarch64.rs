@@ -333,11 +333,11 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     }
  
     fn new_in(_asid: usize, alloc: A) -> Self {
-        let frame = alloc.alloc(1).unwrap();
-        frame.get_slice_mut::<u8>().fill(0);
+        let frame = alloc.alloc_tracker(1).unwrap();
+        frame.range_ppn.get_slice_mut::<u8>().fill(0);
         Self {
-            root_ppn: frame.start,
-            frames: Vec::new(),
+            root_ppn: frame.range_ppn.start,
+            frames: alloc::vec![frame],
             alloc
         }
     }
@@ -354,12 +354,12 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
                 break;
             }
             if pte.is_zero() {
-                let frame = self.alloc.alloc(1).unwrap();
-                frame.get_slice_mut::<u8>().fill(0);
+                let frame = self.alloc.alloc_tracker(1).unwrap();
+                frame.range_ppn.get_slice_mut::<u8>().fill(0);
                 *pte = PageTableEntry {
-                    bits: (frame.start.0 << Constant::PAGE_SIZE_BITS)
+                    bits: (frame.range_ppn.start.0 << Constant::PAGE_SIZE_BITS)
                 };
-                self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
+                self.frames.push(frame);
             }
             ppn = pte.ppn();
         }
