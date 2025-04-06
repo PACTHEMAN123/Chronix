@@ -163,6 +163,7 @@ impl File for Socket {
     #[doc ="Read file to `UserBuffer`"]
     #[must_use]
     async fn read(&self, buf: &mut [u8]) -> usize {
+        log::info!("[Socket::read] buf len:{}", buf.len());
         if buf.len() == 0 {
             return 0;
         }
