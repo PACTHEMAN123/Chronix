@@ -3,9 +3,9 @@
 use core::{cmp, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 
 use alloc::{alloc::Global, sync::{Arc, Weak}};
-use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, util::smart_point::StrongArc};
+use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, util::smart_point::StrongArc};
 
-use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker}};
+use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker}, sync::mutex::SpinNoIrqLock};
 
 pub struct Page {
     /// page frame state or attribute
@@ -19,7 +19,7 @@ pub struct Page {
 unsafe impl Send for Page {}
 unsafe impl Sync for Page {}
 
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = Constant::PAGE_SIZE;
 impl Page {
     /// create a Page by allocating a frame
     pub fn new(index: usize) -> Arc<Self> {
@@ -28,7 +28,7 @@ impl Page {
         frame.range_ppn.get_slice_mut::<u8>().fill(0);
         Arc::new(Self {
             is_dirty: AtomicBool::new(false), // need more flags
-            index: index,
+            index,
             frame: StrongArc::new_in(frame, SlabAllocator),
         })
     }

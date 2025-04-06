@@ -5,7 +5,7 @@ use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system

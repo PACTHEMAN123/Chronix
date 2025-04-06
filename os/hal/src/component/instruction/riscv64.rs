@@ -6,11 +6,11 @@ use super::{Instruction, InstructionHal};
 
 impl InstructionHal for Instruction {
     unsafe fn tlb_flush_addr(vaddr: usize) {
-        asm!("sfence.vma {}, x0", in(reg) vaddr, options(nostack))
+        riscv::asm::sfence_vma(0, vaddr);
     }
 
     unsafe fn tlb_flush_all() {
-        asm!("sfence.vma")
+        riscv::asm::sfence_vma_all();
     }
 
     unsafe fn enable_interrupt() {

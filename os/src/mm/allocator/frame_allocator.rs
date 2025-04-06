@@ -22,7 +22,7 @@ struct BitMapFrameAllocator {
 impl BitMapFrameAllocator {
     const fn new() -> Self {
         BitMapFrameAllocator {
-            range: PhysPageNum(0)..PhysPageNum(1),
+            range: PhysPageNum(0)..PhysPageNum(0),
             inner: bitmap_allocator::BitAlloc16M::DEFAULT
         }
     }
@@ -30,7 +30,7 @@ impl BitMapFrameAllocator {
     fn init(&mut self, range_pa: Range<PhysAddr>) {
         self.range = range_pa.start.ceil()..range_pa.end.floor();
         info!("[FrameAllocator] range: {:#x}..{:#x}", range_pa.start.0, range_pa.end.0);
-        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.floor().0));
+        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.ceil().0));
     }
 }
 
@@ -50,17 +50,20 @@ impl FrameAllocatorHal for FrameAllocator {
         if cnt == 0 {
             return None
         }
-        let mut start = FRAME_ALLOCATOR.lock().inner.alloc_contiguous(None, cnt, align_log2)?;
-        start += FRAME_ALLOCATOR.lock().range.start.0;
-        Some(PhysPageNum(start)..PhysPageNum(start + cnt))
+        let mut alloc_guard = FRAME_ALLOCATOR.lock();
+        let mut start = alloc_guard.inner.alloc_contiguous(None, cnt, align_log2)?;
+        start += alloc_guard.range.start.0;
+        let range_ppn = PhysPageNum(start)..PhysPageNum(start + cnt);
+        Some(range_ppn)
     }
 
     fn dealloc(&self, range_ppn: Range<PhysPageNum>) {
-        if range_ppn.end.0 - range_ppn.start.0 == 0 {
+        if range_ppn.clone().count() == 0 {
             return;
         }
-        let start = range_ppn.start.0 - FRAME_ALLOCATOR.lock().range.start.0;
-        FRAME_ALLOCATOR.lock().inner.dealloc_contiguous(start, range_ppn.count());
+        let mut alloc_guard = FRAME_ALLOCATOR.lock();
+        let start = range_ppn.start.0 - alloc_guard.range.start.0;
+        alloc_guard.inner.dealloc_contiguous(start, range_ppn.count());
     }
 }
 
@@ -71,7 +74,7 @@ pub fn init_frame_allocator() {
     }
 
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(ekernel as usize - Constant::KERNEL_ADDR_SPACE.start)..PhysAddr::from(Constant::MEMORY_END),
+        PhysAddr::from(ekernel as usize & !Constant::KERNEL_ADDR_SPACE.start)..PhysAddr::from(Constant::MEMORY_END),
     );
 }
 

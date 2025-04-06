@@ -2,12 +2,12 @@ use core::{cmp, ops::{Deref, Range}};
 
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
-use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
 use log::{info, Level};
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{vfs::File, utils::FileReader}, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::File}, mm::{allocator::{FrameAllocator, SlabAllocator}, vm::KernVmAreaType, PageTable}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::SysError, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_PHDR, AT_RANDOM}, utils::round_down_to_page};
 
 use crate::syscall::{mm::MmapFlags, SysResult};
 
@@ -415,8 +415,8 @@ impl UserVmSpaceHal for UserVmSpace {
                 max_end_vpn = map_area.range_vpn().end;
                 ret.push_area(
                     map_area,
-                    // None
-                    Some(elf.input.read(elf_offset_start, elf_offset_end-elf_offset_start))
+                    None
+                    // Some(elf.input.read(elf_offset_start, elf_offset_end-elf_offset_start))
                 );
             }
         };
@@ -762,6 +762,7 @@ impl UserVmArea {
             } else {
                 self.len - (new_offset - self.offset)
             };
+            self.len -= new_len;
         } else {
             new_offset = 0;
             new_len = 0;
@@ -878,7 +879,6 @@ impl UserVmArea {
                         FrameAllocator.alloc_tracker(1).ok_or(())?,
                         SlabAllocator
                     );
-                    new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                     let new_range_ppn = new_frame.range_ppn.clone();
 
                     let old_data = frame.range_ppn.get_slice::<u8>();
@@ -900,34 +900,29 @@ impl UserVmArea {
                         return Err(())
                     },
                     UserVmAreaType::Data => {
-                        if let Some(ref file) = self.file {
+                        if let Some(file) = self.file.clone() {
                             let inode = file.inode().unwrap().clone();
                             let area_offset = (vpn.0 - self.range_va.start.floor().0) * Constant::PAGE_SIZE;
                             let offset = self.offset + area_offset;
-                            let offset_aligned = round_down_to_page(offset);
                             if area_offset < self.len {
                                 if self.len - area_offset < Constant::PAGE_SIZE {
-                                    let page_offset = self.len-area_offset;
+                                    let page_offset = self.len - area_offset;
                                     let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
                                     let data = new_frame.range_ppn.get_slice_mut::<u8>();
-                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
+                                    let page = inode.read_page_at(offset).ok_or(())?;
                                     data[page_offset..].fill(0);
-                                    data[..page_offset].copy_from_slice(
-                                        &page.get_slice::<u8>()[..page_offset]
-                                    );
+                                    data[..page_offset].copy_from_slice(&page.get_slice()[..page_offset]);
                                     page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
                                     self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                                     Ok(())
                                 } else {
-                                    let page = inode.read_page_at(offset_aligned).ok_or(())?;
-                                    let mut new_perm = self.map_perm;
-                                    if self.map_perm.contains(MapPerm::W) {
-                                        new_perm.remove(MapPerm::W);
-                                        new_perm.insert(MapPerm::C);
-                                    }
-                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
-                                    self.frames.insert(vpn, page.frame().clone());
+                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                    let page = inode.read_page_at(offset).ok_or(())?;
+                                    let data = new_frame.range_ppn.get_slice_mut::<u8>();
+                                    data.copy_from_slice(page.get_slice());
+                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                                     Ok(())
                                 }
@@ -951,6 +946,7 @@ impl UserVmArea {
                     UserVmAreaType::Stack
                     | UserVmAreaType::Heap => {
                         let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                        new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                         page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
                         self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
@@ -989,6 +985,7 @@ impl UserVmArea {
                             } else {
                                 // private anonymous area
                                 let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                new_frame.range_ppn.get_slice_mut::<u8>().fill(0);
                                 page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
                                 self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
                                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
