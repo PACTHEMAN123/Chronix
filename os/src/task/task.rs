@@ -506,7 +506,7 @@ impl TaskControlBlock {
         // alloc user resource for main thread again since vm_space has changed
         // push argument to user_stack
         let (new_user_sp, argc, argv, envp) = user_stack_init(&mut vm_space, user_sp, argv, envp, auxv);
-
+        
         user_sp = new_user_sp;
         // substitute memory_set
         self.with_mut_vm_space(|m| *m = vm_space);
