@@ -14,6 +14,7 @@ use crate::fs::vfs::inode::InodeMode;
 use crate::fs::page::cache::PageCache;
 use crate::fs::page::page::Page;
 use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
+use crate::sync::mutex::SpinNoIrqLock;
 use crate::{fs::vfs::{Inode, InodeInner}, sync::UPSafeCell};
 
 use super::disk::DiskCursor;
