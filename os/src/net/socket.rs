@@ -3,9 +3,9 @@ use core::task::Poll;
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
-use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, SaFamily};
+use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;
 /// a trait for differnt socket types
 /// net poll results.
@@ -20,12 +20,14 @@ pub struct PollState {
 }
 pub enum Sock {
     TCP(TcpSocket),
+    UDP(UdpSocket)
 }
 impl Sock {
     /// connect method for socket connect to remote socket, for user socket
     pub async fn connect(&self, addr: IpEndpoint) -> SockResult<()>{
         match self {
-            Sock::TCP(tcp) => tcp.connect(addr).await
+            Sock::TCP(tcp) => tcp.connect(addr).await,
+            Sock::UDP(udp) => udp.connect(addr)
         }
     }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
@@ -40,63 +42,99 @@ impl Sock {
                 };
                 tcp.bind(IpEndpoint::new(addr, local_addr.port))
             }
+            Sock::UDP(udp) => {
+                let local_endpoint = local_addr.into_listen_endpoint();
+                if let Some(used_fd) = udp.bind_check(sock_fd, local_endpoint) {
+                    current_task().unwrap()
+                    .with_mut_fd_table(|t| t.dup3_with_flags(used_fd, sock_fd))?;
+                    Ok(())
+                }else {
+                    udp.bind(local_endpoint)
+                }
+            }
         }
     }
     /// listen method for socket to listen for incoming connections, for server socket
     pub fn listen(&self) -> SockResult<()>{
         match self {
-            Sock::TCP(tcp) => tcp.listen()
+            Sock::TCP(tcp) => tcp.listen(),
+            Sock::UDP(udp) => Err(SysError::EOPNOTSUPP)
         }
     }
     /// set socket non-blocking, 
     pub fn set_nonblocking(&self){
         match self {
-            Sock::TCP(tcp) => tcp.set_nonblocking()
+            Sock::TCP(tcp) => tcp.set_nonblocking(),
+            Sock::UDP(udp) => udp.set_nonblocking(),
         }
     }
     /// get the peer_addr of the socket
-    pub fn peer_addr(&self) -> Option<IpEndpoint>{
+    pub fn peer_addr(&self) -> SockResult<SockAddr>{
         match self {
-            Sock::TCP(tcp) => tcp.peer_addr()
+            Sock::TCP(tcp) => {
+                let peer_addr = tcp.peer_addr()?;
+                Ok(SockAddr::from_endpoint(peer_addr))
+            },
+            Sock::UDP(udp_socket) => {
+                let peer_addr = udp_socket.peer_addr()?;
+                Ok(SockAddr::from_endpoint(peer_addr))
+            },
         }
     }
     /// get the local_addr of the socket
-    pub fn local_addr(&self) -> Option<IpEndpoint>{
+    pub fn local_addr(&self) -> SockResult<SockAddr>{
         match self {
-            Sock::TCP(tcp) => tcp.local_addr()
+            Sock::TCP(tcp) => {
+                let local_addr = tcp.local_addr()?;
+                Ok(SockAddr::from_endpoint(local_addr))
+            },
+            Sock::UDP(udp_socket) => {
+                let local_addr = udp_socket.local_addr()?;
+                Ok(SockAddr::from_endpoint(local_addr))
+            },
         }
     }
     /// send data to the socket
     pub async fn send(&self, data: &[u8], remote_addr: Option<IpEndpoint>) -> SockResult<usize>{
         match self {
-            Sock::TCP(tcp) => tcp.send(data, remote_addr).await
+            Sock::TCP(tcp) => tcp.send(data, remote_addr).await,
+            Sock::UDP(udp_socket) => {
+                match remote_addr {
+                    Some(addr) => udp_socket.send_to(data,addr).await,
+                    None => udp_socket.send(data).await,
+                }
+            },
         }
     }
     /// recv data from the socket
     pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)>{
         match self {
-            Sock::TCP(tcp) => tcp.recv(data).await
+            Sock::TCP(tcp) => tcp.recv(data).await,
+            Sock::UDP(udp_socket) => udp_socket.recv(data).await,
         }
     }
     /// shutdown a connection
     pub fn shutdown(&self) -> SockResult<()>{
         match self {
-            Sock::TCP(tcp) => tcp.shutdown()
+            Sock::TCP(tcp) => tcp.shutdown(),
+            Sock::UDP(udp_socket) => udp_socket.shutdown(),
         }
     }
     /// poll the socket for events
     pub async fn poll(&self) -> PollState{
         match self {
-            Sock::TCP(tcp) => tcp.poll().await
+            Sock::TCP(tcp) => tcp.poll().await,
+            Sock::UDP(udp_socket) => todo!(),
         }
     }
     /// for tcp socket listener, accept a connection
     pub async fn accept(&self) -> SockResult<TcpSocket> {
         match self {
             Sock::TCP(tcp) => {
-                let new  = tcp.accecpt().await?;
-                Ok(new)
-            }
+                        let new  = tcp.accecpt().await?;
+                        Ok(new)
+                    }
+            Sock::UDP(udp_socket) => Err(SysError::EOPNOTSUPP),
         }
     }
 }
