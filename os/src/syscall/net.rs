@@ -262,7 +262,7 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             panic!("Failed to downcast to socket::Socket")
         })
     });
-    let local_addr = SockAddr::from_endpoint(socket_file.sk.local_addr().unwrap());
+    let local_addr = socket_file.sk.local_addr().unwrap();
     log::info!("Get local address of socket: {:?}", local_addr);
     // write to pointer
     unsafe {
@@ -293,7 +293,7 @@ pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
         });
-    let peer_addr = SockAddr::from_endpoint(socket_file.sk.peer_addr().unwrap());
+    let peer_addr = socket_file.sk.peer_addr().unwrap();
     log::info!("Get peer address of socket: {:?}", peer_addr);
     // write to pointer
     unsafe {
