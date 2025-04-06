@@ -298,6 +298,7 @@ impl TcpSocket {
                         return Err(SysError::ECONNRESET);
                     }else if socket.can_send() {
                         let len = socket.send_slice(data).map_err(|_| {
+                            log::warn!("send error beacuse of EBADF");
                             SysError::EBADF
                         })?;
                         Ok(len)
@@ -375,7 +376,7 @@ impl TcpSocket {
         // for listener socket
         self.update_state(SocketState::Listening, SocketState::Closed, ||{
             let local_port = self.local_endpoint().port;
-            self.local_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
+            self.set_local_endpoint(ZERO_IPV4_ENDPOINT);
             LISTEN_TABLE.unlisten(local_port);
             let time_instance = SOCKET_SET.poll_interfaces();
             SOCKET_SET.check_poll(time_instance);

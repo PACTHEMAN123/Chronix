@@ -92,6 +92,7 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
+    log::info!("sys_socket fd: {}", fd);
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
@@ -124,10 +125,8 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         // local_addr.ipv4.sin_port
     // });
     let socket_file = task.with_fd_table(|table| {
-        table.get_file(fd)
-        .clone()
-        .unwrap()
-        .downcast_arc::<socket::Socket>()}).unwrap_or_else(|_| {
+        table.get_file(fd)})?
+        .downcast_arc::<socket::Socket>().unwrap_or_else(|_| {
         panic!("Failed to downcast to socket::Socket")
     });
     socket_file.sk.bind(fd, local_addr)?;
@@ -140,14 +139,11 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
     let current_task = current_task().unwrap();
     let socket_file = current_task.with_fd_table(|table| {
-        table.get_file(fd)
-        .clone()
-        .unwrap()
+        table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
-        })
-    });
+        });
     socket_file.sk.listen()?;
     Ok(0)
 }
@@ -183,14 +179,11 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             // remote_addr.ipv4.sin_port
     // });
     let socket_file = task.with_fd_table(|table| {
-        table.get_file(fd)
-        .clone()
-        .unwrap()
+        table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
-        })
-    });
+        });
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
     Ok(0)
 }
@@ -212,15 +205,12 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 
 pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
-    let socket_file = task.with_fd_table(|table|{
-        table.get_file(fd)
-        .clone()
-        .unwrap()
+    let socket_file = task.with_fd_table(|table| {
+        table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
-        })
-    });
+        });
     // moniter accept, allow sig_kill and sig_stop to interrupt
     task.set_interruptable();
     // task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
@@ -255,7 +245,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     };
     let new_fd = task.with_mut_fd_table(|t|t.alloc_fd());
     task.with_mut_fd_table(|t| {
-        t.put_file(fd, fd_info)
+        t.put_file(new_fd, fd_info)
     })?;
     Ok(new_fd as isize)
 }
@@ -298,14 +288,11 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
-        table.get_file(fd)
-        .clone()
-        .unwrap()
+        table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
-        })
-    });
+        });
     let peer_addr = SockAddr::from_endpoint(socket_file.sk.peer_addr().unwrap());
     log::info!("Get peer address of socket: {:?}", peer_addr);
     // write to pointer
