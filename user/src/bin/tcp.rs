@@ -54,7 +54,7 @@ fn server() -> ! {
     let mut client_addr = unsafe{core::mem::zeroed()};
     let mut client_len = core::mem::size_of::<SockaddrIn>() as u32;
     let client_fd = accept(sockfd as usize, &mut client_addr , &mut client_len);
-    println!("get a client_fd");
+    println!("get a client_fd {}", client_fd);
     if client_fd < 0 {
         close(sockfd as usize);
         panic!("server: accept failed");
@@ -64,6 +64,7 @@ fn server() -> ! {
     loop {
         let n = read(client_fd as usize, buf.as_mut_slice());
         if n < 0 {
+            println!("[Server] Failed to read data from client, closing connection, n is {}",n);
             close(client_fd as usize);
             panic!("server: read failed");
         }
@@ -72,9 +73,12 @@ fn server() -> ! {
         if write_res != n {
             panic!("[Server] Failed to write all bytes, {}/{}", write_res, n);
         }
+        for _ in 0..100 {
+            delay();
+        }
+        break;
     }
-    close(client_fd as usize);
-    close(sockfd as usize);
+    println!("[Server] exiting");
     exit(0);
 } 
 

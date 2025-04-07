@@ -1,22 +1,20 @@
 use core::{ops::DerefMut, time::Duration};
 
-use alloc::{boxed::Box, vec::Vec, vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec,vec::Vec};
 use listen_table::ListenTable;
 use log::info;
-use smoltcp::{iface::{Config, Interface, PollResult, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr}};
+use smoltcp::{iface::{Config, Interface, PollResult, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpListenEndpoint}};
 use spin::{Lazy, Once};
 
 use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::loopback::LoopbackDevice, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
-#[allow(dead_code)]
 /// Network Address Module
 pub mod addr;
-#[allow(dead_code)]
 /// Network Socket Module
 pub mod socket;
-#[allow(dead_code)]
 /// TCP Module
 pub mod tcp;
-#[allow(dead_code)]
+/// udp Module
+pub mod udp;
 /// A Listen Table for Server to allocte port
 pub mod listen_table;
 #[repr(u16)]
@@ -56,6 +54,8 @@ static SOCKET_SET: Lazy<SocketSetWrapper> = Lazy::new(SocketSetWrapper::new);
 pub const TCP_RX_BUF_LEN: usize = 64 * 1024;
 /// TCP RX and TX buffer size
 pub const TCP_TX_BUF_LEN: usize = 64 * 1024;
+const UDP_RX_BUF_LEN: usize = 64 * 1024;
+const UDP_TX_BUF_LEN: usize = 64 * 1024;
 
 static ETH0: Once<InterfaceWrapper> = Once::new();
 /// A wrapper for interface in smoltcp
@@ -144,10 +144,22 @@ impl <'a> SocketSetWrapper<'a> {
         Self(SpinNoIrqLock::new(socket_set))
     }
     /// allocate tx buffer and rx buffer ,return a Socket struct in smoltcp
-    pub fn new_tcp_socket() -> Socket<'a> {
+    pub fn new_tcp_socket() -> smoltcp::socket::tcp::Socket<'a> {
         let rx_buffer = SocketBuffer::new(vec![0; TCP_RX_BUF_LEN]);
         let tx_buffer = SocketBuffer::new(vec![0; TCP_TX_BUF_LEN]);
         Socket::new(rx_buffer, tx_buffer)
+    }
+    /// allocate a udp socket, return a Socket struct in smoltcp
+    pub fn new_udp_socket() -> smoltcp::socket::udp::Socket<'a> {
+        let rx_buffer = smoltcp::socket::udp::PacketBuffer::new(
+            vec![smoltcp::socket::udp::PacketMetadata::EMPTY; 8],
+            vec![0; UDP_RX_BUF_LEN], 
+        );
+        let tx_buffer = smoltcp::socket::udp::PacketBuffer::new(
+            vec![smoltcp::socket::udp::PacketMetadata::EMPTY; 8],
+            vec![0; UDP_TX_BUF_LEN],
+        );
+        smoltcp::socket::udp::Socket::new(rx_buffer, tx_buffer)
     }
     /// add a socket to the set , return a socket_handle
     pub fn add_socket<T:AnySocket<'a>>(&self, socket: T) -> SocketHandle {
@@ -220,6 +232,30 @@ pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: b
         }
     }
     Ok(())
+}
+/// a port allocator for udp socket bind
+pub struct PortManager {
+    port_map: SpinNoIrqLock<BTreeMap<u16, (usize, IpListenEndpoint)>>,
+}
+pub (crate) static PORT_MANAGER: Lazy<PortManager> = Lazy::new(PortManager::new);
+impl PortManager {
+    const fn new() -> Self {
+        Self {
+            port_map: SpinNoIrqLock::new(BTreeMap::new()),
+        }
+    }
+    /// get fd and endpoint for a port
+    pub fn get(&self, port: u16) -> Option<(usize, IpListenEndpoint)> {
+        self.port_map.lock().get(&port).cloned()
+    }
+    /// insert a port and endpoint to the map
+    pub fn insert(&self, port: u16, fd: usize, endpoint: IpListenEndpoint) {
+        self.port_map.lock().insert(port, (fd, endpoint));
+    }
+    /// remove a port from the map
+    pub fn remove(&self, port: u16) {
+        self.port_map.lock().remove(&port);
+    }
 }
 // function or struct concerning time ,from microseconds to smoltcp::time::Instant, from core::time::Duration to smoltcp::time::Duration
 /// timer for network poll

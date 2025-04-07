@@ -93,6 +93,7 @@ impl ListenTable {
     }
     /// unlisten a port, used in shutdown a socket
     pub fn unlisten(&self, port: u16) {
+        log::info!("TCP socket unlisten on {}", port);
         if let Some(entry) = self.inner[port as usize].lock().take() {
             entry.wake()
         }
