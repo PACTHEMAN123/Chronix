@@ -87,7 +87,7 @@ pub async fn user_trap_handler()  {
                 Some(task) => {
                     let res = task.with_mut_vm_space(|vm_space| vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
                     match res {
-                        Ok(()) => {},
+                        Ok(()) => {}
                         Err(()) => {
                             log::warn!(
                                 "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?}",
@@ -185,7 +185,6 @@ fn kernel_trap_handler() {
                     }
                 }
             };
-
         }
         TrapType::Timer => {
             //info!("interrupt: supervisor timer");

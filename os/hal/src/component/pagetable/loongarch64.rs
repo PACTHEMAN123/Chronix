@@ -307,7 +307,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     }
 
     fn get_token(&self) -> usize {
-        self.root_ppn.start_addr().0
+        self.root_ppn.start_addr().0 & !Constant::KERNEL_ADDR_SPACE.start
     }
 
     fn translate_va(&self, va: crate::addr::VirtAddr) -> Option<crate::addr::PhysAddr> {
@@ -393,14 +393,16 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
                 *pte = PageTableEntry { bits: 0 };
             }, 
             None => panic!("vpn: {:#x} has not mapped", vpn.0)
-        }
+        };
     }
 
     unsafe fn enable_high(&self) {
+        register::asid::set_asid(0);
         register::pgdh::set_base(self.get_token());
     }
 
     unsafe fn enable_low(&self) {
+        register::asid::set_asid(0);
         register::pgdl::set_base(self.get_token());
     }
 }

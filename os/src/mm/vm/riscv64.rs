@@ -723,6 +723,7 @@ impl KernVmArea {
         let range_vpn = self.range_vpn();
         for vpn in range_vpn {
             page_table.unmap(vpn);
+            unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
         }
     }
 }
@@ -809,6 +810,7 @@ impl UserVmArea {
     fn unmap(&mut self, page_table: &mut PageTable) {
         for &vpn in self.frames.keys() {
             page_table.unmap(vpn);
+            unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
         }
     }
 
@@ -904,6 +906,7 @@ impl UserVmArea {
                             let inode = file.inode().unwrap().clone();
                             let area_offset = (vpn.0 - self.range_va.start.floor().0) * Constant::PAGE_SIZE;
                             let offset = self.offset + area_offset;
+                            assert_eq!(offset % Constant::PAGE_SIZE, 0);
                             if area_offset < self.len {
                                 if self.len - area_offset < Constant::PAGE_SIZE {
                                     let page_offset = self.len - area_offset;
@@ -917,14 +920,27 @@ impl UserVmArea {
                                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                                     Ok(())
                                 } else {
-                                    let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-                                    let page = inode.read_page_at(offset).ok_or(())?;
-                                    let data = new_frame.range_ppn.get_slice_mut::<u8>();
-                                    data.copy_from_slice(page.get_slice());
-                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
-                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
-                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
-                                    Ok(())
+                                    if access_type.contains(PageFaultAccessType::WRITE) {
+                                        let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+                                        let page = inode.read_page_at(offset).ok_or(())?;
+                                        let data = new_frame.range_ppn.get_slice_mut::<u8>();
+                                        data.copy_from_slice(page.get_slice());
+                                        page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                        self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                        unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                        Ok(())
+                                    } else {
+                                        let page = inode.read_page_at(offset).ok_or(())?;
+                                        let mut new_perm = self.map_perm;
+                                        if self.map_perm.contains(MapPerm::W) {
+                                            new_perm.insert(MapPerm::C);
+                                            new_perm.remove(MapPerm::W);
+                                        }
+                                        page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                        self.frames.insert(vpn, page.frame());
+                                        unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                        Ok(())
+                                    }
                                 }
                             } else {
                                 let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
@@ -958,26 +974,35 @@ impl UserVmArea {
                             let file = self.file.as_ref().unwrap();
                             let inode = file.inode().unwrap().clone();
                             let offset = self.offset + (vpn.0 - self.range_va.start.floor().0) * PAGE_SIZE;
-                            let offset_aligned = round_down_to_page(offset);
+                            assert_eq!(offset % Constant::PAGE_SIZE, 0);
                         
                             if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                                 // share file mapping
-                                let page = inode.read_page_at(offset_aligned).unwrap();
+                                let page = inode.read_page_at(offset).unwrap();
                                 // map a single page
                                 page_table.map(vpn, page.ppn(), self.map_perm, PageLevel::Small);
                                 self.frames.insert(vpn, StrongArc::clone(&page.frame()));
                                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             } else {
                                 // private file mapping
-                                let page = inode.read_page_at(offset_aligned).unwrap();
-                                let mut new_perm = self.map_perm;
-                                if self.map_perm.contains(MapPerm::W) {
-                                    new_perm.insert(MapPerm::C);
-                                    new_perm.remove(MapPerm::W);
+                                if access_type.contains(PageFaultAccessType::WRITE) {
+                                    let page = inode.read_page_at(offset).unwrap();
+                                    let new_frame = FrameAllocator.alloc_tracker(1).unwrap();
+                                    new_frame.range_ppn.get_slice_mut::<u8>().copy_from_slice(page.get_slice());
+                                    page_table.map(vpn, new_frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+                                } else {
+                                    let page = inode.read_page_at(offset).unwrap();
+                                    let mut new_perm = self.map_perm;
+                                    if self.map_perm.contains(MapPerm::W) {
+                                        new_perm.insert(MapPerm::C);
+                                        new_perm.remove(MapPerm::W);
+                                    }
+                                    page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
+                                    self.frames.insert(vpn, page.frame().clone());
+                                    unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                                 }
-                                page_table.map(vpn, page.ppn(), new_perm, PageLevel::Small);
-                                self.frames.insert(vpn, page.frame().clone());
-                                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                             }
                         } else if self.mmap_flags.contains(MmapFlags::MAP_PRIVATE) {
                             if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {

@@ -212,7 +212,6 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
     }
     // open file
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_WRONLY) {
-        // let all_data = app_inode.read_all();
         let task = current_task().unwrap();
         
         task.exec_from_file(app_inode, argv_vec, envp_vec);
