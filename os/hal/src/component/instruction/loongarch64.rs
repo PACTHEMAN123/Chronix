@@ -13,7 +13,7 @@ impl InstructionHal for Instruction {
         core::arch::asm!(
             r"
             dbar 0
-            invtlb 0x5, $r0, {0}
+            invtlb 0x5, $zero, {0}
             ", 
             in(reg) vaddr, 
             options(nostack)

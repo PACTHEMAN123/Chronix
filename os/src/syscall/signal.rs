@@ -77,7 +77,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
 
 /// syscall: rt_sigaction
 pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut SigAction) -> SysResult {
-    info!(
+    log::debug!(
         "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}, act size {}",
         signo,
         action as usize,
@@ -92,7 +92,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     let task = current_task().unwrap().clone();
     let sig_manager = task.sig_manager.lock();
     let _sum_guard = SumGuard::new();
-    info!("[sys_rt_sigaction]: writing old action");
+    log::debug!("[sys_rt_sigaction]: writing old action");
     if !old_action.is_null() {
         let k_sig_hand = &sig_manager.sig_handler[signo as usize];
         unsafe {
@@ -107,7 +107,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     }
     drop(sig_manager);
 
-    info!("[sys_rt_sigaction]: reading new action");
+    log::debug!("[sys_rt_sigaction]: reading new action");
     if !action.is_null() {
         let mut sig_action = unsafe { *action };
         let new_sigaction = match sig_action.sa_handler as usize {
@@ -127,7 +127,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
                 is_user: true,
             },
         };
-        log::info!(
+        log::debug!(
                 "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}",
                 signo,
                 new_sigaction.sa.sa_handler as *const usize as usize,
@@ -146,7 +146,7 @@ const SIGSETMASK: i32 = 2;
 
 /// syscall: rt_sigprocmask
 pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> SysResult {
-    info!("[sys_rt_sigprocmask]: how: {}", how);
+    log::debug!("[sys_rt_sigprocmask]: how: {}", how);
     let task = current_task().unwrap().clone();
     let mut sig_manager = task.sig_manager.lock();
     if old_set as usize != 0 {
@@ -163,7 +163,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
     let _sum_guard = SumGuard::new();
     
     let new_sig_mask = unsafe { SigSet::from_bits(*set as usize).unwrap() };
-    log::info!(
+    log::debug!(
         "[sys_rt_sigprocmask] how {}, new sig mask: {:?}",
         how,
         new_sig_mask
@@ -187,7 +187,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
 
 /// syscall: rt_sigreturn
 pub fn sys_rt_sigreturn() -> SysResult {
-    info!("[sys_rt_sigreturn]: into");
+    log::debug!("[sys_rt_sigreturn]: into");
     // read from user context
     let _sum_guard = SumGuard::new();
     let task = current_task().unwrap();

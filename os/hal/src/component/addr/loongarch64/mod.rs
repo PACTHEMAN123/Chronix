@@ -21,8 +21,8 @@ impl VirtAddrHal for VirtAddr {
 impl VirtPageNumHal for VirtPageNum {
     fn indexes(&self) -> [usize; Constant::PG_LEVEL] {
         let mut vpn = self.0;
-        let mut idx = [0usize; 4];
-        for i in (0..4).rev() {
+        let mut idx = [0usize; Constant::PG_LEVEL];
+        for i in (0..Constant::PG_LEVEL).rev() {
             idx[i] = vpn & 511;
             vpn >>= 9;
         }
@@ -31,11 +31,10 @@ impl VirtPageNumHal for VirtPageNum {
     
     fn start_addr(&self) -> VirtAddr {
         if self.0 & (1 << (Constant::VPN_WIDTH - 1)) != 0 {
-            VirtAddr((self.0 << Constant::PAGE_SIZE_BITS) | !((1usize << Constant::PA_WIDTH) - 1))
+            VirtAddr((self.0 << Constant::PAGE_SIZE_BITS) | !((1usize << Constant::VA_WIDTH) - 1))
         } else {
             VirtAddr(self.0 << Constant::PAGE_SIZE_BITS)
         }
-        
     }
     
     fn end_addr(&self) -> VirtAddr {

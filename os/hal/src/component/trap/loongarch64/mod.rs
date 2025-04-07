@@ -328,10 +328,7 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     let token = register::pgdl::read().base();
     let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
     let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
-    if !pte.flags().contains(PTEFlags::W) && !pte.flags().contains(PTEFlags::C) {
-        // return TrapType::StorePageFault(badv);
-        return TrapType::Other;
-    } else if pte.flags().contains(PTEFlags::C) {
+    if !pte.flags().contains(PTEFlags::W) {
         return TrapType::StorePageFault(badv);
     }
     pte.set_flags(pte.flags() | PTEFlags::D);

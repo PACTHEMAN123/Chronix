@@ -5,7 +5,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::open_file, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
 }, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}};
 use crate::utils::{
     path::*,
@@ -109,7 +109,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        let dentry = at_helper(task.clone(), dirfd, pathname)?;
+        let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
         info!("trying to open {}", dentry.path());
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
@@ -153,7 +153,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
     if let Some(path) = user_path_to_string(pathname) {
         let task = current_task().unwrap().clone();
-        let dentry = at_helper(task, dirfd, pathname)?;
+        let dentry = at_helper(task, dirfd, pathname, OpenFlags::empty())?;
         if dentry.state() != DentryState::NEGATIVE {
             return Err(SysError::EEXIST);
         }
@@ -169,31 +169,28 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
     Ok(0)
 }
 
+const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
+
 /// syscall: fstatat
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
-    info!("[sys_fstatat]: into");
     let _sum_guard= SumGuard::new();
-    const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
-    if flags == AT_SYMLINK_NOFOLLOW {
-        info!("reach panic");
-        panic!("[sys_fstatat]: not support for symlink now");
-    }
+    
     let task = current_task().unwrap().clone();
-    info!("reach here");
-    let dentry = at_helper(task.clone(), dirfd, pathname)?;
-    info!("not here");
+    let dentry = if flags == AT_SYMLINK_NOFOLLOW {
+        at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW)?
+    } else {
+        at_helper(task.clone(), dirfd, pathname, OpenFlags::empty())?
+    };
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::EBADF);
     }
 
-    info!("stat_buf: {:#x}", stat_buf);
     let stat = dentry.inode().unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
         Instruction::set_sum();
         stat_ptr.write(stat);
     }
-    info!("mamba out");
     Ok(0)
 }
 
@@ -257,11 +254,12 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
 }
 
 /// syscall statx
-pub fn sys_statx(dirfd: isize, pathname: *const u8, _flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
+pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
     let _sum_guard = SumGuard::new();
+    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
     let mask = XstatMask::from_bits_truncate(mask);
     let task = current_task().unwrap().clone();
-    let dentry = at_helper(task, dirfd, pathname)?;
+    let dentry = at_helper(task, dirfd, pathname, flags)?;
     let inode = dentry.inode().unwrap();
     let statx_ptr = statx_buf.0 as *mut Xstat;
     let statx = inode.getxattr(mask);
@@ -309,47 +307,41 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     };
     assert!(buf_slice.len() == len);
 
-    // get the dentry the fd points to
-    if let Some(dentry) = task.with_fd_table(|table| {
-        let file = table.get_file(fd).expect("dir not found");
-        file.dentry()
-    }) {
-        let mut buf_it = buf_slice;
-        let mut writen_len = 0;
-        let mut pos = 0;
-        for child in dentry.child_dentry() {
-            assert!(child.state() != DentryState::NEGATIVE);
-            // align to 8 bytes
-            let c_name_len = child.name().len() + 1;
-            let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
-            let inode = child.inode().unwrap();
-            let linux_dirent = LinuxDirent64 {
-                d_ino: inode.inner().ino as u64,
-                d_off: pos as u64,
-                d_type: inode.inner().mode.bits() as u8,
-                d_reclen: rec_len as u16,
-            };
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let dentry = file.dentry().unwrap();
+    let mut buf_it = buf_slice;
+    let mut writen_len = 0;
+    for child in dentry.child_dentry().iter().skip(file.pos()) {
+        assert!(child.state() != DentryState::NEGATIVE);
+        // align to 8 bytes
+        let c_name_len = child.name().len() + 1;
+        let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
+        let inode = child.inode().unwrap();
+        let linux_dirent = LinuxDirent64 {
+            d_ino: inode.inner().ino as u64,
+            d_off: file.pos() as u64,
+            d_type: inode.inner().mode.bits() as u8,
+            d_reclen: rec_len as u16,
+        };
 
-            //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
-            if writen_len + rec_len > len {
-                break;
-            }
-
-            pos += 1;
-            let ptr = buf_it.as_mut_ptr() as *mut LinuxDirent64;
-            unsafe {
-                ptr.copy_from_nonoverlapping(&linux_dirent, 1);
-            }
-            buf_it[LEN_BEFORE_NAME..LEN_BEFORE_NAME + c_name_len - 1]
-                .copy_from_slice(child.name().as_bytes());
-            buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
-            buf_it = &mut buf_it[rec_len..];
-            writen_len += rec_len;
+        //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
+        if writen_len + rec_len > len {
+            break;
         }
-        return Ok(writen_len as isize);
-    } else {
-        Err(SysError::EBADF)
+
+        file.seek(SeekFrom::Current(1))?;
+        let ptr = buf_it.as_mut_ptr() as *mut LinuxDirent64;
+        unsafe {
+            ptr.copy_from_nonoverlapping(&linux_dirent, 1);
+        }
+        buf_it[LEN_BEFORE_NAME..LEN_BEFORE_NAME + c_name_len - 1]
+            .copy_from_slice(child.name().as_bytes());
+        buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
+        buf_it = &mut buf_it[rec_len..];
+        writen_len += rec_len;
     }
+    info!("writen_len: {}", writen_len);
+    return Ok(writen_len as isize);
 }
 
 /// unlink() deletes a name from the filesystem.  If that name was the
@@ -365,7 +357,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(pathname).unwrap();
-    let dentry = at_helper(task, dirfd, pathname)?;
+    let dentry = at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
@@ -488,17 +480,78 @@ pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[allow(missing_docs)]
+pub struct IoVec {
+    pub base: usize,
+    pub len: usize,
+}
+
+/// The readv() system call reads iovcnt buffers from the file
+/// associated with the file descriptor fd into the buffers described
+/// by iov ("scatter input").
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let iovs = unsafe {
+        Instruction::set_sum();
+        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
+    };
+    let mut totol_len = 0usize;
+    for (i, iov) in iovs.iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        let buf = unsafe {
+            Instruction::set_sum();
+            core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
+        };
+        let read_len = file.read(buf).await;
+        totol_len += read_len;
+    }
+    Ok(totol_len as isize)
+}
+
+/// The writev() function shall be equivalent to write(), except as
+/// described below. The writev() function shall gather output data
+/// from the iovcnt buffers specified by the members of the iov array:
+/// iov[0], iov[1], ..., iov[iovcnt-1].
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let iovs = unsafe {
+        Instruction::set_sum();
+        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
+    };
+    let mut totol_len = 0usize;
+    for (i, iov) in iovs.iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        let buf = unsafe {
+            Instruction::set_sum();
+            core::slice::from_raw_parts(iov.base as *const u8, iov.len)
+        };
+        let write_len = file.write(buf).await;
+        totol_len += write_len;
+    }
+    Ok(totol_len as isize)
+}
+
 /// at helper:
 /// since many "xxxat" type file system syscalls will use the same logic of getting dentry,
 /// we need to write a helper function to reduce code duplication
 /// warning: for supporting more "at" syscall, emptry path is allowed here,
 /// caller should check the path before calling at_helper if it doesnt expect empty path
-pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8) -> Result<Arc<dyn Dentry>, SysError> {
+pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8, flags: OpenFlags) -> Result<Arc<dyn Dentry>, SysError> {
     let _sum_guard = SumGuard::new();
-    match user_path_to_string(pathname) {
+    let dentry = match user_path_to_string(pathname) {
         Some(path) => {
             if path.starts_with("/") {
-                Ok(global_find_dentry(&path))
+                global_find_dentry(&path)
             } else {
                 // getting full path (absolute path)
                 let fpath = if dirfd == AT_FDCWD {
@@ -512,17 +565,24 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8)
                     let dentry = dir.dentry().unwrap();
                     rel_path_to_abs(&dentry.path(), &path).unwrap()
                 };
-                Ok(global_find_dentry(&fpath))
+                global_find_dentry(&fpath)
             }
         }
         None => {
             warn!("[at_helper]: using empty path!");
             if dirfd == AT_FDCWD {
-                Ok(task.with_cwd(|d| d.clone()))
+                task.with_cwd(|d| d.clone())
             } else {
                 let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
-                Ok(file.dentry().unwrap())
+                file.dentry().unwrap()
             }
         }
-    } 
+    };
+
+    if flags.contains(OpenFlags::O_NOFOLLOW) {
+        Ok(dentry)
+    } else {
+        let dentry = dentry.follow()?;
+        Ok(dentry)
+    }
 }
