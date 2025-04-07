@@ -2,8 +2,6 @@ use core::{alloc::Layout, ops::{Deref, DerefMut}, ptr::{self, NonNull}, sync::at
 
 use alloc::alloc::{handle_alloc_error, Allocator, Global};
 
-use crate::println;
-
 struct StrongArcPayload<T> {
     data: T,
     rc: AtomicUsize,

@@ -89,6 +89,9 @@ impl<T: Inode + ?Sized> Drop for FileReader<T> {
     fn drop(&mut self) {
         for (_, range_vpn) in self.mapped.exclusive_access().iter() {
             crate::mm::INIT_VMSPACE.lock().unmap_vm_area(range_vpn.clone());
+            for vpn in range_vpn.clone() {
+                unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
+            }
         }
     }
 }
