@@ -80,7 +80,9 @@ pub enum SysError {
     ENOSYS = 38,
     /// Directory not empty
     ENOTEMPTY = 39,
-    /// Timer expired
+    /// Too many symbolic links encountered
+    ELOOP = 40,
+    /// Timer expired   
     ETIME = 62,
     /// Socket operation on non-socket
     ENOTSOCK = 88,

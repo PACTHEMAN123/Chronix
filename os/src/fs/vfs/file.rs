@@ -1,6 +1,6 @@
 //! virtual file system file object
 
-use core::{any::Any, task::Poll};
+use core::{any::Any, sync::atomic::{AtomicUsize, Ordering}, task::Poll};
 
 
 use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, mm::UserBuffer, sync::mutex::{spin_mutex::SpinMutex, SpinNoIrqLock}, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
@@ -20,7 +20,7 @@ pub struct FileInner {
     /// the dentry it points to
     pub dentry: Arc<dyn Dentry>,
     /// the current pos 
-    pub offset: usize,
+    pub offset: AtomicUsize,
     /// file flags
     pub flags: SpinNoIrqLock<OpenFlags>,
 }
@@ -48,6 +48,16 @@ bitflags! {
         /// Invalid poll request.
         const INVAL = 0x020;
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SeekFrom {
+    /// set the offset to given index
+    Start(u64),
+    /// set the offset using current file size
+    End(i64),
+    /// set the offset using current pos
+    Current(i64),
 }
 
 #[async_trait]
@@ -94,6 +104,54 @@ pub trait File: Send + Sync + DowncastSync {
     /// set the file flags
     fn set_flags(&self, flags: OpenFlags) {
         *self.inner().flags.lock() = flags
+    }
+    /// the file size 
+    /// (this method should only be called when inode is a file)
+    fn size(&self) -> usize {
+        self.inode().unwrap().getattr().st_size as usize
+    }
+    /// get file current offset
+    fn pos(&self) -> usize {
+        self.inner().offset.load(Ordering::Relaxed)
+    }
+    /// set file current offset
+    fn set_pos(&self, pos: usize) {
+        self.inner().offset.store(pos, Ordering::Relaxed);
+    }
+    /// move the file position index (see lseek)
+    /// allows the file offset to be set beyond the end of the
+    /// file (but this does not change the size of the file).  If data is
+    /// later written at this point, subsequent reads of the data in the
+    /// gap (a "hole") return null bytes ('\0') until data is actually
+    /// written into the gap.
+    fn seek(&self, offset: SeekFrom) -> Result<usize, SysError> {
+        let mut pos = self.pos();
+        match offset {
+            SeekFrom::Current(off) => {
+                if off < 0 {
+                    if pos as i64 - off.abs() < 0 {
+                        return Err(SysError::EINVAL)
+                    } else {
+                        pos -= off.abs() as usize;
+                    }
+                } else {
+                    pos += off as usize;
+                }
+            }
+            SeekFrom::Start(off) => {
+                pos = off as usize;
+            }
+            SeekFrom::End(off) => {
+                let size = self.size();
+                if off < 0 {
+                    pos = size - off.abs() as usize;
+                } else {
+                    pos = size + off as usize;
+                }
+            }
+        }
+        self.set_pos(pos);
+        Ok(pos)
     }
 }
 

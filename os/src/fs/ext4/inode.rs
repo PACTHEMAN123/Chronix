@@ -10,7 +10,7 @@ use alloc::ffi::CString;
 use hal::addr::RangePPNHal;
 use super::disk::Disk;
 use alloc::sync::{Arc, Weak};
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use log::*;
 use crate::fs::page::cache::PageCache;
@@ -20,6 +20,7 @@ use crate::fs::vfs::{InodeInner, Inode};
 use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::sync::UPSafeCell;
 use crate::utils::rel_path_to_abs;
+use crate::syscall::SysError;
 
 use lwext4_rust::bindings::{
     O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
@@ -451,6 +452,30 @@ impl Inode for Ext4Inode {
         }
     }
 
+    fn symlink(&self, target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
+        let file = self.file.exclusive_access();
+        // create symlink
+        file.symlink_create(target_path).expect("symlink create failed");
+        // get the symlink Inode
+        Ok(Arc::new(Ext4Inode::new(
+            self.inner().super_block.upgrade().unwrap().clone(),
+            target_path,
+            InodeTypes::EXT4_DE_SYMLINK
+        )))
+    }
+
+    fn readlink(&self) -> Result<String, SysError> {
+        let file = self.file.exclusive_access();
+        let mut path_buf: Vec<u8> = vec![0u8; 512];
+        let len = file.symlink_read(&mut path_buf).expect("symlink read failed");
+        path_buf.truncate(len + 1);
+        let path = CString::from_vec_with_nul(path_buf)
+            .unwrap()
+            .into_string()
+            .unwrap();
+        Ok(path)
+    }
+
     /// remove the file that Ext4Inode holds
     fn unlink(&self) -> Result<usize, i32> {
         let file = self.file.exclusive_access();
@@ -500,7 +525,7 @@ impl Inode for Ext4Inode {
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
         let file = self.file.exclusive_access();
-        info!("Drop struct Inode {:?}", file.get_path());
+        //info!("Drop struct Inode {:?}", file.get_path());
 
         // flush the dirty page in page cache
         let cache = self.cache.clone();

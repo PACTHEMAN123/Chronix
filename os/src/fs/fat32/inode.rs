@@ -222,6 +222,14 @@ impl Inode for FatFileInode {
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
         panic!()
     }
+
+    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, super::SysError> {
+        panic!()
+    }
+
+    fn readlink(&self) -> Result<String, super::SysError> {
+        panic!()
+    }
 }
 
 impl Inode for FatDirInode {
@@ -430,6 +438,14 @@ impl Inode for FatDirInode {
     }
 
     fn truncate(&self, _size: u64) -> Result<usize, i32> {
+        panic!()
+    }
+
+    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, super::SysError> {
+        panic!()
+    }
+
+    fn readlink(&self) -> Result<String, super::SysError> {
         panic!()
     }
 }

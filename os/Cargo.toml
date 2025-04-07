@@ -16,7 +16,7 @@ log = "0.4"
 spin = "0.9"
 virtio-drivers = { version = "0.9.0" }
 async-task = { version = "4.7.1", default-features = false }
-lwext4_rust = { path = "../vendor/lwext4_rust", default-features = false}
+lwext4_rust = { path = "../vendor/ext4fs", default-features = false }
 bitmap-allocator = { path = "../vendor/bitmap-allocator" }
 paste = "1.0"
 hal = {path = "./hal" }
