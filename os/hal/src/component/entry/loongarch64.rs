@@ -100,7 +100,7 @@ core::arch::global_asm!(
 );
 
 
-/// Sv39 mode
+/// Sv48 mode
 fn tlb_init() {
 
     use loongArch64::register::*;
@@ -108,7 +108,7 @@ fn tlb_init() {
     tlbidx::set_ps(Constant::PAGE_SIZE_BITS);
     stlbps::set_ps(Constant::PAGE_SIZE_BITS);
     tlbrehi::set_ps(Constant::PAGE_SIZE_BITS);
-
+    asid::set_asid_width(0);
     pwcl::set_pte_width(8);
     pwcl::set_ptbase(12);
     pwcl::set_ptwidth(9);
@@ -128,6 +128,6 @@ fn tlb_init() {
     tlbrentry::set_tlbrentry(_tlb_fill as usize & ((1 << Constant::PA_WIDTH) - 1));
 
     unsafe {
-        core::arch::asm!("invtlb 0,$r0,$r0"); //clear tlb
+        core::arch::asm!("invtlb 0x0, $r0, $r0"); //clear tlb
     }
 }

@@ -17,3 +17,6 @@
 [submodule "vendor/xmas-elf"]
 	path = vendor/xmas-elf
 	url = https://github.com/zlc-dev/xmas-elf
+[submodule "vendor/ext4fs"]
+	path = vendor/ext4fs
+	url = https://github.com/PACTHEMAN123/ext4fs.git

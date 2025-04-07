@@ -5,7 +5,7 @@ use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -78,6 +78,10 @@ pub trait Inode {
     fn getattr(&self) -> Kstat;
     /// get extra attributes of a file
     fn getxattr(&self, mask: XstatMask) -> Xstat;
+    /// create a symlink of this inode and return the symlink inode
+    fn symlink(&self, target: &str) -> Result<Arc<dyn Inode>, SysError>;
+    /// read out the path from the symlink
+    fn readlink(&self) -> Result<String, SysError>;
     /// called by the unlink system call
     fn unlink(&self) -> Result<usize, i32>;
     /// remove inode current inode

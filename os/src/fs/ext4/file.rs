@@ -1,12 +1,15 @@
 //! (FileWrapper + VfsNodeOps) -> OSInodeInner
 //! OSInodeInner -> OSInode
 
+use core::sync::atomic::AtomicUsize;
+
 use async_trait::async_trait;
 use hal::println;
 
 
 use crate::fs::page::page::PAGE_SIZE;
 use crate::fs::vfs::dentry::global_find_dentry;
+use crate::fs::vfs::file::SeekFrom;
 use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{Dentry, DentryState, Inode, DCACHE};
 use crate::fs::FS_MANAGER;
@@ -53,7 +56,7 @@ impl Ext4File {
             readable,
             writable,
             inner: UPSafeCell::new(FileInner { 
-                offset: 0, 
+                offset: AtomicUsize::new(0), 
                 dentry, 
                 flags: SpinNoIrqLock::new(OpenFlags::empty()), 
             }),
@@ -62,16 +65,15 @@ impl Ext4File {
 
     /// Read all data inside a inode into vector
     pub fn read_all(&self) -> Vec<u8> {
-        let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
         let mut buffer = [0u8; PAGE_SIZE];
         let mut v: Vec<u8> = Vec::new();
         loop {
-            let len = inode.clone().cache_read_at(inner.offset, &mut buffer).unwrap();
+            let len = inode.clone().cache_read_at(self.pos(), &mut buffer).unwrap();
             if len == 0 {
                 break;
             }
-            inner.offset += len;
+            self.seek(SeekFrom::Current(len as i64)).expect("seek failed");
             v.extend_from_slice(&buffer[..len]);
         }
         v
@@ -90,19 +92,17 @@ impl File for Ext4File {
         self.writable
     }
     async fn read(&self, buf: &mut [u8]) -> usize {
-        let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
 
-        let size = inode.read_at(inner.offset, buf).unwrap();
-        inner.offset += size;
+        let size = inode.read_at(self.pos(), buf).unwrap();
+        self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
         size
     }
     async fn write(&self, buf: &[u8]) -> usize {
-        let inner = self.inner.exclusive_access();
         let inode = self.dentry().unwrap().inode().unwrap();
         
-        let size = inode.write_at(inner.offset, buf).unwrap();
-        inner.offset += size;
+        let size = inode.write_at(self.pos(), buf).unwrap();
+        self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
         size
     }
 }

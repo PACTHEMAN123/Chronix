@@ -2,7 +2,7 @@
 
 use core::default;
 
-use crate::{fs::{vfs::{dentry, inode::InodeMode}, OpenFlags}, sync::mutex::SpinNoIrqLock};
+use crate::{fs::{vfs::{dentry, inode::InodeMode}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 use super::{superblock, File, Inode, SuperBlock};
 
@@ -215,6 +215,29 @@ impl dyn Dentry {
             child_dentrys.push(child_dentry);
         }
         child_dentrys
+    }
+
+    /// follow the link and jump until reach the first NOT link Inode or reach the max depth
+    pub fn follow(self: Arc<Self>) -> Result<Arc<dyn Dentry>, SysError> {
+        const MAX_LINK_DEPTH: usize = 40;
+        let mut current = self.clone();
+
+        for _ in 0..MAX_LINK_DEPTH {
+            if current.state() == DentryState::NEGATIVE {
+                return Ok(current)
+            }
+
+            match current.inode().unwrap().inner().mode {
+                InodeMode::LINK => {
+                    // follow to the next
+                    let path =  current.inode().unwrap().readlink()?;
+                    let new_dentry = global_find_dentry(&path);
+                    current = new_dentry;
+                }
+                _ => return Ok(current)
+            }
+        }
+        Err(SysError::ELOOP)
     }
 }
 
