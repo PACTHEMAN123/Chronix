@@ -1,6 +1,6 @@
 use core::{any::Any, panic};
 
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 use fatfs::info;
 use hal::{addr, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
@@ -92,7 +92,7 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
-    log::info!("sys_socket fd: {}", fd);
+    // log::info!("sys_socket fd: {}", fd);
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
@@ -250,6 +250,124 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     Ok(new_fd as isize)
 }
 
+/// The system calls send(), sendto(), and sendmsg() are used to
+/// transmit a message to another socket.
+pub async fn sys_sendto(
+    fd: usize,
+    buf: usize,
+    len: usize,
+    _flags: usize,
+    addr: usize,
+    addr_len: usize,
+)-> SysResult {
+    // log::info!("addr is {}, addr_len is {}", addr, addr_len);
+    let buf_slice = buf as *const u8 ;
+    let task = current_task().unwrap();
+    let buf_slice = unsafe {
+        core::slice::from_raw_parts_mut(buf_slice as *mut u8, len)
+    };
+    let socket_file = task.with_fd_table(|table| {
+        table.get_file(fd)})?
+        .downcast_arc::<socket::Socket>()
+        .unwrap_or_else(|_| {
+            panic!("Failed to downcast to socket::Socket")
+        });
+    task.set_interruptable();
+    let bytes = match socket_file.sk_type {
+        SocketType::DGRAM => {
+            let remote_addr = if addr != 0 {  Some(
+                match SaFamily::try_from(unsafe {
+                    *(addr as *const u16)
+                })? {
+                    SaFamily::AfInet => {
+                        if addr_len < size_of::<SockAddrIn4>() {
+                            log::warn!("sys_sendto: addr_len < size_of::<SockAddrIn4>() which is {}",size_of::<SockAddrIn4>());
+                            return Err(SysError::EINVAL);
+                        }
+                        Ok(SockAddr{
+                            ipv4: unsafe { *(addr as *const _) },
+                        })
+                    }
+                    SaFamily::AfInet6 => {
+                        if addr_len < size_of::<SockAddrIn6>() {
+                            return Err(SysError::EINVAL);
+                        }
+                        Ok(SockAddr{
+                            ipv6: unsafe { *(addr as *const _) },
+                        })
+                    }
+                }?
+            .into_endpoint())}else {
+                None
+            };
+            socket_file.sk.send(&buf_slice, remote_addr).await?    
+        }
+        SocketType::STREAM => {
+            if addr != 0 {
+                return Err(SysError::EISCONN);
+            }
+            socket_file.sk.send(&buf_slice, None).await?
+        },
+        _ => todo!(),
+    };
+    task.set_running();
+    Ok(bytes as isize)
+}
+
+/// The recvfrom() function shall receive a message from a connection-
+/// mode or connectionless-mode socket. It is normally used with
+/// connectionless-mode sockets because it permits the application to
+/// retrieve the source address of received data.
+pub async fn sys_recvfrom(
+    sockfd: usize,
+    buf: usize,
+    len: usize,
+    _flags: usize,
+    addr: usize,
+    addrlen: usize,
+) -> SysResult {
+    // log::info!("[sys_recvfrom] sockfd: {}, buf: {:#x}, len: {}, flags: {}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
+    let task = current_task().unwrap();
+    let socket_file = task.with_fd_table(|table| {
+        table.get_file(sockfd)})?
+        .downcast_arc::<socket::Socket>()
+        .unwrap_or_else(|_| {
+            panic!("Failed to downcast to socket::Socket")
+        });
+    let mut inner_vec = Vec::with_capacity(len);
+    unsafe {
+        inner_vec.set_len(len);
+    }
+    task.set_interruptable();
+    let (bytes, remote_endpoint) = socket_file.sk.recv(&mut inner_vec).await?;
+    // log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
+    let remote_addr = SockAddr::from_endpoint(remote_endpoint);
+    task.set_running();
+    // write to pointer
+    let buf_slice = unsafe {
+        core::slice::from_raw_parts_mut(buf as *mut u8, bytes)
+    };
+    buf_slice[..bytes].copy_from_slice(&inner_vec[..bytes]);
+    // write to sockaddr_in
+    unsafe {
+        match SaFamily::try_from(remote_addr.family).unwrap() {
+            SaFamily::AfInet => {
+                let addr_ptr = addr as *mut SockAddrIn4;
+                addr_ptr.write_volatile(remote_addr.ipv4);
+                let addr_len_ptr = addrlen as *mut u32;
+                addr_len_ptr.write_volatile(size_of::<SockAddrIn4>() as u32);
+            }
+            SaFamily::AfInet6 => {
+                let addr_ptr = addr as *mut SockAddrIn6;
+                addr_ptr.write_volatile(remote_addr.ipv6);
+                let addr_len_ptr = addrlen as *mut u32;
+                addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
+            },
+        }
+    }
+    // log::info!("now return bytes: {}",bytes);
+    Ok(bytes as isize)
+}
 /// Returns the local address of the Socket corresponding to `sockfd`.
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();

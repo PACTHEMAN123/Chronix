@@ -353,3 +353,11 @@ pub fn accept (fd: usize, addr: *mut SockaddrIn, addr_len: *mut u32) -> isize {
 pub fn connect(fd: usize, addr: *const SockaddrIn, addr_len: u32) -> isize {
     sys_connect(fd, addr as *const _ as *const u8, addr_len)
 }
+
+pub fn sendto(fd: usize, buf: &[u8], len: usize, flags: i32, addr: *const SockaddrIn, addr_len: u32) -> isize {
+    sys_sendto(fd as i32, buf.as_ptr() , len, flags, addr as *const _ , addr_len)
+}
+
+pub fn recvfrom(fd: usize, buf: &mut [u8], len: usize, flags: i32, addr: *mut SockaddrIn, addr_len: *mut u32) -> isize {
+    sys_recvfrom(fd as i32, buf.as_ptr() as *mut u8, len, flags, addr as *mut _ , addr_len)
+}
