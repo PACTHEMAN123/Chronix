@@ -26,6 +26,7 @@ const SYSCALL_PIPE: usize = 59;
 const SYSCALL_GETDENTS: usize = 61;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
@@ -110,6 +111,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETDENTS => sys_getdents64(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]).await,
+        SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
