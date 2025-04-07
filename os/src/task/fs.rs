@@ -1,6 +1,8 @@
 //! file system support for Task
 
 use alloc::{sync::Arc, vec::Vec};
+use fatfs::info;
+use log::warn;
 
 use crate::{fs::{devfs::tty::TTY, vfs::{Dentry, File}, OpenFlags, Stdin}, syscall::SysError};
 
@@ -60,36 +62,45 @@ impl FdTable {
     /// get the fd_info using fd
     pub fn get_fd_info(&self, fd: usize) -> Result<FdInfo, SysError> {
         if fd >= self.fd_table.len() {
+            log::warn!("[get_fd_info_1] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         }
         if let Some(fdinfo) = self.fd_table[fd].clone() {
             return Ok(fdinfo)
         } else {
+            log::warn!("[get_fd_info_2] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         }
     }
     /// get the mut fd_info using fd
     pub fn get_mut_fd_info(&mut self, fd: usize) -> Result<&mut FdInfo, SysError> {
         if fd >= self.fd_table.len() {
+            log::warn!("[get_mut_fd_info_1] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         }
-        self.fd_table[fd].as_mut().ok_or(SysError::EBADF)
+        self.fd_table[fd].as_mut().ok_or_else(||{
+            log::warn!("[get_mut_fd_info_2] fd {} is not valid",fd);
+            SysError::EBADF
+        })
     }
     /// get the file using fd
     /// error if not found
     pub fn get_file(&self, fd: usize) -> Result<Arc<dyn File>, SysError> {
         if fd >= self.fd_table.len() {
+            log::warn!("[get_file] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         }
         if let Some(fdinfo) = self.fd_table[fd].clone() {
             return Ok(fdinfo.file)
         } else {
+            log::warn!("[get_file_2] fd {} is not valid, table len {}, is true: {}",fd,self.fd_table.len(), !self.fd_table[fd].is_none());
             return Err(SysError::EBADF);
         }
     }
     /// put the file into given fd slot
     pub fn put_file(&mut self, fd: usize, fd_info: FdInfo) -> Result<(), SysError> {
         if fd >= self.fd_table.len() {
+            log::warn!("[put_file] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         }
         self.fd_table[fd] = Some(fd_info);
@@ -98,8 +109,10 @@ impl FdTable {
     /// clear the slot using given fd
     pub fn remove(&mut self, fd: usize) -> Result<(), SysError> {
         if fd >= self.fd_table.len() {
+            log::warn!("[fs::remove_1] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         } else if self.fd_table[fd].is_none() {
+            log::warn!("[fs::remove_2] fd {} is not valid",fd);
             return Err(SysError::EBADF);
         } else {
             self.fd_table[fd] = None;

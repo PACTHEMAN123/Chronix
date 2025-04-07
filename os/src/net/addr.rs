@@ -220,3 +220,11 @@ impl fmt::Debug for SockAddr {
         }
     }
 }
+
+pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
+    let ip = match listen_endpoint.addr {
+        Some(ip) => ip,
+        None => ZERO_IPV4_ADDR,
+    };
+    IpEndpoint::new(ip, listen_endpoint.port)
+}

@@ -127,8 +127,10 @@ impl TcpSocket {
         }
     }
     /// get the local endpoint ref
-    pub fn local_endpoint(&self) -> &IpEndpoint {
-        self.local_endpoint.get_ref().as_ref().unwrap()
+    pub fn local_endpoint(&self) -> Option<IpEndpoint> {
+        unsafe{
+            self.local_endpoint.get().read()
+        }
     }
     /// set the local endpoint
     pub fn set_local_endpoint(&self, endpoint: IpEndpoint) {
@@ -144,8 +146,10 @@ impl TcpSocket {
         }
     }
     /// get the remote endpoint ref
-    pub fn remote_endpoint(&self) -> &IpEndpoint {
-        self.remote_endpoint.get_ref().as_ref().unwrap()
+    pub fn remote_endpoint(&self) -> Option<IpEndpoint> {
+        unsafe {
+            self.remote_endpoint.get().read()
+        }
     }
     /// set the remote endpoint
     pub fn set_remote_endpoint(&self, endpoint: IpEndpoint) {
@@ -264,23 +268,23 @@ impl TcpSocket {
         self.set_nonblock(true);
     }
     
-    pub fn peer_addr(&self) -> Option<IpEndpoint> {
+    pub fn peer_addr(&self) -> SockResult<IpEndpoint> {
         match self.state() {
             SocketState::Connected | SocketState::Listening => {
-                let remote_endpoint = self.remote_endpoint().clone();
-                Some(remote_endpoint)
+                let remote_endpoint = self.remote_endpoint().unwrap();
+                Ok(remote_endpoint)
             }
-            _ => None,
+            _ => Err(SysError::ENOTCONN),
         }
     }
     
-    pub fn local_addr(&self) -> Option<IpEndpoint> {
+    pub fn local_addr(&self) -> SockResult<IpEndpoint> {
         match self.state() {
             SocketState::Connected | SocketState::Listening => {
-                let local_endpoint = self.local_endpoint().clone();
-                Some(local_endpoint)
+                let local_endpoint = self.local_endpoint().unwrap();
+                Ok(local_endpoint)
             }
-            _ => None,
+            _ => Err(SysError::ENOTCONN),
         }
     }
     
@@ -298,6 +302,7 @@ impl TcpSocket {
                         return Err(SysError::ECONNRESET);
                     }else if socket.can_send() {
                         let len = socket.send_slice(data).map_err(|_| {
+                            log::warn!("send error beacuse of EBADF");
                             SysError::EBADF
                         })?;
                         Ok(len)
@@ -374,8 +379,8 @@ impl TcpSocket {
         }).unwrap_or(Ok(()))?;
         // for listener socket
         self.update_state(SocketState::Listening, SocketState::Closed, ||{
-            let local_port = self.local_endpoint().port;
-            self.local_endpoint.exclusive_access().replace(ZERO_IPV4_ENDPOINT);
+            let local_port = self.local_endpoint().unwrap().port;
+            self.set_local_endpoint(ZERO_IPV4_ENDPOINT);
             LISTEN_TABLE.unlisten(local_port);
             let time_instance = SOCKET_SET.poll_interfaces();
             SOCKET_SET.check_poll(time_instance);
@@ -472,7 +477,7 @@ impl TcpSocket {
     }
     /// read current endpoint and make it robust if it lack port or anything else
     fn  robost_port_endpoint(&self) -> SockResult<IpListenEndpoint> {
-        let local_endpoint = self.local_endpoint();
+        let local_endpoint = self.local_endpoint().unwrap();
         let port = if local_endpoint.port == 0 {
             // info!("get a random port");
             self.get_ephemeral_port()?
@@ -625,7 +630,7 @@ impl TcpSocket {
             log::warn!("socket accept state is not listening");
             return Err(SysError::EINVAL);
         }
-        let local_port = self.local_endpoint().port;
+        let local_port = self.local_endpoint().unwrap().port;
         // log::info!("[accept]: local_port is {}", local_port);
         self.block_on(|| {
             let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
