@@ -137,10 +137,16 @@ impl UdpSocket {
         return Ok(bytes);
     }
     pub async fn send_to(&self, data: &[u8], remote_endpoint: IpEndpoint) -> SockResult<usize> {
+        // log::info!("in send to");
         if remote_endpoint.port == 0 || remote_endpoint.addr.is_unspecified() {
+            log::warn!("socket send_to() failed: invalid remote address");
             return Err(SysError::EINVAL);
         }
         if self.local_endpoint.read().is_none() {
+            log::warn!(
+                "[send_impl] UDP socket {}: not bound. Use 127.0.0.1",
+                self.handle
+            );
             self.bind(UNSPECIFIED_LISTEN_ENDPOINT)?;
         }
         let waker = get_waker().await;
@@ -151,15 +157,21 @@ impl UdpSocket {
                     .send_slice(data, remote_endpoint)
                     .map_err(|e|match e {
                          SendError::BufferFull => {
+                            log::warn!("socket send() failed, {e:?}");
                              socket.register_send_waker(&waker);
                              SysError::EAGAIN
                          }
                          SendError::Unaddressable => {
+                             log::warn!("socket send() failed, {e:?}");
                              SysError::ECONNREFUSED
                          }
                      })?;
                     Ok(data.len())
                 }else {
+                    log::info!(
+                        "[UdpSocket::send_to] handle{} can't send now, tx buffer is full",
+                        self.handle
+                    );
                     socket.register_send_waker(&waker);
                     Err(SysError::EAGAIN)
                 }
