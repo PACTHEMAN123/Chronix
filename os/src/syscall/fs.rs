@@ -480,6 +480,67 @@ pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[allow(missing_docs)]
+pub struct IoVec {
+    pub base: usize,
+    pub len: usize,
+}
+
+/// The readv() system call reads iovcnt buffers from the file
+/// associated with the file descriptor fd into the buffers described
+/// by iov ("scatter input").
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let iovs = unsafe {
+        Instruction::set_sum();
+        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
+    };
+    let mut totol_len = 0usize;
+    for (i, iov) in iovs.iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        let buf = unsafe {
+            Instruction::set_sum();
+            core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
+        };
+        let read_len = file.read(buf).await;
+        totol_len += read_len;
+    }
+    Ok(totol_len as isize)
+}
+
+/// The writev() function shall be equivalent to write(), except as
+/// described below. The writev() function shall gather output data
+/// from the iovcnt buffers specified by the members of the iov array:
+/// iov[0], iov[1], ..., iov[iovcnt-1].
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let iovs = unsafe {
+        Instruction::set_sum();
+        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
+    };
+    let mut totol_len = 0usize;
+    for (i, iov) in iovs.iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        let buf = unsafe {
+            Instruction::set_sum();
+            core::slice::from_raw_parts(iov.base as *const u8, iov.len)
+        };
+        let write_len = file.write(buf).await;
+        totol_len += write_len;
+    }
+    Ok(totol_len as isize)
+}
+
 /// at helper:
 /// since many "xxxat" type file system syscalls will use the same logic of getting dentry,
 /// we need to write a helper function to reduce code duplication
