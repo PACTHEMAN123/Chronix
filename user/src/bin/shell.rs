@@ -27,14 +27,14 @@ fn run_cmd(cmd: &str) {
 #[no_mangle]
 fn main() -> i32 {
     println!("start to init busybox");
-    run_cmd("busybox --install /bin");
-    run_cmd("rm /bin/sh");
-    println!("install finished, start to run busy box");
+    //run_cmd("busybox --install /bin");
+    //run_cmd("rm /bin/sh");
+    //println!("install finished, start to run busy box");
     execve(
         "busybox",
         &["busybox", "sh"],
         &[
-            "PATH=/:/bin",
+            //"PATH=/:/bin",
             //"LD_LIBRARY_PATH=/:/lib:/lib/glibc/:/lib/musl",
             "TERM=screen",
         ],

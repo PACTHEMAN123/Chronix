@@ -3,11 +3,12 @@
 #![allow(unused)]
 
 use async_trait::async_trait;
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec, vec};
+use hal::console::console_getchar;
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
-use crate::{devices::CharDevice, drivers::serial::UART0, fs::vfs::{File, FileInner}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::vfs::{File, FileInner}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::suspend_current_and_run_next};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -179,7 +180,24 @@ impl File for TtyFile {
 
     async fn read(&self, buf: &mut [u8]) -> usize {
         let char_dev = UART0.clone();
-        let len = char_dev.read(buf).await;
+        log::debug!("[tty file]: reading buf len: {}", buf.len());
+        //let len = char_dev.read(buf).await;
+        let mut c: usize;
+        loop {
+            c = console_getchar();
+            if c == 0 {
+                suspend_current_and_run_next();
+                continue;
+            } else {
+                break;
+            }
+        }
+        let ch = c as u8;
+        let len = 1;
+        unsafe {
+            buf.as_mut_ptr().write_volatile(ch);
+        }
+        
         let termios = self.meta.lock().termios;
         if termios.is_icrnl() {
             for i in 0..len {
@@ -206,7 +224,7 @@ impl File for TtyFile {
             log::error!("[TtyFile::ioctl] cmd {cmd} not included");
             unimplemented!()
         };
-        log::info!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
+        log::debug!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
         match cmd {
             TCGETS | TCGETA => {
                 unsafe {
@@ -217,13 +235,13 @@ impl File for TtyFile {
             TCSETS | TCSETSW | TCSETSF => {
                 unsafe {
                     self.meta.lock().termios = *(arg as *const Termios);
-                    log::info!("termios {:#x?}", self.meta.lock().termios);
+                    log::debug!("termios {:#x?}", self.meta.lock().termios);
                 }
                 Ok(0)
             }
             TIOCGPGRP => {
                 let fg_pgid = self.meta.lock().fg_pgid;
-                log::info!("[TtyFile::ioctl] get fg pgid {fg_pgid}");
+                log::debug!("[TtyFile::ioctl] get fg pgid {fg_pgid}");
                 unsafe {
                     *(arg as *mut u32) = fg_pgid;
                 }
@@ -234,12 +252,12 @@ impl File for TtyFile {
                     self.meta.lock().fg_pgid = *(arg as *const u32);
                 }
                 let fg_pgid = self.meta.lock().fg_pgid;
-                log::info!("[TtyFile::ioctl] set fg pgid {fg_pgid}");
+                log::debug!("[TtyFile::ioctl] set fg pgid {fg_pgid}");
                 Ok(0)
             }
             TIOCGWINSZ => {
                 let win_size = self.meta.lock().win_size;
-                log::info!("[TtyFile::ioctl] get window size {win_size:?}",);
+                log::debug!("[TtyFile::ioctl] get window size {win_size:?}",);
                 unsafe {
                     *(arg as *mut WinSize) = win_size;
                 }

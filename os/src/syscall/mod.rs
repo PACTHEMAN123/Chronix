@@ -26,7 +26,10 @@ const SYSCALL_PIPE: usize = 59;
 const SYSCALL_GETDENTS: usize = 61;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
+const SYSCALL_SENDFILE: usize = 71;
+const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
@@ -79,6 +82,7 @@ pub mod sche;
 pub mod sys_error;
 /// syscall concerning network
 pub mod net;
+use fatfs::info;
 pub use fs::*;
 use hal::{addr::VirtAddr, println};
 use mm::{sys_mmap, sys_munmap};
@@ -111,7 +115,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETDENTS => sys_getdents64(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1] , args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1] , args[2]).await,
+        SYSCALL_READV => sys_readv(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
+        SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as *const u8, args[2], args[3]),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
