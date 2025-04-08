@@ -1,5 +1,7 @@
 //! File and filesystem-related syscalls
-use alloc::{string::ToString, sync::Arc};
+use core::ptr::copy_nonoverlapping;
+
+use alloc::{string::ToString, sync::Arc, vec};
 use hal::{addr::VirtAddr, instruction::{Instruction, InstructionHal}};
 use log::{info, warn};
 use strum::FromRepr;
@@ -32,6 +34,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     //info!("task {} trying to read fd {}", task.gettid(), fd);
+    log::debug!("reading fd: {fd}");
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let _sum_guard = SumGuard::new();
     let buf = unsafe {
@@ -377,6 +380,31 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     Ok(0)
 }
 
+/// syscall: readlinkat
+/// does not append
+/// a terminating null byte to buf.  It will (silently) truncate the
+/// contents (to a length of bufsiz characters), in case the buffer is
+/// too small to hold all of the contents.
+pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let dentry = at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
+    info!("[sys_readlinkat]: reading link {}", dentry.path());
+    let inode = dentry.inode().unwrap();
+    if inode.inner().mode != InodeMode::LINK {
+        return Err(SysError::EINVAL);
+    }
+    
+    let path = inode.readlink()?;
+    unsafe {
+        Instruction::set_sum();
+        let new_buf = core::slice::from_raw_parts_mut(buf as *mut u8, len);
+        new_buf.fill(0u8);
+        let new_buf = core::slice::from_raw_parts_mut(buf as *mut u8, path.len());
+        new_buf.copy_from_slice(path.as_bytes());
+    }
+    return Ok(path.len() as isize)
+}
+
 /// syscall: mount
 /// (todo)
 pub fn sys_mount(
@@ -540,6 +568,40 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     }
     Ok(totol_len as isize)
 }
+
+/// sendfile() copies data between one file descriptor and another.
+/// If offset is not NULL, then it points to a variable holding the
+/// file offset from which sendfile() will start reading data from
+/// in_fd.  When sendfile() returns, this variable will be set to the
+/// offset of the byte following the last byte that was read. 
+/// 
+/// If offset is not NULL, then sendfile() does not modify the file
+/// offset of in_fd; otherwise the file offset is adjusted to reflect
+/// the number of bytes read from in_fd.
+/// 
+/// If offset is NULL, then data will be read from in_fd starting at
+/// the file offset, and the file offset will be updated by the call.
+pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult {
+    info!("[sys_sendfile]: out fd: {out_fd}, in fd: {in_fd}, offset: {offset}, count: {count}");
+    let task = current_task().unwrap().clone();
+    let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
+    let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
+    let mut buf = vec![0u8; count];
+    let len;
+    if offset == 0 {
+        len = in_file.read(&mut buf).await;
+    } else {
+        unsafe {
+            Instruction::set_sum();
+            let off = (offset as *const usize).read();
+            len = in_file.inode().unwrap().read_at(off, &mut buf).expect("read failed");
+            (offset as *mut usize).write(off + len);
+        }
+    }
+    let ret = out_file.write(&buf[..len]).await;
+    Ok(ret as isize)
+}
+
 
 /// at helper:
 /// since many "xxxat" type file system syscalls will use the same logic of getting dentry,

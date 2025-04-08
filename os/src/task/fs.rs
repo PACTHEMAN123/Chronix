@@ -20,7 +20,8 @@ impl FdTable {
     pub fn new() -> Self {
         let mut table: Vec<Option<FdInfo>> = Vec::new();
         // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
-        let stdin = Arc::new(Stdin);
+        //let stdin = Arc::new(Stdin);
+        let stdin = TTY.clone();
         //stdin.set_flags(OpenFlags::empty());
         // 1 -> stdout
         let stdout = TTY.clone();
