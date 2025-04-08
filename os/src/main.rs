@@ -91,7 +91,7 @@ pub fn main(id: usize) -> ! {
         hal::trap::init();
         net::init_network_loopback();
         fs::init();
-        fs::vfs::file::list_apps(); 
+        // fs::vfs::file::list_apps(); 
         // fs::ext4::page_cache_test();       
         #[cfg(not(feature = "smp"))]
         executor::init();

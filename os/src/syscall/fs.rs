@@ -127,6 +127,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             dentry.set_state(DentryState::USED);
         }
         if dentry.state() == DentryState::NEGATIVE {
+            info!("return!");
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
@@ -138,6 +139,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         let fd = task.with_mut_fd_table(|table| table.alloc_fd());
         let fd_info = FdInfo { file, flags: flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
+        info!("open success, return fd: {}", fd);
         return Ok(fd as isize)
     } else {
         info!("[sys_openat]: pathname is empty!");

@@ -12,13 +12,14 @@ pub mod page;
 pub mod devfs;
 pub mod utils;
 
+use devfs::{fstype::DevFsType, init_devfs};
 use ext4::Ext4FSType;
 use fatfs::FatType;
 use log::*;
 pub use stdio::{Stdin, Stdout};
 
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
-use vfs::fstype::{FSType, MountFlags};
+use vfs::{fstype::{FSType, MountFlags}, DCACHE};
 
 use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
 pub use ext4::Ext4SuperBlock;
@@ -50,6 +51,9 @@ type DiskFSType = Fat32FSType;
 fn register_all_fs() {
     let diskfs = DiskFSType::new();
     FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
+
+    let devfs = DevFsType::new();
+    FS_MANAGER.lock().insert(devfs.name().to_string(), devfs);
 }
 
 /// get the file system by name
@@ -64,9 +68,16 @@ pub fn init() {
     register_all_fs();
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
-    diskfs.mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone()));
-    info!("fs finish init");
+    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone())).unwrap();
 
+    // mount the dev file system under diskfs
+    let devfs = get_filesystem("devfs");
+    let devfs_root = devfs.mount("dev", Some(diskfs_root), MountFlags::empty(), None).unwrap();
+    init_devfs(devfs_root.clone());
+    log::info!("insert path: {}", devfs_root.path());
+    DCACHE.lock().insert(devfs_root.path(), devfs_root);
+
+    info!("fs finish init");
 }
 
 /// AT_FDCWD: a special value
