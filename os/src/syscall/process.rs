@@ -372,6 +372,7 @@ pub fn sys_getppid() -> SysResult {
 }
 /// get the process group id of the specified process
 pub fn sys_getpgid(pid: usize) -> SysResult {
+    log::debug!("[sys_getpgid]: caller pgid: {}, target pid: {}", current_task().unwrap().pgid(), pid);
     if pid == 0 {
         Ok(current_task().unwrap().pgid() as isize)
     }else {

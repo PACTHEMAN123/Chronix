@@ -9,7 +9,7 @@ use spin::Once;
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
-use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::suspend_current_and_run_next};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::{current_task, suspend_current_and_run_next}};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -149,7 +149,7 @@ pub struct TtyFile {
 impl TtyFile {
     pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let meta = SpinNoIrqLock::new(TtyMeta {
-            fg_pgid: 1 as u32,
+            fg_pgid: 0 as u32, // warning: shell will use this process group id
             win_size: WinSize::new(),
             termios: Termios::new(),
         });

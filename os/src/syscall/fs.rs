@@ -46,6 +46,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
 
 /// syscall: close
 pub fn sys_close(fd: usize) -> SysResult {
+    log::debug!("[sys_close]: close on fd: {}", fd);
     let task = current_task().unwrap();
     task.with_mut_fd_table(|table| table.remove(fd))?;
     Ok(0)
@@ -345,7 +346,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         buf_it = &mut buf_it[rec_len..];
         writen_len += rec_len;
     }
-    info!("writen_len: {}", writen_len);
+    log::debug!("writen_len: {}", writen_len);
     return Ok(writen_len as isize);
 }
 

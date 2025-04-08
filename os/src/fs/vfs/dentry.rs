@@ -273,7 +273,7 @@ pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> =
 /// first lookup in the dcache
 /// if not found, search from root
 pub fn global_find_dentry(path: &str) -> Arc<dyn Dentry> {
-    log::info!("global find dentry: {}", path);
+    log::debug!("global find dentry: {}", path);
     {
         let cache = DCACHE.lock();
         if let Some(dentry) = cache.get(path) {
