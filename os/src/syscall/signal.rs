@@ -17,6 +17,7 @@ use crate::task::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
 
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
+    log::debug!("[sys_kill]: sending signo: {} to pid: {}", signo, pid);
     let task = current_task().unwrap().clone();
     let pgid = task.pgid();
     match pid {

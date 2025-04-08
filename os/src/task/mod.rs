@@ -22,6 +22,7 @@ mod tid;
 pub mod manager;
 pub mod utils;
 pub mod fs;
+pub mod signal;
 
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
