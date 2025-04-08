@@ -6,7 +6,7 @@ use log::info;
 use smoltcp::{iface::{Config, Interface, PollResult, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpListenEndpoint}};
 use spin::{Lazy, Once};
 
-use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::loopback::LoopbackDevice, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
+use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
 /// Network Address Module
 pub mod addr;
 /// Network Socket Module
@@ -37,7 +37,11 @@ impl TryFrom<u16> for SaFamily {
         }
     }
 }
-
+const IP_PREFIX: u8 = 24;
+const IP: &str = match option_env!("IP") {
+    Some(ip) => ip,
+    None => "",
+};
 const SOCK_RAND_SEED: u64 = 404;// for random port allocation
 const CONFIG_RANDOM_SEED: u64 = 0x3A0C_1495_BC68_9A2C; // for smoltcp random seed
 const PORT_START: u16 = 0xc000; // 49152
@@ -104,7 +108,7 @@ impl InterfaceWrapper {
         let mut sockets = sockets.lock();
         let timestamp = Self::current_time();
         let res = iface.poll(timestamp, dev.deref_mut(), &mut sockets);
-        // log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
+        log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
         timestamp
     }
     /// check the interface and call poll socket_handle to detect device status then poll sockets
@@ -271,9 +275,9 @@ pub fn smol_dur_to_core_cur(duration: smoltcp::time::Duration) -> core::time::Du
     core::time::Duration::from_micros(duration.micros())
 }
 
-pub fn init_network_loopback() {
-    info!("Initialize network loopback");
-    let dev = LoopbackDevice::new();
+pub fn init_network() {
+    info!("Initialize network");
+    let (dev, dev_flag) = init_network_device();
     let ehter_addr = EthernetAddress(dev.mac_address().0);
     let eth0 = InterfaceWrapper::new("eth0", dev, ehter_addr);
     let gateway: IpAddress = match option_env!("GATEWAY") {
@@ -284,8 +288,16 @@ pub fn init_network_loopback() {
             "".parse().unwrap()
         }
     };
-    let ip = "127.0.0.1".parse().unwrap();
-    let ip_addrs = vec![IpCidr::new(ip,8)];
+    let ip = if dev_flag {
+        IP.parse().unwrap()
+    }else {
+        "127.0.0.1".parse().unwrap()
+    };
+    let ip_addrs = if dev_flag {
+        vec![IpCidr::new(IP.parse().unwrap(), 8),IpCidr::new(ip, IP_PREFIX)]
+    }else {
+        vec![IpCidr::new(ip, 8)]
+    };
     eth0.iface.lock().update_ip_addrs(|inner_ip_addrs|{
         inner_ip_addrs.extend(ip_addrs);
     });

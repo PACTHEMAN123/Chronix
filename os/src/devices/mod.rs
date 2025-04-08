@@ -172,3 +172,21 @@ pub trait CharDevice: Send + Sync + Any {
     /// if device is writable
     async fn poll_out(&self) -> bool;
 }
+
+
+pub(crate) const fn as_dev_err(e: virtio_drivers::Error) -> DevError {
+    use virtio_drivers::Error::*;
+    match e {
+        QueueFull => DevError::BadState,
+        NotReady => DevError::Again,
+        WrongToken => DevError::BadState,
+        AlreadyUsed => DevError::AlreadyExists,
+        InvalidParam => DevError::InvalidParam,
+        DmaError => DevError::NoMemory,
+        IoError => DevError::Io,
+        Unsupported => DevError::Unsupported,
+        ConfigSpaceTooSmall => DevError::BadState,
+        ConfigSpaceMissing => DevError::BadState,
+        _ => DevError::BadState,
+    }
+}

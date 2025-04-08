@@ -87,9 +87,15 @@ KERNEL_ENTRY_PA := 0x1c000000
 endif
 
 # net
-IP ?= 10.0.2.15
+NET_C ?=n
+IP_C ?= 10.0.2.15
 GW ?= 10.0.2.2
 export GATEWAY=$(GW)
+export IP=$(IP_C)
+
+ifeq ($(NET_C),y)
+	KERNEL_FEATURES += net
+endif
 # Binutils
 OBJDUMP := rust-objdump --arch-name=${ARCH}
 OBJCOPY := rust-objcopy --binary-architecture=${ARCH}
@@ -220,6 +226,7 @@ ifneq ($(SMP),)
 QEMU_ARGS += -smp $(CPU)
 endif
 
+
 ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
@@ -230,6 +237,13 @@ QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-pci,drive=x0
 endif
 
+ifeq ($(NET_C),y)
+$(info "enable qemu net device")
+QEMU_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.1,netdev=net0\
+             -netdev user,id=net0,hostfwd=tcp::6666-:8888,hostfwd=udp::8888-:8888
+QEMU_ARGS += -d guest_errors\
+			 -d unimp
+endif
 
 ifeq ($(ARCH), riscv64)
 QEMU := qemu-system-riscv64

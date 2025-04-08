@@ -216,7 +216,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     // task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
     let accept_sk = socket_file.sk.accept().await?;
     task.set_running();
-    // log::info!("get accept correct");
+    log::info!("get accept correct");
     let peer_addr_endpoint = accept_sk.peer_addr().unwrap();
     let peer_addr = SockAddr::from_endpoint(peer_addr_endpoint);
     // log::info!("Accept a connection from {:?}", peer_addr);

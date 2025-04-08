@@ -334,6 +334,14 @@ pub struct SockaddrIn {
     pub sin_zero: [u8; 8],
 }
 
+pub fn parse_ipv4(s: &str) -> Option<u32> {
+    let mut addr: u32 = 0;
+    for (i, octet) in s.split('.').enumerate() {
+        let byte: u8 = octet.parse().ok()?;
+        addr |= (byte as u32) << (24 - 8*i);
+    }
+    Some(addr)
+}
 pub fn socket(domain: i32, sock_type: i32, protocol: i32) -> isize {
     sys_socket(domain as usize, sock_type as usize, protocol as usize)
 }
