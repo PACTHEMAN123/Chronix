@@ -27,7 +27,7 @@ rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_r
 fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
 range-map = { path = "../utils/range-map" }
 downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
-
+fdt = "0.1.5"
 [dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp.git"
 rev = "46f1c2a95f359a67d1e1f49ead672c2d77e73df4"  
@@ -50,7 +50,7 @@ features = [
 [features]
 smp = []
 fat32 = []
-
+net = []
 
 
 [profile.release]
