@@ -406,9 +406,17 @@ impl Inode for Ext4Inode {
         let mask = mask & SUPPORTED_MASK;
         let inner = self.inner();
         let file = self.file.exclusive_access();
-        let path = file.get_path();
-        let _r = file.file_open(&path.to_str().unwrap(), O_RDONLY);
-        let size = file.file_size() as usize;
+        let ty = file.get_type();
+        let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
+            let path = file.get_path();
+            file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
+            let fsize = file.file_size() as usize;
+            file.file_close().expect("failed to close");
+            fsize
+        } else {
+            // DIR size should be 0
+            0
+        };
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: BLOCK_SIZE as _,

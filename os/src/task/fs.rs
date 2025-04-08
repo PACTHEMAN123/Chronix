@@ -21,13 +21,14 @@ impl FdTable {
         let mut table: Vec<Option<FdInfo>> = Vec::new();
         // 0 -> stdin (todo: use TTY instead of Stdin, now TTY is not support for loop reading)
         //let stdin = Arc::new(Stdin);
-        let stdin = TTY.clone();
+        let tty_file = TTY.get().unwrap().clone();
+        let stdin = tty_file.clone();
         //stdin.set_flags(OpenFlags::empty());
         // 1 -> stdout
-        let stdout = TTY.clone();
+        let stdout = tty_file.clone();
         //stdout.set_flags(OpenFlags::O_WRONLY);
         // 2 -> stderr
-        let stderr = TTY.clone();
+        let stderr = tty_file.clone();
         //stderr.set_flags(OpenFlags::O_WRONLY);
         table.push(Some(FdInfo { file: stdin, flags: FdFlags::empty() }));
         table.push(Some(FdInfo { file: stdout, flags: FdFlags::empty() }));

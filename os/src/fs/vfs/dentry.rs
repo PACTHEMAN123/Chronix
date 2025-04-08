@@ -57,7 +57,9 @@ pub trait Dentry: Send + Sync {
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry>;
     /// open the inode it points as File
-    fn open(self: Arc<Self>, flags: OpenFlags) -> Option<Arc<dyn File>>;
+    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
+        todo!()
+    }
     /// get the inode it points to
     fn inode(&self) -> Option<Arc<dyn Inode>> {
        self.inner().inode.lock().as_ref().map(Arc::clone)
@@ -268,7 +270,16 @@ pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> =
 
 /// helper function: Search from root using absolute path,
 /// return the target dentry: maybe negative
+/// first lookup in the dcache
+/// if not found, search from root
 pub fn global_find_dentry(path: &str) -> Arc<dyn Dentry> {
+    log::info!("global find dentry: {}", path);
+    {
+        let cache = DCACHE.lock();
+        if let Some(dentry) = cache.get(path) {
+            return dentry.clone();
+        }
+    }
     // get the root dentry
     let root_dentry = {
         let dcache = DCACHE.lock();

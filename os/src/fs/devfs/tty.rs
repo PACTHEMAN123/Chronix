@@ -5,10 +5,11 @@
 use async_trait::async_trait;
 use alloc::{boxed::Box, sync::Arc, vec::Vec, vec};
 use hal::console::console_getchar;
+use spin::Once;
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
-use crate::{devices::CharDevice, drivers::serial::UART0, fs::vfs::{File, FileInner}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::suspend_current_and_run_next};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::suspend_current_and_run_next};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -138,23 +139,26 @@ impl Termios {
     }
 }
 
-
-lazy_static! {
-    pub static ref TTY: Arc<dyn File> = TtyFile::new();
-}
+pub static TTY: Once<Arc<TtyFile>> = Once::new();
 
 pub struct TtyFile {
     pub(crate) meta: SpinNoIrqLock<TtyMeta>,
+    inner: FileInner,
 }
 
 impl TtyFile {
-    pub fn new() -> Arc<Self> {
+    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let meta = SpinNoIrqLock::new(TtyMeta {
             fg_pgid: 1 as u32,
             win_size: WinSize::new(),
             termios: Termios::new(),
         });
-        Arc::new(Self {meta})
+        let inner = FileInner {
+            offset: 0.into(),
+            dentry,
+            flags: SpinNoIrqLock::new(OpenFlags::empty()),
+        };
+        Arc::new(Self { meta, inner })
     }
 }
 
@@ -167,7 +171,7 @@ pub struct TtyMeta {
 #[async_trait]
 impl File for TtyFile {
     fn inner(&self) ->  &FileInner {
-        panic!("[tty]: tty file have no inner");
+        &self.inner
     }
 
     fn readable(&self) -> bool {
@@ -275,6 +279,145 @@ impl File for TtyFile {
     }
 }
 
+pub struct TtyInode {
+    inner: InodeInner,
+    char_dev: Arc<dyn CharDevice>,
+}
+
+impl TtyInode {
+    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
+        let mut inner = InodeInner::new(super_block, InodeMode::CHAR, 0);
+        // todo: device manager to get device id
+        let char_dev = UART0.clone();
+        Arc::new(Self { inner, char_dev })
+    }
+}
+
+impl Inode for TtyInode {
+    fn inner(&self) -> &InodeInner {
+        &self.inner
+    }
+
+    fn getattr(&self) -> crate::fs::Kstat {
+        let inner = self.inner();
+        Kstat {
+            st_dev: 0,
+            st_ino: inner.ino as u64,
+            st_mode: inner.mode.bits() as _,
+            st_nlink: inner.nlink as u32,
+            st_uid: 0,
+            st_gid: 0,
+            st_rdev: 0,
+            _pad0: 0,
+            st_size: inner.size as _,
+            _pad1: 0,
+            st_blksize: 0,
+            st_blocks: 0,
+            st_atime_sec: inner.atime.tv_sec as _,
+            st_atime_nsec: inner.atime.tv_nsec as _,
+            st_mtime_sec: inner.mtime.tv_sec as _,
+            st_mtime_nsec: inner.mtime.tv_nsec as _,
+            st_ctime_sec: inner.ctime.tv_sec as _,
+            st_ctime_nsec: inner.ctime.tv_nsec as _,
+        }
+    }
+
+    fn getxattr(&self, mask: crate::fs::XstatMask) -> crate::fs::Xstat {
+        const SUPPORTED_MASK: XstatMask = XstatMask::from_bits_truncate({
+            XstatMask::STATX_BLOCKS.bits |
+            XstatMask::STATX_ATIME.bits |
+            XstatMask::STATX_CTIME.bits |
+            XstatMask::STATX_MTIME.bits |
+            XstatMask::STATX_NLINK.bits |
+            XstatMask::STATX_MODE.bits |
+            XstatMask::STATX_SIZE.bits |
+            XstatMask::STATX_INO.bits
+        });
+        let mask = mask & SUPPORTED_MASK;
+        let inner = self.inner();
+        Xstat {
+            stx_mask: mask.bits,
+            stx_blksize: 0,
+            stx_attributes: 0,
+            stx_nlink: inner.nlink as u32,
+            stx_uid: 0,
+            stx_gid: 0,
+            stx_mode: inner.mode.bits() as _,
+            stx_ino: inner.ino as u64,
+            stx_size: inner.size as _,
+            stx_blocks: 0,
+            stx_attributes_mask: 0,
+            stx_atime: StatxTimestamp {
+                tv_sec: inner.atime.tv_sec as _,
+                tv_nsec: inner.atime.tv_nsec as _,
+            },
+            stx_btime: StatxTimestamp {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            stx_ctime: StatxTimestamp {
+                tv_sec: inner.ctime.tv_sec as _,
+                tv_nsec: inner.ctime.tv_nsec as _,
+            },
+            stx_mtime: StatxTimestamp {
+                tv_sec: inner.mtime.tv_sec as _,
+                tv_nsec: inner.mtime.tv_nsec as _,
+            },
+            stx_rdev_major: 0,
+            stx_rdev_minor: 0,
+            stx_dev_major: 0,
+            stx_dev_minor: 0,
+            stx_mnt_id: 0,
+            stx_dio_mem_align: 0,
+            std_dio_offset_align: 0,
+            stx_subvol: 0,
+            stx_atomic_write_unit_min: 0,
+            stx_atomic_write_unit_max: 0,
+            stx_atomic_write_segments_max: 0,
+            stx_dio_read_offset_align: 0,
+        }
+    }
+}
+
+pub struct TtyDentry {
+    inner: DentryInner,
+}
+
+impl TtyDentry {
+    pub fn new(
+        name: &str,
+        super_block: Arc<dyn SuperBlock>,
+        parent: Option<Arc<dyn Dentry>>
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            inner: DentryInner::new(name, super_block, parent)
+        })
+    }
+}
+
+unsafe impl Send for TtyDentry {}
+unsafe impl Sync for TtyDentry {}
+
+impl Dentry for TtyDentry {
+    fn inner(&self) -> &DentryInner {
+        &self.inner
+    }
+
+    fn new(&self,
+        name: &str,
+        superblock: Arc<dyn SuperBlock>,
+        parent: Option<Arc<dyn Dentry>>,
+    ) -> Arc<dyn Dentry> {
+        let dentry = Arc::new(Self {
+            inner: DentryInner::new(name, superblock, parent)
+        });
+        dentry
+    }
+    
+    fn open(self: Arc<Self>, flags: OpenFlags) -> Option<Arc<dyn File>> {
+        Some(TtyFile::new(self.clone()))
+    }
+}
 
 
 

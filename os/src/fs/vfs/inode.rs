@@ -48,44 +48,78 @@ impl InodeInner {
 /// Inode trait for all file system to implement
 pub trait Inode {
     /// return inner
-    fn inner(&self) -> &InodeInner;
+    fn inner(&self) -> &InodeInner {
+        todo!()
+    }
     /// use name to lookup under the current inode
-    fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>>;
+    fn lookup(&self, _name: &str) -> Option<Arc<dyn Inode>> {
+        todo!()
+    }
     /// list all files/dir/symlink under current inode
-    fn ls(&self) -> Vec<String>;
+    fn ls(&self) -> Vec<String> {
+        todo!()
+    }
     /// read at given offset in direct IO
     /// the Inode should make sure stop reading when at EOF itself
-    fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
+    fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
+        todo!()
+    }
     /// write at given offset in direct IO
     /// the Inode should make sure stop writing when at EOF itself
-    fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32>;
+    fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
+        todo!()
+    }
     /// get the page cache it owned
-    fn cache(&self) -> Arc<PageCache>;
+    fn cache(&self) -> Arc<PageCache> {
+        todo!()
+    }
     /// get a page at given offset
     /// if the page already in cache, just return the cache
     /// if the page is not in cache, need to load the page into cache
     /// if the offset is out of bound, return None 
-    fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>>;
+    fn read_page_at(self: Arc<Self>, _offset: usize) -> Option<Arc<Page>> {
+        todo!()
+    }
     /// read at given offset, allowing page caching
-    fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32>;
+    fn cache_read_at(self: Arc<Self>, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
+        todo!()
+    }
     /// write at given offset, allowing page caching
-    fn cache_write_at(self: Arc<Self>, offset: usize, buf: &[u8]) -> Result<usize, i32>;
+    fn cache_write_at(self: Arc<Self>, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
+        todo!()
+    }
     /// create inode under current inode
-    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>>;
+    fn create(&self, _name: &str, _mode: InodeMode) -> Option<Arc<dyn Inode>> {
+        todo!()
+    }
     /// resize the current inode
-    fn truncate(&self, size: u64) -> Result<usize, i32>;
+    fn truncate(&self, _size: u64) -> Result<usize, i32> {
+        todo!()
+    }
     /// get attributes of a file
-    fn getattr(&self) -> Kstat;
+    fn getattr(&self) -> Kstat {
+        todo!()
+    }
     /// get extra attributes of a file
-    fn getxattr(&self, mask: XstatMask) -> Xstat;
+    fn getxattr(&self, _mask: XstatMask) -> Xstat {
+        todo!()
+    }
     /// create a symlink of this inode and return the symlink inode
-    fn symlink(&self, target: &str) -> Result<Arc<dyn Inode>, SysError>;
+    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, SysError> {
+        todo!()
+    }
     /// read out the path from the symlink
-    fn readlink(&self) -> Result<String, SysError>;
+    fn readlink(&self) -> Result<String, SysError> {
+        todo!()
+    }
     /// called by the unlink system call
-    fn unlink(&self) -> Result<usize, i32>;
+    fn unlink(&self) -> Result<usize, i32> {
+        todo!()
+    }
     /// remove inode current inode
-    fn remove(&self, name: &str, mode: InodeMode) -> Result<usize, i32>;
+    fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
+        todo!()
+    }
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
