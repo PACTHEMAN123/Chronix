@@ -29,6 +29,7 @@ const SYSCALL_WRITE: usize = 64;
 const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
+const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
@@ -76,6 +77,7 @@ pub mod process;
 pub mod time;
 pub mod signal;
 pub mod mm;
+pub mod io;
 /// syscall concerning scheduler
 pub mod sche;
 /// syscall error code
@@ -85,6 +87,7 @@ pub mod net;
 use fatfs::info;
 pub use fs::*;
 use hal::{addr::VirtAddr, println};
+use io::sys_ppoll;
 use mm::{sys_mmap, sys_munmap};
 use net::*;
 pub use process::*;
@@ -118,6 +121,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_READV => sys_readv(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as *const u8, args[2], args[3]),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),

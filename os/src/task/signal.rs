@@ -1,5 +1,8 @@
 //! task signal related implement
 
+use core::{future::Future, pin::Pin, task::{Context, Poll}};
+
+use alloc::sync::Arc;
 use hal::{addr::VirtAddr, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
 use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigSet, SIGKILL, SIGSTOP}};
@@ -110,5 +113,27 @@ impl TaskControlBlock {
                 handler(signo);
             }
         });
+    }
+}
+
+/// the future that check if recv expect signal
+pub struct IntrBySignalFuture {
+    /// the task needed to check
+    pub task: Arc<TaskControlBlock>,
+    /// current signal mask
+    pub mask: SigSet,
+}
+
+impl Future for IntrBySignalFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let has_signal = !(self.task.sig_manager.lock().bitmap & !self.mask).is_empty();
+        if has_signal {
+            log::warn!("[IntrBySignalFuture] received interupt signal");
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
     }
 }
