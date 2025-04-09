@@ -152,7 +152,7 @@ impl ListenTable {
             let mut socket = SocketSetWrapper::new_tcp_socket();
             if socket.listen(entry.listen_endpoint).is_ok() {
                 let handle = sockets.add(socket);
-                // log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
+                log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
                 entry.syn_queue.push_back(handle);
             }
         }

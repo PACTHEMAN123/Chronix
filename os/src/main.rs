@@ -89,9 +89,9 @@ pub fn main(id: usize) -> ! {
         mm::init();
         processor::processor::init(id);
         hal::trap::init();
-        net::init_network_loopback();
         fs::init();
         // fs::vfs::file::list_apps(); 
+        net::init_network();
         // fs::ext4::page_cache_test();       
         #[cfg(not(feature = "smp"))]
         executor::init();
