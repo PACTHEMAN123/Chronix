@@ -154,6 +154,7 @@ impl Socket {
             SaFamily::AfInet | SaFamily::AfInet6 => {
                 match sk_type {
                     SocketType::STREAM => Sock::TCP(TcpSocket::new_v4_without_handle()),
+                    SocketType::DGRAM => Sock::UDP(UdpSocket::new()),
                     _ => unimplemented!(),
                 }
             }
