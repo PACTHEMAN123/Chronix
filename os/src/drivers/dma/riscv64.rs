@@ -1,11 +1,11 @@
 use core::ptr::NonNull;
 
-use alloc::vec::Vec;
-use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
+use alloc::{format, vec::Vec};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::info;
 use virtio_drivers::BufferDirection;
 
-use crate::{mm::{allocator::{frames_alloc_clean, frames_dealloc}, vm::KernVmSpaceHal, FrameTracker, INIT_VMSPACE}, sync::UPSafeCell};
+use crate::{mm::{allocator::{frames_alloc_clean, frames_dealloc}, vm::{KernVmSpaceHal, PageFaultAccessType, UserVmSpaceHal}, FrameTracker, INIT_VMSPACE}, sync::UPSafeCell, task::current_task};
 
 use super::VirtioHal;
 
@@ -49,8 +49,9 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         _direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         // use kernel space pagetable to get the physical address
-        let pa = INIT_VMSPACE.lock().translate_va(VirtAddr::from(buffer.as_ptr() as *const u8 as usize)).unwrap();
-        
+        let va = VirtAddr::from(buffer.as_ptr() as *const u8 as usize);
+        let pa = INIT_VMSPACE.lock().translate_va(va)
+            .expect(format!("share ptr translate fail: {:#x}", va.0).as_str());
         pa.0
     }
 

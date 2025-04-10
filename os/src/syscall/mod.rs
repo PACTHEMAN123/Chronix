@@ -74,6 +74,8 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_MMAP: usize = 222;
+#[allow(unused)]
+const SYSCALL_RENAMEAT2: usize = 276;
 const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
@@ -99,7 +101,7 @@ pub use time::*;
 pub use signal::*;
 pub use sche::*;
 pub use self::sys_error::SysError;
-use crate::{signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
+use crate::{fs::RenameFlags, signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -170,6 +172,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETSOCKNAME => sys_getsockname(args[0], args[1], args[2]),
         SYSCALL_GETPEERNAME => sys_getpeername(args[0], args[1], args[2]),
         SYSCALL_SENDTO => sys_sendto(args[0], args[1] ,  args[2], args[3], args[4], args[5]).await,
+        // SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as _, args[1] as _, args[2] as _, args[3] as _, RenameFlags::from_bits_truncate(args[4] as u32)),
         SYSCALL_RECVFROM => sys_recvfrom(args[0], args[1] , args[2], args[3], args[4], args[5]).await,
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);

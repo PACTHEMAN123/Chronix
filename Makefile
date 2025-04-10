@@ -54,6 +54,10 @@ BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
 BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
 BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
 
+# libc-test
+LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
+LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
+
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
@@ -110,6 +114,13 @@ else ifeq ($(ARCH), loongarch64)
 GDB ?= loongarch64-linux-gnu-gdb
 endif
 
+ifeq ($(ARCH), riscv64)
+TOOLCHAIN_PREFIX ?= riscv64-linux-gnu-
+else ifeq ($(ARCH), loongarch64)
+TOOLCHAIN_PREFIX ?= loongarch64-linux-gnu-
+endif
+
+
 # Disassembly
 DISASM ?= -x
 
@@ -164,9 +175,14 @@ busybox:
 	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
 	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
 
+libc-test:
+	@echo "building libc-test"
+	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
+
 FS_IMG_DIR := .
-FS_IMG := $(FS_IMG_DIR)/fs.img
-fs-img: user basic_test busybox
+FS_IMG_NAME := fs-$(ARCH)
+FS_IMG := $(FS_IMG_DIR)/$(FS_IMG_NAME).img
+fs-img: user basic_test busybox libc-test
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)
@@ -193,6 +209,12 @@ endif
 	@sudo cp $(BUSY_BOX) mnt/busybox
 	@sudo cp -r $(BUSY_BOX_TEST_DIR)/* mnt
 	@sudo mkdir mnt/bin
+	@echo "copying libc-test to the $(FS_IMG)"
+	@sudo mkdir mnt/libc-test
+	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
+	@sudo rm mnt/libc-test/run-all.sh
+	@sudo mv mnt/libc-test/* mnt/
+	@sudo rm -rf mnt/libc-test
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
