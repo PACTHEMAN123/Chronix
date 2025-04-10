@@ -472,6 +472,13 @@ impl Inode for Ext4Inode {
         )))
     }
 
+    fn link(&self, target_path: &str) -> Result<usize, SysError> {
+        let file = self.file.exclusive_access();
+        // create hard link
+        file.link_create(target_path).expect("link create failed");
+        Ok(0)
+    }
+
     fn readlink(&self) -> Result<String, SysError> {
         let file = self.file.exclusive_access();
         let mut path_buf: Vec<u8> = vec![0u8; 512];

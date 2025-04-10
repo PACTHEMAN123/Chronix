@@ -204,6 +204,10 @@ pub trait UserVmSpaceHal: Sized {
     fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult;
 
     fn unmap(&mut self, va: VirtAddr, len: usize) -> SysResult;
+
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
+
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
 }
 
 #[cfg(target_arch = "riscv64")]

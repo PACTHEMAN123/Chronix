@@ -20,3 +20,6 @@
 [submodule "vendor/ext4fs"]
 	path = vendor/ext4fs
 	url = https://github.com/PACTHEMAN123/ext4fs.git
+[submodule "vendor/oskernel-testsuits-cooperation"]
+	path = vendor/oskernel-testsuits-cooperation
+	url = https://github.com/oscomp/oskernel-testsuits-cooperation.git

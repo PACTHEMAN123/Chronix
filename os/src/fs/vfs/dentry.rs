@@ -22,6 +22,11 @@ pub struct DentryInner {
     pub superblock: Weak<dyn SuperBlock>,
     /// parent
     pub parent: Option<Weak<dyn Dentry>>,
+    /// children
+    /// in the case of mount a fs under another fs
+    /// we cannot get the child using inode
+    /// thats why we need children field
+    pub children: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>>,
     /// state
     pub state: SpinNoIrqLock<DentryState>,
 }
@@ -40,6 +45,7 @@ impl DentryInner {
             superblock,
             inode,
             parent: parent.map(|p| Arc::downgrade(&p)),
+            children: SpinNoIrqLock::new(BTreeMap::new()),
             state: SpinNoIrqLock::new(DentryState::UNUSED),
         }
     }
@@ -70,6 +76,7 @@ pub trait Dentry: Send + Sync {
             warn!("[Dentry] trying to replace inode with {:?}", self.name());
         }
         *self.inner().inode.lock() = Some(inode);
+        *self.inner().state.lock() = DentryState::USED;
     }
     /// clear the inode, now it doesnt have a inode
     fn clear_inode(&self) {
@@ -83,6 +90,22 @@ pub trait Dentry: Send + Sync {
     /// tidier way to get parent
     fn parent(&self) -> Option<Arc<dyn Dentry>> {
         self.inner().parent.as_ref().map(|p| p.upgrade().unwrap())
+    }
+    /// get all children
+    fn children(&self) -> BTreeMap<String, Arc<dyn Dentry>> {
+        self.inner().children.lock().clone()
+    }
+    /// get a child
+    fn get_child(&self, name: &str) -> Option<Arc<dyn Dentry>> {
+        self.inner().children.lock().get(name).cloned()
+    }
+    /// add a child
+    fn add_child(&self, child: Arc<dyn Dentry>) {
+        self.inner().children.lock().insert(child.name().to_string(), child);
+    }
+    /// remove a child
+    fn remove_child(&self, name: &str) {
+        self.inner().children.lock().remove(name);
     }
     /// tider way to get name
     fn name(&self) -> &str {
@@ -109,6 +132,14 @@ pub trait Dentry: Send + Sync {
             // no parent: at the root
             String::from("/")
         }
+    }
+    /// load all child dentry 
+    /// can also be use to update
+    /// since the on-disk fs dentry dont know child until lookup by inode
+    /// we assert that only dir dentry will call this method
+    /// it will insert into DCAHE by the way
+    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+        todo!()
     }
 }
 
@@ -152,8 +183,6 @@ impl dyn Dentry {
     /// if find, should return a USED dentry
     /// if not find, should return a NEGATIVE dentry
     pub fn walk(self: Arc<Self>, path: &str) -> Arc<dyn Dentry> {
-        // get current inode
-        let mut current_inode = self.inode().unwrap();
         let mut current_dentry = self.clone();
         // break down the path: string a/b/c -> vec [a, b, c]
         let name_vec: Vec<&str> = path
@@ -163,60 +192,33 @@ impl dyn Dentry {
         // use the vec to walk, loop
         // if the element exist, keeping walking
         // if not exist, stop.
-        for (_idx, name) in name_vec.iter().enumerate() {
-            if let Some(child) = current_inode.lookup(name) {   
-                // on the path, insert into dcache
-                // construct along the way
-                let path_dentry = self.new(
-                    name,
-                    self.superblock(),
-                    Some(current_dentry)
-                );
-                path_dentry.set_inode(child.clone());
-                path_dentry.set_state(DentryState::USED);
-                let key = path_dentry.path();
-                // info!("[DCACHE]: insert key: {}", key);
-                // (todo): insert op may be duplicate
-                DCACHE.lock().insert(key, path_dentry.clone());
-                current_dentry = path_dentry;
-                current_inode = child;
+        for name in name_vec.iter() {
+            if let Some(child_dentry) = current_dentry.get_child(name) {
+                // first look into self children field
+                // if find, just keep walking
+                current_dentry = child_dentry;
             } else {
-                // not found, construct a negative dentry
-                let neg_dentry = self.new(
-                    name,
-                    self.superblock(),
-                    Some(current_dentry)
-                );
-                neg_dentry.set_state(DentryState::NEGATIVE);
-                //info!("[DCACHE]: insert key: {}", neg_dentry.path());
-                DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
-                return neg_dentry;
+                // not found, try to update the children
+                current_dentry.clone().load_child_dentry();
+                if let Some(child_dentry) = current_dentry.get_child(name) {
+                    // after update find child
+                    current_dentry = child_dentry;
+                } else {
+                    // child not exist
+                    let neg_dentry = self.new(
+                        name,
+                        self.superblock(),
+                        Some(current_dentry)
+                    );
+                    neg_dentry.set_state(DentryState::NEGATIVE);
+                    //info!("[DCACHE]: insert key: {}", neg_dentry.path());
+                    DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
+                    return neg_dentry;
+                }
             }
         }
-        return current_dentry.clone();
-    }
 
-    /// get all child dentry
-    /// we assert that only dir dentry will call this method
-    /// it will insert into DACHE by the way
-    pub fn child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
-        //info!("in child dentry, under: {}", self.path());
-        let inode = self.inode().unwrap().clone();
-        let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
-        for name in inode.ls() {
-            let child_inode = inode.lookup(&name).unwrap();
-            
-            let child_dentry = self.new(
-                &name, 
-                self.superblock(), 
-                Some(self.clone()),
-            );
-            child_dentry.set_inode(child_inode);
-            child_dentry.set_state(DentryState::USED);
-            DCACHE.lock().insert(child_dentry.path(), child_dentry.clone());
-            child_dentrys.push(child_dentry);
-        }
-        child_dentrys
+        return current_dentry.clone();
     }
 
     /// follow the link and jump until reach the first NOT link Inode or reach the max depth
