@@ -43,12 +43,16 @@ USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS
 # test-suite
 TEST_SUITE_DIR := ./vendor/testsuits-for-oskernel
 
+# test-script
+TEST_SCRIPT_DIR := ./vendor/oskernel-testsuits-cooperation
+
 # Basic test
 BASIC_TEST_DIR := $(TEST_SUITE_DIR)/basic/user/build/${ARCH}
 
 # Busy box
 BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
 BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
+BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
 
 # BOARD
 BOARD := qemu
@@ -187,6 +191,8 @@ endif
 	@sudo cp -r $(USER_ELFS) mnt
 	@echo "copying busybox to the $(FS_IMG)"
 	@sudo cp $(BUSY_BOX) mnt/busybox
+	@sudo cp -r $(BUSY_BOX_TEST_DIR)/* mnt
+	@sudo mkdir mnt/bin
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)

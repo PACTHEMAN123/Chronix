@@ -11,11 +11,14 @@ pub mod pipe;
 pub mod page;
 pub mod devfs;
 pub mod utils;
+pub mod simplefs;
+pub mod procfs;
 
 use devfs::{fstype::DevFsType, init_devfs};
 use ext4::Ext4FSType;
 use fatfs::FatType;
 use log::*;
+use procfs::{fstype::ProcFSType, init_procfs};
 pub use stdio::{Stdin, Stdout};
 
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
@@ -54,6 +57,9 @@ fn register_all_fs() {
 
     let devfs = DevFsType::new();
     FS_MANAGER.lock().insert(devfs.name().to_string(), devfs);
+
+    let procfs = ProcFSType::new();
+    FS_MANAGER.lock().insert(procfs.name().to_string(), procfs);
 }
 
 /// get the file system by name
@@ -72,10 +78,19 @@ pub fn init() {
 
     // mount the dev file system under diskfs
     let devfs = get_filesystem("devfs");
-    let devfs_root = devfs.mount("dev", Some(diskfs_root), MountFlags::empty(), None).unwrap();
+    let devfs_root = devfs.mount("dev", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_devfs(devfs_root.clone());
+    diskfs_root.add_child(devfs_root.clone());
     log::info!("insert path: {}", devfs_root.path());
     DCACHE.lock().insert(devfs_root.path(), devfs_root);
+
+    // mount the proc file system under diskfs
+    let procfs = get_filesystem("procfs");
+    let procfs_root = procfs.mount("proc", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
+    init_procfs(procfs_root.clone());
+    diskfs_root.add_child(procfs_root.clone());
+    log::info!("insert path: {}", procfs_root.path());
+    DCACHE.lock().insert(procfs_root.path(), procfs_root);
 
     info!("fs finish init");
 }

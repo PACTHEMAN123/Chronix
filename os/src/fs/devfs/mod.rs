@@ -12,13 +12,10 @@ use crate::sync::mutex::SpinNoIrqLock;
 use super::{vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, Inode, InodeInner, DCACHE}, OpenFlags, SuperBlock};
 
 pub mod tty;
-pub mod dentry;
-pub mod inode;
 pub mod superblock;
 pub mod fstype;
 
 /// init the whole /dev
-/// we will use DCACHE to hold all the dev and inode and dentry
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let sb = root_dentry.superblock();
 
@@ -27,6 +24,7 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let tty_inode = TtyInode::new(sb.clone());
     tty_dentry.set_inode(tty_inode);
     tty_dentry.set_state(DentryState::USED);
+    root_dentry.add_child(tty_dentry.clone());
     log::info!("dcache insert: {}", tty_dentry.path());
     DCACHE.lock().insert(tty_dentry.path(), tty_dentry.clone());
     let tty_file = TtyFile::new(tty_dentry);

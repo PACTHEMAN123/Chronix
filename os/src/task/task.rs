@@ -103,6 +103,8 @@ pub struct TaskControlBlock {
     pub sig_ucontext_ptr: AtomicUsize, 
     /// current working dentry
     pub cwd: Shared<Arc<dyn Dentry>>,
+    /// ELF file the task executes
+    pub elf: Shared<Arc<dyn File>>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -164,7 +166,8 @@ impl TaskControlBlock {
         thread_group: ThreadGroup,
         task_status: TaskStatus,
         sig_manager: SigManager,
-        cwd: Arc<dyn Dentry>
+        cwd: Arc<dyn Dentry>,
+        elf: Arc<dyn File>
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -277,7 +280,7 @@ impl TaskControlBlock {
 
 impl TaskControlBlock {
     /// new a task with elf data
-    pub fn new(elf_data: &[u8]) -> Self {
+    pub fn new(elf_data: &[u8], elf_file: Arc<dyn File>) -> Self {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let tid_handle = tid_alloc();
@@ -320,6 +323,7 @@ impl TaskControlBlock {
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
+            elf: new_shared(elf_file),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -390,6 +394,7 @@ impl TaskControlBlock {
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
+            elf: new_shared(elf_file),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -425,7 +430,7 @@ impl TaskControlBlock {
         waker.as_ref().unwrap().wake_by_ref();
     }
     /// 
-    pub fn exec(&self, elf_data: &[u8], argv: Vec<String>, envp: Vec<String>) {
+    pub fn exec(&self, elf_data: &[u8], argv: Vec<String>, envp: Vec<String>, elf_file: Arc<dyn File>) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut vm_space, mut user_sp, entry_point, auxv) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
         // update trap_cx ppn
@@ -433,6 +438,8 @@ impl TaskControlBlock {
             .get_page_table()
             .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
+        // update the executing elf file
+        self.with_mut_elf(|elf| *elf = elf_file);
          //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
         //info!("terminating all threads except main");
@@ -480,12 +487,14 @@ impl TaskControlBlock {
             mut user_sp, 
             entry_point, 
             auxv
-        ) = UserVmSpace::from_elf_file(elf_file, &INIT_VMSPACE);
+        ) = UserVmSpace::from_elf_file(elf_file.clone(), &INIT_VMSPACE);
         // update trap_cx ppn
         let trap_cx_ppn = vm_space
             .get_page_table()
             .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
+        // update the executing elf file
+        self.with_mut_elf(|elf| *elf = elf_file);
          //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
         //info!("terminating all threads except main");
@@ -608,6 +617,7 @@ impl TaskControlBlock {
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd,
+            elf: self.elf.clone(),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]

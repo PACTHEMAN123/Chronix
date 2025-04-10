@@ -114,7 +114,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 
     if let Some(path) = user_path_to_string(pathname) {
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
-        info!("trying to open {}", dentry.path());
+        log::debug!("trying to open {}", dentry.path());
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
@@ -122,13 +122,11 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             }
             let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
             let name = abs_path_to_name(&path).unwrap();
-            info!("name: {}", name);
             let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
             dentry.set_inode(new_inode);
             dentry.set_state(DentryState::USED);
         }
         if dentry.state() == DentryState::NEGATIVE {
-            info!("return!");
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
@@ -317,7 +315,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     let dentry = file.dentry().unwrap();
     let mut buf_it = buf_slice;
     let mut writen_len = 0;
-    for child in dentry.child_dentry().iter().skip(file.pos()) {
+    for child in dentry.load_child_dentry().iter().skip(file.pos()) {
         assert!(child.state() != DentryState::NEGATIVE);
         // align to 8 bytes
         let c_name_len = child.name().len() + 1;
@@ -392,6 +390,9 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
     info!("[sys_readlinkat]: reading link {}", dentry.path());
+    if dentry.state() == DentryState::NEGATIVE {
+        return Err(SysError::EBADF);
+    }
     let inode = dentry.inode().unwrap();
     if inode.inner().mode != InodeMode::LINK {
         return Err(SysError::EINVAL);
@@ -603,6 +604,40 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     }
     let ret = out_file.write(&buf[..len]).await;
     Ok(ret as isize)
+}
+
+/// syscall: linkat
+/// link() creates a new link (also known as a hard link) to an existing file.
+/// The linkat() system call operates in exactly the same way as link(2), 
+pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, new_pathname: *const u8, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, flags)?;
+    let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, flags)?;
+    log::debug!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
+    let old_inode = old_dentry.inode().unwrap();
+    old_inode.link(&new_dentry.path())?;
+    new_dentry.set_inode(old_inode);
+    new_dentry.set_state(DentryState::USED);
+    Ok(0)
+}
+
+/// syscall: faccessat
+/// access() checks whether the calling process can access the file
+/// pathname.  If pathname is a symbolic link, it is dereferenced.
+/// TODO: now do nothing
+pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
+    if flags == 0x200 || flags == 0x1000 {
+        log::warn!("not support flags");
+    }
+
+    let task = current_task().unwrap().clone();
+    let _dentry = if flags == AT_SYMLINK_NOFOLLOW {
+        at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?
+    } else {
+        at_helper(task, dirfd, pathname, OpenFlags::empty())?
+    };
+    Ok(0)
 }
 
 
