@@ -17,8 +17,10 @@ const SYSCALL_FCNTL: usize = 25;
 const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UNLINKAT: usize = 35;
+const SYSCALL_LINKAT: usize = 37;
 const SYSCALL_UMOUNT2: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
+const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
@@ -78,6 +80,8 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_MMAP: usize = 222;
+#[allow(unused)]
+const SYSCALL_RENAMEAT2: usize = 276;
 const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
@@ -103,7 +107,7 @@ pub use time::*;
 pub use signal::*;
 pub use sche::*;
 pub use self::sys_error::SysError;
-use crate::{signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
+use crate::{fs::RenameFlags, signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -118,7 +122,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
+        SYSCALL_LINKAT => sys_linkat(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
         SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as usize),
+        SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_CLOSE => sys_close(args[0]),
@@ -173,6 +179,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETSOCKNAME => sys_getsockname(args[0], args[1], args[2]),
         SYSCALL_GETPEERNAME => sys_getpeername(args[0], args[1], args[2]),
         SYSCALL_SENDTO => sys_sendto(args[0], args[1] ,  args[2], args[3], args[4], args[5]).await,
+        // SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as _, args[1] as _, args[2] as _, args[3] as _, RenameFlags::from_bits_truncate(args[4] as u32)),
         SYSCALL_RECVFROM => sys_recvfrom(args[0], args[1] , args[2], args[3], args[4], args[5]).await,
         SYSCALL_SETSOCKOPT => sys_setsockopt(args[0], args[1], args[2], args[3], args[4]),
         SYSCALL_GETSOCKOPT => sys_getsockopt(args[0], args[1], args[2], args[3], args[4]),

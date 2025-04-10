@@ -108,6 +108,10 @@ pub trait Inode {
     fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, SysError> {
         todo!()
     }
+    /// create a hard link using this inode path and the target path
+    fn link(&self, _target: &str) -> Result<usize, SysError> {
+        todo!()
+    }
     /// read out the path from the symlink
     fn readlink(&self) -> Result<String, SysError> {
         todo!()

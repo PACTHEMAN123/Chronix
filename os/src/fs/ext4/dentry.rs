@@ -45,4 +45,35 @@ impl Dentry for Ext4Dentry {
         let (readable, writable) = flags.read_write();
         Some(Arc::new(Ext4File::new(readable, writable, self.clone())))
     }
+    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+        //info!("in child dentry, under: {}", self.path());
+        let inode = self.inode().unwrap().clone();
+        let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
+        // look into the children first
+        // to avoid unneccsary IO
+        for (_, child) in self.children().iter() {
+            child_dentrys.push(child.clone());
+        }
+        // try to update
+        for name in inode.ls() {
+            if let Some(_child_dentry) = self.get_child(&name) {
+                // do nothing 
+            } else {
+                // not find in the mem
+                // try to find by IO
+                let child_inode = inode.lookup(&name).unwrap();
+                let child_dentry = self.new(
+                    &name, 
+                    self.superblock(), 
+                    Some(self.clone()),
+                );
+                child_dentry.set_inode(child_inode);
+                child_dentry.set_state(DentryState::USED);
+                self.add_child(child_dentry.clone());
+                DCACHE.lock().insert(child_dentry.path(), child_dentry.clone());
+                child_dentrys.push(child_dentry);
+            }
+        }
+        child_dentrys
+    }
 }

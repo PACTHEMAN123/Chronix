@@ -47,7 +47,7 @@ fn syscall(id: usize, args: [usize; 6]) -> isize {
 }
 
 #[cfg(target_arch="loongarch64")]
-fn syscall(id: usize, args: [usize; 3]) -> isize {
+fn syscall(id: usize, args: [usize; 6]) -> isize {
     use core::arch;
 
     let mut ret: isize;
