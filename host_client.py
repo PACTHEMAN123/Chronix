@@ -4,10 +4,16 @@ import time
 def host_client_test():
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client.settimeout(5)  
-        
+        client.settimeout(5)
+        print("[Host] Binding completed")
         print("[Host] Connecting...")
-        client.connect(('localhost', 6666))
+        try: 
+            client.connect(('localhost', 6666))
+        except Exception as e:
+            print(f"[Host] Error: {str(e)}")
+            return
+        
+        print("[Host] Connected")
         
         test_data = b"Cross-VM TCP Test"
         print(f"[Host] Sending {len(test_data)} bytes")

@@ -257,7 +257,7 @@ impl TcpSocket {
             let inner_endpoint = self.robost_port_endpoint().unwrap();
             self.set_local_endpoint_with_port(inner_endpoint.port);
             LISTEN_TABLE.listen(inner_endpoint, waker)?;
-            // info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
+            info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
             Ok(())
         }).unwrap_or_else(|_| {
             Ok(())

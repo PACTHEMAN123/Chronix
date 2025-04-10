@@ -81,14 +81,15 @@ impl<T: Transport> VirtIoNetDev<T> {
             log::warn!("[VirtioNetDev::receive] token {}", token);
             let mut rx_buf = self.rx_buffers[token as usize]
             .take().ok_or(DevError::BadState)?;
+            log::info!("[VirtioNetDev::receive] rx_buf: {:p}", &rx_buf);
             let (head_len, packet_len) = unsafe {
                 self.raw_device
                 .receive_complete(token, rx_buf.as_mut_slice())
-                .unwrap()
+                .map_err(as_dev_err)?
             };
+            log::info!("[VirtioNetDev::receive] packet len {}, head len {}", packet_len, head_len);
             rx_buf.set_header_len(head_len);
             rx_buf.set_packet_len(packet_len);
-            log::info!("[VirtioNetDev::receive] packet len {}, head len {}", packet_len, head_len);
             Ok(rx_buf)
         }else {
             Err(DevError::Again)
