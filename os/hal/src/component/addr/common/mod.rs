@@ -1,5 +1,7 @@
 use core::{iter::Step, ops::{Add, AddAssign, Sub, SubAssign}};
 
+use alloc::slice;
+
 use crate::component::constant::{Constant, ConstantsHal};
 
 macro_rules! ImplFor {
@@ -119,6 +121,18 @@ pub trait PhysAddrHal {
 
     fn get_ref<T>(&self) -> &'static T {
         unsafe { & *self.get_ptr() }
+    }
+
+    fn get_slice<T>(&self, len: usize) -> &'static [T] {
+        unsafe {
+            slice::from_raw_parts(self.get_ptr(), len)
+        }
+    }
+
+    fn get_slice_mut<T>(&self, len: usize) -> &'static mut [T] {
+        unsafe {
+            slice::from_raw_parts_mut(self.get_ptr(), len)
+        }
     }
 
     fn floor(&self) -> PhysPageNum;

@@ -517,6 +517,14 @@ impl UserVmSpaceHal for UserVmSpace {
             self.areas.try_insert(right.range_va.clone(), right).map_err(|_| SysError::EFAULT)?;
         }
         Ok(0)
+    }
+    
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
+        self.page_table.translate_vpn(vpn)
+    }
+    
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.page_table.translate_va(va)
     }    
 }
 

@@ -178,6 +178,17 @@ impl OpenFlags {
     }
 }
 
+bitflags! {
+    pub struct RenameFlags: u32 {
+        /// Don't overwrite target
+        const RENAME_NOREPLACE = 1 << 0;
+        /// Exchange source and dest
+        const RENAME_EXCHANGE = 1 << 1;
+        /// Whiteout source
+        const RENAME_WHITEOUT = 1 << 2;
+    }
+}
+
 // Defined in <bits/struct_stat.h>
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]

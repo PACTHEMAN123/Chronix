@@ -2,13 +2,13 @@
 use core::ptr::copy_nonoverlapping;
 
 use alloc::{string::ToString, sync::Arc, vec};
-use hal::{addr::VirtAddr, instruction::{Instruction, InstructionHal}};
+use hal::{addr::{PhysAddrHal, VirtAddr}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, println};
 use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
-}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}};
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+}, mm::vm::{PageFaultAccessType, UserVmSpaceHal}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}};
 use crate::utils::{
     path::*,
     string::*,
@@ -22,25 +22,54 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     //info!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
-    let _sum_guard = SumGuard::new();
-    let buf = unsafe {
-        core::slice::from_raw_parts::<u8>(buf as *const u8, len)
-    };
-    return Ok(file.write(buf).await as isize);
+
+    let start = buf & !(Constant::PAGE_SIZE - 1);
+    let end = buf + len;
+    let mut ret = 0;
+    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        let va = aligned_va.max(buf);
+        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        let va = VirtAddr::from(va);
+        let pa = task.with_mut_vm_space(|vm| {
+            if let Some(pa) = vm.translate_va(va) {
+                pa
+            } else {
+                vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
+                vm.translate_va(va).unwrap()
+            }
+        });
+        let data = pa.get_slice(len);
+        ret += file.write(data).await;
+    }
+
+    return Ok(ret as isize);
 }
 
 
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    //info!("task {} trying to read fd {}", task.gettid(), fd);
-    log::debug!("reading fd: {fd}");
+    // info!("task {} trying to read fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
-    let _sum_guard = SumGuard::new();
-    let buf = unsafe {
-        core::slice::from_raw_parts_mut::<u8>(buf as *mut u8, len)
-    };
-    let ret = file.read(buf).await;
+    let start = buf & !(Constant::PAGE_SIZE - 1);
+    let end = buf + len;
+    let mut ret = 0;
+    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        let va = aligned_va.max(buf);
+        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        let va = VirtAddr::from(va);
+        let pa = task.with_mut_vm_space(|vm| {
+            if let Some(pa) = vm.translate_va(va) {
+                pa
+            } else {
+                vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
+                vm.translate_va(va).unwrap()
+            }
+        });
+        let data = pa.get_slice_mut(len);
+        ret += file.read(data).await;
+    }
+
     return Ok(ret as isize);
 }
 
@@ -186,7 +215,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
         at_helper(task.clone(), dirfd, pathname, OpenFlags::empty())?
     };
     if dentry.state() == DentryState::NEGATIVE {
-        return Err(SysError::EBADF);
+        return Err(SysError::ENOENT);
     }
 
     let stat = dentry.inode().unwrap().getattr();
@@ -535,7 +564,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         if iov.len == 0 {
             continue;
         }
-        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        log::debug!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
         let buf = unsafe {
             Instruction::set_sum();
             core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
@@ -638,6 +667,17 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32
         at_helper(task, dirfd, pathname, OpenFlags::empty())?
     };
     Ok(0)
+}
+
+
+#[allow(unused)]
+/// renameat2() has an additional flags argument.  A renameat2() call
+/// with a zero flags argument is equivalent to renameat().
+pub fn sys_renameat2(
+    old_dir_fd: i32, old_path: *const u8, 
+    new_dir_fd: i32, new_path: *const u8, 
+    flags: RenameFlags) -> Result<isize, SysError> {
+    todo!()
 }
 
 
