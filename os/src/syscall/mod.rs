@@ -58,6 +58,7 @@ const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
 const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SOCKET: usize = 198;
+const SYSCALL_SOCKETPAIR: usize = 199;
 const SYSCALL_BIND: usize = 200;
 const SYSCALL_LISTEN: usize = 201;
 const SYSCALL_ACCEPT: usize = 202;
@@ -66,6 +67,11 @@ const SYSCALL_GETSOCKNAME: usize = 204;
 const SYSCALL_GETPEERNAME: usize = 205;
 const SYSCALL_SENDTO: usize = 206;
 const SYSCALL_RECVFROM: usize = 207;
+const SYSCALL_SETSOCKOPT: usize = 208;
+const SYSCALL_GETSOCKOPT: usize = 209;
+const SYSCALL_SHUTDOWN: usize = 210;
+const SYSCALL_SENDMSG: usize = 211;
+const SYSCALL_RECVMSG: usize = 212;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
@@ -159,6 +165,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
         SYSCALL_SOCKET => sys_socket(args[0], args[1], args[2]),
+        SYSCALL_SOCKETPAIR => sys_socketpair(args[0], args[1],  args[2], args[3]),
         SYSCALL_BIND => sys_bind(args[0], args[1], args[2]),
         SYSCALL_LISTEN => sys_listen(args[0], args[1]),
         SYSCALL_ACCEPT => sys_accept(args[0], args[1], args[2]).await,
@@ -167,6 +174,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPEERNAME => sys_getpeername(args[0], args[1], args[2]),
         SYSCALL_SENDTO => sys_sendto(args[0], args[1] ,  args[2], args[3], args[4], args[5]).await,
         SYSCALL_RECVFROM => sys_recvfrom(args[0], args[1] , args[2], args[3], args[4], args[5]).await,
+        SYSCALL_SETSOCKOPT => sys_setsockopt(args[0], args[1], args[2], args[3], args[4]),
+        SYSCALL_GETSOCKOPT => sys_getsockopt(args[0], args[1], args[2], args[3], args[4]),
+        SYSCALL_SHUTDOWN => sys_shutdown(args[0],  args[1]),
+        SYSCALL_SENDMSG => sys_sendmsg(args[0], args[1], args[2]).await,
+        SYSCALL_RECVMSG => sys_recvmsg(args[0], args[1], args[2]).await,
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)
