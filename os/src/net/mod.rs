@@ -231,7 +231,7 @@ pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: b
         let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
         let first_flag = tcp_packet.syn() && !tcp_packet.ack();
         if first_flag {
-            // info!("[modify tcp packet]receive tcp");
+            info!("[modify tcp packet]receive tcp");
             LISTEN_TABLE.handle_coming_tcp(src_addr, dst_addr, sockets);
         }
     }

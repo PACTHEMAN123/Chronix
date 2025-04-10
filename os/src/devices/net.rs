@@ -199,6 +199,11 @@ impl <'a> RxToken for NetRxToken<'a> {
     {
         // need preprocess
         let mut rx_buf = self.1;
+        log::warn!(
+            "[RxToken::consume] RECV {} bytes",
+            rx_buf.packet_len(),
+            // rx_buf.packet()
+        );
         let result = f(rx_buf.packet_mut());
         self.0.exclusive_access().recycle_rx_buffer(rx_buf).unwrap();
         result
