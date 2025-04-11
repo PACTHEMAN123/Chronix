@@ -670,14 +670,50 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32
 }
 
 
-#[allow(unused)]
+/// rename() renames a file, moving it between directories if
+/// required.  Any other hard links to the file (as created using
+/// link(2)) are unaffected.  Open file descriptors for oldpath are
+/// also unaffected.
 /// renameat2() has an additional flags argument.  A renameat2() call
 /// with a zero flags argument is equivalent to renameat().
-pub fn sys_renameat2(
-    old_dir_fd: i32, old_path: *const u8, 
-    new_dir_fd: i32, new_path: *const u8, 
-    flags: RenameFlags) -> Result<isize, SysError> {
-    todo!()
+pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, new_path: *const u8, flags: i32) -> Result<isize, SysError> {
+    let task = current_task().unwrap().clone();
+    let flags = RenameFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let old_dentry = at_helper(task.clone(), old_dirfd, old_path, OpenFlags::O_NOFOLLOW)?;
+    let new_dentry = at_helper(task.clone(), new_dirfd, new_path, OpenFlags::O_NOFOLLOW)?;
+
+    if flags.contains(RenameFlags::RENAME_EXCHANGE)
+            && (flags.contains(RenameFlags::RENAME_NOREPLACE)
+                || flags.contains(RenameFlags::RENAME_WHITEOUT))
+    {
+        return Err(SysError::EINVAL);
+    }
+    // the new dentry can not be the descendant of the old dentry
+    let mut parent_opt = new_dentry.parent();
+    while let Some(parent) = parent_opt {
+        if Arc::ptr_eq(&parent, &old_dentry) {
+            return Err(SysError::EINVAL);
+        }
+        parent_opt = parent.parent();
+    }
+
+    if new_dentry.state() == DentryState::NEGATIVE && flags.contains(RenameFlags::RENAME_EXCHANGE) {
+        return Err(SysError::ENOENT);
+    } else if flags.contains(RenameFlags::RENAME_NOREPLACE) {
+        return Err(SysError::EEXIST);
+    }
+
+    let old_inode = old_dentry.inode().unwrap();
+    let new_inode = new_dentry.inode();
+    old_inode.rename(&new_dentry.path(), new_inode)?;
+    new_dentry.set_inode(old_inode);
+    // warning: due to lwext4 unsupport for RENAME_EXCHANGE
+    if flags.contains(RenameFlags::RENAME_EXCHANGE) {
+        old_dentry.set_inode(new_dentry.inode().unwrap());
+    } else {
+        old_dentry.clear_inode();
+    }
+    Ok(0)
 }
 
 
