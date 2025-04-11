@@ -1,7 +1,7 @@
 //! addition struct and some useful helper function for task
 
 use alloc::{string::String, vec::Vec};
-use hal::addr::VirtAddr;
+use hal::{addr::VirtAddr, println};
 
 use crate::{config::PAGE_SIZE, mm::{PageTable, UserVmSpace}, processor::context::SumGuard};
 use crate::mm::vm::{self, PageFaultAccessType, UserVmSpaceHal};
