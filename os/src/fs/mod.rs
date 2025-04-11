@@ -179,7 +179,7 @@ impl OpenFlags {
 }
 
 bitflags! {
-    pub struct RenameFlags: u32 {
+    pub struct RenameFlags: i32 {
         /// Don't overwrite target
         const RENAME_NOREPLACE = 1 << 0;
         /// Exchange source and dest
