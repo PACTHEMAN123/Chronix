@@ -535,6 +535,35 @@ impl Inode for Ext4Inode {
         }
     }
 
+    fn rename(&self, target: &str, new_inode: Option<Arc<dyn Inode>>) -> Result<(), SysError> {
+        let file = self.file.exclusive_access();
+        let path = file.get_path();
+        let old_path = path.to_str().expect("failed");
+        let ty = file.get_type();
+        let old_mode = InodeMode::from_inode_type(ty).get_type();
+        log::debug!("old mode: {:x}", old_mode.bits());
+        if let Some(new) = new_inode {
+            let new_mode = new.inner().mode;
+            if new_mode != old_mode {
+                return match (old_mode, new_mode) {
+                    (InodeMode::FILE, InodeMode::DIR) => Err(SysError::EISDIR),
+                    (InodeMode::DIR, InodeMode::FILE) => Err(SysError::ENOTDIR),
+                    _ => unimplemented!(),
+                };
+            }
+            let _ = match new_mode {
+                InodeMode::FILE => file.file_remove(target),
+                InodeMode::DIR => file.dir_rm(target),
+                _ => unimplemented!(),
+            };
+        }
+        let _ = match old_mode {
+            InodeMode::FILE => file.file_rename(old_path, target),
+            InodeMode::DIR => file.dir_mv(old_path, target),
+            _ => unimplemented!(),
+        };
+        Ok(())
+    }
 }
 
 impl Drop for Ext4Inode {
