@@ -52,6 +52,11 @@ impl Dentry for Ext4Dentry {
         // look into the children first
         // to avoid unneccsary IO
         for (_, child) in self.children().iter() {
+            if child.state() == DentryState::NEGATIVE {
+                // skip the invalid child dentry
+                // todo: should invalid dentry stay or clean?
+                continue;
+            }
             child_dentrys.push(child.clone());
         }
         // try to update

@@ -124,6 +124,11 @@ pub trait Inode {
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
         todo!()
     }
+    /// rename inode from current path to dst path
+    /// return the new inode
+    fn rename(&self, _target: &str, _new_inode: Option<Arc<dyn Inode>>) -> Result<(), SysError> {
+        Err(SysError::EINVAL)
+    }
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

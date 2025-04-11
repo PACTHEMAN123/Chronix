@@ -543,7 +543,11 @@ impl UserVmSpaceHal for UserVmSpace {
     }
     
     fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult {
-        assert!(va.0 % PAGE_SIZE == 0);
+        if len == 0 {
+            return Err(SysError::EINVAL);
+        }
+        let va= va.floor().start_addr();
+        let len = (len - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1);
         let range = if flags.contains(MmapFlags::MAP_FIXED) && 
         self.areas.is_range_free(va..va+len).is_ok() {
             va..va + len
@@ -592,7 +596,11 @@ impl UserVmSpaceHal for UserVmSpace {
     }
 
     fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult {
-        assert!(va.0 % PAGE_SIZE == 0);
+        if len == 0 {
+            return Err(SysError::EINVAL);
+        }
+        let va= va.floor().start_addr();
+        let len = (len - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1);
         let range = if flags.contains(MmapFlags::MAP_FIXED) {
             va..va + len
         } else {
@@ -607,7 +615,6 @@ impl UserVmSpaceHal for UserVmSpace {
         } else {
             let vma = UserVmArea::new_mmap(range, perm, flags, None, 0, len);
             self.push_area(vma, None);
-
         }
         Ok(start.0 as isize)
     }
@@ -880,16 +887,14 @@ impl UserVmArea {
             _ => {
                 match self.vma_type {
                     UserVmAreaType::TrapContext => return Err(()),
-                    UserVmAreaType::Data => {
-                        UserDataHandler::handle_lazy_page_fault(self, page_table, vpn, access_type)
-                    }
+                    UserVmAreaType::Data =>
+                        UserDataHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Stack =>
                         UserStackHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Heap =>
                         UserHeapHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
-                    UserVmAreaType::Mmap => {
-                        UserMmapHandler::handle_lazy_page_fault(self, page_table, vpn, access_type)
-                    }
+                    UserVmAreaType::Mmap =>
+                        UserMmapHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Shm =>
                         UserShmHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                 }
@@ -1186,5 +1191,12 @@ impl UserLazyFaultHandler for UserMmapHandler {
 }
 
 impl UserLazyFaultHandler for UserShmHandler {
-
+    fn handle_lazy_page_fault(
+            _vma: &mut UserVmArea,
+            _page_table: &mut PageTable,
+            _vpn: VirtPageNum,
+            _access_type: PageFaultAccessType,
+        ) -> Result<(), ()> {
+        panic!("todo... ")
+    }
 }
