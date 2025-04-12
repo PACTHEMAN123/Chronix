@@ -142,7 +142,7 @@ impl Inode for ExeInode {
 
     fn readlink(&self) -> Result<String, SysError> {
         current_task().unwrap().with_elf(|elf| {
-            return Ok(elf.dentry().unwrap().path());
+            return Ok(elf.clone().ok_or(SysError::ENFILE)?.dentry().ok_or(SysError::ENOENT)?.path());
         })
     }
 }

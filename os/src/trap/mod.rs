@@ -18,7 +18,8 @@ use hal::instruction::{self, Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
-use crate::mm::vm::{UserVmSpaceHal, PageFaultAccessType};
+use crate::mm::vm::{KernVmSpaceHal, PageFaultAccessType, UserVmSpaceHal};
+use crate::mm::KVMSPACE;
 use hal::addr::VirtAddr;
 
 use crate::utils::async_utils::yield_now;
@@ -170,21 +171,24 @@ fn kernel_trap_handler() {
                 TrapType::InstructionPageFault(_) => PageFaultAccessType::EXECUTE,
                 _ => unreachable!(),
             };
-            match current_task() {
-                None => {},
-                Some(task) => {
-                    let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
-                    match res {
-                        Ok(()) => {},
-                        Err(()) => {
-                            // todo: don't panic, kill the task
-                            panic!(
-                                "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}",
-                            );
+
+            if KVMSPACE.lock().handle_page_fault(VirtAddr::from(stval), access_type).is_err() {
+                match current_task() {
+                    None => {},
+                    Some(task) => {
+                        let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
+                        match res {
+                            Ok(()) => {},
+                            Err(()) => {
+                                // todo: don't panic, kill the task
+                                panic!(
+                                    "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}",
+                                );
+                            }
                         }
                     }
-                }
-            };
+                };
+            }
         }
         TrapType::Timer => {
             //info!("interrupt: supervisor timer");

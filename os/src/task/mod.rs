@@ -30,8 +30,7 @@ pub mod signal;
 
 use core::sync::atomic::{AtomicI32, Ordering};
 use crate::fs::{
-    vfs::file::open_file,
-    OpenFlags,
+    utils::FileReader, vfs::file::open_file, OpenFlags
 };
 use hal::instruction::{InstructionHal, Instruction};
 use alloc::sync::Arc;
@@ -87,8 +86,10 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
         //info!("trying to open initproc");
-        let inode = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
-        TaskControlBlock::new_from_file(inode)
+        let file = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
+        let reader = FileReader::new(file.clone());
+        let elf = xmas_elf::ElfFile::new(&reader).unwrap();
+        TaskControlBlock::new(&elf, Some(file)).unwrap()
         // let v = inode.read_all();
         // TaskControlBlock::new(v.as_slice())
     });

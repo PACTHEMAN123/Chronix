@@ -70,8 +70,10 @@ BOARD := qemu
 SBI ?= rustsbi
 ifeq ($(ARCH), riscv64)
 BOOTLOADER := bootloader/$(SBI)-$(BOARD).bin
+SDCARD := sdcard-rv.img
 else ifeq ($(ARCH), loongarch64)
 BOOTLOADER := bootloader/loongarch_bios_0310.bin
+SDCARD := sdcard-la.img
 endif
 
 KERNEL_FEATURES := 
@@ -180,7 +182,7 @@ busybox:
 	@echo "building busybox"
 	@make -C $(BUSY_BOX_DIR) clean
 	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
-	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
+	@make -C $(BUSY_BOX_DIR) CC="$(CC) -g -Og" STRIP=$(STRIP) -j
 
 libc-test:
 	@echo "building libc-test"
@@ -220,15 +222,27 @@ endif
 	@echo "copying libc-test to the $(FS_IMG)"
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
-	@sudo rm mnt/libc-test/run-all.sh
-	@sudo mv mnt/libc-test/* mnt/
-	@sudo rm -rf mnt/libc-test
 ifneq ($(NT),)
 	@sudo cp $(IPERF_TEST_DIR)/* mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netserver mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf_testcode.sh mnt/
 endif
+	@echo "copying libc.so"
+	@sudo mkdir -p sdcard
+	@sudo mount $(SDCARD) sdcard
+	@sudo mkdir -p mnt/lib
+	@sudo cp -r sdcard/musl/lib/libc.so mnt/lib
+ifeq ($(ARCH), riscv64)
+	@sudo ln mnt/lib/libc.so mnt/lib/ld-linux-riscv64-lp64.so.1
+	@sudo ln mnt/lib/libc.so mnt/lib/ld-musl-riscv64.so.1
+else ifeq ($(ARCH), loongarch64)
+	@sudo mkdir -p mnt/lib64
+	@sudo ln mnt/lib/libc.so mnt/lib64/ld-linux-loongarch-lp64d.so.1
+	@sudo ln mnt/lib/libc.so mnt/lib/ld-musl-riscv64.so.1
+endif
+	@sudo umount sdcard
+	@sudo rm -rf sdcard
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)

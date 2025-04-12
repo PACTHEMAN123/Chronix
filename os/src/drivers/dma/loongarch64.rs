@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
 use log::info;
 use virtio_drivers::BufferDirection;
-use crate::{mm::{allocator::{frames_alloc_clean, frames_dealloc}, vm::KernVmSpaceHal, FrameTracker, INIT_VMSPACE}, sync::UPSafeCell};
+use crate::{mm::{allocator::{frames_alloc_clean, frames_dealloc}, vm::KernVmSpaceHal, FrameTracker, KVMSPACE}, sync::UPSafeCell};
 
 use super::VirtioHal;
 
