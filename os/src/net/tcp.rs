@@ -1,6 +1,6 @@
 use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{AtomicBool, AtomicU8, Ordering}, time::{self, Duration}};
 
-use crate::{ sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
+use crate::{ net::addr::LOCAL_IPV4, sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
 
 use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
@@ -204,7 +204,7 @@ impl TcpSocket {
             Err(SysError::EINPROGRESS)
         }else {
             self.block_on_future(|| async {
-                let connection_info = self.poll_concect().await;
+                let connection_info = self.poll_connect().await;
                 if !connection_info {
                     log::warn!("[TcpSocket::connect] try agian");
                     Err(SysError::EAGAIN)
@@ -219,8 +219,9 @@ impl TcpSocket {
     }
     
     pub fn bind(&self, mut new_endpoint: IpEndpoint) -> SockResult<()>  {
+        log::info!("[TcpSocket::bind] start to bind");
         self.update_state(SocketState::Closed, SocketState::Closed,||{
-            // info!("new end point port {}", new_endpoint.port);
+            info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
                 let port = self.get_ephemeral_port().unwrap();
                 new_endpoint.port = port;
@@ -231,7 +232,7 @@ impl TcpSocket {
             };
             if old != ZERO_IPV4_ENDPOINT {
                 // already bind
-                return Err(SysError::EADDRINUSE); 
+                return Err(SysError::EINVAL); 
             }
             if let IpAddress::Ipv6(v6) = new_endpoint.addr {
                 if v6.is_unspecified() {
@@ -240,9 +241,9 @@ impl TcpSocket {
                 }
             }  
             self.set_local_endpoint(new_endpoint);
-            // info!("now self local endpoint port {}",unsafe {
-                // self.local_endpoint.get().read().unwrap().port
-            // });
+            info!("now self local endpoint port {}",unsafe {
+                self.local_endpoint.get().read().unwrap().port
+            });
             Ok(())
         })
         .unwrap_or_else(|_|{
@@ -254,7 +255,7 @@ impl TcpSocket {
     pub fn listen(&self) -> SockResult<()> {
         let waker = current_task().unwrap().waker_ref().as_ref().unwrap();
         self.update_state(SocketState::Closed, SocketState::Listening, ||{
-            let inner_endpoint = self.robost_port_endpoint().unwrap();
+            let inner_endpoint = self.robost_port_endpoint()?;
             self.set_local_endpoint_with_port(inner_endpoint.port);
             LISTEN_TABLE.listen(inner_endpoint, waker)?;
             info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
@@ -280,7 +281,7 @@ impl TcpSocket {
     
     pub fn local_addr(&self) -> SockResult<IpEndpoint> {
         match self.state() {
-            SocketState::Connected | SocketState::Listening => {
+            SocketState::Connected | SocketState::Listening | SocketState::Closed => {
                 let local_endpoint = self.local_endpoint().unwrap();
                 Ok(local_endpoint)
             }
@@ -391,7 +392,7 @@ impl TcpSocket {
     pub async fn poll(&self) -> PollState {
         match self.state() {
             SocketState::Connecting => {
-                let writable = self.poll_concect().await;
+                let writable = self.poll_connect().await;
                 PollState {
                     readable: false,
                     writable: writable,
@@ -490,6 +491,7 @@ impl TcpSocket {
         }else {
             Some(local_endpoint.addr)
         };
+        log::info!("[robost_port_endpoint] addr is {:?}, port is {}", addr, port);
         Ok(IpListenEndpoint {
             addr,
             port,
@@ -553,7 +555,7 @@ impl TcpSocket {
         }
     }
     /// poll the tcp connect event and return true if the socket is connected
-    async fn poll_concect(&self) -> bool {
+    async fn poll_connect(&self) -> bool {
         let handle = unsafe{self.handle.get().read()}.unwrap();
         let waker = get_waker().await;
         SOCKET_SET.with_socket_mut::<tcp::Socket,_,_>(handle, |socket|{

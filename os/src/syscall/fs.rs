@@ -143,7 +143,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 
     if let Some(path) = user_path_to_string(pathname) {
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
-        log::debug!("trying to open {}", dentry.path());
+        log::info!("trying to open {}, flags: {:?}", dentry.path(), flags);
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
@@ -153,7 +153,6 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             let name = abs_path_to_name(&path).unwrap();
             let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
             dentry.set_inode(new_inode);
-            dentry.set_state(DentryState::USED);
         }
         if dentry.state() == DentryState::NEGATIVE {
             return Err(SysError::ENOENT);
@@ -761,4 +760,10 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
         let dentry = dentry.follow()?;
         Ok(dentry)
     }
+}
+
+/// Modify the permissions of a file or directory relative to a certain
+/// directory or location
+pub fn sys_fchmodat() -> SysResult {
+    Ok(0)
 }

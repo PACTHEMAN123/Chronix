@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 
-use crate::fs::{vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
+use crate::fs::{devfs::null::NullInode, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 
 
 
@@ -103,6 +103,18 @@ impl Inode for SpInode {
             stx_atomic_write_unit_max: 0,
             stx_atomic_write_segments_max: 0,
             stx_dio_read_offset_align: 0,
+        }
+    }
+
+    fn create(&self, name: &str, _mode: InodeMode) -> Option<Arc<dyn Inode>> {
+        // special case
+        // since some test may try to open existing file using O_CREAT flag
+        match name {
+            "null" => {
+                // just return another null inode
+                Some(NullInode::new(self.inner().super_block.upgrade()?.clone()))
+            }
+            _ => todo!()
         }
     }
 }

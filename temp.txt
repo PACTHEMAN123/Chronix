@@ -1,0 +1,103 @@
+[Server] Parent process started
+[ INFO] [sys_socket] fd: 3
+[SERVER] Socket created (fd = 3)
+[ INFO] [sys_bind] local_addr's port is: 23569
+[ INFO] [TcpSocket::bind] start to bind
+[ INFO] new end point port 23569
+[ INFO] now self local endpoint port 23569
+[Server] Bound to port 4444
+[ INFO] [robost_port_endpoint] addr is Some(Ipv4(127.0.0.1)), port is 23569
+[ INFO] [TcpSocket::listen] listening on endpoint which addr is 127.0.0.1, port is 23569
+[Server] Listening on port 4444...
+[ INFO] [accept]: local_port is 23569
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ WARN] [Listen Table] no available socket_handle
+[Client] Child process started
+[ INFO] [Timer Manager] there is a timer expired, current:2.802945s, expire:2.800048s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [sys_socket] fd: 3
+[Client] Socket created (fd = 3)
+[ INFO] [robost_port_endpoint] addr is None, port is 54594
+[ WARN] [NetDriverOps::transmit] now transmit 52 bytes
+[ WARN] [NetDriverOps::receive] now receive 52 bytes from LoopbackDev.queue
+[ INFO] [modify tcp packet]receive tcp
+[ INFO] TCP socket #1: prepare for connection 127.0.0.1:54594 -> 127.0.0.1:23569
+[ WARN] [RxToken::consume] RECV 52 bytes
+[ WARN] [NetDriverOps::transmit] now transmit 52 bytes
+[ WARN] [NetDriverOps::receive] now receive 52 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 52 bytes
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? SocketStateChanged
+[ INFO] [TcpSocket::poll_concect] socket is connected
+[Client] Connected to server
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [Timer Manager] there is a timer expired, current:2.894198s, expire:2.89294s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ WARN] [NetDriverOps::transmit] now transmit 60 bytes
+[ WARN] [NetDriverOps::receive] now receive 60 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 60 bytes
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? SocketStateChanged
+[ INFO] TCP socket accepted a new connection 127.0.0.1:54594
+[ INFO] get accept correct
+get a client_fd 4
+[SERVER]: accpet client_fd 4
+[ INFO] [Timer Manager] there is a timer expired, current:2.935706s, expire:2.934918s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [Socket::read] buf len:1024
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[Server] Received 20 bytes, echoing back...
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ WARN] [NetDriverOps::transmit] now transmit 60 bytes
+[ WARN] [NetDriverOps::receive] now receive 60 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 60 bytes
+[ INFO] [Timer Manager] there is a timer expired, current:2.953707s, expire:2.950061s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[Client] Sent bytes 
+[ INFO] [Socket::read] buf len:1024
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? SocketStateChanged
+[client ]read 20 bytes
+[ INFO] [TcpSocket::drop]
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? SocketStateChanged
+[ INFO] socket SocketHandle(0): destroyed
+[ INFO] [Timer Manager] there is a timer expired, current:2.996537s, expire:2.976379s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [Timer Manager] there is a timer expired, current:3.002756s, expire:2.997397s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[kernel] Task 3 exit with exit_code 0 ...
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [ign_sig_handler]: ignore this sig 17
+[Server] exiting
+[kernel] Task 2 exit with exit_code 0 ...
+[ INFO] Dropping TCB 2
+[ INFO] [TcpSocket::drop]
+[ INFO] TCP socket unlisten on 23569
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [TcpSocket::drop]
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [NetDriverOps::transmit] now transmit 40 bytes
+[ WARN] [NetDriverOps::receive] now receive 40 bytes from LoopbackDev.queue
+[ WARN] [RxToken::consume] RECV 40 bytes
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? SocketStateChanged
+[ INFO] socket SocketHandle(1): destroyed
+[ INFO] [Timer Manager] there is a timer expired, current:4.081465s, expire:4.07084s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [Timer Manager] there is a timer expired, current:4.084813s, expire:4.083568s
+[ WARN] [net::InterfaceWrapper::poll] does something have been changed? None
+[ INFO] [ign_sig_handler]: ignore this sig 17

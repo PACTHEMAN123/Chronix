@@ -14,7 +14,19 @@ const MAX_BUFFER_LEN: usize = 65535;
 /// The ethernet address of the NIC (MAC address).
 pub struct EthernetAddress(pub [u8; 6]);
 /// for each buffer set a NetBufPtr
+
+
+/// A raw buffer struct for network device.
 pub struct NetBufPtr {
+    // The raw pointer of the original object.
+    pub raw_ptr: NonNull<u8>,
+    // The pointer to the net buffer.
+    buf_ptr: NonNull<u8>,
+    len: usize,
+}
+
+#[repr(C)]
+pub struct NetBuf {
     /// the header part bytes length
     pub header_len: usize,
     /// the packet length
@@ -57,11 +69,11 @@ impl NetBufPool {
         })
     }
     /// allocates a new buffer from the pool
-    pub fn alloc(self: &Arc<Self>) -> Option<NetBufPtr> {
+    pub fn alloc(self: &Arc<Self>) -> Option<NetBuf> {
         let mut free_list = self.free_list.lock();
         if let Some(idx) = free_list.pop() {
             let ptr = NonNull::new(unsafe{self.pool.as_ptr().add(idx) }as *mut u8).unwrap();
-            Some(NetBufPtr {
+            Some(NetBuf {
                 header_len: 0,
                 packet_len: 0,
                 capacity: self.buf_len,
@@ -84,7 +96,7 @@ impl NetBufPool {
     }
 }
 
-impl NetBufPtrTrait for NetBufPtr {
+impl NetBufPtrTrait for NetBuf {
     fn packet_len(&self) -> usize {
         self.get_packet_len()
     }
@@ -98,7 +110,7 @@ impl NetBufPtrTrait for NetBufPtr {
     }
     
 }
-impl NetBufPtr {
+impl NetBuf {
     /// retruns a slice of memory give start and len
     const fn get_slice(&self, start: usize, len: usize) -> &[u8] {
         unsafe {
@@ -152,7 +164,7 @@ impl NetBufPtr {
         self.get_slice(0, self.capacity)
     }
     /// returns the whole mutable buffer
-    pub fn as_mut_slice(&self) -> &mut [u8] {
+    pub const fn as_mut_slice(&self) -> &mut [u8] {
         self.get_mut_slice(0, self.capacity)
     }
     /// returns buffer's header length
@@ -165,13 +177,13 @@ impl NetBufPtr {
     }
 }
 
-impl Drop for NetBufPtr {
+impl Drop for NetBuf {
     fn drop(&mut self) {
         self.pool.dealloc(self.pool_offset);
     }
 }
 
-pub type NetBufBox = Box<NetBufPtr>;
+pub type NetBufBox = Box<NetBuf>;
 
 /// device wrapper for network device
 pub struct NetDeviceWrapper {
@@ -224,6 +236,11 @@ impl <'a> TxToken for NetTxToken<'a> {
     {
         let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len).unwrap();
         let result = f(tx_buf.packet_mut());
+        log::warn!(
+            "[TxToken::consume] SEND {} bytes",
+            len,
+            // tx_buf.packet()
+        );
         self.0.exclusive_access().transmit(tx_buf).unwrap();
         result
     }

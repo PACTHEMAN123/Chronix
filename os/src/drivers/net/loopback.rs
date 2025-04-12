@@ -3,7 +3,7 @@ use fatfs::{info, warn};
 use smoltcp::phy::{DeviceCapabilities, Medium};
 use spin::Lazy;
 
-use crate::devices::{net::{EthernetAddress, NetBufPool, NetBufPtr}, DevError, DevResult, NetBufPtrTrait, NetDevice};
+use crate::devices::{net::{EthernetAddress, NetBufPool, NetBuf}, DevError, DevResult, NetBufPtrTrait, NetDevice};
 
 /// A loopback device that sends packets back to the same device.
 pub struct LoopbackDevice {

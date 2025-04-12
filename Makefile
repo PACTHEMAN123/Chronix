@@ -58,6 +58,12 @@ BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
 LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
 
+# iperf test
+IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
+
+# netperf test
+NETPERF_TEST_DIR := $(TEST_SUITE_DIR)/netperf
+
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
@@ -179,10 +185,11 @@ libc-test:
 	@echo "building libc-test"
 	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
 
+
 FS_IMG_DIR := .
 FS_IMG_NAME := fs-$(ARCH)
 FS_IMG := $(FS_IMG_DIR)/$(FS_IMG_NAME).img
-fs-img: user basic_test busybox libc-test
+fs-img: user basic_test busybox libc-test 
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)
@@ -215,6 +222,10 @@ endif
 	@sudo rm mnt/libc-test/run-all.sh
 	@sudo mv mnt/libc-test/* mnt/
 	@sudo rm -rf mnt/libc-test
+	@sudo cp $(IPERF_TEST_DIR)/* mnt/
+	@sudo cp $(NETPERF_TEST_DIR)/netserver mnt/
+	@sudo cp $(NETPERF_TEST_DIR)/netperf mnt/
+	@sudo cp $(NETPERF_TEST_DIR)/netperf_testcode.sh mnt/
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)

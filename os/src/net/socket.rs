@@ -2,7 +2,7 @@ use core::task::Poll;
 
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
-use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
+use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
 use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily};
@@ -124,7 +124,7 @@ impl Sock {
     pub async fn poll(&self) -> PollState{
         match self {
             Sock::TCP(tcp) => tcp.poll().await,
-            Sock::UDP(udp_socket) => todo!(),
+            Sock::UDP(udp_socket) => udp_socket.poll().await,
         }
     }
     /// for tcp socket listener, accept a connection

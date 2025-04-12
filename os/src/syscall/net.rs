@@ -92,7 +92,7 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
-    // log::info!("sys_socket fd: {}", fd);
+    log::info!("[sys_socket] fd: {}", fd);
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
@@ -121,9 +121,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             })
         },
     }?;
-    // log::info!("[sys_bind] local_addr's port is: {}",unsafe {
-        // local_addr.ipv4.sin_port
-    // });
+    log::info!("[sys_bind] local_addr's port is: {}",unsafe {
+        local_addr.ipv4.sin_port
+    });
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>().unwrap_or_else(|_| {
@@ -213,7 +213,8 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         });
     // moniter accept, allow sig_kill and sig_stop to interrupt
     task.set_interruptable();
-    // task.set_wake_up_sigs(SigSet::SIGKILL | SigSet::SIGSTOP);
+    let old_mask = task.sig_manager.lock().blocked_sigs;
+    task.set_wake_up_sigs(!old_mask);
     let accept_sk = socket_file.sk.accept().await?;
     task.set_running();
     log::info!("get accept correct");
@@ -326,7 +327,6 @@ pub async fn sys_recvfrom(
     addr: usize,
     addrlen: usize,
 ) -> SysResult {
-    // log::info!("[sys_recvfrom] sockfd: {}, buf: {:#x}, len: {}, flags: {}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(sockfd)})?
@@ -340,15 +340,19 @@ pub async fn sys_recvfrom(
     }
     task.set_interruptable();
     let (bytes, remote_endpoint) = socket_file.sk.recv(&mut inner_vec).await?;
-    // log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
+    log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
     let remote_addr = SockAddr::from_endpoint(remote_endpoint);
     task.set_running();
     // write to pointer
+    log::info!("now set running");
     let buf_slice = unsafe {
         core::slice::from_raw_parts_mut(buf as *mut u8, bytes)
     };
     buf_slice[..bytes].copy_from_slice(&inner_vec[..bytes]);
     // write to sockaddr_in
+    if addr == 0 {
+        return Ok(bytes as isize);  
+    }
     unsafe {
         match SaFamily::try_from(remote_addr.family).unwrap() {
             SaFamily::AfInet => {
@@ -365,11 +369,12 @@ pub async fn sys_recvfrom(
             },
         }
     }
-    // log::info!("now return bytes: {}",bytes);
+    log::info!("now return bytes: {}",bytes);
     Ok(bytes as isize)
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
+    log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)
@@ -380,7 +385,7 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             panic!("Failed to downcast to socket::Socket")
         })
     });
-    let local_addr = socket_file.sk.local_addr().unwrap();
+    let local_addr = socket_file.sk.local_addr()?;
     log::info!("Get local address of socket: {:?}", local_addr);
     // write to pointer
     unsafe {
