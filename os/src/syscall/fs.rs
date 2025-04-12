@@ -338,10 +338,18 @@ pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
 /// syscall statx
 pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
     let _sum_guard = SumGuard::new();
-    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let open_flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
     let mask = XstatMask::from_bits_truncate(mask);
     let task = current_task().unwrap().clone();
-    let dentry = at_helper(task, dirfd, pathname, flags)?;
+
+    let dentry = if flags == AT_SYMLINK_NOFOLLOW {
+        at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW | open_flags)?
+    } else {
+        at_helper(task.clone(), dirfd, pathname, open_flags)?
+    };
+    if dentry.state() == DentryState::NEGATIVE {
+        return Err(SysError::ENOENT);
+    }
     let inode = dentry.inode().unwrap();
     let statx_ptr = statx_buf.0 as *mut Xstat;
     let statx = inode.getxattr(mask);

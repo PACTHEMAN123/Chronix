@@ -431,20 +431,20 @@ impl Inode for Ext4Inode {
             stx_blocks: (size / BLOCK_SIZE) as _,
             stx_attributes_mask: 0,
             stx_atime: StatxTimestamp {
-                tv_sec: inner.atime.lock().tv_sec as _,
-                tv_nsec: inner.atime.lock().tv_nsec as _,
+                tv_sec: inner.atime().tv_sec as _,
+                tv_nsec: inner.atime().tv_nsec as _,
             },
             stx_btime: StatxTimestamp {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
             stx_ctime: StatxTimestamp {
-                tv_sec: inner.ctime.lock().tv_sec as _,
-                tv_nsec: inner.ctime.lock().tv_nsec as _,
+                tv_sec: inner.ctime().tv_sec as _,
+                tv_nsec: inner.ctime().tv_nsec as _,
             },
             stx_mtime: StatxTimestamp {
-                tv_sec: inner.mtime.lock().tv_sec as _,
-                tv_nsec: inner.mtime.lock().tv_nsec as _,
+                tv_sec: inner.mtime().tv_sec as _,
+                tv_nsec: inner.mtime().tv_nsec as _,
             },
             stx_rdev_major: 0,
             stx_rdev_minor: 0,
