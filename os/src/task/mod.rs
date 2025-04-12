@@ -124,6 +124,28 @@ macro_rules! generate_with_methods {
     };
 }
 
+#[macro_export]
+/// quick macro to generate xxx & set_xxx for SpinNoIrqLock<T>
+/// T should be able to Copy, Clone
+macro_rules! generate_lock_accessors {
+    ($($field_name:ident : $field_type:ty),+) => {
+        paste::paste! {
+            $(
+                /// get the value of the field
+                #[allow(unused)]
+                pub fn $field_name(&self) -> $field_type {
+                    *self.$field_name.lock()
+                }
+                /// store the value of the field
+                #[allow(unused)]
+                pub fn [<set_ $field_name>](&self, value: $field_type) {
+                    *self.$field_name.lock() = value;
+                }
+            )+
+        }
+    };
+}
+
 /// quick macro to genrate method to access upsafecell
 #[macro_export]
 macro_rules! generate_upsafecell_accessors {

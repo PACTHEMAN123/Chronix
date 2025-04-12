@@ -6,7 +6,9 @@
 use alloc::{collections::btree_map::BTreeMap, string::String, sync::Arc};
 use fatfs::info;
 use null::{NullDentry, NullInode};
+use rtc::{RtcDentry, RtcInode};
 use tty::{TtyDentry, TtyFile, TtyInode, TTY};
+use urandom::{UrandomDentry, UrandomInode};
 
 use crate::sync::mutex::SpinNoIrqLock;
 
@@ -16,6 +18,8 @@ pub mod tty;
 pub mod null;
 pub mod superblock;
 pub mod fstype;
+pub mod rtc;
+pub mod urandom;
 
 /// init the whole /dev
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
@@ -39,6 +43,21 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     log::info!("dcache insert: {}", null_dentry.path());
     DCACHE.lock().insert(null_dentry.path(), null_dentry.clone());
 
+    // add /dev/rtc
+    let rtc_dentry = RtcDentry::new("rtc", sb.clone(), Some(root_dentry.clone()));
+    let rtc_inode = RtcInode::new(sb.clone());
+    rtc_dentry.set_inode(rtc_inode);
+    root_dentry.add_child(rtc_dentry.clone());
+    log::info!("dcache insert: {}", rtc_dentry.path());
+    DCACHE.lock().insert(rtc_dentry.path(), rtc_dentry.clone());
+
+    // add /dev/urandom
+    let urandom_dentry = UrandomDentry::new("urandom", sb.clone(), Some(root_dentry.clone()));
+    let urandom_inode = UrandomInode::new(sb.clone());
+    urandom_dentry.set_inode(urandom_inode);
+    root_dentry.add_child(urandom_dentry.clone());
+    log::info!("dcache insert: {}", urandom_dentry.path());
+    DCACHE.lock().insert(urandom_dentry.path(), urandom_dentry.clone());
     
 }
 
