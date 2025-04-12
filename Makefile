@@ -58,6 +58,7 @@ BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
 LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
 
+export NT :=
 # iperf test
 IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
 
@@ -222,10 +223,12 @@ endif
 	@sudo rm mnt/libc-test/run-all.sh
 	@sudo mv mnt/libc-test/* mnt/
 	@sudo rm -rf mnt/libc-test
+ifneq ($(NT),)
 	@sudo cp $(IPERF_TEST_DIR)/* mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netserver mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf_testcode.sh mnt/
+endif
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
