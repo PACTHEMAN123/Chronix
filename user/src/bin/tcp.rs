@@ -99,7 +99,7 @@ fn client() -> ! {
     let connect_res = connect(sockfd as usize, &addr, core::mem::size_of::<SockaddrIn>() as u32);
     if connect_res < 0 {
         close(sockfd as usize);
-        panic!("client: connect failed");
+        panic!("client: connect failed, error: {}", connect_res);
     }
     println!("[Client] Connected to server");
     // send data

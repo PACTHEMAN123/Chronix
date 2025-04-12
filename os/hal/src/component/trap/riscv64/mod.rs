@@ -188,7 +188,7 @@ impl FloatContextHal for FloatContext {
             return;
         }
         self.need_save = 0;
-        log::warn!("FP save");
+        //log::warn!("FP save");
         unsafe {
             let mut _t: usize = 1; // as long as not x0
             asm!("

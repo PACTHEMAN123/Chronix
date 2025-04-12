@@ -145,10 +145,10 @@ impl ListenTable {
                 return;
             }
             entry.waker.wake_by_ref();
-            // log::info!(
-                // "[ListenTable::incoming_tcp_packet] wake the socket who listens port {}",
-                // dst.port
-            // );
+            log::info!(
+                "[ListenTable::incoming_tcp_packet] wake the socket who listens port {}",
+                dst.port
+            );
             let mut socket = SocketSetWrapper::new_tcp_socket();
             if socket.listen(entry.listen_endpoint).is_ok() {
                 let handle = sockets.add(socket);

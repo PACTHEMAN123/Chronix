@@ -333,7 +333,17 @@ pub struct SockaddrIn {
     pub sin_addr: u32,
     pub sin_zero: [u8; 8],
 }
-
+const AF_INET: u16 = 2;
+impl SockaddrIn {
+    pub fn new(ip: u32, port: u16) -> Self {
+        SockaddrIn {
+            sin_family: AF_INET,
+            sin_port: port,
+            sin_addr: ip,
+            sin_zero: [0; 8],
+        }
+    }
+}
 pub fn parse_ipv4(s: &str) -> Option<u32> {
     let mut addr: u32 = 0;
     for (i, octet) in s.split('.').enumerate() {

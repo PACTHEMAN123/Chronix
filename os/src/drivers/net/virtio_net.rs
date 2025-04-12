@@ -1,6 +1,6 @@
 use core::any::Any;
 
-use crate::devices::{as_dev_err, net::{NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, DevError, DevResult, NetBufPtrTrait, NetDevice};
+use crate::devices::{as_dev_err, net::{NetBufBox, NetBufPool, NetBuf, NET_BUF_LEN}, DevError, DevResult, NetBufPtrTrait, NetDevice};
 use fatfs::warn;
 use log::info;
 use smoltcp::phy::{DeviceCapabilities, Medium};
@@ -43,8 +43,8 @@ impl<T: Transport> VirtIoNetDev<T> {
         // for rx_buffer: allocate all
         for (i,rx_buf_place) in inner_self.rx_buffers.iter_mut().enumerate() {
             let rx_buf = inner_self.buf_pool.alloc_boxed().unwrap();
-            let token = unsafe{inner_self.raw_device.
-                receive_begin(rx_buf.as_mut_slice()).unwrap()
+            let token = unsafe{inner_self.raw_device
+                .receive_begin(rx_buf.as_mut_slice()).map_err(as_dev_err)?
             };
             assert_eq!(token, i as u16);
             *rx_buf_place = Some(rx_buf);
@@ -99,21 +99,23 @@ impl<T: Transport> VirtIoNetDev<T> {
         let tx_buf =
             unsafe { core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(tx_buf) };
         let tx_buf = unsafe {
-            tx_buf.downcast::<NetBufPtr>().unwrap()
+            tx_buf.downcast::<NetBuf>().unwrap()
         };
         let token = unsafe {
             self.raw_device.transmit_begin(tx_buf.packet_with_header()).map_err(as_dev_err)?
         };
+        log::info!("[VirtioNetDev::transmit] packet len {}",tx_buf.get_packet_len() );
         self.tx_buffers[token as usize] = Some(tx_buf);
         Ok(())
     }
      /// alocate a tx buffer
     fn alloc_tx_buffer(&mut self, size: usize) -> DevResult<Box<dyn NetBufPtrTrait>> {
-        let mut net_buf = self.free_tx_bufs.pop().unwrap();
+        let mut net_buf = self.free_tx_bufs.pop().ok_or(DevError::NoMemory)?;
         let packet_len = size;
         let head_len = net_buf.header_len();
         if packet_len + head_len > net_buf.capacity() {
-            panic!("tx buffer too small");
+            log::warn!("tx buffer too small");
+            return Err(DevError::InvalidParam);
         }
         net_buf.set_packet_len(packet_len);
         Ok(net_buf)
@@ -124,7 +126,7 @@ impl<T: Transport> VirtIoNetDev<T> {
             core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(rx_buf)
         };
         let rx_buf = unsafe {
-            rx_buf_ptr.downcast::<NetBufPtr>().unwrap()
+            rx_buf_ptr.downcast::<NetBuf>().unwrap()
         };
         let new_token = unsafe {
             self.raw_device.receive_begin(rx_buf.as_mut_slice())

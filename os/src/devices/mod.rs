@@ -4,7 +4,7 @@ use core::any::Any;
 use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use downcast_rs::DowncastSync;
-use net::{EthernetAddress, NetBufPtr};
+use net::{EthernetAddress, NetBuf};
 use smoltcp::phy::{DeviceCapabilities,RxToken, TxToken};
 
 

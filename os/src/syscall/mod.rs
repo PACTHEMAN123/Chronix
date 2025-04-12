@@ -22,6 +22,7 @@ const SYSCALL_UMOUNT2: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
 const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
+const SYSCALL_FCHMODAT: usize = 53;
 const SYSCALL_OPENAT: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_PIPE: usize = 59;
@@ -31,6 +32,7 @@ const SYSCALL_WRITE: usize = 64;
 const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
+const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
@@ -98,7 +100,7 @@ pub mod net;
 use fatfs::info;
 pub use fs::*;
 use hal::{addr::VirtAddr, println};
-use io::sys_ppoll;
+use io::*;
 use mm::{sys_mmap, sys_munmap};
 use net::*;
 pub use process::*;
@@ -126,6 +128,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
+        SYSCALL_FCHMODAT => sys_fchmodat(),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe2(args[0] as *mut i32, args[1] as u32),
         SYSCALL_GETDENTS => sys_getdents64(args[0], args[1], args[2]),
@@ -135,6 +138,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2], args[3]).await,
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_PSELECT6 => sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await,
         SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as *const u8, args[2], args[3]),
         SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),

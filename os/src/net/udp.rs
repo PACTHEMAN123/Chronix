@@ -9,7 +9,7 @@ use spin::RwLock;
 
 use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{to_endpoint, SockAddr, UNSPECIFIED_LISTEN_ENDPOINT}, socket::SockResult, SocketSetWrapper, PORT_MANAGER, SOCKET_SET};
+use super::{addr::{to_endpoint, SockAddr, UNSPECIFIED_LISTEN_ENDPOINT}, socket::{PollState, SockResult}, SocketSetWrapper, PORT_MANAGER, SOCKET_SET};
 
 pub struct UdpSocket {
     /// socket handle
@@ -214,6 +214,33 @@ impl UdpSocket {
         let timestamp = SOCKET_SET.poll_interfaces();
         SOCKET_SET.check_poll(timestamp);
         Ok(())
+    }
+    pub async fn poll(&self) -> PollState {
+        if self.local_endpoint.read().is_none() {
+            return PollState{
+                readable: false,
+                writable: false,
+                hangup: false,
+            };
+        }
+        let waker = get_waker().await;
+        SOCKET_SET.with_socket_mut::<smoltcp::socket::udp::Socket, _, _>(self.handle, |socket|{
+            let readable = socket.can_recv();
+            let writable = socket.can_send();
+            if !readable {
+                log::info!("[UdpSocket::poll] handle{} can't recv now, rx buffer is empty", self.handle);
+                socket.register_recv_waker(&waker);
+            }
+            if !writable {
+                log::info!("[UdpSocket::poll] handle{} can't send now, tx buffer is full", self.handle);
+                socket.register_send_waker(&waker);
+            }
+            PollState {
+                readable,
+                writable,
+                hangup: false,
+            }
+        })
     }
 }
 
