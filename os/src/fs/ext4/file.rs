@@ -99,10 +99,13 @@ impl File for Ext4File {
         size
     }
     async fn write(&self, buf: &[u8]) -> usize {
+        if self.flags().contains(OpenFlags::O_APPEND) {
+            self.set_pos(self.size());
+        }
+        let pos = self.pos();
         let inode = self.dentry().unwrap().inode().unwrap();
-        
-        let size = inode.write_at(self.pos(), buf).unwrap();
-        self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
+        let size = inode.write_at(pos, buf).unwrap();
+        self.set_pos(pos + size);
         size
     }
 }
