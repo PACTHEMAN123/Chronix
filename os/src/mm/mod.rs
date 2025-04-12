@@ -29,12 +29,12 @@ pub type FrameTracker = hal::common::FrameTracker<allocator::FrameAllocator>;
 use super::sync::mutex::SpinNoIrqLock;
 lazy_static::lazy_static! {
     #[allow(missing_docs)]
-    pub static ref INIT_VMSPACE: SpinNoIrqLock<KernVmSpace> = SpinNoIrqLock::new(KernVmSpace::new());
+    pub static ref KVMSPACE: SpinNoIrqLock<KernVmSpace> = SpinNoIrqLock::new(KernVmSpace::new());
 }
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     allocator::init_heap();
     allocator::init_frame_allocator();
-    vm::KernVmSpaceHal::enable(INIT_VMSPACE.lock().deref());
+    vm::KernVmSpaceHal::enable(KVMSPACE.lock().deref());
 }

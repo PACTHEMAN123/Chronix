@@ -1,7 +1,7 @@
 //! memory related syscall
 #![allow(missing_docs)]
 
-use hal::{addr::VirtAddr, pagetable::MapPerm};
+use hal::{addr::VirtAddr, pagetable::MapPerm, println};
 use log::info;
 
 use crate::{config::PAGE_SIZE, mm::vm::UserVmSpaceHal, task::current_task};

@@ -2,6 +2,7 @@
 
 use core::ptr::null;
 use core::sync::atomic::Ordering;
+use crate::fs::utils::FileReader;
 use crate::fs::{
     vfs::file::open_file,
     OpenFlags,
@@ -222,8 +223,9 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
     // open file
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_WRONLY) {
         let task = current_task().unwrap();
-        
-        task.exec_from_file(app_inode, argv_vec, envp_vec);
+        let reader = FileReader::new(app_inode.clone());
+        let elf = xmas_elf::ElfFile::new(&reader).unwrap();
+        task.exec(&elf, Some(app_inode), argv_vec, envp_vec)?;
         // task.exec(&app_inode.read_all(), argv_vec, envp_vec);
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
