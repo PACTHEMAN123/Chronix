@@ -15,6 +15,7 @@ use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::signal::SigSet;
 use crate::utils::{suspend_now, user_path_to_string};
+use alloc::string::ToString;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::pagetable::PageTableHal;
@@ -173,7 +174,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
 /// stack, heap, and (initialized and uninitialized) data segments.
 /// more details, see: https://man7.org/linux/man-pages/man2/execve.2.html
 pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
-    let path = user_path_to_string(path as *const u8).unwrap();
+    let mut path = user_path_to_string(path as *const u8).unwrap();
     let token = current_user_token(&current_processor());
     let mut argv = argv as *const usize;
     let mut envp = envp as *const usize;
@@ -210,6 +211,14 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
             envp = envp.add(1);
         }
     }
+
+    // for .sh we will use busybox sh as default
+    if path.ends_with(".sh") {
+        path = "/busybox".to_string();
+        argv_vec.insert(0, "busybox".to_string());
+        argv_vec.insert(1, "sh".to_string());
+    }
+
     // open file
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_WRONLY) {
         let task = current_task().unwrap();
@@ -244,7 +253,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
     let res_task = {
         let children = task.children();
         if  children.is_empty() {
-            info!("[sys_waitpid]: fail on no child");
+            log::debug!("[sys_waitpid]: fail on no child");
             return Err(SysError::ESRCH);
         }
         match pid {

@@ -1,17 +1,18 @@
-//! the null device
+//! the real time clock device
 
 use alloc::sync::Arc;
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use hal::instruction::{Instruction, InstructionHal};
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysResult};
 
 
-pub struct NullFile {
+pub struct RtcFile {
     inner: FileInner,
 }
 
-impl NullFile {
+impl RtcFile {
     pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let inner = FileInner {
             offset: 0.into(),
@@ -23,7 +24,7 @@ impl NullFile {
 }
 
 #[async_trait]
-impl File for NullFile {
+impl File for RtcFile {
     fn inner(&self) ->  &FileInner {
         &self.inner
     }
@@ -36,21 +37,41 @@ impl File for NullFile {
         true
     }
 
-    async fn read(&self, _buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> usize {
         // reach EOF
-        0
+        buf.fill(0);
+        buf.len()
     }
 
     async fn write(&self, buf: &[u8]) -> usize {
         buf.len()
     }
+
+    fn ioctl(&self, _cmd: usize, arg: usize) -> SysResult {
+        unsafe {
+            Instruction::set_sum();
+            (arg as *mut RtcTime).write(RtcTime::default());
+        }
+        Ok(0)
+    }
 }
 
-pub struct NullDentry {
+#[derive(Default)]
+#[repr(C)]
+pub struct RtcTime {
+    tm_sec: i32,
+    tm_min: i32,
+    tm_hour: i32,
+    tm_mday: i32,
+    tm_mon: i32,
+    tm_year: i32,
+}
+
+pub struct RtcDentry {
     inner: DentryInner,
 }
 
-impl NullDentry {
+impl RtcDentry {
     pub fn new(
         name: &str,
         super_block: Arc<dyn SuperBlock>,
@@ -62,10 +83,10 @@ impl NullDentry {
     }
 }
 
-unsafe impl Send for NullDentry {}
-unsafe impl Sync for NullDentry {}
+unsafe impl Send for RtcDentry {}
+unsafe impl Sync for RtcDentry {}
 
-impl Dentry for NullDentry {
+impl Dentry for RtcDentry {
     fn inner(&self) -> &DentryInner {
         &self.inner
     }
@@ -82,30 +103,31 @@ impl Dentry for NullDentry {
     }
     
     fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(NullFile::new(self.clone()))
+        Some(RtcFile::new(self.clone()))
     }
 }
 
-pub struct NullInode {
+pub struct RtcInode {
     inner: InodeInner,
 }
 
-impl NullInode {
+impl RtcInode {
     pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
         let size = BLOCK_SIZE;
         Arc::new(Self {
-            inner: InodeInner::new(super_block, InodeMode::CHAR, size),
+            inner: InodeInner::new(super_block, InodeMode::FILE, size),
         })
     }
 }
 
-impl Inode for NullInode {
+impl Inode for RtcInode {
     fn inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
         let inner = self.inner();
+        let len = inner.size();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -117,8 +139,8 @@ impl Inode for NullInode {
             _pad0: 0,
             st_size: inner.size() as _,
             _pad1: 0,
-            st_blksize: 0,
-            st_blocks: 0,
+            st_blksize: 512,
+            st_blocks: (len / 512) as _,
             st_atime_sec: inner.atime().tv_sec as _,
             st_atime_nsec: inner.atime().tv_nsec as _,
             st_mtime_sec: inner.mtime().tv_sec as _,

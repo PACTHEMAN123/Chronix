@@ -6,9 +6,9 @@ use hal::{addr::{PhysAddrHal, VirtAddr}, constant::{Constant, ConstantsHal}, ins
 use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
-use crate::{drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
-}, mm::vm::{PageFaultAccessType, UserVmSpaceHal}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}};
+use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
+    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+}, mm::vm::{PageFaultAccessType, UserVmSpaceHal}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
     string::*,
@@ -81,6 +81,29 @@ pub fn sys_close(fd: usize) -> SysResult {
     Ok(0)
 }
 
+/// syscall: lseek
+pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
+    #[derive(FromRepr)]
+    #[repr(usize)]
+    enum Whence {
+        SeekSet = 0,
+        SeekCur = 1,
+        SeekEnd = 2,
+        SeekData = 3,
+        SeekHold = 4,
+    }
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let whence = Whence::from_repr(whence).ok_or(SysError::EINVAL)?;
+    let ret = match whence {
+        Whence::SeekSet => file.seek(SeekFrom::Start(offset as u64))?,
+        Whence::SeekCur => file.seek(SeekFrom::Current(offset as i64))?,
+        Whence::SeekEnd => file.seek(SeekFrom::End(offset as i64))?,
+        _ => todo!()
+    };
+    Ok(ret as isize)
+}
+
 /// syscall: getcwd
 /// The getcwd() function copies an absolute pathname of 
 /// the current working directory to the array pointed to by buf, 
@@ -143,7 +166,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 
     if let Some(path) = user_path_to_string(pathname) {
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
-        log::info!("trying to open {}, flags: {:?}", dentry.path(), flags);
+        log::debug!("trying to open {}, flags: {:?}", dentry.path(), flags);
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
@@ -153,6 +176,9 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             let name = abs_path_to_name(&path).unwrap();
             let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
             dentry.set_inode(new_inode);
+            dentry.set_state(DentryState::USED);
+            // we shall not add child to parent until child is valid!
+            parent.add_child(dentry.clone());
         }
         if dentry.state() == DentryState::NEGATIVE {
             return Err(SysError::ENOENT);
@@ -166,10 +192,10 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         let fd = task.with_mut_fd_table(|table| table.alloc_fd());
         let fd_info = FdInfo { file, flags: flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
-        info!("open success, return fd: {}", fd);
+        log::debug!("open success, return fd: {}", fd);
         return Ok(fd as isize)
     } else {
-        info!("[sys_openat]: pathname is empty!");
+        log::info!("[sys_openat]: pathname is empty!");
         return Err(SysError::ENOENT);
     }
 }
@@ -285,13 +311,45 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     return Ok(0);
 }
 
+/// syscall statfs
+/// TODO
+pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
+    let info = StatFs {
+        f_type: 0x2011BAB0 as i64,
+        f_bsize: BLOCK_SIZE as i64,
+        f_blocks: 1 << 27,
+        f_bfree: 1 << 26,
+        f_bavail: 1 << 20,
+        f_files: 1 << 10,
+        f_ffree: 1 << 9,
+        f_fsid: [0; 2],
+        f_namelen: 1 << 8,
+        f_frsize: 1 << 9,
+        f_flags: 1 << 1 as i64,
+        f_spare: [0; 4],
+    };
+    unsafe {
+        Instruction::set_sum();
+        (buf as *mut StatFs).write(info);
+    }
+    Ok(0)
+}
+
 /// syscall statx
 pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
     let _sum_guard = SumGuard::new();
-    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let open_flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
     let mask = XstatMask::from_bits_truncate(mask);
     let task = current_task().unwrap().clone();
-    let dentry = at_helper(task, dirfd, pathname, flags)?;
+
+    let dentry = if flags == AT_SYMLINK_NOFOLLOW {
+        at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW | open_flags)?
+    } else {
+        at_helper(task.clone(), dirfd, pathname, open_flags)?
+    };
+    if dentry.state() == DentryState::NEGATIVE {
+        return Err(SysError::ENOENT);
+    }
     let inode = dentry.inode().unwrap();
     let statx_ptr = statx_buf.0 as *mut Xstat;
     let statx = inode.getxattr(mask);
@@ -309,6 +367,12 @@ pub fn sys_uname(uname_buf: usize) -> SysResult {
     unsafe {
         *uname_ptr = uname;
     }
+    Ok(0)
+}
+
+/// syscall: syslog
+/// TODO: unimplement
+pub fn sys_syslog(_log_type: usize, _bufp: usize, _len: usize) -> SysResult {
     Ok(0)
 }
 
@@ -435,6 +499,50 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
         new_buf.copy_from_slice(path.as_bytes());
     }
     return Ok(path.len() as isize)
+}
+
+/// syscall: utimensat
+/// The utime() system call changes the access and modification times
+/// of the inode specified by filename to the actime and modtime
+/// fields of times respectively.  The status change time (ctime) will
+/// be set to the current time, even if the other time stamps don't
+/// actually change.
+pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32) -> SysResult {
+    const UTIME_NOW: usize = 0x3fffffff;
+    const UTIME_OMIT: usize = 0x3ffffffe;
+    let task = current_task().unwrap().clone();
+    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let dentry = at_helper(task, dirfd, pathname, flags)?;
+    log::info!("[sys_utimensat]: path: {}", dentry.path());
+    if dentry.state() == DentryState::NEGATIVE {
+        return Err(SysError::ENOENT);
+    }
+    let inode = dentry.inode().unwrap();
+    let inner = inode.as_ref().inner();
+    
+    let current_time = TimeSpec::from(get_current_time_duration());
+    if times == 0 {
+        *inner.atime.lock() = current_time;
+        *inner.ctime.lock() = current_time;
+        *inner.mtime.lock() = current_time;
+    } else {
+        let times = unsafe {
+            Instruction::set_sum();
+            core::slice::from_raw_parts_mut(times as *mut TimeSpec, 2)
+        };
+        match times[0].tv_nsec {
+            UTIME_NOW => *inner.atime.lock() = current_time,
+            UTIME_OMIT => {}
+            _ => *inner.atime.lock() = current_time,
+        }
+        match times[0].tv_nsec {
+            UTIME_NOW => *inner.mtime.lock() = current_time,
+            UTIME_OMIT => {}
+            _ => *inner.mtime.lock() = current_time,
+        }
+        *inner.ctime.lock() = current_time;
+    }
+    Ok(0)
 }
 
 /// syscall: mount

@@ -18,6 +18,7 @@ use crate::fs::page::page::{Page, PAGE_SIZE};
 use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{InodeInner, Inode};
 use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
+use crate::sync::mutex::SpinNoIrqLock;
 use crate::sync::UPSafeCell;
 use crate::utils::rel_path_to_abs;
 use crate::syscall::SysError;
@@ -138,7 +139,7 @@ impl Inode for Ext4Inode {
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_REG_FILE)));
         } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_DIR) {
-            info!("lookup dir {} success", name);
+            log::debug!("lookup dir {} success", name);
             return Some(Arc::new(Ext4Inode::new(
                 self.inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
@@ -369,12 +370,12 @@ impl Inode for Ext4Inode {
             // DIR size should be 0
             0
         };
-        debug!("file size: {}", size);
+        log::debug!("file size: {}", size);
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
             st_mode: inner.mode.bits() as _,
-            st_nlink: inner.nlink as u32,
+            st_nlink: inner.nlink() as u32,
             st_uid: 0,
             st_gid: 0,
             st_rdev: 0,
@@ -383,12 +384,12 @@ impl Inode for Ext4Inode {
             _pad1: 0,
             st_blksize: BLOCK_SIZE as _,
             st_blocks: (size / BLOCK_SIZE) as _,
-            st_atime_sec: inner.atime.tv_sec as _,
-            st_atime_nsec: inner.atime.tv_nsec as _,
-            st_mtime_sec: inner.mtime.tv_sec as _,
-            st_mtime_nsec: inner.mtime.tv_nsec as _,
-            st_ctime_sec: inner.ctime.tv_sec as _,
-            st_ctime_nsec: inner.ctime.tv_nsec as _,
+            st_atime_sec: inner.atime().tv_sec as _,
+            st_atime_nsec: inner.atime().tv_nsec as _,
+            st_mtime_sec: inner.mtime().tv_sec as _,
+            st_mtime_nsec: inner.mtime().tv_nsec as _,
+            st_ctime_sec: inner.ctime().tv_sec as _,
+            st_ctime_nsec: inner.ctime().tv_nsec as _,
         }
     }
 
@@ -421,7 +422,7 @@ impl Inode for Ext4Inode {
             stx_mask: mask.bits,
             stx_blksize: BLOCK_SIZE as _,
             stx_attributes: 0,
-            stx_nlink: inner.nlink as u32,
+            stx_nlink: inner.nlink() as u32,
             stx_uid: 0,
             stx_gid: 0,
             stx_mode: inner.mode.bits() as _,
@@ -430,20 +431,20 @@ impl Inode for Ext4Inode {
             stx_blocks: (size / BLOCK_SIZE) as _,
             stx_attributes_mask: 0,
             stx_atime: StatxTimestamp {
-                tv_sec: inner.atime.tv_sec as _,
-                tv_nsec: inner.atime.tv_nsec as _,
+                tv_sec: inner.atime().tv_sec as _,
+                tv_nsec: inner.atime().tv_nsec as _,
             },
             stx_btime: StatxTimestamp {
                 tv_sec: 0,
                 tv_nsec: 0,
             },
             stx_ctime: StatxTimestamp {
-                tv_sec: inner.ctime.tv_sec as _,
-                tv_nsec: inner.ctime.tv_nsec as _,
+                tv_sec: inner.ctime().tv_sec as _,
+                tv_nsec: inner.ctime().tv_nsec as _,
             },
             stx_mtime: StatxTimestamp {
-                tv_sec: inner.mtime.tv_sec as _,
-                tv_nsec: inner.mtime.tv_nsec as _,
+                tv_sec: inner.mtime().tv_sec as _,
+                tv_nsec: inner.mtime().tv_nsec as _,
             },
             stx_rdev_major: 0,
             stx_rdev_minor: 0,

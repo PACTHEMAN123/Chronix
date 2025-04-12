@@ -1,17 +1,17 @@
-//! the null device
+//! /proc/mounts file
 
-use alloc::sync::Arc;
+use alloc::{string::{String, ToString}, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask, FS_MANAGER}, sync::mutex::SpinNoIrqLock};
 
 
-pub struct NullFile {
+pub struct MountsFile {
     inner: FileInner,
 }
 
-impl NullFile {
+impl MountsFile {
     pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let inner = FileInner {
             offset: 0.into(),
@@ -23,7 +23,7 @@ impl NullFile {
 }
 
 #[async_trait]
-impl File for NullFile {
+impl File for MountsFile {
     fn inner(&self) ->  &FileInner {
         &self.inner
     }
@@ -36,21 +36,28 @@ impl File for NullFile {
         true
     }
 
-    async fn read(&self, _buf: &mut [u8]) -> usize {
-        // reach EOF
-        0
+    async fn read(&self, buf: &mut [u8]) -> usize {
+        let info = list_mounts();
+        let len = info.len();
+        let pos = self.pos();
+        if self.pos() >= len {
+            return 0;
+        }
+        buf[..len].copy_from_slice(info.as_bytes());
+        self.set_pos(pos + len);
+        len
     }
 
-    async fn write(&self, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write(&self, _buf: &[u8]) -> usize {
+        0
     }
 }
 
-pub struct NullDentry {
+pub struct MountsDentry {
     inner: DentryInner,
 }
 
-impl NullDentry {
+impl MountsDentry {
     pub fn new(
         name: &str,
         super_block: Arc<dyn SuperBlock>,
@@ -62,10 +69,10 @@ impl NullDentry {
     }
 }
 
-unsafe impl Send for NullDentry {}
-unsafe impl Sync for NullDentry {}
+unsafe impl Send for MountsDentry {}
+unsafe impl Sync for MountsDentry {}
 
-impl Dentry for NullDentry {
+impl Dentry for MountsDentry {
     fn inner(&self) -> &DentryInner {
         &self.inner
     }
@@ -82,24 +89,24 @@ impl Dentry for NullDentry {
     }
     
     fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(NullFile::new(self.clone()))
+        Some(MountsFile::new(self.clone()))
     }
 }
 
-pub struct NullInode {
+pub struct MountsInode {
     inner: InodeInner,
 }
 
-impl NullInode {
+impl MountsInode {
     pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
         let size = BLOCK_SIZE;
         Arc::new(Self {
-            inner: InodeInner::new(super_block, InodeMode::CHAR, size),
+            inner: InodeInner::new(super_block, InodeMode::FILE, size),
         })
     }
 }
 
-impl Inode for NullInode {
+impl Inode for MountsInode {
     fn inner(&self) -> &InodeInner {
         &self.inner
     }
@@ -183,4 +190,29 @@ impl Inode for NullInode {
             stx_dio_read_offset_align: 0,
         }
     }
+}
+
+pub fn list_mounts() -> String {
+    let mut res = "".to_string();
+    let fs_manager = FS_MANAGER.lock();
+    for (_, fs) in fs_manager.iter() {
+        let sbs = fs.inner().supers.lock();
+        for (mount_path, _) in sbs.iter() {
+            // device name: (todo)
+            res += "device";
+            res += " ";
+            // mount point
+            res += mount_path;
+            res += " ";
+            // fs type name
+            res += fs.name();
+            res += " ";
+            // fs stat flags (todo)
+            res += "rw,nosuid,nodev,noexec,relatime";
+            res += " ";
+            
+            res += "0 0\n";
+        }
+    }
+    res
 }

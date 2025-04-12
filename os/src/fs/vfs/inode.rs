@@ -5,7 +5,7 @@ use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, generate_atomic_accessors, generate_lock_accessors, generate_with_methods, sync::mutex::SpinNoIrqLock, syscall::SysError, timer::ffi::TimeSpec};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -15,18 +15,18 @@ pub struct InodeInner {
     /// super block that owned it
     pub super_block: Weak<dyn SuperBlock>,
     /// size of the file in bytes
-    pub size: usize,
+    pub size: AtomicUsize,
     /// link count
-    pub nlink: usize,
+    pub nlink: AtomicUsize,
     /// mode of inode
     pub mode: InodeMode,
     /// last access time
-    pub atime: TimeSpec,
+    pub atime: SpinNoIrqLock<TimeSpec>,
     /// last modification time
-    pub mtime: TimeSpec,
+    pub mtime: SpinNoIrqLock<TimeSpec>,
     #[allow(unused)]
     /// last state change time(todo: support state change)
-    pub ctime: TimeSpec,
+    pub ctime: SpinNoIrqLock<TimeSpec>,
 }
 
 impl InodeInner {
@@ -35,14 +35,23 @@ impl InodeInner {
         Self {
             ino: inode_alloc(),
             super_block: Arc::downgrade(&super_block),
-            size: size,
-            nlink: 1,
+            size: AtomicUsize::new(size),
+            nlink: AtomicUsize::new(1),
             mode: mode,
-            atime: TimeSpec::default(),
-            mtime: TimeSpec::default(),
-            ctime: TimeSpec::default(),
+            atime: SpinNoIrqLock::new(TimeSpec::default()),
+            mtime: SpinNoIrqLock::new(TimeSpec::default()),
+            ctime: SpinNoIrqLock::new(TimeSpec::default()),
         }
     }
+    generate_atomic_accessors!(
+        size: usize,
+        nlink: usize
+    );
+    generate_lock_accessors!(
+        atime: TimeSpec,
+        mtime: TimeSpec,
+        ctime: TimeSpec
+    );
 }
 
 /// Inode trait for all file system to implement
