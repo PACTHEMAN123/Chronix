@@ -399,3 +399,21 @@ bitflags! {
         const STATX_DIO_READ_ALIGN = 1 << 17;
     }
 }
+
+#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+#[allow(missing_docs)]
+pub struct StatFs {
+    pub f_type: i64,
+    pub f_bsize: i64,
+    pub f_blocks: u64,
+    pub f_bfree: u64,
+    pub f_bavail: u64,
+    pub f_files: u64,
+    pub f_ffree: u64,
+    pub f_fsid: [i32; 2],
+    pub f_namelen: isize,
+    pub f_frsize: isize,
+    pub f_flags: isize,
+    pub f_spare: [isize; 4],
+}

@@ -1,17 +1,81 @@
-//! the null device
+//! device urandom
+//! adapt from phoenix
+//! 
 
 use alloc::sync::Arc;
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use hal::instruction::{Instruction, InstructionHal};
 
 use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock};
 
+/// Linear congruence generator (LCG)
+pub struct SimpleRng {
+    state: u64,
+}
 
-pub struct NullFile {
+impl SimpleRng {
+    // 使用时间初始化种子
+    pub const fn new() -> Self {
+        // let seed = get_time_duration();
+        let seed = 42;
+        Self { state: seed }
+    }
+
+    // 生成下一个随机数
+    pub fn next_u32(&mut self) -> u32 {
+        const A: u64 = 6364136223846793005;
+        const C: u64 = 1;
+        self.state = self.state.wrapping_mul(A).wrapping_add(C);
+        (self.state >> 32) as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn next_u8(&mut self) -> u8 {
+        // LCG 参数：乘数、增量和模数
+        const A: u64 = 1664525;
+        const C: u64 = 1013904223;
+
+        // 更新内部状态
+        self.state = self.state.wrapping_mul(A).wrapping_add(C);
+
+        // 返回最低 8 位
+        (self.state >> 24) as u8
+    }
+
+    /// Generate a random number of u32 (4 bytes) at a time, and then split it
+    /// into bytes to fill in the buf
+    pub fn fill_buf(&mut self, buf: &mut [u8]) {
+        let mut remaining = buf.len();
+        let mut offset = 0;
+
+        while remaining > 0 {
+            // 生成一个随机的 u32 值
+            let rand = self.next_u32();
+            let rand_bytes = rand.to_le_bytes();
+
+            // 计算要复制的字节数
+            let chunk_size = remaining.min(4);
+
+            // 将 rand_bytes 中的字节填充到 buf 中
+            buf[offset..offset + chunk_size].copy_from_slice(&rand_bytes[..chunk_size]);
+
+            // 更新剩余字节数和偏移量
+            remaining -= chunk_size;
+            offset += chunk_size;
+        }
+    }
+}
+
+
+
+pub static RNG: SpinNoIrqLock<SimpleRng> = SpinNoIrqLock::new(SimpleRng::new());
+
+pub struct UrandomFile {
     inner: FileInner,
 }
 
-impl NullFile {
+impl UrandomFile {
     pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let inner = FileInner {
             offset: 0.into(),
@@ -23,7 +87,7 @@ impl NullFile {
 }
 
 #[async_trait]
-impl File for NullFile {
+impl File for UrandomFile {
     fn inner(&self) ->  &FileInner {
         &self.inner
     }
@@ -36,9 +100,12 @@ impl File for NullFile {
         true
     }
 
-    async fn read(&self, _buf: &mut [u8]) -> usize {
-        // reach EOF
-        0
+    async fn read(&self, buf: &mut [u8]) -> usize {
+        unsafe {
+            Instruction::set_sum();
+            RNG.lock().fill_buf(buf);
+        }
+        buf.len()
     }
 
     async fn write(&self, buf: &[u8]) -> usize {
@@ -46,11 +113,11 @@ impl File for NullFile {
     }
 }
 
-pub struct NullDentry {
+pub struct UrandomDentry {
     inner: DentryInner,
 }
 
-impl NullDentry {
+impl UrandomDentry {
     pub fn new(
         name: &str,
         super_block: Arc<dyn SuperBlock>,
@@ -62,10 +129,10 @@ impl NullDentry {
     }
 }
 
-unsafe impl Send for NullDentry {}
-unsafe impl Sync for NullDentry {}
+unsafe impl Send for UrandomDentry {}
+unsafe impl Sync for UrandomDentry {}
 
-impl Dentry for NullDentry {
+impl Dentry for UrandomDentry {
     fn inner(&self) -> &DentryInner {
         &self.inner
     }
@@ -82,15 +149,15 @@ impl Dentry for NullDentry {
     }
     
     fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(NullFile::new(self.clone()))
+        Some(UrandomFile::new(self.clone()))
     }
 }
 
-pub struct NullInode {
+pub struct UrandomInode {
     inner: InodeInner,
 }
 
-impl NullInode {
+impl UrandomInode {
     pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
         let size = BLOCK_SIZE;
         Arc::new(Self {
@@ -99,13 +166,14 @@ impl NullInode {
     }
 }
 
-impl Inode for NullInode {
+impl Inode for UrandomInode {
     fn inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
         let inner = self.inner();
+        let len = inner.size();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -117,8 +185,8 @@ impl Inode for NullInode {
             _pad0: 0,
             st_size: inner.size() as _,
             _pad1: 0,
-            st_blksize: 0,
-            st_blocks: 0,
+            st_blksize: 512,
+            st_blocks: (len / 512) as _,
             st_atime_sec: inner.atime().tv_sec as _,
             st_atime_nsec: inner.atime().tv_nsec as _,
             st_mtime_sec: inner.mtime().tv_sec as _,
