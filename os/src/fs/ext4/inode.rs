@@ -129,11 +129,10 @@ impl Inode for Ext4Inode {
     /// Return the node if found.
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
         let file = self.file.exclusive_access();
-        
         let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
-        
+        log::debug!("try to look up {}", full_path);
         if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
-            //info!("lookup {} success", name);
+            log::debug!("lookup {} success", name);
             return Some(Arc::new(Ext4Inode::new(
                 self.inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
@@ -144,10 +143,13 @@ impl Inode for Ext4Inode {
                 self.inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_DIR)));
+        } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_SYMLINK) {
+            log::debug!("look up symlink {} success", name);
+            return Some(Arc::new(Ext4Inode::new(
+                self.inner().super_block.upgrade()?.clone(),
+                full_path.as_str(),
+                InodeTypes::EXT4_DE_SYMLINK)));
         }
-
-        // todo!: add support for directory
-
         //info!("lookup {} failed", name);
         None
     }

@@ -5,7 +5,7 @@ use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{file::open_file, File}, OpenFlags}, mm::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::round_down_to_page};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, mm::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::round_down_to_page};
 
 use super::{KernVmArea, KernVmAreaType, KernVmSpaceHal, MaxEndVpn, PageFaultAccessType, StartPoint, UserVmArea, UserVmAreaType, UserVmSpaceHal};
 
@@ -500,11 +500,14 @@ impl UserVmSpace {
         log::info!("[load_dl] interp {}", interp);
 
         let interp_file;
-        if let Some(inode) = open_file(&interp, OpenFlags::empty()) {
-            interp_file = inode;
-        } else {
+        let dentry = global_find_dentry(&interp);
+        if dentry.state() == DentryState::NEGATIVE {
             return Err(SysError::ENOENT);
         }
+        // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inner().mode);
+        let dentry = dentry.follow()?;
+        // log::info!("follow symlink to {}", dentry.path());
+        interp_file = dentry.open(OpenFlags::O_RDWR).unwrap();
 
         let reader = FileReader::new(interp_file.clone());
         let interp_elf = xmas_elf::ElfFile::new(&reader).map_err(|_| SysError::ENOEXEC)?;
