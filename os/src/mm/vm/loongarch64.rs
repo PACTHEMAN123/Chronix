@@ -333,7 +333,7 @@ impl UserVmSpaceHal for UserVmSpace {
             heap.range_va = range.start..new_brk;
             new_brk
         } else if new_brk > range.start {
-            let mut right = heap.split_off(new_brk.ceil());
+            let right = heap.split_off(new_brk.ceil());
             right.unmap(&mut self.page_table);
             new_brk
         } else {
@@ -449,16 +449,17 @@ impl UserVmSpaceHal for UserVmSpace {
     }
 
     
-    fn unmap(&mut self, va: VirtAddr, len: usize) -> SysResult {
+    fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError> {
         let mut left: UserVmArea;
         let right: UserVmArea;
+        let mut mid: UserVmArea;
         if let Some((range_vpn, _)) = self.areas.get_key_value_mut(va.floor()) {
             left = self.areas.force_remove_one(range_vpn);
-            let mut mid = left.split_off(va.floor());
+            mid = left.split_off(va.floor());
             mid.unmap(&mut self.page_table);
             right = mid.split_off((va + len).ceil());
         } else {
-            return Ok(0);
+            return Err(SysError::ENOMEM);
         }
         if !left.range_va.is_empty() {
             self.areas.try_insert(left.range_vpn(), left).map_err(|_| SysError::EFAULT)?;
@@ -466,7 +467,7 @@ impl UserVmSpaceHal for UserVmSpace {
         if !right.range_va.is_empty() {
             self.areas.try_insert(right.range_vpn(), right).map_err(|_| SysError::EFAULT)?;
         }
-        Ok(0)
+        Ok(mid)
     }
     
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
@@ -670,7 +671,7 @@ impl UserVmArea {
         }
     }
 
-    fn unmap(&mut self, page_table: &mut PageTable) {
+    fn unmap(&self, page_table: &mut PageTable) {
         for &vpn in self.frames.keys() {
             page_table.unmap(vpn);
             unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
@@ -785,6 +786,24 @@ trait UserLazyFaultHandler {
     }
 }
 
+#[repr(C)]
+#[repr(align(4096))]
+struct ZeroPage([u8; 4096]);
+
+static ZERO_PAGE: ZeroPage = ZeroPage([0u8; 4096]);
+
+lazy_static::lazy_static!{
+    static ref ZERO_PAGE_ARC: StrongArc<FrameTracker, SlabAllocator> = 
+        StrongArc::new_in(
+            FrameTracker::new_in(
+                PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor()..
+                PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor()+1, 
+                FrameAllocator
+            ), 
+            SlabAllocator
+        );
+}
+
 /// tool structure
 struct PageFaultProcessor;
 
@@ -835,16 +854,28 @@ impl PageFaultProcessor {
         perm: MapPerm,
         frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     ) -> Result<(), ()> {
-        let frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-        frame.range_ppn.get_slice_mut::<u8>().fill(0);
-        let pte = page_table
-                .find_pte_create(vpn, PageLevel::Small)
-                .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-        *pte = PageTableEntry::new(frame.range_ppn.start, perm, true);
         if access_type.contains(PageFaultAccessType::WRITE) {
+            let frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
+            frame.range_ppn.get_slice_mut::<u8>().fill(0);
+            let pte = page_table
+                    .find_pte_create(vpn, PageLevel::Small)
+                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+            *pte = PageTableEntry::new(frame.range_ppn.start, perm, true);
             pte.set_flags(pte.flags() | PTEFlags::D);
+            frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+        } else { // zero page optimize
+            let pte = page_table
+                    .find_pte_create(vpn, PageLevel::Small)
+                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
+            let mut new_perm = perm;
+            if perm.contains(MapPerm::W) {
+                new_perm.remove(MapPerm::W);
+                new_perm.insert(MapPerm::C);
+            }
+            *pte = PageTableEntry::new(ZERO_PAGE_ARC.range_ppn.start, new_perm, true);
+            frames.insert(vpn, ZERO_PAGE_ARC.clone());
         }
-        frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+        
         unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0) };
         Ok(())
     }

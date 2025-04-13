@@ -1,7 +1,7 @@
 //! memory related syscall
 #![allow(missing_docs)]
 
-use hal::{addr::VirtAddr, pagetable::MapPerm, println};
+use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use log::info;
 
 use crate::{config::PAGE_SIZE, mm::vm::UserVmSpaceHal, task::current_task};
@@ -133,4 +133,21 @@ pub fn sys_munmap(addr: VirtAddr, length: usize) -> SysResult {
         m.unmap(addr, length)
     })?;
     Ok(0)
+}
+
+/// syscall mprotect
+pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
+    if addr.page_offset() != 0 || len == 0 || len % Constant::PAGE_SIZE != 0 {
+        return Err(SysError::EINVAL);
+    }
+    let prot = MmapProt::from_bits_truncate(prot);
+    let perm = MapPerm::from(prot);
+    log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
+    let task = current_task().unwrap().clone();
+    task.with_mut_vm_space(|vm| -> SysResult {
+        let mut vma = vm.unmap(addr, len)?;
+        vma.map_perm = perm;
+        vm.push_area(vma, None);
+        Ok(0)
+    })
 }
