@@ -236,7 +236,6 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         let reader = FileReader::new(app.clone());
         let elf = xmas_elf::ElfFile::new(&reader).unwrap();
         task.exec(&elf, Some(app), argv_vec, envp_vec)?;
-        // task.exec(&app_inode.read_all(), argv_vec, envp_vec);
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
         Ok(p as isize)
