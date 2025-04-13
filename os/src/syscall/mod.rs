@@ -41,8 +41,11 @@ const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
-const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_EXIT_GROUP: usize = 94;
+const SYSCALL_SET_TID_ADDRESS: usize = 96;
+const SYSCALL_FUTEX: usize = 98;
+const SYSCALL_SET_ROBUST_LIST: usize = 99;
+const SYSCALL_GET_ROBUST_LIST: usize = 100;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_SYSLOG: usize = 116;
@@ -83,6 +86,7 @@ const SYSCALL_SENDMSG: usize = 211;
 const SYSCALL_RECVMSG: usize = 212;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
+const SYSCALL_MPROTECE: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
@@ -91,6 +95,8 @@ const SYSCALL_RENAMEAT2: usize = 276;
 const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
+/// futex
+pub mod futex;
 pub mod process;
 pub mod time;
 pub mod signal;
@@ -105,10 +111,11 @@ pub mod sys_error;
 pub mod net;
 use fatfs::info;
 pub use fs::*;
+use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list};
 use hal::{addr::VirtAddr, println};
 use io::*;
 use misc::sys_sysinfo;
-use mm::{sys_mmap, sys_munmap};
+use mm::{sys_mmap, sys_mprotect, sys_munmap};
 use net::*;
 pub use process::*;
 pub use time::*;
@@ -155,6 +162,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
+        SYSCALL_FUTEX => sys_futex(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4] as _, args[5] as _),
+        SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as _, args[1]),
+        SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1]),
         SYSCALL_SYSLOG => sys_syslog(args[0], args[1], args[2]),
@@ -195,13 +205,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETSOCKNAME => sys_getsockname(args[0], args[1], args[2]),
         SYSCALL_GETPEERNAME => sys_getpeername(args[0], args[1], args[2]),
         SYSCALL_SENDTO => sys_sendto(args[0], args[1] ,  args[2], args[3], args[4], args[5]).await,
-        // SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as _, args[1] as _, args[2] as _, args[3] as _, RenameFlags::from_bits_truncate(args[4] as u32)),
         SYSCALL_RECVFROM => sys_recvfrom(args[0], args[1] , args[2], args[3], args[4], args[5]).await,
         SYSCALL_SETSOCKOPT => sys_setsockopt(args[0], args[1], args[2], args[3], args[4]),
         SYSCALL_GETSOCKOPT => sys_getsockopt(args[0], args[1], args[2], args[3], args[4]),
         SYSCALL_SHUTDOWN => sys_shutdown(args[0],  args[1]),
         SYSCALL_SENDMSG => sys_sendmsg(args[0], args[1], args[2]).await,
         SYSCALL_RECVMSG => sys_recvmsg(args[0], args[1], args[2]).await,
+        SYSCALL_MPROTECE => sys_mprotect(args[0].into(), args[1], args[2] as _),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)
