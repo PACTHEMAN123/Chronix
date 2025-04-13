@@ -231,14 +231,15 @@ impl dyn Dentry {
                 return Ok(current)
             }
 
-            match current.inode().unwrap().inner().mode {
-                InodeMode::LINK => {
-                    // follow to the next
-                    let path =  current.inode().unwrap().readlink()?;
-                    let new_dentry = global_find_dentry(&path);
-                    current = new_dentry;
-                }
-                _ => return Ok(current)
+            let mode = current.inode().unwrap().inner().mode;
+
+            if mode.contains(InodeMode::LINK) {
+                // follow to the next
+                let path =  current.inode().unwrap().readlink()?;
+                let new_dentry = global_find_dentry(&path);
+                current = new_dentry;
+            } else {
+                return Ok(current)
             }
         }
         Err(SysError::ELOOP)
