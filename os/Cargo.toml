@@ -29,8 +29,8 @@ range-map = { path = "../utils/range-map" }
 downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
 fdt = "0.1.5"
 [dependencies.smoltcp]
-git = "https://github.com/lullabyeoytl/smoltcp.git"
-rev = "46f1c2a95f359a67d1e1f49ead672c2d77e73df4"  
+git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"
+rev = "5ac01e106e3ec6daac84bba40510cf1791f0396c"  
 default-features = false
 features = [
     "alloc",

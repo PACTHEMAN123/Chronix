@@ -207,7 +207,7 @@ impl <'a> RxToken for NetRxToken<'a> {
     /// receive a packet than call the closure with the packet bytes
     fn consume<R, F>(self, f: F) -> R
         where
-            F: FnOnce(&[u8]) -> R 
+            F: FnOnce(&mut [u8]) -> R 
     {
         // need preprocess
         let mut rx_buf = self.1;

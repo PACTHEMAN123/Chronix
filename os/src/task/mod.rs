@@ -58,7 +58,7 @@ pub const INITPROC_PID: usize = 1;
 /// Exit the current 'Running' task ////and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     task.exit_code.store(exit_code, Ordering::Relaxed);
     let tid = task.gettid();
     println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);

@@ -92,7 +92,7 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
-    log::info!("[sys_socket] fd: {}", fd);
+    // log::info!("[sys_socket] fd: {}", fd);
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
@@ -122,7 +122,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         },
     }?;
     log::info!("[sys_bind] local_addr's port is: {}",unsafe {
-        local_addr.ipv4.sin_port
+        local_addr.ipv4
     });
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -185,6 +185,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             panic!("Failed to downcast to socket::Socket")
         });
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
+    //yield_now().await;
     Ok(0)
 }
 
@@ -262,10 +263,9 @@ pub async fn sys_sendto(
     addr_len: usize,
 )-> SysResult {
     // log::info!("addr is {}, addr_len is {}", addr, addr_len);
-    let buf_slice = buf as *const u8 ;
     let task = current_task().unwrap();
     let buf_slice = unsafe {
-        core::slice::from_raw_parts_mut(buf_slice as *mut u8, len)
+        core::slice::from_raw_parts_mut(buf as *mut u8, len)
     };
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -340,11 +340,11 @@ pub async fn sys_recvfrom(
     }
     task.set_interruptable();
     let (bytes, remote_endpoint) = socket_file.sk.recv(&mut inner_vec).await?;
-    log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
+    // log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
     let remote_addr = SockAddr::from_endpoint(remote_endpoint);
     task.set_running();
     // write to pointer
-    log::info!("now set running");
+    // log::info!("now set running");
     let buf_slice = unsafe {
         core::slice::from_raw_parts_mut(buf as *mut u8, bytes)
     };
@@ -374,7 +374,7 @@ pub async fn sys_recvfrom(
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
-    log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
+    // log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)
@@ -386,7 +386,7 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         })
     });
     let local_addr = socket_file.sk.local_addr()?;
-    log::info!("Get local address of socket: {:?}", local_addr);
+    // log::info!("Get local address of socket: {:?}", local_addr);
     // write to pointer
     unsafe {
         match SaFamily::try_from(local_addr.family).unwrap() {
@@ -629,20 +629,27 @@ pub fn sys_getsockopt (
                         optlen_ptr.write_volatile(size_of::<u32>() as u32);
                     } 
                 },
-                TcpSocketOption::INFO => todo!(),
+                TcpSocketOption::INFO => {},
                 TcpSocketOption::CONGESTION => {
-                    todo!()
+                    unsafe {
+                        let str = "reno".as_bytes();
+                        let optval_ptr = option_value as *mut u8;
+                        for (i, &byte) in str.iter().enumerate() {
+                            optval_ptr.add(i).write_volatile(byte);
+                        }
+                        optlen_ptr.write_volatile(4);
+                    }
                 },
             }
         },
-        SocketLevel::IpprotoIpv6 => todo!(),
+        SocketLevel::IpprotoIpv6 => {},
     }
     Ok(0)
 }
 
 /// sys_shutdown() allows a greater control over the behaviour of connection-oriented sockets.
 /// todo : how used for indicate read is shut down, write is shut down, or both 
-pub fn sys_shutdown(fd: usize, _how: usize) -> SysResult {
+pub fn sys_shutdown(fd: usize, how: usize) -> SysResult {
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -650,7 +657,7 @@ pub fn sys_shutdown(fd: usize, _how: usize) -> SysResult {
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
         });
-    socket_file.sk.shutdown()?;
+    socket_file.sk.shutdown(how as u8)?;
     Ok(0)
 }
 /// create a pair of connected sockets

@@ -13,7 +13,7 @@ pub struct LoopbackDevice {
 impl LoopbackDevice {
     pub fn new() -> Box<Self> {
         let inner =Box::new(Self {
-            queue: VecDeque::with_capacity(512),
+            queue: VecDeque::with_capacity(64*1024),
         });
         log::info!("queue length: {} ", inner.queue.len());
         inner
@@ -47,10 +47,10 @@ impl NetDevice for LoopbackDevice {
 
     fn receive(&mut self) ->  DevResult<Box<dyn NetBufPtrTrait>> {
         if let Some(buf) = self.queue.pop_front() {
-            log::warn!(
-                "[NetDriverOps::receive] now receive {} bytes from LoopbackDev.queue",
-                buf.len()
-            );
+            // log::warn!(
+                // "[NetDriverOps::receive] now receive {} bytes from LoopbackDev.queue",
+                // buf.len()
+            // );
             Ok(Box::new(LoopbackBuf(buf)))
         }else {
             Err(DevError::Again)
@@ -59,7 +59,7 @@ impl NetDevice for LoopbackDevice {
 
     fn transmit(&mut self, tx_buf: Box<dyn NetBufPtrTrait>) -> DevResult {
         let data = tx_buf.packet().to_vec();
-        log::warn!("[NetDriverOps::transmit] now transmit {} bytes", data.len());
+        // log::warn!("[Loopback::transmit] now transmit {} bytes", data.len());
         self.queue.push_back(data);
         Ok(())
     }
