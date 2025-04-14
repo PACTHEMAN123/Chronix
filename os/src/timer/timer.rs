@@ -1,12 +1,11 @@
-//! Adapted from Phoenix
-use core::{cmp::Reverse, task::Waker, time::Duration};
+use core::{cmp::Reverse, sync::atomic::{AtomicUsize, Ordering}, task::Waker, time::Duration};
 extern crate alloc;
-use alloc::{boxed::Box, collections::BinaryHeap};
+use alloc::{boxed::Box, collections::BinaryHeap, sync::{Arc, Weak}};
 use log::info;
 
-use super::get_current_time_duration;
+use super::{ffi::TimeVal, get_current_time_duration};
 use spin::Lazy;
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{signal::SIGALRM, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
 use hal::instruction::{Instruction, InstructionHal};
 /// A trait that defines the event to be triggered when a timer expires.
 /// The TimerEvent trait requires a callback method to be implemented,
@@ -113,11 +112,11 @@ impl TimerManager {
                 log::trace!("timers len {}", timers.len());
                 
                 
-                info!(
-                    "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
-                    current_time,
-                    timer.0.expire
-                );
+                // info!(
+                //     "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
+                //     current_time,
+                //     timer.0.expire
+                // );
                   
                 let timer = timers.pop().unwrap().0;
                 if let Some(new_timer) = timer.callback() {
@@ -131,3 +130,91 @@ impl TimerManager {
 }
 /// The global `TimerManager` instance that can be accessed from anywhere in the kernel.
 pub static TIMER_MANAGER: Lazy<TimerManager> = Lazy::new(TimerManager::new);
+
+/// below are timer structure in linux,ITimer is a timer struct in linux used in settimmer
+///and in get timer, ther are three types of timer in linux
+#[derive(Debug)]
+pub struct ITimer {
+    /// interval: repeat gap
+    pub interval: Duration,
+    /// next_expire_time
+    pub next_expire: Duration,
+    /// timer id
+    pub id: usize,
+}
+
+impl ITimer {
+    /// zero itimer
+    pub const ZERO: Self = Self {
+        interval: Duration::ZERO,
+        next_expire: Duration::ZERO,
+        id: 0,
+    };
+}
+
+static TIMER_ID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
+
+/// alloc func for itimer id
+pub fn alloc_timer_id() -> usize {
+    TIMER_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+}
+
+/// a timer mechanism called itimer for implementing interval timers. 
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+pub struct ITimerVal {
+    /// Interval for periodic timer
+    pub it_interval: TimeVal,
+    /// Time until next expiration
+    pub it_value: TimeVal,
+}
+
+impl ITimerVal {
+    /// a zero ITimerVal const
+    pub const ZERO: Self = Self {
+        it_interval: TimeVal::ZERO,
+        it_value: TimeVal::ZERO,
+    };
+    /// check the val is valid
+    pub fn is_valid(&self) -> bool {
+        self.it_interval.usec < 1_000_000 && self.it_value.usec < 1_000_000
+    }
+}
+
+#[derive (Default, Debug)]
+/// based on real time no matter the task is running the timer will work
+/// poll by SIGALRM
+pub struct RealITimer {
+    /// tcb in RealITimer 
+    pub task: Weak<TaskControlBlock>,
+    /// id of the timer
+    pub id: usize,
+}
+
+impl TimerEvent for RealITimer {
+    fn callback(self: Box<Self>) -> Option<Timer> {
+        self.task.upgrade()
+        .and_then(|task|{
+              task.with_mut_itimers(|itimers| {
+                    let real_timer = &mut itimers[0];
+                    if real_timer.id != self.id {
+                        log::warn!("check failed!");
+                        return None
+                    }
+                    task.recv_sigs(SIGALRM);
+                    let real_timer_interval = real_timer.interval;
+                    if real_timer_interval == Duration::ZERO {
+                        return None;
+                    }
+                    let next_expire = get_current_time_duration() + real_timer_interval; 
+                    real_timer.next_expire = next_expire;
+                    Some(
+                        Timer {
+                            expire: next_expire,
+                            data: self,
+                        }
+                    )
+              })
+        })
+    }
+}

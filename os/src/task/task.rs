@@ -22,6 +22,7 @@ use crate::syscall::SysError;
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
+use crate::timer::timer::ITimer;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, task, vec};
@@ -105,6 +106,8 @@ pub struct TaskControlBlock {
     pub cwd: Shared<Arc<dyn Dentry>>,
     /// ELF file the task executes
     pub elf: Shared<Arc<dyn File>>,
+    /// Interval timers for the task.
+    pub itimers: Shared<[ITimer; 3]>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -167,7 +170,8 @@ impl TaskControlBlock {
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
-        elf: Arc<dyn File>
+        elf: Arc<dyn File>,
+        itimers: [ITimer;3]
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -324,6 +328,7 @@ impl TaskControlBlock {
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
+            itimers: new_shared([ITimer::ZERO; 3]),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -395,6 +400,7 @@ impl TaskControlBlock {
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
+            itimers: new_shared([ITimer::ZERO; 3]),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -547,7 +553,7 @@ impl TaskControlBlock {
         let thread_group;
         let pgid;
         let cwd;
-
+        let itimers;
         let sig_manager = new_shared(
             match flag.contains(CloneFlags::SIGHAND) {
             true => SigManager::from_another(&self.sig_manager.lock()),
@@ -563,6 +569,7 @@ impl TaskControlBlock {
             thread_group = self.thread_group.clone();
             pgid = self.pgid.clone();
             cwd = self.cwd.clone();
+            itimers = self.itimers.clone();
         }
         else{
             is_leader = true;
@@ -572,6 +579,7 @@ impl TaskControlBlock {
             thread_group = new_shared(ThreadGroup::new());
             pgid = new_shared(*self.pgid.lock());
             cwd = new_shared(self.cwd());
+            itimers = new_shared([ITimer::ZERO; 3]);
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
@@ -618,6 +626,7 @@ impl TaskControlBlock {
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd,
             elf: self.elf.clone(),
+            itimers,
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]

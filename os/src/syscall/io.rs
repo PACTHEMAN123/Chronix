@@ -181,7 +181,7 @@ pub async fn sys_pselect6(
     timeout_ptr: usize,
     sigmask_ptr: usize,
 ) -> SysResult {
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     if nfds < 0 {
         return Err(SysError::EINVAL);
     }
@@ -216,10 +216,10 @@ pub async fn sys_pselect6(
             Some((*(timeout_ptr as *const TimeSpec)).into())
         }
     };
-    log::info!(
-        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
-        readfds, writefds, exceptfds, timeout
-    );
+    // log::info!(
+    //     "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
+    //     readfds, writefds, exceptfds, timeout
+    // );
     let new_mask = if sigmask_ptr == 0 {
         None
     } else {
@@ -301,12 +301,12 @@ pub async fn sys_pselect6(
     let mut res = 0;
     for (fd, events) in ret {
         if events.contains(PollEvents::IN) || events.contains(PollEvents::HUP){
-            log::info!("[sys_pselect]: fd {} is ready for read", fd);
+            // log::info!("[sys_pselect]: fd {} is ready for read", fd);
             readfds.as_mut().map(|fds| fds.mark_fd(fd));
             res += 1;
         }
         if events.contains(PollEvents::OUT) {
-            log::info!("[sys_pselect]: fd {} is ready for write", fd);
+            // log::info!("[sys_pselect]: fd {} is ready for write", fd);
             writefds.as_mut().map(|fds| fds.mark_fd(fd));
             res += 1;
         }

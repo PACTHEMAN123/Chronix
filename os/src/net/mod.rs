@@ -3,7 +3,7 @@ use core::{ops::DerefMut, time::Duration};
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec,vec::Vec};
 use listen_table::ListenTable;
 use log::info;
-use smoltcp::{iface::{Config, Interface, PollResult, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpListenEndpoint}};
+use smoltcp::{iface::{Config, Interface, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpListenEndpoint}};
 use spin::{Lazy, Once};
 
 use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
@@ -37,11 +37,28 @@ impl TryFrom<u16> for SaFamily {
         }
     }
 }
+
+/// shutdown flag used in shutdown() syscall
+///RD
+pub const SHUTRD: u8 = 0;
+///WR
+pub const SHUTWR: u8 = 1;
+///RDWR
+pub const SHUTRDWR: u8 = 2;
+
+/// SHUT_RD
+pub const RCV_SHUTDOWN: u8 = 1;
+/// SHUT_WR
+pub const SEND_SHUTDOWN: u8 = 2;
+/// SHUT_RDWR
+pub const SHUTDOWN_MASK: u8 = 3;
+
 const IP_PREFIX: u8 = 24;
 const IP: &str = match option_env!("IP") {
     Some(ip) => ip,
     None => "",
 };
+
 const SOCK_RAND_SEED: u64 = 404;// for random port allocation
 const CONFIG_RANDOM_SEED: u64 = 0x3A0C_1495_BC68_9A2C; // for smoltcp random seed
 const PORT_START: u16 = 0xc000; // 49152
@@ -122,7 +139,7 @@ impl InterfaceWrapper {
             }
             Some(delay) => {
                 // current time + delay is the deadline for the next poll
-                let next_poll_deadline = delay +  Duration::from_micros(timestamp.micros() as u64);
+                let next_poll_deadline = delay +  Duration::from_micros(timestamp.total_micros() as u64);
                 let current_time = get_current_time_duration();
                 if next_poll_deadline < current_time {
                     iface.poll(Self::current_time(), self.dev.lock().deref_mut(), &mut sockets);
@@ -134,7 +151,7 @@ impl InterfaceWrapper {
             // when return None means no active sockets or all the sockets are handled
             None => {
                 // do nothing, just call poll interface
-                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(5), Box::new(NetPollTimer{}));
+                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(2), Box::new(NetPollTimer{}));
                 TIMER_MANAGER.add_timer(empty_timer);
             }
         }
@@ -218,7 +235,7 @@ pub fn poll_interfaces() -> smoltcp::time::Instant {
 /// modify the socket first, a helper method for use smoltcp consume
 pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
     use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
-
+    log::info!("[modify tcp packet]receive packet");
     let ipv4_packet = if is_ethernet {
         let ether_frame = EthernetFrame::new_checked(buf)?;
         Ipv4Packet::new_checked(ether_frame.payload())?

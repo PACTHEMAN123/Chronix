@@ -31,8 +31,8 @@ fn main() -> ! {
         )
     };
     if bind_res < 0 {
-        unsafe { close(sockfd as usize) };
-        unsafe { exit(1) };
+        close(sockfd as usize);
+        exit(1);
     }
     println!("[SERVER] Bound to port {}", PORT);
     // 开始监听
