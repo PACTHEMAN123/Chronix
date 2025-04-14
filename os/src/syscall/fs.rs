@@ -2,7 +2,7 @@
 use core::ptr::copy_nonoverlapping;
 
 use alloc::{string::ToString, sync::Arc, vec};
-use hal::{addr::{PhysAddrHal, VirtAddr}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, println};
+use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
@@ -31,11 +31,14 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            if let Some(pa) = vm.translate_va(va) {
-                pa
-            } else {
-                vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
-                vm.translate_va(va).unwrap()
+            match vm.get_page_table().find_pte(va.floor()) {
+                Some((pte, _)) if pte.readable() => {
+                    pte.ppn().start_addr() + va.page_offset()
+                }
+                _ => {
+                    vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
+                    vm.translate_va(va).unwrap()
+                }
             }
         });
         let data = pa.get_slice(len);
@@ -49,7 +52,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    // info!("task {} trying to read fd {}", task.gettid(), fd);
+    // info!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let start = buf & !(Constant::PAGE_SIZE - 1);
     let end = buf + len;
@@ -59,11 +62,14 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            if let Some(pa) = vm.translate_va(va) {
-                pa
-            } else {
-                vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
-                vm.translate_va(va).unwrap()
+            match vm.get_page_table().find_pte(va.floor()) {
+                Some((pte, _)) if pte.writable() => {
+                    pte.ppn().start_addr() + va.page_offset()
+                }
+                _ => {
+                    vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
+                    vm.translate_va(va).unwrap()
+                }
             }
         });
         let data = pa.get_slice_mut(len);

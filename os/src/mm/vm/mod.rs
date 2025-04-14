@@ -218,9 +218,13 @@ pub trait UserVmSpaceHal: Sized {
 
     fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError>;
 
-    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
+    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
+        self.get_page_table().translate_vpn(vpn)
+    }
 
-    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
+    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.get_page_table().translate_va(va)
+    }
 }
 
 #[cfg(target_arch = "riscv64")]

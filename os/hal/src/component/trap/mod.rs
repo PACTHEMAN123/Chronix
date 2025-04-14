@@ -11,8 +11,10 @@ pub enum TrapType {
     IllegalInstruction(usize),
 }
 
-pub trait TrapTypeHal {
+pub trait TrapTypeHal: Sized {
     fn get() -> Self;
+
+    fn get_debug() -> (Self, usize);
 }
 
 pub trait TrapContextHal {

@@ -14,6 +14,10 @@ impl TrapTypeHal for TrapType {
     fn get() -> Self {
         get_trap_type()
     }
+
+    fn get_debug() -> (Self, usize) {
+        (get_trap_type(), riscv::register::sepc::read())
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
