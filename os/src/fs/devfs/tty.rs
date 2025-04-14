@@ -9,7 +9,7 @@ use spin::Once;
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
-use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::SysResult, task::{current_task, suspend_current_and_run_next}};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::{current_task, suspend_current_and_run_next}};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -170,7 +170,7 @@ pub struct TtyMeta {
 
 #[async_trait]
 impl File for TtyFile {
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         &self.inner
     }
 
@@ -182,7 +182,7 @@ impl File for TtyFile {
         true
     }
 
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let char_dev = UART0.clone();
         log::debug!("[tty file]: reading buf len: {}", buf.len());
         //let len = char_dev.read(buf).await;
@@ -213,13 +213,13 @@ impl File for TtyFile {
         if termios.is_echo() {
             self.write(buf).await;
         }
-        len
+        Ok(len)
     }
 
-    async fn write(&self, buf: &[u8]) -> usize {
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
         let char_dev = UART0.clone();
         let len = char_dev.write(buf).await;
-        len
+        Ok(len)
     }
 
     fn ioctl(&self, cmd: usize, arg: usize) -> SysResult {
@@ -294,12 +294,12 @@ impl TtyInode {
 }
 
 impl Inode for TtyInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -334,7 +334,7 @@ impl Inode for TtyInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,
@@ -399,7 +399,7 @@ unsafe impl Send for TtyDentry {}
 unsafe impl Sync for TtyDentry {}
 
 impl Dentry for TtyDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 

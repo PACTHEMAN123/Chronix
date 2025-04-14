@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 
 pub struct NullFile {
@@ -24,7 +24,7 @@ impl NullFile {
 
 #[async_trait]
 impl File for NullFile {
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         &self.inner
     }
 
@@ -36,13 +36,13 @@ impl File for NullFile {
         true
     }
 
-    async fn read(&self, _buf: &mut [u8]) -> usize {
+    async fn read(&self, _buf: &mut [u8]) -> Result<usize, SysError> {
         // reach EOF
-        0
+        Ok(0)
     }
 
-    async fn write(&self, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
+        Ok(buf.len())
     }
 }
 
@@ -66,7 +66,7 @@ unsafe impl Send for NullDentry {}
 unsafe impl Sync for NullDentry {}
 
 impl Dentry for NullDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 
@@ -100,12 +100,12 @@ impl NullInode {
 }
 
 impl Inode for NullInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -140,7 +140,7 @@ impl Inode for NullInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,

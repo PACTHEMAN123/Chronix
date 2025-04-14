@@ -1,6 +1,6 @@
 use core::{arch::asm, ops::Range};
 
-use alloc::{format, vec::Vec};
+use alloc::vec::Vec;
 use bitflags::bitflags;
 
 use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
@@ -304,17 +304,27 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         None
     }
 
-    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapPerm, level: PageLevel) {
-        let pte = self.find_pte_create(vpn, level).expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-        *pte = PageTableEntry::new(ppn, perm, true);
+    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapPerm, level: PageLevel) -> Option<&mut PageTableEntry>{
+        if let Some(pte) = self.find_pte_create(vpn, level) {
+            *pte = PageTableEntry::new(ppn, perm, true);
+            Some(pte)
+        } else {
+            log::warn!("vpn {} has been mapped", vpn.0);
+            None
+        }
     }
 
-    fn unmap(&mut self, vpn: VirtPageNum) {
+    fn unmap(&mut self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         match self.find_pte(vpn) {
             Some((pte, _)) => {
+                let ret = *pte;
                 *pte = PageTableEntry::new(PhysPageNum(0), MapPerm::empty(), false);
-            }, 
-            None => panic!("vpn: {:#x} has not mapped", vpn.0)
+                Some(ret)
+            },
+            None => {
+                log::warn!("vpn {} is not mapped", vpn.0);
+                None
+            }
         }
     }
     
@@ -325,7 +335,7 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
     unsafe fn enable_low(&self) {
         asm!("csrw satp, {}", in(reg)(self.get_token()), options(nostack));
     }
-    
+
     fn translate_va(&self, va: crate::addr::VirtAddr) -> Option<crate::addr::PhysAddr> {
         let (pte, level) = self.find_pte(va.floor())?;
         if !pte.is_valid() {

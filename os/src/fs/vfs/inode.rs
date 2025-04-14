@@ -57,7 +57,7 @@ impl InodeInner {
 /// Inode trait for all file system to implement
 pub trait Inode {
     /// return inner
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         todo!()
     }
     /// use name to lookup under the current inode

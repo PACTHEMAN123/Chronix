@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
-use crate::{fs::{vfs::{file::SeekFrom, Dentry, File, FileInner}, OpenFlags}, sync::mutex::SpinNoIrqLock};
+use crate::{fs::{vfs::{file::SeekFrom, Dentry, File, FileInner}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 
 /// simple file system file
@@ -29,7 +29,7 @@ impl SpFile {
 
 #[async_trait]
 impl File for SpFile {
-    fn inner(&self) -> &FileInner {
+    fn file_inner(&self) -> &FileInner {
         &self.inner
     }
     fn readable(&self) -> bool {
@@ -38,10 +38,10 @@ impl File for SpFile {
     fn writable(&self) -> bool {
         false
     }
-    async fn read(&self, _buf: &mut [u8]) -> usize {
+    async fn read(&self, _buf: &mut [u8]) -> Result<usize, SysError> {
         panic!("cannot read sp file")
     }
-    async fn write(&self, _buf: &[u8]) -> usize {
+    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
         panic!("cannot write sp file")
     }
 }

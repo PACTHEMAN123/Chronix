@@ -68,7 +68,7 @@ impl PipeFile {
 
 #[async_trait]
 impl File for PipeFile {
-    fn inner(&self) -> &FileInner {
+    fn file_inner(&self) -> &FileInner {
         panic!("[PipeFile] inner dont exist!");
     }
 
@@ -82,7 +82,7 @@ impl File for PipeFile {
 
     async fn read(&self, buf: &mut [u8]) -> usize {
         assert!(self.readable());
-        //info!("[Pipe]: start to read {} bytes", buf.len());
+        // info!("[Pipe]: start to read {} bytes", buf.len());
         // create a read future
         let read_size = PipeReadFuture::new(self.buffer.clone(), buf, self.pipe.clone()).await;
         // wake up the writer
@@ -164,7 +164,7 @@ impl<'a> Future for PipeReadFuture<'a> {
         let this = unsafe { self.get_unchecked_mut() };
         let mut ring_buf = this.buffer.lock();
         // trying to read
-        //info!("[PipeReadFuture]: read");
+        // info!("[PipeReadFuture]: read to {:#x}", &this.user_buf[0] as *const u8 as usize);
         let read_size: usize = ring_buf.read(this.user_buf);
         this.already_put += read_size;
         if read_size == 0 {

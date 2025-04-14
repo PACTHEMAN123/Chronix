@@ -24,7 +24,7 @@ impl SpDentry {
 }
 
 impl Dentry for SpDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
     fn new(&self,

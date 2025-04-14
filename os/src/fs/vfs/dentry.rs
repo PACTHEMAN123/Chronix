@@ -54,7 +54,7 @@ impl DentryInner {
 /// dentry method that all fs need to implement
 pub trait Dentry: Send + Sync {
     /// get the inner dentry
-    fn inner(&self) -> &DentryInner;
+    fn dentry_inner(&self) -> &DentryInner;
     /// construct a new Self type dentry
     fn new(
         &self,
@@ -68,56 +68,56 @@ pub trait Dentry: Send + Sync {
     }
     /// get the inode it points to
     fn inode(&self) -> Option<Arc<dyn Inode>> {
-       self.inner().inode.lock().as_ref().map(Arc::clone)
+       self.dentry_inner().inode.lock().as_ref().map(Arc::clone)
     }
     /// set the inode it points to
     fn set_inode(&self, inode: Arc<dyn Inode>) {
-        if self.inner().inode.lock().is_some() {
+        if self.dentry_inner().inode.lock().is_some() {
             warn!("[Dentry] trying to replace inode with {:?}", self.name());
         }
-        *self.inner().inode.lock() = Some(inode);
-        *self.inner().state.lock() = DentryState::USED;
+        *self.dentry_inner().inode.lock() = Some(inode);
+        *self.dentry_inner().state.lock() = DentryState::USED;
     }
     /// clear the inode, now it doesnt have a inode
     fn clear_inode(&self) {
-        *self.inner().inode.lock() = None;
+        *self.dentry_inner().inode.lock() = None;
         self.set_state(DentryState::NEGATIVE);
     }
     /// get the super block field
     fn superblock(&self) -> Arc<dyn SuperBlock> {
-        self.inner().superblock.upgrade().unwrap()
+        self.dentry_inner().superblock.upgrade().unwrap()
     }
     /// tidier way to get parent
     fn parent(&self) -> Option<Arc<dyn Dentry>> {
-        self.inner().parent.as_ref().map(|p| p.upgrade().unwrap())
+        self.dentry_inner().parent.as_ref().map(|p| p.upgrade().unwrap())
     }
     /// get all children
     fn children(&self) -> BTreeMap<String, Arc<dyn Dentry>> {
-        self.inner().children.lock().clone()
+        self.dentry_inner().children.lock().clone()
     }
     /// get a child
     fn get_child(&self, name: &str) -> Option<Arc<dyn Dentry>> {
-        self.inner().children.lock().get(name).cloned()
+        self.dentry_inner().children.lock().get(name).cloned()
     }
     /// add a child
     fn add_child(&self, child: Arc<dyn Dentry>) {
-        self.inner().children.lock().insert(child.name().to_string(), child);
+        self.dentry_inner().children.lock().insert(child.name().to_string(), child);
     }
     /// remove a child
     fn remove_child(&self, name: &str) {
-        self.inner().children.lock().remove(name);
+        self.dentry_inner().children.lock().remove(name);
     }
     /// tider way to get name
     fn name(&self) -> &str {
-        &self.inner().name
+        &self.dentry_inner().name
     }
     /// get the state
     fn state(&self) -> DentryState {
-        *self.inner().state.lock()
+        *self.dentry_inner().state.lock()
     }
     /// set the state
     fn set_state(&self, state: DentryState) {
-        *self.inner().state.lock() = state;
+        *self.dentry_inner().state.lock() = state;
     }
     /// get the absolute path of the dentry
     fn path(&self) -> String {
@@ -231,14 +231,15 @@ impl dyn Dentry {
                 return Ok(current)
             }
 
-            match current.inode().unwrap().inner().mode {
-                InodeMode::LINK => {
-                    // follow to the next
-                    let path =  current.inode().unwrap().readlink()?;
-                    let new_dentry = global_find_dentry(&path);
-                    current = new_dentry;
-                }
-                _ => return Ok(current)
+            let mode = current.inode().unwrap().inode_inner().mode;
+
+            if mode.contains(InodeMode::LINK) {
+                // follow to the next
+                let path =  current.inode().unwrap().readlink()?;
+                let new_dentry = global_find_dentry(&path);
+                current = new_dentry;
+            } else {
+                return Ok(current)
             }
         }
         Err(SysError::ELOOP)

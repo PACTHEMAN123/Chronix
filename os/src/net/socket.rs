@@ -187,7 +187,7 @@ impl Socket {
 #[async_trait]
 impl File for Socket {
     #[doc ="get basic File object"]
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         unreachable!()
     }
 
@@ -203,23 +203,23 @@ impl File for Socket {
 
     #[doc ="Read file to `UserBuffer`"]
     #[must_use]
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         log::info!("[Socket::read] buf len:{}", buf.len());
         if buf.len() == 0 {
-            return 0;
+            return Ok(0);
         }
         let bytes = self.sk.recv(buf).await.map(|e|e.0).unwrap();
-        bytes
+        Ok(bytes)
     }
 
     #[doc = " Write `UserBuffer` to file"]
     #[must_use]
-    async fn write(& self, buf: &[u8]) -> usize {
+    async fn write(& self, buf: &[u8]) -> Result<usize, SysError> {
         if buf.len() == 0 {
-            return 0;
+            return Ok(0);
         }
         let bytes = self.sk.send(buf, None).await.unwrap();
-        bytes
+        Ok(bytes)
     }
 
     async fn base_poll(&self, events:PollEvents) -> PollEvents {

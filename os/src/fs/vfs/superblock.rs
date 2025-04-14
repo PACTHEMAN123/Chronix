@@ -1,5 +1,7 @@
 //! vfs super block
 //! 
+use core::mem::MaybeUninit;
+
 use alloc::sync::{Arc, Weak};
 use spin::Once;
 
@@ -46,5 +48,19 @@ impl dyn SuperBlock {
     /// get the root dentry
     pub fn root(&self) -> Arc<dyn Dentry> {
         self.inner().root.get().unwrap().clone()
+    }
+}
+
+impl<T: Send + Sync + 'static> SuperBlock for MaybeUninit<T> {
+    fn inner(&self) -> &SuperBlockInner {
+        todo!()
+    }
+
+    fn set_root_dentry(&self, _root: Arc<dyn Dentry>) {
+        todo!()
+    }
+
+    fn get_root_inode(&'static self, _name: &str) -> Arc<dyn Inode> {
+        todo!()
     }
 }
