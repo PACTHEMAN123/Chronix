@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use alloc::boxed::Box;
 use hal::instruction::{Instruction, InstructionHal};
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 /// Linear congruence generator (LCG)
 pub struct SimpleRng {
@@ -88,7 +88,7 @@ impl UrandomFile {
 
 #[async_trait]
 impl File for UrandomFile {
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         &self.inner
     }
 
@@ -100,16 +100,16 @@ impl File for UrandomFile {
         true
     }
 
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         unsafe {
             Instruction::set_sum();
             RNG.lock().fill_buf(buf);
         }
-        buf.len()
+        Ok(buf.len())
     }
 
-    async fn write(&self, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
+        Ok(buf.len())
     }
 }
 
@@ -133,7 +133,7 @@ unsafe impl Send for UrandomDentry {}
 unsafe impl Sync for UrandomDentry {}
 
 impl Dentry for UrandomDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 
@@ -167,12 +167,12 @@ impl UrandomInode {
 }
 
 impl Inode for UrandomInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         let len = inner.size();
         Kstat {
             st_dev: 0,
@@ -208,7 +208,7 @@ impl Inode for UrandomInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,

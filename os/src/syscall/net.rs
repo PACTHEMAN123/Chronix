@@ -5,7 +5,7 @@ use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 
-use crate::{config::PAGE_SIZE, fs::{pipe, OpenFlags}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -656,7 +656,7 @@ pub fn sys_shutdown(fd: usize, _how: usize) -> SysResult {
 /// create a pair of connected sockets
 pub fn sys_socketpair(_domain: usize, _types: usize, _protocol: usize, sv: usize) -> SysResult {
     let task = current_task().unwrap();
-    let (pipe_read, pipe_write) = pipe::make_pipe(PAGE_SIZE);
+    let (pipe_read, pipe_write) = pipefs::make_pipe(PAGE_SIZE);
     let pipe = task.with_mut_fd_table(|table| {
         let fd_read = table.alloc_fd();
         let fd_info_read = FdInfo {

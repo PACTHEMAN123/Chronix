@@ -4,7 +4,7 @@ use alloc::{string::{String, ToString}, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask, FS_MANAGER}, sync::mutex::SpinNoIrqLock};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask, FS_MANAGER}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 
 pub struct MountsFile {
@@ -24,7 +24,7 @@ impl MountsFile {
 
 #[async_trait]
 impl File for MountsFile {
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         &self.inner
     }
 
@@ -36,20 +36,20 @@ impl File for MountsFile {
         true
     }
 
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let info = list_mounts();
         let len = info.len();
         let pos = self.pos();
         if self.pos() >= len {
-            return 0;
+            return Ok(0);
         }
         buf[..len].copy_from_slice(info.as_bytes());
         self.set_pos(pos + len);
-        len
+        Ok(len)
     }
 
-    async fn write(&self, _buf: &[u8]) -> usize {
-        0
+    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
+        Ok(0)
     }
 }
 
@@ -73,7 +73,7 @@ unsafe impl Send for MountsDentry {}
 unsafe impl Sync for MountsDentry {}
 
 impl Dentry for MountsDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 
@@ -107,12 +107,12 @@ impl MountsInode {
 }
 
 impl Inode for MountsInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -147,7 +147,7 @@ impl Inode for MountsInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,

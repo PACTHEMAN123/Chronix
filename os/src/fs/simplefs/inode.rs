@@ -18,7 +18,7 @@ impl SpInode {
 }
 
 impl Inode for SpInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
@@ -27,7 +27,7 @@ impl Inode for SpInode {
     }
 
     fn getattr(&self) -> Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -62,7 +62,7 @@ impl Inode for SpInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,
@@ -112,7 +112,7 @@ impl Inode for SpInode {
         match name {
             "null" => {
                 // just return another null inode
-                Some(NullInode::new(self.inner().super_block.upgrade()?.clone()))
+                Some(NullInode::new(self.inode_inner().super_block.upgrade()?.clone()))
             }
             _ => todo!()
         }

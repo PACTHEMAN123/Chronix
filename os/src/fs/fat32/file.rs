@@ -5,6 +5,8 @@ use async_trait::async_trait;
 
 use crate::{fs::{page::page::PAGE_SIZE, vfs::{file::SeekFrom, Dentry, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::{mutex::SpinNoIrqLock, UPSafeCell}};
 
+use super::SysError;
+
 
 pub struct FatFile {
     readable: bool,
@@ -32,7 +34,7 @@ impl FatFile {
 
 #[async_trait]
 impl File for FatFile {
-    fn inner(&self) -> &FileInner {
+    fn file_inner(&self) -> &FileInner {
         self.inner.exclusive_access()
     }
     fn readable(&self) -> bool {
@@ -41,16 +43,16 @@ impl File for FatFile {
     fn writable(&self) -> bool {
         self.writable
     }
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
         let size = inode.read_at(self.pos(), buf).unwrap();
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
-        size
+        Ok(size)
     }
-    async fn write(&self, buf: &[u8]) -> usize {
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
         let size = inode.write_at(self.pos(), buf).unwrap();
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
-        size
+        Ok(size)
     }
 }

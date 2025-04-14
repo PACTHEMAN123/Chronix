@@ -14,6 +14,7 @@ use crate::fs::vfs::inode::InodeMode;
 use crate::fs::vfs::{Dentry, DentryState, Inode, DCACHE};
 use crate::fs::FS_MANAGER;
 use crate::sync::mutex::SpinNoIrqLock;
+use crate::syscall::SysError;
 use crate::utils::{abs_path_to_name, abs_path_to_parent};
 
 use alloc::vec;
@@ -82,7 +83,7 @@ impl Ext4File {
 
 #[async_trait]
 impl File for Ext4File {
-    fn inner(&self) -> &FileInner {
+    fn file_inner(&self) -> &FileInner {
         self.inner.exclusive_access()
     }
     fn readable(&self) -> bool {
@@ -91,14 +92,14 @@ impl File for Ext4File {
     fn writable(&self) -> bool {
         self.writable
     }
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
 
         let size = inode.read_at(self.pos(), buf).unwrap();
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
-        size
+        Ok(size)
     }
-    async fn write(&self, buf: &[u8]) -> usize {
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
         if self.flags().contains(OpenFlags::O_APPEND) {
             self.set_pos(self.size());
         }
@@ -106,7 +107,7 @@ impl File for Ext4File {
         let inode = self.dentry().unwrap().inode().unwrap();
         let size = inode.write_at(pos, buf).unwrap();
         self.set_pos(pos + size);
-        size
+        Ok(size)
     }
 }
 
