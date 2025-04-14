@@ -27,7 +27,7 @@ impl Ext4Dentry {
 }
 
 impl Dentry for Ext4Dentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
     fn new(&self,
@@ -61,11 +61,17 @@ impl Dentry for Ext4Dentry {
         }
         // try to update
         for name in inode.ls() {
+            // skip the . and ..
+            if name == "." || name == ".." {
+                continue;
+            }
+
             if let Some(_child_dentry) = self.get_child(&name) {
                 // do nothing 
             } else {
                 // not find in the mem
                 // try to find by IO
+                log::debug!("look up name: {}", name);
                 let child_inode = inode.lookup(&name).unwrap();
                 let child_dentry = self.new(
                     &name, 

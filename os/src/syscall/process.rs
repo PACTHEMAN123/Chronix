@@ -2,7 +2,11 @@
 
 use core::ptr::null;
 use core::sync::atomic::Ordering;
+use crate::fs::fat32::dentry;
 use crate::fs::utils::FileReader;
+use crate::fs::vfs::dentry::global_find_dentry;
+use crate::fs::vfs::DentryState;
+use crate::fs::AT_FDCWD;
 use crate::fs::{
     vfs::file::open_file,
     OpenFlags,
@@ -10,6 +14,7 @@ use crate::fs::{
 use crate::mm::copy_out;
 use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::processor::context::SumGuard;
+use crate::syscall::at_helper;
 use crate::task::schedule::spawn_user_task;
 use crate::task::{exit_current_and_run_next, INITPROC};
 use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
@@ -174,8 +179,8 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
 /// process to be replaced with a new program, with newly initialized
 /// stack, heap, and (initialized and uninitialized) data segments.
 /// more details, see: https://man7.org/linux/man-pages/man2/execve.2.html
-pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
-    let mut path = user_path_to_string(path as *const u8).unwrap();
+pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult {
+    let mut path = user_path_to_string(pathname as *const u8).unwrap();
     let token = current_user_token(&current_processor());
     let mut argv = argv as *const usize;
     let mut envp = envp as *const usize;
@@ -213,19 +218,24 @@ pub async fn sys_execve(path: usize, argv: usize, envp: usize) -> SysResult {
         }
     }
 
+    let task = current_task().unwrap().clone();
     // for .sh we will use busybox sh as default
-    if path.ends_with(".sh") {
+    let dentry = if path.ends_with(".sh") {
         path = "/busybox".to_string();
         argv_vec.insert(0, "busybox".to_string());
         argv_vec.insert(1, "sh".to_string());
-    }
-
+        global_find_dentry(&path)
+    } else {
+        at_helper(task, AT_FDCWD, pathname as *const u8, OpenFlags::empty())?
+    };
     // open file
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_WRONLY) {
+    log::debug!("[sys_execve]: try to open file at path {}", dentry.path());
+    if dentry.state() != DentryState::NEGATIVE {
         let task = current_task().unwrap();
-        let reader = FileReader::new(app_inode.clone());
+        let app = dentry.open(OpenFlags::empty()).unwrap();
+        let reader = FileReader::new(app.clone());
         let elf = xmas_elf::ElfFile::new(&reader).unwrap();
-        task.exec(&elf, Some(app_inode), argv_vec, envp_vec)?;
+        task.exec(&elf, Some(app), argv_vec, envp_vec)?;
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
         // return p because cx.x[10] will be covered with it later
         Ok(p as isize)

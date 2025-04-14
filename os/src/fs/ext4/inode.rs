@@ -91,7 +91,7 @@ impl Ext4Inode {
 
 impl Inode for Ext4Inode {
 
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
@@ -129,25 +129,27 @@ impl Inode for Ext4Inode {
     /// Return the node if found.
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
         let file = self.file.exclusive_access();
-        
         let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
-        
+        log::debug!("try to look up {}", full_path);
         if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
-            //info!("lookup {} success", name);
+            log::debug!("lookup {} success", name);
             return Some(Arc::new(Ext4Inode::new(
-                self.inner().super_block.upgrade()?.clone(), 
+                self.inode_inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_REG_FILE)));
         } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_DIR) {
             log::debug!("lookup dir {} success", name);
             return Some(Arc::new(Ext4Inode::new(
-                self.inner().super_block.upgrade()?.clone(), 
+                self.inode_inner().super_block.upgrade()?.clone(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_DIR)));
+        } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_SYMLINK) {
+            log::debug!("look up symlink {} success", name);
+            return Some(Arc::new(Ext4Inode::new(
+                self.inode_inner().super_block.upgrade()?.clone(),
+                full_path.as_str(),
+                InodeTypes::EXT4_DE_SYMLINK)));
         }
-
-        // todo!: add support for directory
-
         //info!("lookup {} failed", name);
         None
     }
@@ -349,14 +351,14 @@ impl Inode for Ext4Inode {
             Ok(_) => {
                 info!("create inode success");
                 Some(Arc::new(Ext4Inode::new(
-                    self.inner().super_block.upgrade()?.clone(),
+                    self.inode_inner().super_block.upgrade()?.clone(),
                     fpath, types)))
             }
         }
     }
 
     fn getattr(&self) -> Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         let file = self.file.exclusive_access();
         let ty = file.get_type();
 
@@ -405,7 +407,7 @@ impl Inode for Ext4Inode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         let file = self.file.exclusive_access();
         let ty = file.get_type();
         let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
@@ -467,7 +469,7 @@ impl Inode for Ext4Inode {
         file.symlink_create(target_path).expect("symlink create failed");
         // get the symlink Inode
         Ok(Arc::new(Ext4Inode::new(
-            self.inner().super_block.upgrade().unwrap().clone(),
+            self.inode_inner().super_block.upgrade().unwrap().clone(),
             target_path,
             InodeTypes::EXT4_DE_SYMLINK
         )))
@@ -544,7 +546,7 @@ impl Inode for Ext4Inode {
         let old_mode = InodeMode::from_inode_type(ty).get_type();
         log::debug!("old mode: {:x}", old_mode.bits());
         if let Some(new) = new_inode {
-            let new_mode = new.inner().mode;
+            let new_mode = new.inode_inner().mode;
             if new_mode != old_mode {
                 return match (old_mode, new_mode) {
                     (InodeMode::FILE, InodeMode::DIR) => Err(SysError::EISDIR),

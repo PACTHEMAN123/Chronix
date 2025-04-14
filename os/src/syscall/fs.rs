@@ -2,12 +2,12 @@
 use core::ptr::copy_nonoverlapping;
 
 use alloc::{string::ToString, sync::Arc, vec};
-use hal::{addr::{PhysAddrHal, VirtAddr}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, println};
+use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipe::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
 }, mm::vm::{PageFaultAccessType, UserVmSpaceHal}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
@@ -31,15 +31,18 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            if let Some(pa) = vm.translate_va(va) {
-                pa
-            } else {
-                vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
-                vm.translate_va(va).unwrap()
+            match vm.get_page_table().find_pte(va.floor()) {
+                Some((pte, _)) if pte.readable() => {
+                    pte.ppn().start_addr() + va.page_offset()
+                }
+                _ => {
+                    vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
+                    vm.translate_va(va).unwrap()
+                }
             }
         });
         let data = pa.get_slice(len);
-        ret += file.write(data).await;
+        ret += file.write(data).await?;
     }
 
     return Ok(ret as isize);
@@ -49,7 +52,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    // info!("task {} trying to read fd {}", task.gettid(), fd);
+    // info!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let start = buf & !(Constant::PAGE_SIZE - 1);
     let end = buf + len;
@@ -59,15 +62,18 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            if let Some(pa) = vm.translate_va(va) {
-                pa
-            } else {
-                vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
-                vm.translate_va(va).unwrap()
+            match vm.get_page_table().find_pte(va.floor()) {
+                Some((pte, _)) if pte.writable() => {
+                    pte.ppn().start_addr() + va.page_offset()
+                }
+                _ => {
+                    vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
+                    vm.translate_va(va).unwrap()
+                }
             }
         });
         let data = pa.get_slice_mut(len);
-        ret += file.read(data).await;
+        ret += file.read(data).await?;
     }
 
     return Ok(ret as isize);
@@ -184,7 +190,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
-        if flags.contains(OpenFlags::O_DIRECTORY) && inode.inner().mode.get_type() != InodeMode::DIR {
+        if flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_inner().mode.get_type() != InodeMode::DIR {
             return Err(SysError::ENOTDIR);
         }
         let file = dentry.open(flags).unwrap();
@@ -414,9 +420,9 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
         let inode = child.inode().unwrap();
         let linux_dirent = LinuxDirent64 {
-            d_ino: inode.inner().ino as u64,
+            d_ino: inode.inode_inner().ino as u64,
             d_off: file.pos() as u64,
-            d_type: inode.inner().mode.bits() as u8,
+            d_type: inode.inode_inner().mode.bits() as u8,
             d_reclen: rec_len as u16,
         };
 
@@ -459,7 +465,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let is_dir = inode.inner().mode == InodeMode::DIR;
+    let is_dir = inode.inode_inner().mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {
         return Err(SysError::ENOTDIR);
     } else if flags != AT_REMOVEDIR && is_dir {
@@ -467,7 +473,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     }
     // use parent inode to remove the inode in the fs
     let name = abs_path_to_name(&path).unwrap();
-    dentry.parent().unwrap().inode().unwrap().remove(&name, inode.inner().mode).expect("remove failed");
+    dentry.parent().unwrap().inode().unwrap().remove(&name, inode.inode_inner().mode).expect("remove failed");
     //inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
     Ok(0)
@@ -486,7 +492,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
         return Err(SysError::EBADF);
     }
     let inode = dentry.inode().unwrap();
-    if inode.inner().mode != InodeMode::LINK {
+    if inode.inode_inner().mode != InodeMode::LINK {
         return Err(SysError::EINVAL);
     }
     
@@ -518,7 +524,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let inner = inode.as_ref().inner();
+    let inner = inode.as_ref().inode_inner();
     
     let current_time = TimeSpec::from(get_current_time_duration());
     if times == 0 {
@@ -676,7 +682,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
             Instruction::set_sum();
             core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
         };
-        let read_len = file.read(buf).await;
+        let read_len = file.read(buf).await?;
         totol_len += read_len;
     }
     Ok(totol_len as isize)
@@ -703,7 +709,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
             Instruction::set_sum();
             core::slice::from_raw_parts(iov.base as *const u8, iov.len)
         };
-        let write_len = file.write(buf).await;
+        let write_len = file.write(buf).await?;
         totol_len += write_len;
     }
     Ok(totol_len as isize)
@@ -729,7 +735,7 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut buf = vec![0u8; count];
     let len;
     if offset == 0 {
-        len = in_file.read(&mut buf).await;
+        len = in_file.read(&mut buf).await?;
     } else {
         unsafe {
             Instruction::set_sum();
@@ -738,7 +744,7 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
             (offset as *mut usize).write(off + len);
         }
     }
-    let ret = out_file.write(&buf[..len]).await;
+    let ret = out_file.write(&buf[..len]).await?;
     Ok(ret as isize)
 }
 

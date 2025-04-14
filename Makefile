@@ -182,7 +182,7 @@ busybox:
 	@echo "building busybox"
 	@make -C $(BUSY_BOX_DIR) clean
 	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
-	@make -C $(BUSY_BOX_DIR) CC="$(CC) -g -Og" STRIP=$(STRIP) -j
+	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
 
 libc-test:
 	@echo "building libc-test"
@@ -234,8 +234,10 @@ endif
 	@sudo mkdir -p mnt/lib
 	@sudo cp -r sdcard/musl/lib/libc.so mnt/lib
 ifeq ($(ARCH), riscv64)
-	@sudo ln mnt/lib/libc.so mnt/lib/ld-linux-riscv64-lp64.so.1
-	@sudo ln mnt/lib/libc.so mnt/lib/ld-musl-riscv64.so.1
+#	@sudo ln mnt/lib/libc.so mnt/lib/ld-linux-riscv64-lp64.so.1
+#	@sudo ln mnt/lib/libc.so mnt/lib/ld-musl-riscv64.so.1
+	@sudo ln -s /lib/libc.so mnt/lib/ld-linux-riscv64-lp64.so.1
+	@sudo ln -s /lib/libc.so mnt/lib/ld-musl-riscv64.so.1
 else ifeq ($(ARCH), loongarch64)
 	@sudo mkdir -p mnt/lib64
 	@sudo ln mnt/lib/libc.so mnt/lib64/ld-linux-loongarch-lp64d.so.1
