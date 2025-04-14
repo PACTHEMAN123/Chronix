@@ -46,4 +46,6 @@ impl ConstantsHal for Constant {
     const USER_TRAP_CONTEXT_SIZE: usize = Self::PAGE_SIZE;
     
     const USER_TRAP_CONTEXT_TOP: usize = Self::USER_ADDR_SPACE.end;
+
+    const DL_INTERP_OFFSET: usize = 0x20_0000_0000;
 }

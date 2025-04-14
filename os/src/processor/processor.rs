@@ -15,7 +15,7 @@ use hal::trap::{TrapContext, TrapContextHal};
 use crate::mm::vm::KernVmSpaceHal;
 use lazy_static::*;
 use log::*;
-use crate::mm::{self, INIT_VMSPACE};
+use crate::mm::{self, KVMSPACE};
 use hal::board::MAX_PROCESSORS;
 const PROCESSOR_OBJECT: Processor = Processor::new();
 pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
@@ -227,7 +227,7 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
 pub fn switch_out_current_task(processor: &mut Processor, env: &mut EnvContext){
     unsafe { Instruction::disable_interrupt()};
     unsafe {env.auto_sum()};
-    INIT_VMSPACE.lock().enable();
+    KVMSPACE.lock().enable();
     core::mem::swap(processor.env_mut(), env);
     let current = processor.current().unwrap();
     current.time_recorder().record_switch_out();

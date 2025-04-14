@@ -9,7 +9,7 @@ use crate::fs::devfs::tty::TTY;
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
-use crate::mm::{copy_out, copy_out_str, UserVmSpace, INIT_VMSPACE};
+use crate::mm::{copy_out, copy_out_str, UserVmSpace, KVMSPACE};
 use crate::processor::processor::{current_processor, PROCESSORS};
 #[cfg(feature = "smp")]
 use crate::processor::schedule::TaskLoadTracker;
@@ -33,6 +33,7 @@ use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::trap::{TrapContext, TrapContextHal};
 use hal::println;
+use xmas_elf::reader::Reader;
 use crate::mm::vm::{self, PageFaultAccessType, UserVmSpaceHal};
 use hal::signal::*;
 use crate::mm::{ translated_refmut, translated_str};
@@ -105,7 +106,7 @@ pub struct TaskControlBlock {
     /// current working dentry
     pub cwd: Shared<Arc<dyn Dentry>>,
     /// ELF file the task executes
-    pub elf: Shared<Arc<dyn File>>,
+    pub elf: Shared<Option<Arc<dyn File>>>,
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
     #[cfg(feature = "smp")]
@@ -170,8 +171,8 @@ impl TaskControlBlock {
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
-        elf: Arc<dyn File>,
-        itimers: [ITimer;3]
+        itimers: [ITimer;3],
+        elf: Option<Arc<dyn File>>
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -284,74 +285,7 @@ impl TaskControlBlock {
 
 impl TaskControlBlock {
     /// new a task with elf data
-    pub fn new(elf_data: &[u8], elf_file: Arc<dyn File>) -> Self {
-        // note: the kernel stack must be allocated before the user page table is created
-        // alloc a pid and a kernel stack in kernel space
-        let tid_handle = tid_alloc();
-        let pgid = tid_handle.0;
-        // memory_set with elf program headers/trampoline/trap context/user stack
-        let (vm_space, mut user_sp, entry_point, _auxv) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
-
-        let trap_cx_ppn = vm_space.get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
-            .unwrap();
-
-        // set argc to zero
-        user_sp -= 8;
-        // let _ = vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
-        // *translated_refmut(vm_space.get_page_table().get_token(), user_sp as *mut usize) = 0;
-
-        // initproc should set current working dir to root dentry
-        let root_dentry = {
-            let dcache = DCACHE.lock();
-            Arc::clone(dcache.get("/").unwrap())
-        };
-
-        let task_control_block = Self {
-            tid: tid_handle,
-            leader: None,
-            is_leader: true,
-            trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
-            waker: UPSafeCell::new(None),
-            tid_address: UPSafeCell::new(TidAddress::new()),
-            time_recorder: UPSafeCell::new(TimeRecorder::new()),
-            exit_code: AtomicI32::new(0),
-            base_size: AtomicUsize::new(user_sp),
-            task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            vm_space: new_shared(vm_space),
-            parent: new_shared(None),
-            children:new_shared(BTreeMap::new()),
-            fd_table: new_shared(FdTable::new()),
-            thread_group: new_shared(ThreadGroup::new()),
-            pgid: new_shared(pgid),
-            sig_manager: new_shared(SigManager::new()),
-            sig_ucontext_ptr: AtomicUsize::new(0),
-            cwd: new_shared(root_dentry), 
-            elf: new_shared(elf_file),
-            itimers: new_shared([ITimer::ZERO; 3]),
-            #[cfg(feature = "smp")]
-            sche_entity: new_shared(TaskLoadTracker::new()),
-            #[cfg(feature = "smp")]
-            cpu_allowed: AtomicUsize::new(15), 
-            #[cfg(feature = "smp")]
-            processor_id: AtomicUsize::new(current_processor().id())  
-        };
-        info!("in new");
-        // prepare TrapContext in user space
-        let trap_cx = task_control_block.get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            0,
-            0,
-            0,
-        );
-        task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
-        task_control_block
-    }
-
-    /// new a task with elf data
-    pub fn new_from_file(elf_file: Arc<dyn File>) -> Self {
+    pub fn new<T: Reader + ?Sized>(elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> Result<Self, SysError> {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let tid_handle = tid_alloc();
@@ -362,7 +296,7 @@ impl TaskControlBlock {
             mut user_sp, 
             entry_point, 
             _auxv
-        ) = UserVmSpace::from_elf_file(elf_file.clone(), &INIT_VMSPACE);
+        ) = UserVmSpace::from_elf(&elf, elf_file.clone())?;
 
         let trap_cx_ppn = vm_space.get_page_table()
             .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
@@ -419,7 +353,7 @@ impl TaskControlBlock {
             0,
         );
         task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
-        task_control_block
+        Ok(task_control_block)
     }
 
 
@@ -435,73 +369,25 @@ impl TaskControlBlock {
         let waker = self.waker_ref();
         waker.as_ref().unwrap().wake_by_ref();
     }
-    /// 
-    pub fn exec(&self, elf_data: &[u8], argv: Vec<String>, envp: Vec<String>, elf_file: Arc<dyn File>) {
-        // memory_set with elf program headers/trampoline/trap context/user stack
-        let (mut vm_space, mut user_sp, entry_point, auxv) = UserVmSpace::from_elf(elf_data, INIT_VMSPACE.lock().deref());
-        // update trap_cx ppn
-        let trap_cx_ppn = vm_space
-            .get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
-            .unwrap();
-        // update the executing elf file
-        self.with_mut_elf(|elf| *elf = elf_file);
-         //  NOTE: should do termination before switching page table, so that other
-        // threads will trap in by page fault and be handled by handle_zombie
-        //info!("terminating all threads except main");
-        let _pid = self.with_thread_group(|thread_group|{
-            let mut pid = 0;
-            for thread in thread_group.iter() {
-                if !thread.is_leader() {
-                    thread.set_zombie();
-                }else {
-                    pid = thread.gettid();
-                }
-            }
-            pid
-        });
-        //change hart page table
-        vm_space.enable();
-        // todo: close fdtable when exec
-        // alloc user resource for main thread again since vm_space has changed
-        // push argument to user_stack
-        let (new_user_sp, argc, argv, envp) = user_stack_init(&mut vm_space, user_sp, argv, envp, auxv);
 
-        user_sp = new_user_sp;
-        // substitute memory_set
-        self.with_mut_vm_space(|m| *m = vm_space);
-        // **** access current TCB exclusively
-        unsafe {*self.trap_cx_ppn.get() = trap_cx_ppn};
-        // initialize trap_cx
-        let mut trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            argc,
-            argv,
-            envp,
-        );
-        //trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
-        log::debug!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
-        *self.get_trap_cx() = trap_cx;
-        // **** release current PCB
-    }
     /// 
-    pub fn exec_from_file(&self, elf_file: Arc<dyn File>, argv: Vec<String>, envp: Vec<String>) {
+    pub fn exec<T: Reader + ?Sized>(&self, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, argv: Vec<String>, envp: Vec<String>) ->
+        Result<(), SysError> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (
             mut vm_space, 
             mut user_sp, 
             entry_point, 
             auxv
-        ) = UserVmSpace::from_elf_file(elf_file.clone(), &INIT_VMSPACE);
+        ) = UserVmSpace::from_elf(&elf, elf_file.clone())?;
         // update trap_cx ppn
         let trap_cx_ppn = vm_space
             .get_page_table()
             .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
             .unwrap();
         // update the executing elf file
-        self.with_mut_elf(|elf| *elf = elf_file);
-         //  NOTE: should do termination before switching page table, so that other
+        self.with_mut_elf(|elf| *elf = elf_file );
+        //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
         //info!("terminating all threads except main");
         let _pid = self.with_thread_group(|thread_group|{
@@ -539,6 +425,7 @@ impl TaskControlBlock {
         log::debug!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
         *self.get_trap_cx() = trap_cx;
         // **** release current PCB
+        Ok(())
     }
     /// 
     pub fn fork(self: &Arc<TaskControlBlock>, flag: CloneFlags) -> Arc<TaskControlBlock> {
@@ -589,7 +476,7 @@ impl TaskControlBlock {
             vm_space = new_shared(
                 self.with_mut_vm_space(
                     |vm| 
-                        UserVmSpace::from_existed(vm, INIT_VMSPACE.lock().deref())
+                        UserVmSpace::from_existed(vm)
                 )
             );
             unsafe { Instruction::tlb_flush_all() };

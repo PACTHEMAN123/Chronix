@@ -3,7 +3,7 @@
 use crate::devices::BlockDevice;
 use crate::config::BLOCK_SIZE;
 use crate::mm::allocator::{frames_alloc, frames_alloc_clean, frames_dealloc, FrameAllocator};
-use crate::mm::{FrameTracker, PageTable, INIT_VMSPACE};
+use crate::mm::{FrameTracker, PageTable, KVMSPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, VirtAddr};
