@@ -40,7 +40,7 @@ extern crate bitflags;
 extern crate hal;
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::*;
-use mm::{vm::KernVmSpaceHal, INIT_VMSPACE};
+use mm::{vm::KernVmSpaceHal, KVMSPACE};
 use processor::processor::current_processor;
 
 #[allow(unused)]
@@ -106,7 +106,7 @@ pub fn main(id: usize) -> ! {
     } else {
         processor::processor::init(id);
         hal::trap::init();
-        INIT_VMSPACE.lock().enable();
+        KVMSPACE.lock().enable();
     }
     info!("[kernel] -------hart {} start-------",id);
     unsafe { 

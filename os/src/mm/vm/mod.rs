@@ -3,8 +3,9 @@ use alloc::{alloc::Global, collections::btree_map::BTreeMap, sync::Arc, vec::Vec
 
 use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
+use xmas_elf::{reader::Reader, ElfFile};
 
-use crate::{fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysResult}, task::utils::AuxHeader};
+use crate::{fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
 
 use super::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable};
 
@@ -23,6 +24,8 @@ pub enum KernVmAreaType {
     SigretTrampoline,
     ///
     VirtMemory,
+    ///
+    Mmap,
 }
 
 /// Type of User's Virtual Memory Area
@@ -103,6 +106,8 @@ pub struct KernVmArea {
     pub vma_type: KernVmAreaType,
     pub map_perm: MapPerm,
     pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+    /// for mmap usage
+    pub file: Option<Arc<dyn File>>,
 }
 
 #[allow(missing_docs, unused)]
@@ -116,7 +121,8 @@ impl KernVmArea {
             range_va,
             vma_type,
             map_perm,
-            frames: BTreeMap::new()
+            frames: BTreeMap::new(),
+            file: None,
         }
     }
 }
@@ -146,10 +152,14 @@ impl PageFaultAccessType {
     }
 }
 
-#[allow(missing_docs, unused)]
-pub type VmSpaceUserStackTop = usize;
-#[allow(missing_docs, unused)]
-pub type VmSpaceEntryPoint = usize;
+#[allow(missing_docs)]
+pub type StackTop = usize;
+#[allow(missing_docs)]
+pub type EntryPoint = usize;
+#[allow(missing_docs)]
+pub type MaxEndVpn = VirtPageNum;
+#[allow(missing_docs)]
+pub type StartPoint = VirtAddr;
 
 #[allow(missing_docs, unused)]
 pub trait KernVmSpaceHal {
@@ -160,13 +170,15 @@ pub trait KernVmSpaceHal {
 
     fn push_area(&mut self, area: KernVmArea, data: Option<&[u8]>);
 
-    fn map_vm_area(&mut self, frames: Vec<StrongArc<FrameTracker, SlabAllocator>>, map_perm: MapPerm) -> Option<Range<VirtPageNum>>;
+    fn mmap(&mut self, file: Arc<dyn File>) -> Result<VirtAddr, ()>;
 
-    fn unmap_vm_area(&mut self, range_vpn: Range<VirtPageNum>);
+    fn unmap(&mut self, va: VirtAddr) -> Result<(), ()>;
 
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
 
     fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr>;
+
+    fn handle_page_fault(&mut self, va: VirtAddr, access_type: PageFaultAccessType) -> Result<(), ()>;
 }
 
 #[allow(missing_docs, unused)]
@@ -183,14 +195,15 @@ pub trait UserVmSpaceHal: Sized {
         }
     }
 
-    fn from_kernel(kvm_space: &KernVmSpace) -> Self;
+    fn from_kernel() -> Self;
 
-    fn from_elf(elf_data: &[u8], kvm_space: &KernVmSpace) -> (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
+    fn map_elf<T: Reader + ?Sized>(&mut self, elf: &ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, offset: VirtAddr) -> 
+        (MaxEndVpn, StartPoint);
 
-    fn from_elf_file(elf_file: Arc<dyn File>, kvm_space: &SpinMutex<KernVmSpace, impl MutexSupport>) -> 
-        (Self, VmSpaceUserStackTop, VmSpaceEntryPoint, Vec<AuxHeader>);
+    fn from_elf<T: Reader + ?Sized>(elf: &ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> 
+        Result<(Self, StackTop, EntryPoint, Vec<AuxHeader>), SysError>;
 
-    fn from_existed(uvm_space: &mut Self, kvm_space: &KernVmSpace) -> Self;
+    fn from_existed(uvm_space: &mut Self) -> Self;
 
     /// warning: data must must be page-aligned
     fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>) -> &mut UserVmArea;
@@ -203,7 +216,7 @@ pub trait UserVmSpaceHal: Sized {
 
     fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult;
 
-    fn unmap(&mut self, va: VirtAddr, len: usize) -> SysResult;
+    fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError>;
 
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
 

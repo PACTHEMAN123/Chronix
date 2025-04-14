@@ -30,11 +30,7 @@ impl VirtPageNumHal for VirtPageNum {
     }
     
     fn start_addr(&self) -> VirtAddr {
-        if self.0 & (1 << (Constant::VPN_WIDTH - 1)) != 0 {
-            VirtAddr((self.0 << Constant::PAGE_SIZE_BITS) | !((1usize << Constant::VA_WIDTH) - 1))
-        } else {
-            VirtAddr(self.0 << Constant::PAGE_SIZE_BITS)
-        }
+        VirtAddr::from(self.0 << Constant::PAGE_SIZE_BITS)
     }
     
     fn end_addr(&self) -> VirtAddr {
