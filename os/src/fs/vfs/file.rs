@@ -64,18 +64,18 @@ pub enum SeekFrom {
 /// File trait
 pub trait File: Send + Sync + DowncastSync {
     /// get basic File object
-    fn inner(&self) -> &FileInner;
+    fn file_inner(&self) -> &FileInner;
     /// If readable
     fn readable(&self) -> bool;
     /// If writable
     fn writable(&self) -> bool;
     /// Read file to `UserBuffer`
-    async fn read(&self, buf: &mut [u8]) -> usize;
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError>;
     /// Write `UserBuffer` to file
-    async fn write(&self, buf: &[u8]) -> usize;
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError>;
     /// get the dentry it points to
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
-        Some(self.inner().dentry.clone())
+        Some(self.file_inner().dentry.clone())
     }
     /// quicker way to get the inode it points to
     /// notice that maybe unsafe!
@@ -99,11 +99,11 @@ pub trait File: Send + Sync + DowncastSync {
     }
     /// get the file flags
     fn flags(&self) -> OpenFlags {
-        self.inner().flags.lock().clone()
+        self.file_inner().flags.lock().clone()
     }
     /// set the file flags
     fn set_flags(&self, flags: OpenFlags) {
-        *self.inner().flags.lock() = flags
+        *self.file_inner().flags.lock() = flags
     }
     /// the file size 
     /// (this method should only be called when inode is a file)
@@ -112,11 +112,11 @@ pub trait File: Send + Sync + DowncastSync {
     }
     /// get file current offset
     fn pos(&self) -> usize {
-        self.inner().offset.load(Ordering::Relaxed)
+        self.file_inner().offset.load(Ordering::Relaxed)
     }
     /// set file current offset
     fn set_pos(&self, pos: usize) {
-        self.inner().offset.store(pos, Ordering::Relaxed);
+        self.file_inner().offset.store(pos, Ordering::Relaxed);
     }
     /// move the file position index (see lseek)
     /// allows the file offset to be set beyond the end of the

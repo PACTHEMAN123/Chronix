@@ -7,7 +7,7 @@ pub mod stdio;
 pub mod fat32;
 pub mod ext4;
 pub mod vfs;
-pub mod pipe;
+pub mod pipefs;
 pub mod page;
 pub mod devfs;
 pub mod utils;

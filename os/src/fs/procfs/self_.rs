@@ -22,7 +22,7 @@ unsafe impl Sync for ExeDentry {}
 
 
 impl Dentry for ExeDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 
@@ -56,12 +56,12 @@ impl ExeInode {
 }
 
 impl Inode for ExeInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -96,7 +96,7 @@ impl Inode for ExeInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,

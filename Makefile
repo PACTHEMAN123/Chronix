@@ -182,7 +182,7 @@ busybox:
 	@echo "building busybox"
 	@make -C $(BUSY_BOX_DIR) clean
 	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
-	@make -C $(BUSY_BOX_DIR) CC="$(CC) -g -Og" STRIP=$(STRIP) -j
+	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
 
 libc-test:
 	@echo "building libc-test"

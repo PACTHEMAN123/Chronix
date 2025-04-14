@@ -68,7 +68,7 @@ impl PipeFile {
 
 #[async_trait]
 impl File for PipeFile {
-    fn inner(&self) -> &FileInner {
+    fn file_inner(&self) -> &FileInner {
         panic!("[PipeFile] inner dont exist!");
     }
 
@@ -164,7 +164,7 @@ impl<'a> Future for PipeReadFuture<'a> {
         let this = unsafe { self.get_unchecked_mut() };
         let mut ring_buf = this.buffer.lock();
         // trying to read
-        //info!("[PipeReadFuture]: read");
+        log::debug!("[PipeReadFuture]: read");
         let read_size: usize = ring_buf.read(this.user_buf);
         this.already_put += read_size;
         if read_size == 0 {

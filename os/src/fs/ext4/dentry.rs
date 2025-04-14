@@ -27,7 +27,7 @@ impl Ext4Dentry {
 }
 
 impl Dentry for Ext4Dentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
     fn new(&self,

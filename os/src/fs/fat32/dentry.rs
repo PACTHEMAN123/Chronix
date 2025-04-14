@@ -24,7 +24,7 @@ impl FatDentry {
 }
 
 impl Dentry for FatDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
     fn new(

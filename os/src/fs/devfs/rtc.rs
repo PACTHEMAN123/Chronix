@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use alloc::boxed::Box;
 use hal::instruction::{Instruction, InstructionHal};
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysResult};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}};
 
 
 pub struct RtcFile {
@@ -25,7 +25,7 @@ impl RtcFile {
 
 #[async_trait]
 impl File for RtcFile {
-    fn inner(&self) ->  &FileInner {
+    fn file_inner(&self) ->  &FileInner {
         &self.inner
     }
 
@@ -37,14 +37,14 @@ impl File for RtcFile {
         true
     }
 
-    async fn read(&self, buf: &mut [u8]) -> usize {
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         // reach EOF
         buf.fill(0);
-        buf.len()
+        Ok(buf.len())
     }
 
-    async fn write(&self, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
+        Ok(buf.len())
     }
 
     fn ioctl(&self, _cmd: usize, arg: usize) -> SysResult {
@@ -87,7 +87,7 @@ unsafe impl Send for RtcDentry {}
 unsafe impl Sync for RtcDentry {}
 
 impl Dentry for RtcDentry {
-    fn inner(&self) -> &DentryInner {
+    fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
 
@@ -121,12 +121,12 @@ impl RtcInode {
 }
 
 impl Inode for RtcInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
-        let inner = self.inner();
+        let inner = self.inode_inner();
         let len = inner.size();
         Kstat {
             st_dev: 0,
@@ -162,7 +162,7 @@ impl Inode for RtcInode {
             XstatMask::STATX_INO.bits
         });
         let mask = mask & SUPPORTED_MASK;
-        let inner = self.inner();
+        let inner = self.inode_inner();
         Xstat {
             stx_mask: mask.bits,
             stx_blksize: 0,

@@ -47,7 +47,7 @@ pub struct FatDirMeta {
 }
 
 impl Inode for FatFileInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
 
@@ -233,7 +233,7 @@ impl Inode for FatFileInode {
 }
 
 impl Inode for FatDirInode {
-    fn inner(&self) -> &InodeInner {
+    fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
     fn cache(&self) -> Arc<PageCache> {
@@ -244,7 +244,7 @@ impl Inode for FatDirInode {
     }
     fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
         let dir = self.dir.exclusive_access();
-        let super_block = self.inner().super_block.upgrade()?.clone();
+        let super_block = self.inode_inner().super_block.upgrade()?.clone();
         match mode {
             InodeMode::FILE => {
                 dir.inner
@@ -370,7 +370,7 @@ impl Inode for FatDirInode {
         if target.is_dir() {
             Some(Arc::new(FatDirInode {
                 inner: InodeInner::new(
-                self.inner().super_block.upgrade()?.clone(),
+                self.inode_inner().super_block.upgrade()?.clone(),
                 InodeMode::DIR,
                 0,
                 ),
@@ -383,7 +383,7 @@ impl Inode for FatDirInode {
         } else if target.is_file() {
             Some(Arc::new(FatFileInode {
                 inner: InodeInner::new(
-                    self.inner().super_block.upgrade()?.clone(),
+                    self.inode_inner().super_block.upgrade()?.clone(),
                 InodeMode::FILE,
                 0,
                 ),
