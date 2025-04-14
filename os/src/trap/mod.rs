@@ -156,7 +156,7 @@ hal::define_kernel_trap_handler!(kernel_trap_handler);
 
 /// Kernel trap handler
 fn kernel_trap_handler() {
-    let trap_type = TrapType::get();
+    let (trap_type, epc) = TrapType::get_debug();
     match trap_type {
         TrapType::StorePageFault(stval)
         | TrapType::LoadPageFault(stval)
@@ -182,7 +182,7 @@ fn kernel_trap_handler() {
                             Err(()) => {
                                 // todo: don't panic, kill the task
                                 panic!(
-                                    "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}",
+                                    "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
                                 );
                             }
                         }
