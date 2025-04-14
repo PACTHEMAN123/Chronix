@@ -469,14 +469,6 @@ impl UserVmSpaceHal for UserVmSpace {
         }
         Ok(mid)
     }
-    
-    fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
-        self.page_table.translate_vpn(vpn)
-    }
-    
-    fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
-        self.page_table.translate_va(va)
-    }    
 }
 
 impl UserVmSpace {
