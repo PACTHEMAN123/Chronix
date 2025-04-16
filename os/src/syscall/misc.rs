@@ -3,7 +3,7 @@
 
 use hal::instruction::{Instruction, InstructionHal};
 
-use crate::timer::get_current_time;
+use crate::{fs::devfs::urandom::RNG, timer::get_current_time};
 
 use super::SysResult;
 
@@ -71,3 +71,13 @@ pub fn sys_sysinfo(info: usize) -> SysResult {
     Ok(0)
 }
 
+/// syscall: get random
+pub fn sys_getrandom(buf: usize, len: usize, _flags: usize) -> SysResult {
+    let mut buf_slice = unsafe {
+        Instruction::set_sum();
+        core::slice::from_raw_parts_mut(buf as *mut u8, len)
+    };
+
+    RNG.lock().fill_buf(&mut buf_slice);
+    Ok(buf_slice.len() as isize)
+}

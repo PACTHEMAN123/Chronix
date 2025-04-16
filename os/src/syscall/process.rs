@@ -234,6 +234,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();
         let reader = FileReader::new(app.clone());
+        //let reader = app.read_all();
         let elf = xmas_elf::ElfFile::new(&reader).unwrap();
         task.exec(&elf, Some(app), argv_vec, envp_vec)?;
         let p = *task.get_trap_cx_ppn_access().start_addr().get_mut::<TrapContext>().sp();
@@ -257,7 +258,9 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
 /// is equal to that of the calling process at the time of the call to waitpid().
 /// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
+    
     let task = current_task().unwrap().clone();
+    log::debug!("[sys_waitpid]: TCB: {}, pid: {pid}, exitcode_ptr: {:x}, option: {option}", task.tid() ,exit_code_ptr);
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0
     // get the all target zombie process
@@ -293,7 +296,9 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
     if let Some(res_task) = res_task {
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
         if exit_code_ptr != 0 {
-            let exit_code = (res_task.exit_code() & 0xFF) << 8; 
+            let exit_code = res_task.exit_code();
+            log::debug!("[sys_waitpid]: TCB {} first time exit code {}", task.tid() ,exit_code);
+            let exit_code = (exit_code & 0xFF) << 8; 
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     &exit_code as *const i32 as *const u8,
@@ -310,7 +315,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
     } else if option.contains(WaitOptions::WNOHANG) {
         return Ok(0);
     } else {
-        //info!("[sys_waitpid]: task {} waiting for SIGCHLD", task.gettid());
+        log::debug!("[sys_waitpid]: TCB {} waiting for SIGCHLD", task.gettid());
         let (child_pid, exit_code) = loop {
             task.set_interruptable();
             task.set_wake_up_sigs(SigSet::SIGCHLD);
@@ -352,6 +357,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         };
         // write into exit code pointer
         if exit_code_ptr != 0 {
+            log::debug!("[sys_waitpid]: TCB {} get child {}, exit code {}", task.tid(), child_pid, exit_code);
             let exit_code = (exit_code & 0xFF) << 8;
             let exit_code_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(
@@ -434,6 +440,7 @@ pub fn sys_exit_group(exit_code: i32) -> SysResult {
             thread.set_zombie();
         }
     });
+    log::debug!("[sys_exit_group]: set exit code {}", (exit_code & 0xFF) << 8);
     task.set_exit_code((exit_code & 0xFF) << 8);
     Ok(0)
 }
