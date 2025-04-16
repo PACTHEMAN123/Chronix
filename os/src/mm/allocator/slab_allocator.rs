@@ -210,7 +210,7 @@ struct SlabBlock<const S: usize> {
 #[allow(unused, missing_docs)]
 impl<const S: usize> SlabBlock<S> {
     pub fn page_cnt() -> usize {
-        next_power_of_two((S << 3) >> Constant::PAGE_SIZE_BITS)
+        super::next_power_of_two((S << 3) >> Constant::PAGE_SIZE_BITS)
     }
 
     pub fn cap() -> usize {
@@ -268,7 +268,7 @@ impl<const S: usize> SlabCache<S> {
                 }
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
-                    log2(SlabBlock::<S>::page_cnt())
+                    super::log2(SlabBlock::<S>::page_cnt())
                 )?;
                 let free_nodes_ptr = frames.start.start_addr().get_ptr::<FreeNode<S>>();
 
@@ -409,35 +409,3 @@ impl<T: LinkedNode> LinkedStack<T> {
     }
 }
 
-#[cfg(target_pointer_width="32")]
-const fn next_power_of_two(mut x: usize) -> usize {
-    if x == 0 {
-        return 1
-    }
-    x -= 1;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    return x+1;
-}
-
-#[cfg(target_pointer_width="64")]
-const fn next_power_of_two(mut x: usize) -> usize {
-    if x == 0 {
-        return 1
-    }
-    x -= 1;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    x |= x >> 32;
-    return x+1;
-}
-
-fn log2(x: usize) -> usize {
-    (size_of::<usize>() << 3) - 1 - (x.leading_zeros() as usize)
-}

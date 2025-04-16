@@ -3,6 +3,7 @@
 use crate::sync::mutex::spin_mutex::SpinMutex;
 use crate::sync::mutex::Spin;
 use crate::sync::UPSafeCell;
+use alloc::alloc::Allocator;
 use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
 use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, RangePPNHal};
@@ -12,6 +13,7 @@ use hal::println;
 use log::info;
 use core::fmt::{self, Debug, Formatter};
 use core::ops::Range;
+use core::ptr::NonNull;
 use lazy_static::*;
 
 struct BitMapFrameAllocator {
@@ -64,6 +66,23 @@ impl FrameAllocatorHal for FrameAllocator {
         let mut alloc_guard = FRAME_ALLOCATOR.lock();
         let start = range_ppn.start.0 - alloc_guard.range.start.0;
         alloc_guard.inner.dealloc_contiguous(start, range_ppn.count());
+    }
+}
+
+unsafe impl Allocator for FrameAllocator {
+    fn allocate(&self, layout: core::alloc::Layout) -> Result<core::ptr::NonNull<[u8]>, alloc::alloc::AllocError> {
+        let pg_cnt = (layout.size() - 1 + Constant::PAGE_SIZE) / Constant::PAGE_SIZE;
+        let pg_align = (layout.align() - 1 + Constant::PAGE_SIZE) / Constant::PAGE_SIZE;
+        let frame = FrameAllocatorHal::alloc_with_align(self, pg_cnt, super::log2(pg_align))
+            .ok_or(alloc::alloc::AllocError)?;
+        NonNull::new(&mut frame.get_slice_mut::<u8>()[..layout.size()])
+            .ok_or(alloc::alloc::AllocError)
+    }
+
+    unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: core::alloc::Layout) {
+        let pg_cnt = (layout.size() - 1 + Constant::PAGE_SIZE) / Constant::PAGE_SIZE;
+        let start_ppn = PhysAddr(ptr.as_ptr() as usize & !Constant::KERNEL_ADDR_SPACE.start).floor();
+        FrameAllocatorHal::dealloc(self, start_ppn..start_ppn+pg_cnt);
     }
 }
 
