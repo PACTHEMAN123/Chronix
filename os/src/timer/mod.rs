@@ -5,6 +5,7 @@ pub mod ffi;
 /// Time recoder for events in tasks and kernel functions
 pub mod recoder; 
 use hal::timer::{Timer, TimerHal};
+/// timer struct
 pub mod timer;
 /// time-limited task wrapper
 pub mod timed_task;

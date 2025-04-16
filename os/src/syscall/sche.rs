@@ -2,18 +2,19 @@ use super::{SysError,SysResult};
 use core::sync::atomic::AtomicUsize;
 
 use crate::task::{manager::TASK_MANAGER, task::CpuMask}; 
-#[cfg(feature = "smp")]
 /// sets the CPU affinity mask of the thread whose ID is pid to the value specified by mask.
-pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SysResult {
-    if cpusetsize < size_of::<CpuMask> () {
+pub fn sys_sched_setaffinity(_pid: usize, _cpusetsize: usize, _mask: usize) -> SysResult {
+    #[cfg(feature = "smp")]
+    if _cpusetsize < size_of::<CpuMask> () {
         return Err(SysError::EINVAL);
     }
-    if let Some(task) = TASK_MANAGER.get_task(pid) {
+    #[cfg(feature = "smp")]
+    if let Some(task) = TASK_MANAGER.get_task(_pid) {
         if !task.is_leader() {
             return Err(SysError::ESRCH);
         }
         // todo: handle when pid is 0 , which means calling processor is used but now we have opened all the processors
-        let mask = mask as *const CpuMask;
+        let mask = _mask as *const CpuMask;
         let cpu_mask = unsafe { *mask };
         let task_cpu_mask = match cpu_mask {
             CpuMask::CPU_ALL => {
@@ -42,15 +43,17 @@ pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SysR
     Ok(0)
 }
 
-#[cfg(feature = "smp")]
+
 /// writes the affinity mask of the thread whose ID is pid into the cpu_set_t structure pointed to by mask. 
-pub fn sys_sched_getaffinity(pid: usize, cpusetusize: usize, mask: usize) -> SysResult {
+pub fn sys_sched_getaffinity(_pid: usize, cpusetusize: usize, mask: usize) -> SysResult {
+    #[allow(unused)]
     use alloc::task;
-    let mask = mask as *mut CpuMask;
+    let _mask = mask as *mut CpuMask;
     if cpusetusize < size_of::<CpuMask> () {
         return Err(SysError::EINVAL);
-    }
-    if let Some(task) = TASK_MANAGER.get_task(pid) {
+    }else {
+        #[cfg(feature = "smp")]
+    if let Some(task) = TASK_MANAGER.get_task(_pid) {
         if !task.is_leader() {
             return Err(SysError::ESRCH);
         }
@@ -74,9 +77,10 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetusize: usize, mask: usize) -> Sys
                 panic!("Invalid cpu mask")
             }
         };
-        unsafe {mask.write_volatile(cpu_mask)};
+        unsafe {_mask.write_volatile(cpu_mask)};
+        }else {
+             return Err(SysError::ESRCH);
+        }   
         Ok(0)
-    }else {
-        return Err(SysError::ESRCH);
     }
 } 

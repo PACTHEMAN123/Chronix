@@ -140,14 +140,14 @@ impl fmt::Display for SockAddrIn6 {
         let port = self.sin_port;
         let addr = format!(
             "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-            self.sin_addr.segments()[0],
-            self.sin_addr.segments()[1],
-            self.sin_addr.segments()[2],
-            self.sin_addr.segments()[3],
-            self.sin_addr.segments()[4],
-            self.sin_addr.segments()[5],
-            self.sin_addr.segments()[6],
-            self.sin_addr.segments()[7]
+            self.sin_addr.as_bytes()[0],
+            self.sin_addr.as_bytes()[1],
+            self.sin_addr.as_bytes()[2],
+            self.sin_addr.as_bytes()[3],
+            self.sin_addr.as_bytes()[4],
+            self.sin_addr.as_bytes()[5],
+            self.sin_addr.as_bytes()[6],
+            self.sin_addr.as_bytes()[7]
         );
 
         write!(f, "AF_INET6: [{}]:{}", addr, port)
@@ -227,4 +227,8 @@ pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
         None => ZERO_IPV4_ADDR,
     };
     IpEndpoint::new(ip, listen_endpoint.port)
+}
+
+pub fn is_unspecified(ip: IpAddress) -> bool {
+    ip.as_bytes() == [0, 0, 0, 0] || ip.as_bytes() == [0, 0, 0, 0, 0, 0]
 }

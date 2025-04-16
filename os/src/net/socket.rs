@@ -2,6 +2,7 @@ use core::task::Poll;
 
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
+use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
 use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
@@ -44,6 +45,7 @@ impl Sock {
             }
             Sock::UDP(udp) => {
                 let local_endpoint = local_addr.into_listen_endpoint();
+                log::info!("[udp::bind] local_endpoint:{:?}", local_endpoint);
                 if let Some(used_fd) = udp.bind_check(sock_fd, local_endpoint) {
                     current_task().unwrap()
                     .with_mut_fd_table(|t| t.dup3_with_flags(used_fd, sock_fd))?;
@@ -114,9 +116,9 @@ impl Sock {
         }
     }
     /// shutdown a connection
-    pub fn shutdown(&self) -> SockResult<()>{
+    pub fn shutdown(&self, how: u8) -> SockResult<()>{
         match self {
-            Sock::TCP(tcp) => tcp.shutdown(),
+            Sock::TCP(tcp) => tcp.shutdown(how),
             Sock::UDP(udp_socket) => udp_socket.shutdown(),
         }
     }
@@ -234,7 +236,7 @@ impl File for Socket {
             log::warn!("[Socket::bask_poll] PollEvents is hangup");
             res |= PollEvents::HUP;
         }
-        log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
+        // log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
         res
     }
 }

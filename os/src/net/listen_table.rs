@@ -118,6 +118,7 @@ impl ListenTable {
                 );
             }
             let handle = syn_queue.swap_remove_front(idx).unwrap();
+            // log::info!("TCP socket {}: accepted connection from {}", handle, addr_tuple.0);
             Ok((handle,addr_tuple))
         }else {
             log::warn!("[listen table] failed: not listen");

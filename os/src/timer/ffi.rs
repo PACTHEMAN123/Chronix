@@ -51,6 +51,10 @@ impl TimeVal {
     pub fn into_usec(&self) -> usize {
         self.sec * USEC_PER_SEC + self.usec
     } 
+    /// check if is zero
+    pub fn is_zero(&self) -> bool {
+        self.sec == 0 && self.usec == 0
+    }
 }
 
 impl TimeSpec {
