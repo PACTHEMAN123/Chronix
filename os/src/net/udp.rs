@@ -9,7 +9,7 @@ use spin::RwLock;
 
 use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{to_endpoint, SockAddr, UNSPECIFIED_LISTEN_ENDPOINT}, socket::{PollState, SockResult}, SocketSetWrapper, PORT_MANAGER, SOCKET_SET};
+use super::{addr::{is_unspecified, to_endpoint, SockAddr, UNSPECIFIED_LISTEN_ENDPOINT}, socket::{PollState, SockResult}, SocketSetWrapper, PORT_MANAGER, SOCKET_SET};
 
 pub struct UdpSocket {
     /// socket handle
@@ -61,6 +61,10 @@ impl UdpSocket {
             })
         })?;
         *local_addr = Some(local_endpoint);
+        log::info!(
+            "[Udpsocket::bind] handle {} bound on {local_endpoint}",
+            self.handle
+        );
         Ok(())
     }
     /// for udp socket, two socket can bound to one same port, but need to check if the local addr is the same
@@ -177,12 +181,14 @@ impl UdpSocket {
                 }
             })
         }).await?;
+        log::info!("[UdpSocket::send_impl] send {bytes}bytes to {remote_endpoint:?}");
         yield_now().await;
         return Ok(bytes);
     }
 
     pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)> {
         if self.local_endpoint.read().is_none() {
+            log::warn!("socket send failed: not bound");
             return Err(SysError::ENOTCONN);
         }
         let waker = get_waker().await;
@@ -190,22 +196,26 @@ impl UdpSocket {
             SOCKET_SET.with_socket_mut::<smoltcp::socket::udp::Socket,_,_>(self.handle, |socket|{
                 if socket.can_recv() {
                     match socket.recv_slice(data) {
-                        Ok((len, meta)) => Ok((len, meta.endpoint)),
+                        Ok((len,meta)) => {
+                            Ok((len, meta.endpoint))
+                        },
                         Err(e) => {
-                            Err(SysError::EAGAIN)
+                            log::warn!("[UdpSocket::recv] socket {} recv_slice error: {}",self.handle, e);
+                            return Err(SysError::EAGAIN);
                         }
                     }
                 }else if !socket.is_open() {
-                    Err(SysError::ENOTCONN)
-                }
-                else {
+                    log::warn!("UdpSocket {}: recv() failed, not connected", self.handle);
+                    return Err(SysError::ENOTCONN);
+                }else {
+                    log::info!("[recv_impl] {} no more data, register waker and suspend now", self.handle);
                     socket.register_recv_waker(&waker);
-                    Err(SysError::EAGAIN)
-                }
+                    return Err(SysError::EAGAIN);
+                } 
             })
-        }).await?;
+        }).await;    
         yield_now().await;
-        Ok(ret)
+        ret   
     }
     pub fn shutdown(&self) -> SockResult<()> {
         SOCKET_SET.with_socket_mut::<smoltcp::socket::udp::Socket,_,_>(self.handle, |socket| {
@@ -320,6 +330,16 @@ impl UdpSocket {
                     Err(e) => return Err(e),
                 }
             }
+        }
+    }
+}
+
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        self.shutdown().ok();
+        SOCKET_SET.remove(self.handle);
+        if let Ok(addr) = self.local_addr() {
+            PORT_MANAGER.remove(addr.port);
         }
     }
 }

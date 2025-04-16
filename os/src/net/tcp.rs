@@ -2,7 +2,7 @@ use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{Atomic
 
 use crate::{ net::addr::LOCAL_IPV4, sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
+use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, RCV_SHUTDOWN, SEND_SHUTDOWN, SHUTDOWN_MASK, SHUTRD, SHUTRDWR, SHUTWR, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
 use fatfs::warn;
 use hal::println;
@@ -56,7 +56,9 @@ pub struct TcpSocket {
     /// remote endpoint
     remote_endpoint: UPSafeCell<Option<IpEndpoint>>,
     /// whether in non=blokcing mode
-    nonblock_flag: AtomicBool
+    nonblock_flag: AtomicBool,
+    /// shutdown flag
+    shutdown_flag: UPSafeCell<u8>,
 }
 
 unsafe impl Send for TcpSocket {}
@@ -71,6 +73,7 @@ impl TcpSocket {
             local_endpoint: UPSafeCell::const_new(Some(ZERO_IPV4_ENDPOINT)),
             remote_endpoint: UPSafeCell::const_new(Some(ZERO_IPV4_ENDPOINT)),
             nonblock_flag: AtomicBool::new(false),
+            shutdown_flag: UPSafeCell::const_new(0),
         }
     }
     /// create a TcpSocket with a socket handle
@@ -81,6 +84,7 @@ impl TcpSocket {
             local_endpoint: UPSafeCell::const_new(Some(local_endpoint)),
             remote_endpoint: UPSafeCell::const_new(Some(remote_endpoint)),
             nonblock_flag: AtomicBool::new(false),
+            shutdown_flag: UPSafeCell::const_new(0),
         }
     }
     /// get the socket state
@@ -165,6 +169,16 @@ impl TcpSocket {
     pub fn nonblock(&self) -> bool {
         self.nonblock_flag.load(Ordering::SeqCst)
     }
+    /// get shutdown flag
+    pub fn get_shutdown(&self) -> u8 {
+        self.shutdown_flag.exclusive_access().clone()
+    }
+    /// set shutdown flag
+    pub fn set_shutdown(&self, flag: u8) {
+        unsafe {
+            self.shutdown_flag.get().write(flag)
+        }
+    }
 }
 
 impl TcpSocket {
@@ -219,13 +233,13 @@ impl TcpSocket {
     }
     
     pub fn bind(&self, mut new_endpoint: IpEndpoint) -> SockResult<()>  {
-        log::info!("[TcpSocket::bind] start to bind");
+        // log::info!("[TcpSocket::bind] start to bind");
         self.update_state(SocketState::Closed, SocketState::Closed,||{
-            info!("new end point port {}", new_endpoint.port);
+            // info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
                 let port = self.get_ephemeral_port().unwrap();
                 new_endpoint.port = port;
-                info!("[TcpSocket::bind] local port is 0, use port {}",port);
+                // info!("[TcpSocket::bind] local port is 0, use port {}",port);
             }
             let old = unsafe {
                 self.local_endpoint.get().read().unwrap()
@@ -241,9 +255,9 @@ impl TcpSocket {
                 }
             }  
             self.set_local_endpoint(new_endpoint);
-            info!("now self local endpoint port {}",unsafe {
-                self.local_endpoint.get().read().unwrap().port
-            });
+            // info!("now self local endpoint port {}",unsafe {
+            //     self.local_endpoint.get().read().unwrap().port
+            // });
             Ok(())
         })
         .unwrap_or_else(|_|{
@@ -253,12 +267,13 @@ impl TcpSocket {
     }
     
     pub fn listen(&self) -> SockResult<()> {
-        let waker = current_task().unwrap().waker_ref().as_ref().unwrap();
+        let binding = current_task().unwrap().clone();
+        let waker = binding.waker_ref().as_ref().unwrap();
         self.update_state(SocketState::Closed, SocketState::Listening, ||{
             let inner_endpoint = self.robost_port_endpoint()?;
             self.set_local_endpoint_with_port(inner_endpoint.port);
             LISTEN_TABLE.listen(inner_endpoint, waker)?;
-            info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
+            // info!("[TcpSocket::listen] listening on endpoint which addr is {}, port is {}", inner_endpoint.addr.unwrap(),inner_endpoint.port);
             Ok(())
         }).unwrap_or_else(|_| {
             Ok(())
@@ -290,9 +305,14 @@ impl TcpSocket {
     }
     
     pub async fn send(&self, data: &[u8], _remote_addr: Option<IpEndpoint>) -> SockResult<usize> {
+        let shutdown = self.get_shutdown();
+        if shutdown & SEND_SHUTDOWN != 0 {
+            log::warn!("[TcpSocket::send] shutdown&SEND_SHUTDOWN != 0, return 0");
+            return Ok(0);
+        }
         if self.state() == SocketState::Connecting {
             return Err(SysError::EAGAIN);
-        }else if self.state() != SocketState::Connected {
+        }else if self.state() != SocketState::Connected && shutdown == 0 {
             return Err(SysError::ENOTCONN);
         }else {
             let handle = self.handle().unwrap();
@@ -328,14 +348,20 @@ impl TcpSocket {
     }
     
     pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)> {
-        let peer_addr = self.peer_addr().unwrap();
+        let shutdown = self.get_shutdown();
+        if shutdown & RCV_SHUTDOWN != 0 {
+            info!("[tcp socket] shutdown&RCV_SHUTDOWN != 0, return 0");
+            let peer_addr = self.peer_addr()?;
+            return Ok((0, peer_addr));
+        }
         if self.state() == SocketState::Connecting {
             return Err(SysError::EAGAIN);
         }
-        else if self.state() != SocketState::Connected {
+        else if self.state() != SocketState::Connected && shutdown == 0 {
             return Err(SysError::ENOTCONN);
         }
         else {
+            let peer_addr = self.peer_addr()?;
             let handle = self.handle().unwrap();
             let waker = get_waker().await;
             self.block_on(|| {
@@ -355,7 +381,7 @@ impl TcpSocket {
                         return Ok((len, peer_addr))
                     }else {
                         // no more data
-                        log::info!("[TcpSocket::recv] handle{handle} has no data to recv, register waker and suspend");
+                        // log::info!("[TcpSocket::recv] handle{handle} has no data to recv, register waker and suspend");
                         socket.register_recv_waker(&waker);
                         Err(SysError::EAGAIN)
                     }
@@ -365,7 +391,15 @@ impl TcpSocket {
         
     }
 
-    pub fn shutdown(&self) -> SockResult<()> {
+    pub fn shutdown(&self, how: u8) -> SockResult<()> {
+        let mut shutdown = self.get_shutdown();
+        match how {
+            SHUTRD => shutdown |= RCV_SHUTDOWN,
+            SHUTWR => shutdown |= SEND_SHUTDOWN,
+            SHUTRDWR => shutdown |= SHUTDOWN_MASK,
+            _ => return Err(SysError::EINVAL),
+        }
+        self.set_shutdown(shutdown);
         // for stream socket
         self.update_state(SocketState::Connected, SocketState::Closed, ||  {
             let handle = self.handle().unwrap();
@@ -487,11 +521,12 @@ impl TcpSocket {
         };
         // info!("[robost_port_endpoint] now port is {} ",port);
         let addr = if local_endpoint.addr.is_unspecified() {
-            None
+            // log::warn!("[robost_port_endpoint] local endpoint addr is unspecified, use ipv4 local addr");
+            Some(LOCAL_IPV4)
         }else {
             Some(local_endpoint.addr)
         };
-        log::info!("[robost_port_endpoint] addr is {:?}, port is {}", addr, port);
+        // log::info!("[robost_port_endpoint] addr is {:?}, port is {}", addr, port);
         Ok(IpListenEndpoint {
             addr,
             port,
@@ -569,7 +604,7 @@ impl TcpSocket {
                 State::Established => {
                     // this means the connection is established
                     self.set_state(SocketState::Connected as u8);
-                    info!("[TcpSocket::poll_concect] socket is connected");
+                    // info!("[TcpSocket::poll_concect] socket is connected");
                     true
                 }
                 _ => {
@@ -633,10 +668,10 @@ impl TcpSocket {
             return Err(SysError::EINVAL);
         }
         let local_port = self.local_endpoint().unwrap().port;
-        log::info!("[accept]: local_port is {}", local_port);
+        // log::info!("[accept]: local_port is {}", local_port);
         self.block_on(|| {
             let (handle, (local_endpoint, remote_endpoint)) = LISTEN_TABLE.accept(local_port)?;
-            info!("TCP socket accepted a new connection {}", remote_endpoint);
+            // info!("TCP socket accepted a new connection {}", remote_endpoint);
             Ok(TcpSocket::new_v4_connected(handle, local_endpoint, remote_endpoint))
         }).await
     }
@@ -645,7 +680,7 @@ impl TcpSocket {
 impl Drop for TcpSocket {
     fn drop (&mut self) {
         log::info!("[TcpSocket::drop]");
-        self.shutdown().ok();
+        self.shutdown(SHUTRDWR).ok();
         if let Some(handle) = unsafe{self.handle.get().read()} {
             SOCKET_SET.remove(handle);
         }

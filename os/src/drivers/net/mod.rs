@@ -18,7 +18,7 @@ pub fn init_network_device() -> (Box<dyn NetDevice>,bool) {
     log::info!("net device flag: {}",_devflag);
     let dev:Box<dyn NetDevice> = if _devflag {
         let header = NonNull::new(VIRTIO1 as *mut VirtIOHeader).unwrap();
-        let transport = unsafe{MmioTransport::new(header, 512).unwrap()};
+        let transport = unsafe{MmioTransport::new(header, 4096).unwrap()};
         VirtIoNetDev::new(transport).unwrap()
     }else {
         LoopbackDevice::new()
