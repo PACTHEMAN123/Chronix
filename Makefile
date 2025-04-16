@@ -138,7 +138,8 @@ endif
 # Disassembly
 DISASM ?= -x
 
-build: env $(KERNEL_BIN) user #fs-img: should make fs-img first 
+build: env $(KERNEL_BIN) user #fs-img: should make fs-img first
+	@cp $(FS_IMG) $(FS_IMG_COPY)
 
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
@@ -192,7 +193,7 @@ busybox:
 lua:
 	@echo "building lua"
 	@make -C $(LUA_DIR) clean
-	@make -C $(LUA_DIR) CC="$(CC) -static" -j $(NPROC) 
+	@make -C $(LUA_DIR) CC="$(CC) -static -g -Og" -j $(NPROC) 
 
 libc-test:
 	@echo "building libc-test"
@@ -332,7 +333,6 @@ qemu-version-check:
 	@sh scripts/qemu-ver-check.sh $(QEMU)
 
 run-inner: qemu-version-check build
-	cp $(FS_IMG) $(FS_IMG_COPY)
 	$(QEMU) $(QEMU_ARGS)
 
 run: run-inner

@@ -171,8 +171,8 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
+        log::debug!("trying to open {}, flags: {:?}", path, flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
-        log::debug!("trying to open {}, flags: {:?}", dentry.path(), flags);
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
@@ -187,6 +187,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             parent.add_child(dentry.clone());
         }
         if dentry.state() == DentryState::NEGATIVE {
+            log::debug!("cannot open {}, not exist", path);
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
