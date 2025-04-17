@@ -8,7 +8,7 @@ use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
     get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
-}, mm::vm::{PageFaultAccessType, UserVmSpaceHal}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
     string::*,
@@ -31,15 +31,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            match vm.get_page_table().find_pte(va.floor()) {
-                Some((pte, _)) if pte.readable() => {
-                    pte.ppn().start_addr() + va.page_offset()
-                }
-                _ => {
-                    vm.handle_page_fault(va, PageFaultAccessType::READ).unwrap();
-                    vm.translate_va(va).unwrap()
-                }
-            }
+            translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
         });
         let data = pa.get_slice(len);
         ret += file.write(data).await?;
@@ -62,15 +54,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
         let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
         let va = VirtAddr::from(va);
         let pa = task.with_mut_vm_space(|vm| {
-            match vm.get_page_table().find_pte(va.floor()) {
-                Some((pte, _)) if pte.writable() => {
-                    pte.ppn().start_addr() + va.page_offset()
-                }
-                _ => {
-                    vm.handle_page_fault(va, PageFaultAccessType::WRITE).unwrap();
-                    vm.translate_va(va).unwrap()
-                }
-            }
+            translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
         });
         let data = pa.get_slice_mut(len);
         ret += file.read(data).await?;

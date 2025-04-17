@@ -1,4 +1,4 @@
-use crate::println;
+use crate::{println, trap::TrapContext};
 
 pub fn backtrace() {
     unsafe extern "C" {

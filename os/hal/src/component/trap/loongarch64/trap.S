@@ -114,55 +114,47 @@ __restore:
 __trap_from_kernel:
     # need to save caller-saved regs
     # note that we need save ERA & BADV here
-    addi.d $sp, $sp, -23*8
-    st.d $ra, $sp, 1*8
-    st.d $tp, $sp, 2*8
-    st.d $a0, $sp, 3*8
-    st.d $a1, $sp, 4*8
-    st.d $a2, $sp, 5*8
-    st.d $a3, $sp, 6*8
-    st.d $a4, $sp, 7*8
-    st.d $a5, $sp, 8*8
-    st.d $a6, $sp, 9*8
-    st.d $a7, $sp, 10*8
-    st.d $t0, $sp, 11*8
-    st.d $t1, $sp, 12*8
-    st.d $t2, $sp, 13*8
-    st.d $t3, $sp, 14*8
-    st.d $t4, $sp, 15*8
-    st.d $t5, $sp, 16*8
-    st.d $t6, $sp, 17*8
-    st.d $t7, $sp, 18*8
-    st.d $t8, $sp, 19*8
-    st.d $r21, $sp, 20*8
-    csrrd $t0, ERA
-    csrrd $t1, BADV
-    st.d $t0, $sp, 21*8
-    st.d $t1, $sp, 22*8
+    addi.d $sp, $sp, -20*8
+    st.d $ra, $sp, 0*8
+    st.d $tp, $sp, 1*8
+    st.d $a0, $sp, 2*8
+    st.d $a1, $sp, 3*8
+    st.d $a2, $sp, 4*8
+    st.d $a3, $sp, 5*8
+    st.d $a4, $sp, 6*8
+    st.d $a5, $sp, 7*8
+    st.d $a6, $sp, 8*8
+    st.d $a7, $sp, 9*8
+    st.d $t0, $sp, 10*8
+    st.d $t1, $sp, 11*8
+    st.d $t2, $sp, 12*8
+    st.d $t3, $sp, 13*8
+    st.d $t4, $sp, 14*8
+    st.d $t5, $sp, 15*8
+    st.d $t6, $sp, 16*8
+    st.d $t7, $sp, 17*8
+    st.d $t8, $sp, 18*8
+    st.d $r21, $sp, 19*8
     bl kernel_trap_handler
-    ld.d $t0, $sp, 21*8
-    ld.d $t1, $sp, 22*8
-    csrwr $t0, ERA
-    csrwr $t1, BADV
-    ld.d $ra, $sp, 1*8
-    ld.d $tp, $sp, 2*8
-    ld.d $a0, $sp, 3*8
-    ld.d $a1, $sp, 4*8
-    ld.d $a2, $sp, 5*8
-    ld.d $a3, $sp, 6*8
-    ld.d $a4, $sp, 7*8
-    ld.d $a5, $sp, 8*8
-    ld.d $a6, $sp, 9*8
-    ld.d $a7, $sp, 10*8
-    ld.d $t0, $sp, 11*8
-    ld.d $t1, $sp, 12*8
-    ld.d $t2, $sp, 13*8
-    ld.d $t3, $sp, 14*8
-    ld.d $t4, $sp, 15*8
-    ld.d $t5, $sp, 16*8
-    ld.d $t6, $sp, 17*8
-    ld.d $t7, $sp, 18*8
-    ld.d $t8, $sp, 19*8
-    ld.d $r21, $sp, 20*8
-    addi.d $sp, $sp, 23*8
+    ld.d $ra, $sp, 0*8
+    ld.d $tp, $sp, 1*8
+    ld.d $a0, $sp, 2*8
+    ld.d $a1, $sp, 3*8
+    ld.d $a2, $sp, 4*8
+    ld.d $a3, $sp, 5*8
+    ld.d $a4, $sp, 6*8
+    ld.d $a5, $sp, 7*8
+    ld.d $a6, $sp, 8*8
+    ld.d $a7, $sp, 9*8
+    ld.d $t0, $sp, 10*8
+    ld.d $t1, $sp, 11*8
+    ld.d $t2, $sp, 12*8
+    ld.d $t3, $sp, 13*8
+    ld.d $t4, $sp, 14*8
+    ld.d $t5, $sp, 15*8
+    ld.d $t6, $sp, 16*8
+    ld.d $t7, $sp, 17*8
+    ld.d $t8, $sp, 18*8
+    ld.d $r21, $sp, 19*8
+    addi.d $sp, $sp, 20*8
     ertn
