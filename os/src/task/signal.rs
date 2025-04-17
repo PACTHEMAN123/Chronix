@@ -3,7 +3,7 @@
 use core::{future::Future, pin::Pin, task::{Context, Poll}};
 
 use alloc::sync::Arc;
-use hal::{addr::VirtAddr, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
+use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
 use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigSet, SIGKILL, SIGSTOP}};
 
@@ -92,7 +92,8 @@ impl TaskControlBlock {
                         core::mem::size_of::<UContext>(),
                     )
                 };
-                copy_out(&self.vm_space.lock().get_page_table(), VirtAddr(new_sp), ucontext_bytes);
+                println!("copy_out to {:#x}", new_sp);
+                copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
 
                 // set the current trap cx sepc to reach user handler

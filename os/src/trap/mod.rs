@@ -43,8 +43,8 @@ hal::define_user_trap_handler!(user_trap_handler);
 /// handle an interrupt, exception, or system call from user space
 pub async fn user_trap_handler()  {
     set_kernel_trap_entry();
-    unsafe { Instruction::enable_interrupt() };
     let trap_type = TrapType::get();
+    unsafe { Instruction::enable_interrupt() };
     match trap_type{
         TrapType::Syscall => {
             let _sum = SumGuard::new();
@@ -105,6 +105,7 @@ pub async fn user_trap_handler()  {
             exit_current_and_run_next(-3);
         }
         TrapType::Timer => {
+            // println!("timer interp");
             crate::timer::timer::TIMER_MANAGER.check();
             #[cfg(feature = "smp")]
             crate::processor::processor::current_processor().update_load_avg();
