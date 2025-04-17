@@ -3,6 +3,7 @@ use core::{cmp, ops::{Deref, Range}};
 use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec, vec};
 
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, entry, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
+use hashbrown::Equivalent;
 use log::{info, Level};
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
@@ -597,13 +598,18 @@ impl UserVmSpace {
                 break;
             }
         };
+        is_dl |= elf_header.pt2.type_().as_type() == xmas_elf::header::Type::SharedObject;
         if !is_dl {
             return Ok(None);
         }
 
-        let section = elf.find_section_by_name(".interp").unwrap();
-        let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
-        interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+        let mut interp: String;
+        if let Some(section) = elf.find_section_by_name(".interp") {
+            interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();   
+        } else {
+            interp = "/lib/libc.so".to_string();
+        }
         log::info!("[load_dl] interp {}", interp);
 
         let interp_file;

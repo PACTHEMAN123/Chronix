@@ -53,6 +53,7 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
 
 /// syscall: clock_gettime
 pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
+    log::debug!("[sys_clock_gettime]: clock id {}", clock_id);
     let _sum_guard = SumGuard::new();
     if ts == 0 {
         return Ok(0)
@@ -74,6 +75,10 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
             let (user_time, kernel_time) = current_task().unwrap().time_recorder().time_pair();
             let cpu_time = user_time + kernel_time;
             unsafe { ts_ptr.write(cpu_time.into()); }
+        }
+        5 => {
+            log::warn!("[sys_clock_gettime] unsupported clockid{}", clock_id);
+            return Err(SysError::EINTR);
         }
         _ => {
             panic!("unsupported clock id {}", clock_id);

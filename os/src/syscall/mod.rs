@@ -84,14 +84,15 @@ const SYSCALL_GETSOCKOPT: usize = 209;
 const SYSCALL_SHUTDOWN: usize = 210;
 const SYSCALL_SENDMSG: usize = 211;
 const SYSCALL_RECVMSG: usize = 212;
-const SYSCALL_CLONE: usize = 220;
-const SYSCALL_EXEC: usize = 221;
-const SYSCALL_MPROTECE: usize = 226;
-const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
+const SYSCALL_CLONE: usize = 220;
+const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
+const SYSCALL_MPROTECE: usize = 226;
+const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_RENAMEAT2: usize = 276;
+const SYSCALL_GETRANDOM: usize = 278;
 const SYSCALL_STATX: usize = 291;
 
 pub mod fs;
@@ -114,7 +115,7 @@ pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list};
 use hal::{addr::VirtAddr, println};
 use io::*;
-use misc::sys_sysinfo;
+use misc::{sys_getrandom, sys_sysinfo};
 use mm::{sys_mmap, sys_mprotect, sys_munmap};
 use net::*;
 pub use process::*;
@@ -128,6 +129,7 @@ pub type SysResult = Result<isize, SysError>;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
+    log::debug!("syscall id: {}", syscall_id);
     let result = match syscall_id { 
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
@@ -195,6 +197,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
         SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
+        SYSCALL_GETRANDOM => sys_getrandom(args[0], args[1], args[2]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
         SYSCALL_SOCKET => sys_socket(args[0], args[1], args[2]),
         SYSCALL_SOCKETPAIR => sys_socketpair(args[0], args[1],  args[2], args[3]),

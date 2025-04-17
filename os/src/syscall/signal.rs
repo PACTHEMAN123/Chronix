@@ -202,5 +202,5 @@ pub fn sys_rt_sigreturn() -> SysResult {
     // restore the old context (todo: restore signal stack)
     let cx = current_trap_cx(current_processor());
     ucontext.restore_old_context(cx);
-    Ok(0)
+    Ok(cx.arg_nth(0) as isize)
 }

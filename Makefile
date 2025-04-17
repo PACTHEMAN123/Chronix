@@ -54,6 +54,11 @@ BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
 BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
 BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
 
+# lua
+LUA_DIR := $(TEST_SUITE_DIR)/lua
+LUA := $(LUA_DIR)/src/lua
+LUA_TEST_DIR := $(TEST_SUITE_DIR)/scripts/lua
+
 # libc-test
 LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
@@ -133,7 +138,8 @@ endif
 # Disassembly
 DISASM ?= -x
 
-build: env $(KERNEL_BIN) user #fs-img: should make fs-img first 
+build: env $(KERNEL_BIN) user #fs-img: should make fs-img first
+	@cp $(FS_IMG) $(FS_IMG_COPY)
 
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
@@ -184,6 +190,11 @@ busybox:
 	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
 	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
 
+lua:
+	@echo "building lua"
+	@make -C $(LUA_DIR) clean
+	@make -C $(LUA_DIR) CC="$(CC) -static -g -Og" -j $(NPROC) 
+
 libc-test:
 	@echo "building libc-test"
 	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
@@ -192,7 +203,8 @@ libc-test:
 FS_IMG_DIR := .
 FS_IMG_NAME := fs-$(ARCH)
 FS_IMG := $(FS_IMG_DIR)/$(FS_IMG_NAME).img
-fs-img: user basic_test busybox libc-test 
+FS_IMG_COPY := $(FS_IMG_DIR)/fs.img
+fs-img: user basic_test busybox libc-test lua
 	@echo "building file system image"
 	@echo "cleaning up..."
 	@rm -f $(FS_IMG)
@@ -215,10 +227,16 @@ endif
 	@echo "copying user apps and tests to the $(FS_IMG)"
 	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt
+
 	@echo "copying busybox to the $(FS_IMG)"
 	@sudo cp $(BUSY_BOX) mnt/busybox
 	@sudo cp -r $(BUSY_BOX_TEST_DIR)/* mnt
 	@sudo mkdir mnt/bin
+
+	@echo "copying lua to the $(FS_IMG)"
+	@sudo cp $(LUA) mnt/
+	@sudo cp $(LUA_TEST_DIR)/* mnt/
+
 	@echo "copying libc-test to the $(FS_IMG)"
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
@@ -287,11 +305,11 @@ endif
 
 ifeq ($(ARCH), riscv64)
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH), loongarch64)
 QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
-QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-pci,drive=x0
 endif
 
@@ -331,4 +349,4 @@ gdbserver: qemu-version-check build
 gdbclient:
 	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel busybox
+.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel busybox lua
