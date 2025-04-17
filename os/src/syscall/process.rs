@@ -305,7 +305,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     core::mem::size_of::<i32>(),
                 )
             };
-            copy_out(&task.vm_space.lock().get_page_table(), VirtAddr(exit_code_ptr), exit_code_bytes);
+            copy_out(&mut task.vm_space.lock(), VirtAddr(exit_code_ptr), exit_code_bytes);
         }
         let tid = res_task.tid();
         task.remove_child(tid);
@@ -365,7 +365,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     core::mem::size_of::<i32>(),
                 )
             };
-            copy_out(&task.vm_space.lock().get_page_table(), VirtAddr(exit_code_ptr), exit_code_bytes);
+            copy_out(&mut task.vm_space.lock(), VirtAddr(exit_code_ptr), exit_code_bytes);
         }
         task.remove_child(child_pid);
         TASK_MANAGER.remove_task(child_pid);
