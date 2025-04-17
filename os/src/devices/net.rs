@@ -4,7 +4,7 @@ use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::info;
 use smoltcp::{phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken}, time::Instant};
 
-use crate::{net::modify_tcp_packet, sync::{mutex::SpinLock, UPSafeCell}};
+use crate::{net::modify_packet, sync::{mutex::SpinLock, UPSafeCell}};
 
 use super::{DevError, NetBufPtrTrait, NetDevice};
 /// NET_BUF_LEN
@@ -211,11 +211,11 @@ impl <'a> RxToken for NetRxToken<'a> {
     {
         // need preprocess
         let mut rx_buf = self.1;
-        log::warn!(
-            "[RxToken::consume] RECV {} bytes",
-            rx_buf.packet_len(),
+        // log::warn!(
+        //     "[RxToken::consume] RECV {} bytes",
+        //     rx_buf.packet_len(),
             // rx_buf.packet()
-        );
+        // );
         let result = f(rx_buf.packet_mut());
         self.0.exclusive_access().recycle_rx_buffer(rx_buf).unwrap();
         result
@@ -223,8 +223,8 @@ impl <'a> RxToken for NetRxToken<'a> {
 
     fn preprocess(&self, sockets: &mut smoltcp::iface::SocketSet<'_>) {
         let medium = self.0.exclusive_access().capabilities().medium;
-        let is_ethernet = medium==Medium::Ethernet;
-        modify_tcp_packet(self.1.packet(),sockets,is_ethernet).ok();
+        let is_ethernet = medium == Medium::Ethernet;
+        modify_packet(self.1.packet(),sockets,is_ethernet).ok();
     }
 }
 
@@ -236,11 +236,11 @@ impl <'a> TxToken for NetTxToken<'a> {
     {
         let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len).unwrap();
         let result = f(tx_buf.packet_mut());
-        log::warn!(
-            "[TxToken::consume] SEND {} bytes",
-            len,
-            // tx_buf.packet()
-        );
+        // log::warn!(
+        //     "[TxToken::consume] SEND {} bytes",
+        //     len,
+             // tx_buf.packet()
+        // );
         self.0.exclusive_access().transmit(tx_buf).unwrap();
         result
     }

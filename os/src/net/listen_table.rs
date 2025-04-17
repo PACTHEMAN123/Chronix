@@ -118,7 +118,7 @@ impl ListenTable {
                 );
             }
             let handle = syn_queue.swap_remove_front(idx).unwrap();
-            // log::info!("TCP socket {}: accepted connection from {}", handle, addr_tuple.0);
+            log::info!("TCP socket {}: accepted connection from {}", handle, addr_tuple.0);
             Ok((handle,addr_tuple))
         }else {
             log::warn!("[listen table] failed: not listen");
@@ -135,7 +135,7 @@ impl ListenTable {
     }
     /// handle incoming tcp packet, check if the packet is for a listening port,
     /// and add the connection to the syn queue if possible.
-    pub fn handle_coming_tcp(&self, src: IpEndpoint, dst: IpEndpoint, sockets: &mut SocketSet<'_>) {
+    pub fn handle_coming_packet(&self, src: IpEndpoint, dst: IpEndpoint, sockets: &mut SocketSet<'_>) {
         if let Some(entry) = self.inner[dst.port as usize].lock().deref_mut() {
             if !entry.can_accept(dst.addr) {
                 log::warn!("[LISTEN_TABLE] not listening on addr {}", dst.addr);

@@ -1,7 +1,7 @@
 use core::{sync::atomic::AtomicBool, time};
 
 use alloc::vec::Vec;
-use fatfs::warn;
+use fatfs::{info, warn};
 use lwext4_rust::bindings::EEXIST;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
@@ -325,6 +325,7 @@ impl UdpSocket {
                 match ret {
                     Ok(r) => return Ok(r),
                     Err(SysError::EAGAIN) => {
+                        log::info!("[UdpSocket::block_on] handle, EAGAIN, suspend now");
                         suspend_now().await;
                     }
                     Err(e) => return Err(e),
