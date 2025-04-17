@@ -3,10 +3,12 @@ use core::{ops::DerefMut, time::Duration};
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec,vec::Vec};
 use listen_table::ListenTable;
 use log::info;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use smoltcp::{iface::{Config, Interface, SocketHandle, SocketSet}, phy::Medium, socket::{tcp::{Socket, SocketBuffer}, AnySocket}, time::Instant, wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpListenEndpoint}};
+use socket::SockResult;
 use spin::{Lazy, Once};
 
-use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
+use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, syscall::SysError, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
 /// Network Address Module
 pub mod addr;
 /// Network Socket Module
@@ -125,7 +127,7 @@ impl InterfaceWrapper {
         let mut sockets = sockets.lock();
         let timestamp = Self::current_time();
         let res = iface.poll(timestamp, dev.deref_mut(), &mut sockets);
-        log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
+        // log::warn!("[net::InterfaceWrapper::poll] does something have been changed? {res:?}");
         timestamp
     }
     /// check the interface and call poll socket_handle to detect device status then poll sockets
@@ -151,12 +153,67 @@ impl InterfaceWrapper {
             // when return None means no active sockets or all the sockets are handled
             None => {
                 // do nothing, just call poll interface
-                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(2), Box::new(NetPollTimer{}));
+                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(5), Box::new(NetPollTimer{}));
                 TIMER_MANAGER.add_timer(empty_timer);
             }
         }
     }
 
+}
+/// random port alloc
+pub fn get_ephemeral_port() -> SockResult<u16> {
+    let mut small_rng = SmallRng::seed_from_u64(SOCK_RAND_SEED);
+    static CURR: SpinNoIrqLock<u16> = SpinNoIrqLock::new(PORT_START);
+    // 1. quick temp random scan
+    let mut attempt = 0;
+    while attempt < 3 { // at most 3 attempts
+        let _base = {
+            let mut curr = CURR.lock();
+            let base = *curr;
+            // every time randomely increase the step size:（1-1023）
+            *curr = curr.wrapping_add(small_rng.random::<u16>() % 1024 + 1);
+            if *curr < PORT_START || *curr > PORT_END {
+                *curr = PORT_START;
+            }
+            base
+        };
+
+        // 2. from base randomly scam PORT_MAX_ATTEMPTS 
+        const PORT_MAX_ATTEMPTS: usize = 128; // every time tries 128 ports at most
+        let ports: Vec<u16> = (0..PORT_MAX_ATTEMPTS)
+            .map(|_| small_rng.random_range(PORT_START..=PORT_END))
+            .collect();
+
+        for &port in &ports {
+            if LISTEN_TABLE.can_listen(port) {
+                return Ok(port);
+            }
+        }
+
+        attempt += 1;
+    }
+
+    // 3. back to the usual way
+    let mut curr = CURR.lock();
+    let start_port = *curr;
+    let mut port = start_port;
+    loop {
+        port = if port == PORT_END {
+            PORT_START
+        } else {
+            port + 1
+        };
+
+        if LISTEN_TABLE.can_listen(port) {
+            *curr = port; 
+            return Ok(port);
+        }
+
+        if port == start_port {
+            break; 
+        }
+    }
+    Err(SysError::EADDRINUSE)
 }
 
 impl <'a> SocketSetWrapper<'a> {
@@ -233,9 +290,9 @@ pub fn poll_interfaces() -> smoltcp::time::Instant {
     SOCKET_SET.poll_interfaces()
 }
 /// modify the socket first, a helper method for use smoltcp consume
-pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
+pub fn modify_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
     use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
-    log::info!("[modify tcp packet]receive packet");
+    log::info!("[modify packet]receive packet");
     let ipv4_packet = if is_ethernet {
         let ether_frame = EthernetFrame::new_checked(buf)?;
         Ipv4Packet::new_checked(ether_frame.payload())?
@@ -248,8 +305,8 @@ pub fn modify_tcp_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: b
         let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
         let first_flag = tcp_packet.syn() && !tcp_packet.ack();
         if first_flag {
-            info!("[modify tcp packet]receive tcp");
-            LISTEN_TABLE.handle_coming_tcp(src_addr, dst_addr, sockets);
+            info!("[modify packet]receive packet");
+            LISTEN_TABLE.handle_coming_packet(src_addr, dst_addr, sockets);
         }
     }
     Ok(())

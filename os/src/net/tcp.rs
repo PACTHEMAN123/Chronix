@@ -2,7 +2,7 @@ use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{Atomic
 
 use crate::{ net::addr::LOCAL_IPV4, sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
 
-use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, RCV_SHUTDOWN, SEND_SHUTDOWN, SHUTDOWN_MASK, SHUTRD, SHUTRDWR, SHUTWR, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
+use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, get_ephemeral_port, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, RCV_SHUTDOWN, SEND_SHUTDOWN, SHUTDOWN_MASK, SHUTRD, SHUTRDWR, SHUTWR, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
 use fatfs::warn;
 use hal::println;
@@ -237,7 +237,7 @@ impl TcpSocket {
         self.update_state(SocketState::Closed, SocketState::Closed,||{
             // info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
-                let port = self.get_ephemeral_port().unwrap();
+                let port = get_ephemeral_port().unwrap();
                 new_endpoint.port = port;
                 // info!("[TcpSocket::bind] local port is 0, use port {}",port);
             }
@@ -456,73 +456,20 @@ impl TcpSocket {
 }
 
 impl TcpSocket {
-    fn get_ephemeral_port(&self) -> SockResult<u16> {
-        let mut small_rng = SmallRng::seed_from_u64(SOCK_RAND_SEED);
-        static CURR: SpinNoIrqLock<u16> = SpinNoIrqLock::new(PORT_START);
-        // 1. quick temp random scan
-        let mut attempt = 0;
-        while attempt < 3 { // at most 3 attempts
-            let _base = {
-                let mut curr = CURR.lock();
-                let base = *curr;
-                // every time randomely increase the step size:（1-1023）
-                *curr = curr.wrapping_add(small_rng.random::<u16>() % 1024 + 1);
-                if *curr < PORT_START || *curr > PORT_END {
-                    *curr = PORT_START;
-                }
-                base
-            };
-
-            // 2. from base randomly scam PORT_MAX_ATTEMPTS 
-            const PORT_MAX_ATTEMPTS: usize = 128; // every time tries 128 ports at most
-            let ports: Vec<u16> = (0..PORT_MAX_ATTEMPTS)
-                .map(|_| small_rng.random_range(PORT_START..=PORT_END))
-                .collect();
-    
-            for &port in &ports {
-                if LISTEN_TABLE.can_listen(port) {
-                    return Ok(port);
-                }
-            }
-    
-            attempt += 1;
-        }
-    
-        // 3. back to the usual way
-        let mut curr = CURR.lock();
-        let start_port = *curr;
-        let mut port = start_port;
-        loop {
-            port = if port == PORT_END {
-                PORT_START
-            } else {
-                port + 1
-            };
-    
-            if LISTEN_TABLE.can_listen(port) {
-                *curr = port; 
-                return Ok(port);
-            }
-    
-            if port == start_port {
-                break; 
-            }
-        }
-        Err(SysError::EADDRINUSE)
-    }
     /// read current endpoint and make it robust if it lack port or anything else
     fn  robost_port_endpoint(&self) -> SockResult<IpListenEndpoint> {
         let local_endpoint = self.local_endpoint().unwrap();
         let port = if local_endpoint.port == 0 {
             // info!("get a random port");
-            self.get_ephemeral_port()?
+            get_ephemeral_port()?
         }else {
             local_endpoint.port
         };
         // info!("[robost_port_endpoint] now port is {} ",port);
         let addr = if local_endpoint.addr.is_unspecified() {
             // log::warn!("[robost_port_endpoint] local endpoint addr is unspecified, use ipv4 local addr");
-            Some(LOCAL_IPV4)
+            // Some(LOCAL_IPV4)
+            None
         }else {
             Some(local_endpoint.addr)
         };

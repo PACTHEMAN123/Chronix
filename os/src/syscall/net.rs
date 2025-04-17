@@ -1,4 +1,4 @@
-use core::{any::Any, mem, option, panic};
+use core::{any::Any, clone, mem, option, panic};
 
 use alloc::{sync::Arc, task, vec,vec::Vec};
 use fatfs::{info, warn};
@@ -97,8 +97,9 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
 }
 /// “assigning a name to a socket”
 pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     let family = SaFamily::try_from(unsafe {
+        Instruction::set_sum();
         *(addr as *const u16)
     })?;
     let local_addr = match family {
@@ -107,7 +108,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
-                ipv4: unsafe { *(addr as *const _)},
+                ipv4: unsafe { *(addr as *const SockAddrIn4)},
             })
         }
         SaFamily::AfInet6 => {
@@ -116,7 +117,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             }
             Ok(SockAddr{
                 ipv6: unsafe {
-                    *(addr as *const _)
+                    *(addr as *const SockAddrIn6)
                 }
             })
         },
@@ -155,6 +156,7 @@ pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
 pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let task = current_task().unwrap();
     let remote_addr = match SaFamily::try_from(unsafe {
+        Instruction::set_sum();
         *(addr as *const u16)
     })? {
         SaFamily::AfInet => {
@@ -162,7 +164,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
-                ipv4: unsafe { *(addr as *const _) },
+                ipv4: unsafe { *(addr as *const SockAddrIn4) },
             })
         }
         SaFamily::AfInet6 => {
@@ -170,13 +172,13 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
-                ipv6: unsafe { *(addr as *const _) },
+                ipv6: unsafe { *(addr as *const SockAddrIn6) },
             })
         }
     }?;
-    // log::info!("[sys_connect] remote_addr's port is: {}",
-        // unsafe {
-            // remote_addr.ipv4.sin_port
+    // log::info!("[sys_connect] remote_addr is: {}",
+    //     unsafe {
+    //         remote_addr.ipv4
     // });
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -184,8 +186,9 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
         });
+    // log::info!("[sys_connect] socket_file_type {:#?}", socket_file.sk_type);
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
-    //yield_now().await;
+    // yield_now().await;
     Ok(0)
 }
 
@@ -278,6 +281,7 @@ pub async fn sys_sendto(
         SocketType::DGRAM => {
             let remote_addr = if addr != 0 {  Some(
                 match SaFamily::try_from(unsafe {
+                    Instruction::set_sum();
                     *(addr as *const u16)
                 })? {
                     SaFamily::AfInet => {
@@ -286,7 +290,7 @@ pub async fn sys_sendto(
                             return Err(SysError::EINVAL);
                         }
                         Ok(SockAddr{
-                            ipv4: unsafe { *(addr as *const _) },
+                            ipv4: unsafe { *(addr as *const SockAddrIn4) },
                         })
                     }
                     SaFamily::AfInet6 => {
@@ -294,7 +298,7 @@ pub async fn sys_sendto(
                             return Err(SysError::EINVAL);
                         }
                         Ok(SockAddr{
-                            ipv6: unsafe { *(addr as *const _) },
+                            ipv6: unsafe { *(addr as *const SockAddrIn6) },
                         })
                     }
                 }?
@@ -739,6 +743,7 @@ pub async fn sys_sendmsg(
         log::warn!("unsupported control data");
     }
     let addr = match SaFamily::try_from(unsafe {
+        Instruction::set_sum();
         *(msg.msg_name as *const u16)
     })? {
         SaFamily::AfInet => {
@@ -747,7 +752,7 @@ pub async fn sys_sendmsg(
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
-                ipv4: unsafe { *(msg.msg_name as *const _) },
+                ipv4: unsafe { *(msg.msg_name as *const SockAddrIn4) },
             }.into_endpoint())
         },
         SaFamily::AfInet6 => {
@@ -757,7 +762,7 @@ pub async fn sys_sendmsg(
             }
             Ok(SockAddr{
                 ipv6: unsafe {
-                    *(msg.msg_name as *const _)
+                    *(msg.msg_name as *const SockAddrIn6)
                 }
             }.into_endpoint())
         },
