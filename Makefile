@@ -197,7 +197,7 @@ lua:
 
 libc-test:
 	@echo "building libc-test"
-	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
+	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-buildroot-linux-musl- clean disk
 
 
 FS_IMG_DIR := .
@@ -304,7 +304,8 @@ endif
 
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+QEMU_ARGS += -device loader,file=$(KERNEL_ELF),addr=$(KERNEL_ENTRY_PA)
+# QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
 QEMU_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH), loongarch64)
@@ -331,6 +332,9 @@ endif
 
 qemu-version-check:
 	@sh scripts/qemu-ver-check.sh $(QEMU)
+
+dumpdtb: kernel
+	$(QEMU) $(QEMU_ARGS) -machine dumpdtb=$(ARCH)-qemu.dtb
 
 run-inner: qemu-version-check build
 	$(QEMU) $(QEMU_ARGS)
