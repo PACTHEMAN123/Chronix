@@ -91,6 +91,7 @@ const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECE: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
+const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
 const SYSCALL_GETRANDOM: usize = 278;
 const SYSCALL_STATX: usize = 291;
@@ -115,7 +116,7 @@ pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list};
 use hal::{addr::VirtAddr, println};
 use io::*;
-use misc::{sys_getrandom, sys_sysinfo};
+use misc::{sys_getrandom, sys_prlimit64, sys_sysinfo};
 use mm::{sys_mmap, sys_mprotect, sys_munmap};
 use net::*;
 pub use process::*;
@@ -192,6 +193,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into(), args[3].into(), args[4].into()),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
+        SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),
         SYSCALL_EXEC => sys_execve(args[0] , args[1], args[2]).await,
         SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
         SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
