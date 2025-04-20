@@ -97,6 +97,7 @@ impl TaskControlBlock {
                 self.set_sig_ucontext_ptr(new_sp);
 
                 // set the current trap cx sepc to reach user handler
+                log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
                 *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
                 // a0
                 trap_cx.set_arg_nth(0, signo);

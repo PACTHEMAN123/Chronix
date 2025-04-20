@@ -1,112 +1,27 @@
-# docker
-DOCKER_TAG ?= rcore-tutorial-v3:latest
-.PHONY: docker build_docker
-	
-docker:
-	docker run --rm -it -v ${PWD}:/mnt -w /mnt --name rcore-tutorial-v3 ${DOCKER_TAG} bash
-
-build_docker: 
-	docker build -t ${DOCKER_TAG} --target build .
-
-fmt:
-	cd os ; cargo fmt;  cd ..
-
-
-# copy from os/Makefile
-
+# Makefile for Chronix
 
 ########################################################
-# Building
+# BUILD ARGUMENTS
 ########################################################
 ARCH := riscv64
 
+# build target
 ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
 else ifeq ($(ARCH), loongarch64)
 TARGET := loongarch64-unknown-none
 endif
 
-MODE := debug
-USER_MODE := $(MODE)
-
-# Kernel
-KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
-KERNEL_BIN := $(KERNEL_ELF).bin
-DISASM_TMP := $(KERNEL_ELF).asm
-
-# User
-USER_APPS_DIR := ./user/src/bin
-USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
-USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
-USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
-
-# test-suite
-TEST_SUITE_DIR := ./vendor/testsuits-for-oskernel
-
-# test-script
-TEST_SCRIPT_DIR := ./vendor/oskernel-testsuits-cooperation
-
-# Basic test
-BASIC_TEST_DIR := $(TEST_SUITE_DIR)/basic/user/build/${ARCH}
-
-# Busy box
-BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
-BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
-BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
-
-# lua
-LUA_DIR := $(TEST_SUITE_DIR)/lua
-LUA := $(LUA_DIR)/src/lua
-LUA_TEST_DIR := $(TEST_SUITE_DIR)/scripts/lua
-
-# libc-test
-LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
-LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
-
-export NT :=
-# iperf test
-IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
-
-# netperf test
-NETPERF_TEST_DIR := $(TEST_SUITE_DIR)/netperf
-
-# BOARD
-BOARD := qemu
-SBI ?= rustsbi
-ifeq ($(ARCH), riscv64)
-BOOTLOADER := bootloader/$(SBI)-$(BOARD).bin
-SDCARD := sdcard-rv.img
-else ifeq ($(ARCH), loongarch64)
-BOOTLOADER := bootloader/loongarch_bios_0310.bin
-SDCARD := sdcard-la.img
-endif
-
-KERNEL_FEATURES := 
-# Disk file system (default: ext4)
-FS := ext4
-ifeq ($(FS), fat32)
-KERNEL_FEATURES += fat32
-endif
 
 # Building mode argument
+MODE := debug
 ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
-
 MODE_ARG += --target $(TARGET)
 
-# Crate features
+# smp
 export SMP := 
-
-ifneq ($(SMP),)
-	KERNEL_FEATURES += smp
-endif
-# KERNEL ENTRY
-ifeq ($(ARCH), riscv64)
-KERNEL_ENTRY_PA := 0x80200000
-else ifeq ($(ARCH), loongarch64)
-KERNEL_ENTRY_PA := 0x1c000000
-endif
 
 # net
 NET_C ?=n
@@ -114,45 +29,71 @@ IP_C ?= 10.0.2.15
 GW ?= 10.0.2.2
 export GATEWAY=$(GW)
 export IP=$(IP_C)
+export NT :=
 
-ifeq ($(NET_C),y)
-	KERNEL_FEATURES += net
-endif
+# Disk file system
+FS := ext4
+
+# board
+BOARD := qemu
+SBI ?= rustsbi
+
 # Binutils
 OBJDUMP := rust-objdump --arch-name=${ARCH}
 OBJCOPY := rust-objcopy --binary-architecture=${ARCH}
 
+# boot loader
 ifeq ($(ARCH), riscv64)
-GDB ?= riscv64-unknown-elf-gdb
+BOOTLOADER := bootloader/$(SBI)-$(BOARD).bin
 else ifeq ($(ARCH), loongarch64)
-GDB ?= loongarch64-linux-gnu-gdb
+BOOTLOADER := bootloader/loongarch_bios_0310.bin
 endif
 
+# sdcard
 ifeq ($(ARCH), riscv64)
-TOOLCHAIN_PREFIX ?= riscv64-linux-gnu-
+SDCARD := sdcard-rv.img
 else ifeq ($(ARCH), loongarch64)
-TOOLCHAIN_PREFIX ?= loongarch64-linux-gnu-
+SDCARD := sdcard-la.img
 endif
 
+########################################################
+# KERNEL
+########################################################
 
-# Disassembly
-DISASM ?= -x
+# features
+KERNEL_FEATURES := 
 
-build: env $(KERNEL_BIN) user #fs-img: should make fs-img first
-	@cp $(FS_IMG) $(FS_IMG_COPY)
+ifeq ($(FS), fat32)
+KERNEL_FEATURES += fat32
+endif
 
-env:
-	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+ifneq ($(SMP),)
+KERNEL_FEATURES += smp
+endif
 
+ifeq ($(NET_C),y)
+KERNEL_FEATURES += net
+endif
+
+# kernel entry
+ifeq ($(ARCH), riscv64)
+KERNEL_ENTRY_PA := 0x80200000
+else ifeq ($(ARCH), loongarch64)
+KERNEL_ENTRY_PA := 0x1c000000
+endif
+
+KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
+KERNEL_BIN := $(KERNEL_ELF).bin
+DISASM_TMP := $(KERNEL_ELF).asm
+
+# kernel in binary
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-kernel:
-	@echo Architecture: $(ARCH)
-	@echo Platform: $(BOARD)
+# kernel in elf
+kernel: dumpdtb
+	$(call building, "Architecture: $(ARCH)")
+	$(call building, "Platform: $(BOARD)")
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
 ifeq ($(KERNEL_FEATURES), ) 
 	@cd os && cargo  build $(MODE_ARG)
@@ -160,57 +101,40 @@ else
 	@cd os && cargo  build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
+	$(call success, "kernel $(KERNEL_ELF) finish building")
 
-user:
-	@echo "building user..."
-	@cd user && make build MODE=$(USER_MODE) ARCH=$(ARCH)
-	@echo "building user finished"
+# Disassembly
+DISASM ?= -x
+disasm: kernel
+	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
 
-basic_test:
-	@echo "building basic test"
-	@cd cross-compiler && tar -xf kendryte-toolchain-ubuntu-amd64-8.2.0-20190409.tar.xz
-	@chmod +x vendor/testsuits-for-oskernel/basic/user/build-oscomp.sh 
-	@export PATH=$$PATH:cross-compiler/kendryte-toolchain/bin
-	@echo "unpack and export cross compiler finish"
-	@export ARCH=$(ARCH) && cd vendor/testsuits-for-oskernel/basic/user && ./build-oscomp.sh
-	@rm -rf cross-compiler/kendryte-toolchain
-	@echo "clean up the cross compiler dir"
+disasm-vim: kernel
+	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
+	@vim $(DISASM_TMP)
+	@rm $(DISASM_TMP)
 
-ifeq ($(ARCH), riscv64)
-CC := riscv64-linux-musl-gcc
-STRIP := riscv64-linux-musl-strip
-else ifeq ($(ARCH), loongarch64)
-CC := loongarch64-linux-musl-gcc
-STRIP := loongarch64-linux-musl-strip
-endif
+# code format
+fmt:
+	cd os ; cargo fmt;  cd ..
 
-busybox:
-	@echo "building busybox"
-	@make -C $(BUSY_BOX_DIR) clean
-	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
-	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
+.PHONY: kernel disasm disasm-vim fmt
 
-lua:
-	@echo "building lua"
-	@make -C $(LUA_DIR) clean
-	@make -C $(LUA_DIR) CC="$(CC) -static -g -Og" -j $(NPROC) 
-
-libc-test:
-	@echo "building libc-test"
-	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
-
+########################################################
+# ROOT FILE SYSTEM IMAGE
+########################################################
 
 FS_IMG_DIR := .
 FS_IMG_NAME := fs-$(ARCH)
 FS_IMG := $(FS_IMG_DIR)/$(FS_IMG_NAME).img
 FS_IMG_COPY := $(FS_IMG_DIR)/fs.img
 fs-img: user basic_test busybox libc-test lua
-	@echo "building file system image"
-	@echo "cleaning up..."
+	$(call building, "building file system image")
+	$(call building, "cleaning up...")
 	@rm -f $(FS_IMG)
-	@echo "creating dir..."
+	$(call building, "making fs-img dir")
 	@mkdir -p $(FS_IMG_DIR)
 	@mkdir -p mnt
+
 ifeq ($(FS), fat32)
 	dd if=/dev/zero of=$(FS_IMG) bs=1k count=1363148
 	@mkfs.vfat -F 32 -s 8 $(FS_IMG)
@@ -220,33 +144,37 @@ else
 	@mkfs.ext4 -F -O ^metadata_csum_seed $(FS_IMG)
 	@sudo mount $(FS_IMG) mnt
 endif
-	@echo "making $(FS) image by using $(BASIC_TEST_DIR)"
+
+	$(call building, "making $(FS) image")
 #	@sudo dd if=/dev/zero of=mnt/swap bs=1M count=128
 #	@sudo chmod 0600 mnt/swap
 #	@sudo mkswap -L swap mnt/swap
-	@echo "copying user apps and tests to the $(FS_IMG)"
+	$(call building, "copying user apps and tests to the $(FS_IMG)")
 	@sudo cp -r $(BASIC_TEST_DIR)/* mnt
 	@sudo cp -r $(USER_ELFS) mnt
 
-	@echo "copying busybox to the $(FS_IMG)"
+	$(call building, "copying busybox to the $(FS_IMG)")
 	@sudo cp $(BUSY_BOX) mnt/busybox
 	@sudo cp -r $(BUSY_BOX_TEST_DIR)/* mnt
 	@sudo mkdir mnt/bin
 
-	@echo "copying lua to the $(FS_IMG)"
+	$(call building, "copying lua to the $(FS_IMG)")
 	@sudo cp $(LUA) mnt/
 	@sudo cp $(LUA_TEST_DIR)/* mnt/
 
-	@echo "copying libc-test to the $(FS_IMG)"
+	$(call building, "copying libc-test to the $(FS_IMG)")
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
+
 ifneq ($(NT),)
+	$(call building, "copying netperf to the $(FS_IMG)")
 	@sudo cp $(IPERF_TEST_DIR)/* mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netserver mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf_testcode.sh mnt/
 endif
-	@echo "copying libc.so"
+
+	$(call building, "copying libc.so")
 	@sudo mkdir -p sdcard
 	@sudo mount $(SDCARD) sdcard
 	@sudo mkdir -p mnt/lib
@@ -261,12 +189,121 @@ else ifeq ($(ARCH), loongarch64)
 	@sudo ln mnt/lib/libc.so mnt/lib64/ld-linux-loongarch-lp64d.so.1
 	@sudo ln mnt/lib/libc.so mnt/lib/ld-musl-riscv64.so.1
 endif
+
 	@sudo umount sdcard
 	@sudo rm -rf sdcard
 	@sudo umount mnt
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
-	@echo "building fs-img finished"
+	$(call success, "building $(FS_IMG) finished")
+
+.PHONY: fs-img
+
+########################################################
+# QEMU
+########################################################
+
+ifeq ($(ARCH), riscv64)
+QEMU := qemu-system-riscv64
+else ifeq ($(ARCH), loongarch64)
+QEMU := qemu-system-loongarch64
+endif
+
+CPU := 4
+QEMU_DEV_ARGS := 
+QEMU_RUN_ARGS :=
+QEMU_DEV_ARGS += -machine virt
+QEMU_DEV_ARGS += -nographic
+
+ifeq ($(ARCH), riscv64)
+QEMU_DEV_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
+QEMU_DEV_ARGS += -bios $(BOOTLOADER)
+else ifeq ($(ARCH), loongarch64)
+endif
+
+ifneq ($(SMP),)
+QEMU_DEV_ARGS += -smp $(CPU)
+endif
+
+
+ifeq ($(ARCH), riscv64)
+QEMU_RUN_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+# QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
+QEMU_DEV_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
+QEMU_DEV_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+else ifeq ($(ARCH), loongarch64)
+QEMU_RUN_ARGS += -kernel $(KERNEL_ELF) -m 1G
+QEMU_DEV_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
+QEMU_DEV_ARGS += -device virtio-blk-pci,drive=x0
+endif
+
+ifeq ($(NET_C),y)
+$(info "enable qemu net device")
+QEMU_DEV_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.1,netdev=net0\
+             -netdev user,id=net0,hostfwd=tcp::5555-:5555,hostfwd=udp::5555-:5555
+QEMU_DEV_ARGS += -d guest_errors\
+			 -d unimp
+endif
+
+# check the qemu version
+qemu-version-check:
+	@sh scripts/qemu-ver-check.sh $(QEMU)
+
+# device tree
+DT := $(ARCH)-$(BOARD)
+DTB := $(DT).dtb
+DTB_DST := os/src/devices/dtree.dtb
+dumpdtb:
+	$(call building, "start to dumpdtb")
+	$(QEMU) $(QEMU_DEV_ARGS) -machine dumpdtb=$(DTB)
+	$(call building, "moving $(DTB) to $(DTB_DST)")
+	mv $(DTB) $(DTB_DST)
+	$(call success, "dumpdtb finish")
+		
+
+# debug configs
+ifeq ($(ARCH), riscv64)
+GDB ?= riscv64-unknown-elf-gdb
+GDB_ARCH := riscv:rv64
+else ifeq ($(ARCH), loongarch64)
+GDB ?= loongarch64-linux-gnu-gdb
+GDB_ARCH := Loongarch64
+endif
+
+# debug: using tmux
+debug: qemu-version-check build
+	@tmux new-session -d \
+		"$(QEMU) $(QEMU_DEV_ARGS) $(QEMU_RUN_ARGS) -s -S" && \
+		tmux split-window -h "$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'" && \
+		tmux -2 attach-session -d
+
+# debug: using gdb server
+gdbserver: qemu-version-check build
+	$(QEMU) $(QEMU_DEV_ARGS) $(QEMU_RUN_ARGS) -s -S
+
+# debug: using gdb cilent
+gdbclient:
+	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'
+
+.PHONY: qemu-version-check dumpdtb debug gdbserver gdbclient
+
+########################################################
+# COMMANDS (global quick command)
+########################################################
+
+build: env $(KERNEL_BIN) #fs-img: should make fs-img first
+	@cp $(FS_IMG) $(FS_IMG_COPY)
+
+env:
+	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
+	cargo install cargo-binutils
+	rustup component add rust-src
+	rustup component add llvm-tools-preview
+
+run-inner: qemu-version-check build
+	$(QEMU) $(QEMU_DEV_ARGS) $(QEMU_RUN_ARGS)
+
+run: run-inner
 
 clean:
 	@cd os && cargo clean
@@ -276,77 +313,134 @@ clean:
 	@sudo rm -rf cross-compiler/kendryte-toolchain
 	@make -C $(BUSY_BOX_DIR) clean
 
-disasm: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
-
-disasm-vim: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
-	@vim $(DISASM_TMP)
-	@rm $(DISASM_TMP)
+.PHONY: build env run-inner run clean
 
 ########################################################
-# QEMU
+# USER
 ########################################################
-CPU := 4
-QEMU_ARGS := 
-QEMU_ARGS += -machine virt
-QEMU_ARGS += -nographic
+
+# configs
+USER_APPS_DIR := ./user/src/bin
+USER_TARGET_DIR := ./user/target/$(TARGET)/$(MODE)
+USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
+USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
+
+USER_MODE := $(MODE)
+
+# user build
+user:
+	$(call building, "building user apps")
+	@cd user && make build MODE=$(USER_MODE) ARCH=$(ARCH)
+	$(call success, "user build finished")
+
+.PHONY: user
+
+########################################################
+# TESTS
+########################################################
+
+# test-suite
+TEST_SUITE_DIR := ./vendor/testsuits-for-oskernel
+
+# test-script
+TEST_SCRIPT_DIR := ./vendor/oskernel-testsuits-cooperation
+
+# toolchains
+ifeq ($(ARCH), riscv64)
+CC := riscv64-linux-musl-gcc
+STRIP := riscv64-linux-musl-strip
+else ifeq ($(ARCH), loongarch64)
+CC := loongarch64-linux-musl-gcc
+STRIP := loongarch64-linux-musl-strip
+endif
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
-QEMU_ARGS += -bios $(BOOTLOADER)
+TOOLCHAIN_PREFIX ?= riscv64-linux-gnu-
 else ifeq ($(ARCH), loongarch64)
+TOOLCHAIN_PREFIX ?= loongarch64-linux-gnu-
 endif
 
-ifneq ($(SMP),)
-QEMU_ARGS += -smp $(CPU)
-endif
+# Basic test
+BASIC_TEST_DIR := $(TEST_SUITE_DIR)/basic/user/build/${ARCH}
+basic_test:
+	$(call building, "building basic test")
+	@cd cross-compiler && tar -xf kendryte-toolchain-ubuntu-amd64-8.2.0-20190409.tar.xz
+	@chmod +x vendor/testsuits-for-oskernel/basic/user/build-oscomp.sh 
+	@export PATH=$$PATH:cross-compiler/kendryte-toolchain/bin
+	$(call success, "unpack and export cross compiler finish")
+	@export ARCH=$(ARCH) && cd vendor/testsuits-for-oskernel/basic/user && ./build-oscomp.sh
+	@rm -rf cross-compiler/kendryte-toolchain
+	$(call success, "basic test build finished")
+
+# Busy box
+BUSY_BOX_DIR := $(TEST_SUITE_DIR)/busybox
+BUSY_BOX := $(TEST_SUITE_DIR)/busybox/busybox_unstripped
+BUSY_BOX_TEST_DIR := $(TEST_SCRIPT_DIR)/doc/busybox
+busybox:
+	$(call building, "building busybox")
+	@make -C $(BUSY_BOX_DIR) clean
+	@cp $(TEST_SUITE_DIR)/config/busybox-config-$(ARCH) $(BUSY_BOX_DIR)/.config
+	@make -C $(BUSY_BOX_DIR) CC="$(CC) -static -g -Og" STRIP=$(STRIP) -j
+	$(call success, "busybox build finished")
+
+# lua
+LUA_DIR := $(TEST_SUITE_DIR)/lua
+LUA := $(LUA_DIR)/src/lua
+LUA_TEST_DIR := $(TEST_SUITE_DIR)/scripts/lua
+lua:
+	$(call building, "building lua")
+	@make -C $(LUA_DIR) clean
+	@make -C $(LUA_DIR) CC="$(CC) -static -g -Og" -j $(NPROC) 
+	$(call success, "lua build finished")
+
+# libc-test
+LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
+LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
+libc-test:
+	$(call building, "building libc-test")
+	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-buildroot-linux-musl- clean disk
+	$(call success, "libc test build finished")
 
 
-ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
-QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-else ifeq ($(ARCH), loongarch64)
-QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
-QEMU_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
-QEMU_ARGS += -device virtio-blk-pci,drive=x0
-endif
+# iperf test
+IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
 
-ifeq ($(NET_C),y)
-$(info "enable qemu net device")
-QEMU_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.1,netdev=net0\
-             -netdev user,id=net0,hostfwd=tcp::5555-:5555,hostfwd=udp::5555-:5555
-QEMU_ARGS += -d guest_errors\
-			 -d unimp
-endif
+# netperf test
+NETPERF_TEST_DIR := $(TEST_SUITE_DIR)/netperf
 
-ifeq ($(ARCH), riscv64)
-QEMU := qemu-system-riscv64
-GDB_ARCH := riscv:rv64
-else ifeq ($(ARCH), loongarch64)
-QEMU := qemu-system-loongarch64
-GDB_ARCH := Loongarch64
-endif
+.PHONY: basic_test busybox lua libc-test
 
-qemu-version-check:
-	@sh scripts/qemu-ver-check.sh $(QEMU)
+########################################################
+# DOCKER (unused)
+########################################################
 
-run-inner: qemu-version-check build
-	$(QEMU) $(QEMU_ARGS)
+# docker
+DOCKER_TAG ?= rcore-tutorial-v3:latest
+.PHONY: docker build_docker
+	
+docker:
+	docker run --rm -it -v ${PWD}:/mnt -w /mnt --name rcore-tutorial-v3 ${DOCKER_TAG} bash
 
-run: run-inner
+build_docker: 
+	docker build -t ${DOCKER_TAG} --target build .
 
-debug: qemu-version-check build
-	@tmux new-session -d \
-		"$(QEMU) $(QEMU_ARGS) -s -S" && \
-		tmux split-window -h "$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'" && \
-		tmux -2 attach-session -d
+.PHONY: docker build_docker
 
-gdbserver: qemu-version-check build
-	$(QEMU) $(QEMU_ARGS) -s -S
+########################################################
+# UTILS (for prettier building process)
+########################################################
 
-gdbclient:
-	$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'
+RED = \033[0;31m
+GREEN = \033[0;32m
+YELLOW = \033[0;33m
+PURPLE = \033[0;95m
+RESET = \033[0m
+BOLD = \033[1m
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img user kernel busybox lua
+define building
+	@echo "${BOLD}${PURPLE} [BUILDING] ${1}${RESET}"
+endef
+
+define success
+	@echo "${BOLD}${GREEN} [SUCCESS ] ${1}${RESET}"
+endef

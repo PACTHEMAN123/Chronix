@@ -4,7 +4,7 @@ use alloc::{sync::Arc, vec::Vec};
 use fatfs::info;
 use log::warn;
 
-use crate::{fs::{devfs::tty::TTY, vfs::{Dentry, File}, OpenFlags, Stdin}, syscall::SysError};
+use crate::{fs::{devfs::tty::TTY, vfs::{Dentry, File}, OpenFlags, Stdin}, syscall::{misc::RLimit, SysError}};
 
 use super::task::TaskControlBlock;
 
@@ -13,7 +13,12 @@ use super::task::TaskControlBlock;
 pub struct FdTable {
     /// the inner table
     pub fd_table: Vec<Option<FdInfo>>,
+    /// resource limit: max fds
+    pub rlimit: RLimit,
 }
+
+/// Max file descriptors counts
+pub const MAX_FDS: usize = 1024;
 
 impl FdTable {
     /// new and init fd table
@@ -33,7 +38,11 @@ impl FdTable {
         table.push(Some(FdInfo { file: stdin, flags: FdFlags::empty() }));
         table.push(Some(FdInfo { file: stdout, flags: FdFlags::empty() }));
         table.push(Some(FdInfo { file: stderr, flags: FdFlags::empty() }));
-        Self { fd_table: table }
+        
+        Self { 
+            fd_table: table,
+            rlimit: RLimit { rlim_cur: MAX_FDS, rlim_max: MAX_FDS }
+        }
     }
     /// allocate a new fd for the task
     /// will not expend the fd table
@@ -160,6 +169,18 @@ impl FdTable {
         }
         self.fd_table[new_fd] = Some(fd_info);
         Ok(new_fd)
+    }
+    /// get rlimit
+    pub fn rlimit(&self) -> RLimit {
+        self.rlimit
+    }
+    /// set rlimit
+    pub fn set_rlimit(&mut self, rlimit: RLimit) {
+        self.rlimit = rlimit;
+        if rlimit.rlim_max <= self.fd_table.len() {
+            panic!("not finish");
+            // self.fd_table.truncate(self.rlimit.rlim_max)
+        }
     }
 }
 

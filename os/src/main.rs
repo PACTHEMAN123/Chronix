@@ -46,6 +46,7 @@ use processor::processor::current_processor;
 #[allow(unused)]
 mod net;
 mod config;
+mod banner;
 mod devices;
 mod drivers;
 pub mod fs;
@@ -85,8 +86,9 @@ pub fn main(id: usize) -> ! {
     if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok()
     {
         info!("id: {id}");
-        info!("[kernel] Hello, world!");
+        banner::print_banner();
         mm::init();
+        devices::init();
         processor::processor::init(id);
         hal::trap::init();
         fs::init();
