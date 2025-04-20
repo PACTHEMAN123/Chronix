@@ -1,5 +1,6 @@
 //! signal related syscall
 
+use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
 use hal::{
     trap::TrapContextHal,
@@ -14,6 +15,9 @@ use crate::signal::*;
 use crate::task::{current_task,INITPROC_PID};
 use crate::processor::processor::current_trap_cx;
 use crate::task::manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER};
+use crate::timer::ffi::TimeSpec;
+use crate::timer::timed_task::suspend_timeout;
+use crate::utils::suspend_now;
 
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
@@ -29,7 +33,13 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             .into_iter()
             .map(|inner| inner.upgrade().unwrap())
             {
-                process.sig_manager.lock().receive(signo as usize);
+                process.recv_sigs_process_level(
+                    SigInfo {
+                        si_signo: signo as usize,
+                        si_code: SigInfo::USER,
+                        si_pid: Some(pgid)
+                    }
+                );
             }
         }
         -1 => {
@@ -38,8 +48,10 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             TASK_MANAGER.for_each_task(|task|{
                 if task.tid() == INITPROC_PID {
                 }
-                if signo != 0 {
-                    task.sig_manager.lock().receive(signo as usize);
+                if signo != 0 && task.is_leader(){
+                    task.recv_sigs_process_level(
+                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pid()) },
+                    );
                 }
             });
         }
@@ -54,7 +66,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             .map(|t| t.upgrade().unwrap())
             {
                 if task.tid() == inner_pid {
-                    task.sig_manager.lock().receive(signo as usize);
+                    task.recv_sigs_process_level(SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pgid()) });
                 }
             }
         }
@@ -63,11 +75,15 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             //assert!(task.gettid() != pid as usize); // should not send to itself
             if let Some(task) = TASK_MANAGER.get_task(pid as usize) {
                 if task.is_leader() {
-                    task.sig_manager.lock().receive(signo as usize);
+                    task.recv_sigs_process_level(
+                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pid()) },
+                    );
                 }else {
                     // todo standard error
                     return Err(SysError::ESRCH);
                 }
+            }else {
+                return Err(SysError::ESRCH);
             }
         }
         _ => {}
@@ -203,4 +219,69 @@ pub fn sys_rt_sigreturn() -> SysResult {
     let cx = current_trap_cx(current_processor());
     ucontext.restore_old_context(cx);
     Ok(cx.arg_nth(0) as isize)
+}
+
+/// suspends execution of the calling thread until one
+/// of the signals in set is pending (If one of the signals in set is
+/// already pending for the calling thread, sigwaitinfo() will return
+/// immediately.)
+/// - `set`: Suspend the execution of the process until a signal in `set`
+///   that arrives
+/// - `info`: If it is not NULL, the buffer that it points to is used to
+///   return a structure of type siginfo_t containing information about the
+///   signal.
+/// - `timeout`: specifies the interval for which the thread is suspended
+///   waiting for a signal.
+/// On success, sigtimedwait() returns a signal number
+pub async fn sys_rt_sigtimedwait(
+    set_ptr: usize,
+    info_ptr: usize,
+    timeout_ptr: usize,
+)-> SysResult {
+    let task = current_task().unwrap();
+    let mut set = unsafe {
+        Instruction::set_sum();
+        *(set_ptr as *mut SigSet)
+    };
+    set.remove(SigSet::SIGKILL | SigSet::SIGSTOP);
+    let pending_sigs = task.with_mut_sig_manager(|sig_manager| {
+        if let Some(si) = sig_manager.check_pending(set) {
+            Some(si.si_signo)
+        }else {
+            sig_manager.wake_sigs = set | SigSet::SIGKILL | SigSet::SIGSTOP;
+            None
+        }
+    });
+    if let Some(si) = pending_sigs {
+        return Ok(si as isize);
+    }
+    task.set_interruptable();
+    if timeout_ptr == 0 {
+        suspend_now().await;
+    }else {
+        let timeout = unsafe {
+            Instruction::set_sum();
+            *(timeout_ptr as *const TimeSpec)
+        };
+        if !timeout.is_valid() {
+            return  Err(SysError::EINVAL);
+        }
+        suspend_timeout(task,timeout.into() ).await;
+    }
+    task.set_running();
+    let si = task.with_mut_sig_manager(|sig_manager| {
+        sig_manager.dequeue_expected(set)
+    });
+    if let Some(si) = si {
+        log::warn!("[sys_rt_sigtimedwait] woken by {:#?}",si);
+        if info_ptr != 0 {
+            unsafe {
+                (info_ptr as *mut SigInfo).write(si);
+            }
+        }    
+        return  Ok(si.si_signo as isize);
+    }else {
+        log::warn!("[sys_rt_sigtimedwait] info_ptr is null, woken by timeout");
+        return Err(SysError::EAGAIN);
+    }
 }

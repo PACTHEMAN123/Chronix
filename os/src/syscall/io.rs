@@ -181,7 +181,7 @@ pub async fn sys_pselect6(
     timeout_ptr: usize,
     sigmask_ptr: usize,
 ) -> SysResult {
-    let task = current_task().unwrap().clone();
+    let task = current_task().unwrap();
     if nfds < 0 {
         return Err(SysError::EINVAL);
     }

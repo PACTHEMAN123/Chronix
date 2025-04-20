@@ -55,6 +55,10 @@ impl TimeVal {
     pub fn is_zero(&self) -> bool {
         self.sec == 0 && self.usec == 0
     }
+    /// check if is valid
+    pub fn is_valid(&self) -> bool {
+        self.sec as isize > 0 && self.usec as isize >= 0 && self.usec  < 1000_000 
+    }
 }
 
 impl TimeSpec {
@@ -68,6 +72,10 @@ impl TimeSpec {
             tv_sec: ms / MSEC_PER_SEC,
             tv_nsec: (ms % MSEC_PER_SEC) * USEC_PER_SEC,
         }
+    }
+     /// check if is valid
+     pub fn is_valid(&self) -> bool {
+        self.tv_sec as isize > 0 && self.tv_nsec as isize >= 0 && self.tv_nsec  < 1000_000_000 
     }
 }
 

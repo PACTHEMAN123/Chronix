@@ -17,7 +17,7 @@ use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use crate::syscall::process::CloneFlags;
-use crate::signal::{KSigAction, SigManager, SIGKILL, SIGSTOP, SIGCHLD, SigSet};
+use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
@@ -561,9 +561,15 @@ impl TaskControlBlock {
             }
             let initproc = &INITPROC;
             for child in children.values() {
+                if child.is_zombie() {
+                    initproc.recv_sigs_process_level(
+                        SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
+                    );
+                }
                 *child.parent.lock() = Some(Arc::downgrade(initproc));
             }
-            initproc.children.lock().extend(children.clone());       
+            initproc.children.lock().extend(children.clone()); 
+            children.clear();      
         });
         if self.is_leader() {
             self.set_zombie();
@@ -574,7 +580,7 @@ impl TaskControlBlock {
         if let Some(parent) = self.parent() {
             //info!("task {} exit, send SIGCHLD to parent", self.pid());
             let parent = parent.upgrade().unwrap();
-            parent.recv_sigs(SIGCHLD);
+            parent.recv_sigs(SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None });
         }
         // set the end time
         self.time_recorder().update_child_time(self.time_recorder().time_pair());

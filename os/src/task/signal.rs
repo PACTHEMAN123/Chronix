@@ -3,9 +3,10 @@
 use core::{future::Future, pin::Pin, task::{Context, Poll}};
 
 use alloc::sync::Arc;
+use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigSet, SIGKILL, SIGSTOP}};
+use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP}};
 
 use super::task::TaskControlBlock;
 
@@ -36,15 +37,35 @@ impl TaskControlBlock {
     }
     /// receive function at TCB level
     /// as we may need to wake up a task when wake up signal come
-    pub fn recv_sigs(&self, signo: usize) {
+    pub fn recv_sigs(&self, signo: SigInfo) {
         //info!("[TCB]: tid {} recv signo {}", self.gettid(), signo);
         self.with_mut_sig_manager(|manager| {
             manager.receive(signo);
-            if manager.wake_sigs.contain_sig(signo) && self.is_interruptable() {
+            if manager.wake_sigs.contain_sig(signo.si_signo) && self.is_interruptable() {
                 //info!("[TCB]: tid {} has been wake up", self.gettid());
                 self.wake();
             }
         });
+    }
+    /// Unix has two types of signal: Process level and Thread level
+    /// in Process-level, all threads in the same process share the same signal mask
+    pub fn recv_sigs_process_level(&self, sig_info: SigInfo) {
+        log::info!("[TCB::recv_sigs_process_level]: tid {} recv signo {} at process level",self.tid(),sig_info.si_signo);
+        self.with_mut_thread_group(|tg| {
+            let mut signal_delivered = false;
+            for thread in tg.iter() {
+                if thread.sig_manager.lock().blocked_sigs.contain_sig(sig_info.si_signo) {
+                    continue;
+                }
+                thread.recv_sigs(sig_info);
+                signal_delivered = true;
+                break;
+            } 
+            if !signal_delivered {
+                let task = tg.iter().next().unwrap();
+                task.recv_sigs(sig_info);
+            }
+        })
     }
     /// signal manager should check the signal queue
     /// before a task return form kernel to user
@@ -57,12 +78,16 @@ impl TaskControlBlock {
             }
             let len = sig_manager.pending_sigs.len();
             let mut cnt = 0;
-            let mut signo: usize = 0;
+            let mut signo = SigInfo{
+                si_signo: 0,
+                si_code: 0,
+                si_pid: None
+            };
             while cnt < len {
                 signo = sig_manager.pending_sigs.pop_front().unwrap();
                 cnt += 1;
                 // block the signals
-                if signo != SIGKILL && signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo) {
+                if signo.si_signo != SIGKILL && signo.si_signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo.si_signo) {
                     //info!("[SIGHANDLER] signal {} blocked", signo);
                     sig_manager.pending_sigs.push_back(signo);
                     continue;
@@ -71,12 +96,12 @@ impl TaskControlBlock {
                 break;
             }
             // handle a signal
-            assert!(signo != 0);
-            let sig_action = sig_manager.sig_handler[signo];
+            assert!(signo.si_signo != 0);
+            let sig_action = sig_manager.sig_handler[signo.si_signo];
             let trap_cx = self.get_trap_cx();
             if sig_action.is_user {
                 let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
-                sig_manager.blocked_sigs.add_sig(signo);
+                sig_manager.blocked_sigs.add_sig(signo.si_signo);
                 sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
                 // save fx state
                 trap_cx.fx_encounter_signal();
@@ -92,15 +117,15 @@ impl TaskControlBlock {
                         core::mem::size_of::<UContext>(),
                     )
                 };
-                println!("copy_out to {:#x}", new_sp);
+                // println!("copy_out to {:#x}", new_sp);
                 copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
 
                 // set the current trap cx sepc to reach user handler
-                log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
+                // log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
                 *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
                 // a0
-                trap_cx.set_arg_nth(0, signo);
+                trap_cx.set_arg_nth(0, signo.si_signo);
                 // sp used by sys_sigreturn to restore ucontext
                 *trap_cx.sp() = new_sp;
                 // ra: when user signal handler ended, return to sigreturn_trampoline
@@ -112,7 +137,7 @@ impl TaskControlBlock {
                         sig_action.sa.sa_handler as *const (),
                     )
                 };
-                handler(signo);
+                handler(signo.si_signo);
             }
         });
     }
