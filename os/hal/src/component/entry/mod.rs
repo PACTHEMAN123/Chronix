@@ -10,6 +10,15 @@ unsafe extern "Rust" {
 pub const BOOT_STACK_SIZE: usize = Constant::KERNEL_STACK_SIZE;
 pub const MAX_PROCESSORS: usize = crate::board::MAX_PROCESSORS;
 
+/// CINPHAL Is Not Poly Hardware Abstraction Layer
+const BANNER: &str = r" ________  ___  ________   ________  ___  ___  ________  ___          
+|\   ____\|\  \|\   ___  \|\   __  \|\  \|\  \|\   __  \|\  \         
+\ \  \___|\ \  \ \  \\ \  \ \  \|\  \ \  \\\  \ \  \|\  \ \  \        
+ \ \  \    \ \  \ \  \\ \  \ \   ____\ \   __  \ \   __  \ \  \       
+  \ \  \____\ \  \ \  \\ \  \ \  \___|\ \  \ \  \ \  \ \  \ \  \____  
+   \ \_______\ \__\ \__\\ \__\ \__\    \ \__\ \__\ \__\ \__\ \_______\
+    \|_______|\|__|\|__| \|__|\|__|     \|__|\|__|\|__|\|__|\|_______|";
+
 /// Boot Stack. Boot Stack Size is [STACK_SIZE]
 #[unsafe(link_section = ".bss.stack")]
 pub(crate) static mut BOOT_STACK: [u8; MAX_PROCESSORS * BOOT_STACK_SIZE] = [0; MAX_PROCESSORS * BOOT_STACK_SIZE];

@@ -76,8 +76,8 @@ pub fn translate_uva_checked(user_vm_space: &mut UserVmSpace, va: VirtAddr, acce
             Some(pte.ppn().start_addr() + va.page_offset())
         }
         _ => {
-            user_vm_space.handle_page_fault(va, access_type).unwrap();
-            user_vm_space.translate_va(va)
+            user_vm_space.handle_page_fault(va, access_type).ok()?;
+            Some(user_vm_space.translate_va(va).unwrap())
         }
     }
 }

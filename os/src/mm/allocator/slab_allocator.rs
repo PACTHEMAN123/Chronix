@@ -1,4 +1,4 @@
-use core::{marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}};
+use core::{marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}, usize};
 
 use alloc::{alloc::{AllocError, Allocator, Global}, collections::btree_map::BTreeMap};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, println, util::mutex::Mutex};
@@ -207,6 +207,8 @@ struct SlabBlock<const S: usize> {
     head: *mut FreeNode<S>
 }
 
+unsafe impl<const S: usize> Send for SlabBlock<S> {}
+
 #[allow(unused, missing_docs)]
 impl<const S: usize> SlabBlock<S> {
     pub fn page_cnt() -> usize {
@@ -244,7 +246,6 @@ pub struct SlabCache<const S: usize> {
     empty_blk_list: LinkedStack<SlabBlock<S>>,
     free_blk_list: LinkedStack<SlabBlock<S>>,
     full_blk_list: LinkedStack<SlabBlock<S>>,
-    _marker: PhantomPinned,
 }
 
 #[allow(unused, missing_docs)]
@@ -255,7 +256,6 @@ impl<const S: usize> SlabCache<S> {
             empty_blk_list: LinkedStack::new(),
             free_blk_list: LinkedStack::new(),
             full_blk_list: LinkedStack::new(),
-            _marker: PhantomPinned,
         }
     }
 
@@ -360,6 +360,8 @@ trait LinkedNode {
 struct LinkedStack<T: LinkedNode> {
     head: *mut T,
 }
+
+unsafe impl<T: LinkedNode> Send for LinkedStack<T> {}
 
 #[allow(unused, missing_docs)]
 impl<T: LinkedNode> LinkedStack<T> {

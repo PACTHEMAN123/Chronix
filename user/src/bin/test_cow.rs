@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{brk, fork, wait, yield_};
+use user_lib::{brk, fork, wait};
 
 #[no_mangle]
 pub fn main() -> i32 {

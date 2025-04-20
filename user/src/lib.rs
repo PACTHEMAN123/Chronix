@@ -13,7 +13,6 @@ extern crate bitflags;
 
 use alloc::{ffi::CString, vec::Vec};
 use buddy_system_allocator::LockedHeap;
-use riscv::addr;
 use syscall::*;
 
 const USER_HEAP_SIZE: usize = 32768;
@@ -378,4 +377,44 @@ pub fn sendto(fd: usize, buf: &[u8], len: usize, flags: i32, addr: *const Sockad
 
 pub fn recvfrom(fd: usize, buf: &mut [u8], len: usize, flags: i32, addr: *mut SockaddrIn, addr_len: *mut u32) -> isize {
     sys_recvfrom(fd as i32, buf.as_ptr() as *mut u8, len, flags, addr as *mut _ , addr_len)
+}
+
+bitflags! {
+    // Defined in <bits/mman-linux.h>
+    #[derive(Default)]
+    pub struct MmapFlags: i32 {
+        // Sharing types (must choose one and only one of these).
+        /// Share changes.
+        const MAP_SHARED = 0x01;
+        /// Changes are private.
+        const MAP_PRIVATE = 0x02;
+        /// Share changes and validate
+        const MAP_SHARED_VALIDATE = 0x03;
+        const MAP_TYPE_MASK = 0x03;
+
+        // Other flags
+        /// Interpret addr exactly.
+        const MAP_FIXED = 0x10;
+        /// Don't use a file.
+        const MAP_ANONYMOUS = 0x20;
+        /// Don't check for reservations.
+        const MAP_NORESERVE = 0x04000;
+    }
+}
+
+bitflags! {
+    // Defined in <bits/mman-linux.h>
+    // NOTE: Zero bit flag is discouraged. See https://docs.rs/bitflags/latest/bitflags/#zero-bit-flags
+    pub struct MmapProt: i32 {
+        /// Page can be read.
+        const PROT_READ = 0x1;
+        /// Page can be written.
+        const PROT_WRITE = 0x2;
+        /// Page can be executed.
+        const PROT_EXEC = 0x4;
+    }
+}
+
+pub fn mmap(addr: usize, len: usize, prot: MmapProt, flags: MmapFlags, fd: usize, offset: usize) -> isize{
+    sys_mmap(addr, len, prot.bits, flags.bits, fd, offset)
 }

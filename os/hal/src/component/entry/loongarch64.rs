@@ -58,16 +58,12 @@ pub(crate) fn rust_main(id: usize) {
     unsafe { super::_main_for_arch(id); }
 }
 
+
 fn print_info() {
-    println!(r" ____  _                 _      _   _    _    _     
-/ ___|(_)_ __ ___  _ __ | | ___| | | |  / \  | |    
-\___ \| | '_ ` _ \| '_ \| |/ _ \ |_| | / _ \ | |    
- ___) | | | | | | | |_) | |  __/  _  |/ ___ \| |___ 
-|____/|_|_| |_| |_| .__/|_|\___|_| |_/_/   \_\_____|
-                  |_|                               ");
-    println!("PA_LEN: {}", loongArch64::cpu::get_palen());
-    println!("VA_LEN: {}", loongArch64::cpu::get_valen());
-    println!("Frequency: {} Hz", Timer::get_timer_freq());
+    println!("\u{1B}[36m\n{}\u{1B}[0m", super::BANNER);
+    println!("[CINPHAL] PA_LEN: {}", loongArch64::cpu::get_palen());
+    println!("[CINPHAL] VA_LEN: {}", loongArch64::cpu::get_valen());
+    println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
     println!("");
 }
 
