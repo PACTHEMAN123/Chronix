@@ -97,7 +97,7 @@ pub fn sys_setitimer(
     if which > 2 {
         return Err(SysError::EINVAL);
     }
-    let task = current_task().unwrap().clone();
+    let task = current_task().unwrap();
     let new =  unsafe {
         Instruction::set_sum();
         core::ptr::read(new_ptr as *const ITimerVal)

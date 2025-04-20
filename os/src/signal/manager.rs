@@ -10,11 +10,11 @@ use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::*;
 use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
 
-use super::{action::KSigAction, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
+use super::{action::KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
 
 pub struct SigManager {
     /// Pending signals
-    pub pending_sigs: VecDeque<usize>,
+    pub pending_sigs: VecDeque<SigInfo>,
     /// bitmap to avoid dup signal
     pub bitmap: SigSet,
     /// Blocked signals
@@ -48,11 +48,29 @@ impl SigManager {
         }
     }
     /// signal manager receive a new signal
-    pub fn receive(&mut self, signo: usize) {
-        if !self.bitmap.contain_sig(signo) {
-            self.bitmap.add_sig(signo);
-            self.pending_sigs.push_back(signo);
+    pub fn receive(&mut self, signo_info: SigInfo) {
+        if !self.bitmap.contain_sig(signo_info.si_signo) {
+            self.bitmap.add_sig(signo_info.si_signo);
+            self.pending_sigs.push_back(signo_info);
         }
+    }
+    /// check if there is any expected SigInfo in the pending_sigs
+    pub fn check_pending(&mut self, expected: SigSet) -> Option<SigInfo> {
+        let x = self.bitmap & expected;
+        if x.is_empty() {
+            return None;
+        }
+        for i in 0..self.pending_sigs.len() {
+            if x.contain_sig(self.pending_sigs[i].si_signo) {
+                return Some(self.pending_sigs[i]);
+            }
+        }
+        log::warn!("[SigManager] check_pending failed, should not happen");
+        None
+    }
+    /// bool flag to check if there is any pending signal expected
+    pub fn check_pending_flag(&self, expected: SigSet) -> bool {
+        !(expected & self.bitmap).is_empty()
     }
     /// signal manager set signal action
     pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
@@ -60,4 +78,21 @@ impl SigManager {
             self.sig_handler[signo] = sigaction;
         }
     }
+    /// dequeue a specific signal 
+    pub fn dequeue_expected(&mut self, expected: SigSet) -> Option<SigInfo> {
+        let sig_set = self.bitmap & expected;
+        if sig_set.is_empty() {
+            return None;
+        }
+        for i in 0..self.pending_sigs.len() {
+            let sig = self.pending_sigs[i].si_signo;
+            if sig_set.contain_sig(sig) {
+                self.bitmap.remove_sig(sig);
+                return self.pending_sigs.remove(i);
+            }
+        }
+        log::warn!("[SigManager] dequeue_expected failed, should not happen");
+        None
+    }
+    
 }

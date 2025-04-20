@@ -5,7 +5,7 @@ use log::info;
 
 use super::{ffi::TimeVal, get_current_time_duration};
 use spin::Lazy;
-use crate::{signal::SIGALRM, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
+use crate::{signal::{SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
 use hal::instruction::{Instruction, InstructionHal};
 /// A trait that defines the event to be triggered when a timer expires.
 /// The TimerEvent trait requires a callback method to be implemented,
@@ -201,7 +201,9 @@ impl TimerEvent for RealITimer {
                         log::warn!("check failed!");
                         return None
                     }
-                    task.recv_sigs(SIGALRM);
+                    task.recv_sigs_process_level(
+                        SigInfo { si_signo: SIGALRM, si_code: SigInfo::KERNEL, si_pid: None }
+                    );
                     let real_timer_interval = real_timer.interval;
                     if real_timer_interval == Duration::ZERO {
                         return None;

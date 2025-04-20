@@ -137,7 +137,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
 
     // handler the signal before return
-    check_signal_for_current_task();
+    task.check_and_handle();
 
     // restore float pointer and set status
     task.get_trap_cx().fx_restore();
