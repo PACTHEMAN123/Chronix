@@ -166,7 +166,11 @@ pub trait KernVmSpaceHal {
     
     fn enable(&self);
 
+    fn get_page_table(&self) -> &PageTable;
+
     fn new() -> Self;
+
+    fn to_user<T: UserVmSpaceHal>(&self) -> T;
 
     fn push_area(&mut self, area: KernVmArea, data: Option<&[u8]>);
 
@@ -194,8 +198,6 @@ pub trait UserVmSpaceHal: Sized {
             Instruction::tlb_flush_all();
         }
     }
-
-    fn from_kernel() -> Self;
 
     fn map_elf<T: Reader + ?Sized>(&mut self, elf: &ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, offset: VirtAddr) -> 
         (MaxEndVpn, StartPoint);
@@ -227,15 +229,8 @@ pub trait UserVmSpaceHal: Sized {
     }
 }
 
-#[cfg(target_arch = "riscv64")]
-mod riscv64;
+mod uvm;
+pub use uvm::*;
 
-#[cfg(target_arch = "riscv64")]
-pub use riscv64::*;
-
-#[cfg(target_arch = "loongarch64")]
-mod loongarch64;
-
-#[cfg(target_arch = "loongarch64")]
-pub use loongarch64::*;
-
+mod kvm;
+pub use kvm::*;

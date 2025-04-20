@@ -13,6 +13,7 @@ use core::ops::Deref;
 /// virtual memory
 pub mod vm;
 
+use hal::println;
 use vm::KernVmSpaceHal;
 
 pub use page_table::*;

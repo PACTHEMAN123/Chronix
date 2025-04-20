@@ -7,7 +7,7 @@ pub use frame_allocator::{FrameAllocator, init_frame_allocator, frames_alloc, fr
 #[allow(unused)]
 pub use heap_allocator::{handle_alloc_error, init_heap};
 #[allow(unused)]
-pub use slab_allocator::SlabAllocator;
+pub use slab_allocator::{SlabAllocator, SlabCache};
 
 /// next power of two
 #[cfg(target_pointer_width="32")]

@@ -48,10 +48,16 @@ macro_rules! ImplFor {
 }
 
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysAddr(pub usize);
 
 ImplFor!(PhysAddr);
+
+impl alloc::fmt::Debug for PhysAddr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "PhysAddr: {:#x}", self.0)
+    }
+}
 
 impl From<usize> for PhysAddr {
     fn from(value: usize) -> Self {
@@ -59,8 +65,14 @@ impl From<usize> for PhysAddr {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysPageNum(pub usize);
+
+impl alloc::fmt::Debug for PhysPageNum {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "PhysPageNum: {:#x}", self.0)
+    }
+}
 
 impl From<usize> for PhysPageNum {
     fn from(value: usize) -> Self {
@@ -70,8 +82,14 @@ impl From<usize> for PhysPageNum {
 
 ImplFor!(PhysPageNum);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtAddr(pub usize);
+
+impl alloc::fmt::Debug for VirtAddr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "VirtAddr: {:#x}", self.0)
+    }
+}
 
 impl From<usize> for VirtAddr {
     fn from(value: usize) -> Self {
@@ -91,8 +109,15 @@ impl VirtAddr {
 
 ImplFor!(VirtAddr);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirtPageNum(pub usize);
+
+impl alloc::fmt::Debug for VirtPageNum {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "VirtAddr: {:#x}", self.0)
+    }
+}
+
 
 impl From<usize> for VirtPageNum {
     fn from(value: usize) -> Self {

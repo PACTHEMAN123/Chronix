@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK};
+use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}};
 
 #[repr(C, align(4096))]
 pub struct BootPageTable([u64; Constant::PTES_PER_PAGE]);
@@ -68,7 +68,16 @@ pub(crate) fn rust_main(id: usize) {
     if FIRST_PROCESSOR.load(Ordering::Acquire) {
         FIRST_PROCESSOR.store(false, Ordering::Release);
         super::clear_bss();
-        crate::console::init();  
+        crate::console::init();
+        print_info();
     }
     unsafe { super::_main_for_arch(id) };
+}
+
+fn print_info() {
+    println!("\u{1B}[36m\n{}\u{1B}[0m", super::BANNER);
+    println!("[CINPHAL] PA_LEN: {}", 56);
+    println!("[CINPHAL] VA_LEN: {}", 39);
+    println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
+    println!("");
 }

@@ -87,13 +87,9 @@ pub fn sys_mmap(
         task.with_mut_vm_space(|m| m.unmap(addr, length))?;
     }
 
-    
-
     match flags.intersection(MmapFlags::MAP_TYPE_MASK) {
         MmapFlags::MAP_SHARED => {
             if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-                // TODO: MAP_SHARED page fault should keep track of all vm areas
-                log::error!("shared anonymous mapping");
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_anon_area(addr, length, perm, flags, true)
                 })?;

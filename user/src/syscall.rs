@@ -27,6 +27,8 @@ const SYSCALL_BRK: usize = 214;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
+const SYSCALL_MUNMAP: usize = 215;
+const SYSCALL_MMAP: usize = 222;
 
 #[cfg(target_arch="riscv64")]
 fn syscall(id: usize, args: [usize; 6]) -> isize {
@@ -201,4 +203,8 @@ pub fn sys_sendto(sockfd: i32, buf: *const u8, len: usize, flags: i32, dest_addr
 
 pub fn sys_recvfrom(sockfd: i32, buf: *mut u8, len: usize, flags: i32, src_addr: *mut u8, addrlen: *mut u32) -> isize{
     syscall(SYSCALL_RECVFROM, [sockfd as usize, buf as usize, len, flags as usize, src_addr as usize, addrlen as usize])
+}
+
+pub fn sys_mmap(addr: usize, len: usize, prot: i32, flags: i32, fd: usize, offset: usize) -> isize {
+    syscall(SYSCALL_MMAP, [addr, len, prot as _, flags as _, fd, offset])
 }

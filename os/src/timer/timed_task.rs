@@ -1,6 +1,7 @@
 use core::{
     clone, future::Future, pin::Pin, task::{Context, Poll}, time::Duration
 };
+use alloc::sync::Arc;
 use log::info;
 
 use crate::{task::task::TaskControlBlock, utils::suspend_now};
@@ -75,7 +76,7 @@ pub async fn ksleep(time: Duration) {
     TimedTaskFuture::new(time,PendingFuture{} ).await;
 }
 /// suspend out time out task future
-pub async fn suspend_timeout(task: &TaskControlBlock, time_limit: Duration) -> Duration {
+pub async fn suspend_timeout(task: &Arc<TaskControlBlock>, time_limit: Duration) -> Duration {
     let expire = get_current_time_duration() + time_limit;
     TIMER_MANAGER.add_timer(Timer::new_waker_timer(expire, task.waker().clone().unwrap()));
     suspend_now().await;

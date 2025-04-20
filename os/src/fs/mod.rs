@@ -13,6 +13,7 @@ pub mod devfs;
 pub mod utils;
 pub mod simplefs;
 pub mod procfs;
+pub mod shmfs;
 
 use devfs::{fstype::DevFsType, init_devfs};
 use ext4::Ext4FSType;

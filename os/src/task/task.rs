@@ -16,6 +16,7 @@ use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
+use crate::syscall::futex::RobustListHead;
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
@@ -109,6 +110,8 @@ pub struct TaskControlBlock {
     pub elf: Shared<Option<Arc<dyn File>>>,
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
+    /// Futexes used by the task.
+    pub robust: Shared<usize>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -172,7 +175,8 @@ impl TaskControlBlock {
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
         itimers: [ITimer;3],
-        elf: Option<Arc<dyn File>>
+        elf: Option<Arc<dyn File>>,
+        robust: usize
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -335,6 +339,7 @@ impl TaskControlBlock {
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
+            robust: new_shared(0),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -514,6 +519,7 @@ impl TaskControlBlock {
             cwd,
             elf: self.elf.clone(),
             itimers,
+            robust: new_shared(0),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]

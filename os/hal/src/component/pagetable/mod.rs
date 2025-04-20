@@ -32,7 +32,6 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
     fn new_in(asid: usize, alloc: A) -> Self;
     fn find_pte(&self, vpn: VirtPageNum) -> Option<(&mut PTE, usize)>;
-    fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PTE>;
     fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapPerm, level: PageLevel) -> Option<&mut PTE>;
     fn unmap(&mut self, vpn: VirtPageNum) -> Option<PTE>;
     unsafe fn enable_high(&self);
