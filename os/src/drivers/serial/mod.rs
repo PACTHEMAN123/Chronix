@@ -7,37 +7,26 @@ use core::task::Waker;
 
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, string::ToString, sync::Arc};
 use async_trait::async_trait;
-use hal::{board::{UART_CLK_FEQ, UART_IRQ_NUM, UART_MMIO_BASE_PADDR, UART_MMIO_SIZE, UART_REG_IO_WIDTH, UART_REG_SHIFT}, constant::{Constant, ConstantsHal}};
+use hal::constant::{Constant, ConstantsHal};
 use lazy_static::lazy_static;
 use uart::{Uart, UART_BAUD_RATE, UART_BUF_LEN};
 
-use crate::{devices::{CharDevice, DevId, DeviceMajor, DeviceMeta, DeviceType}, sync::{mutex::SpinNoIrqLock, UPSafeCell}, utils::{get_waker, suspend_now, RingBuffer}, with_methods};
+use crate::{devices::{CharDevice, DevId, Device, DeviceMajor, DeviceMeta, DeviceType, DEVICE_MANAGER}, sync::{mutex::SpinNoIrqLock, UPSafeCell}, utils::{get_waker, suspend_now, RingBuffer}, with_methods};
 
 lazy_static! {
+    /// WARNING: should only be called after deveices finish init
     pub static ref UART0: Arc<dyn CharDevice> = {
-        let size = UART_MMIO_SIZE;
-        let base_paddr = UART_MMIO_BASE_PADDR;
-        let base_vaddr = base_paddr | Constant::KERNEL_ADDR_SPACE.start;
-        let irq_no = UART_IRQ_NUM;
-        let clk_feq = UART_CLK_FEQ;
-        let baud_rate = UART_BAUD_RATE;
-        let reg_io_width = UART_REG_IO_WIDTH;
-        let reg_shift = UART_REG_SHIFT;
-
-        let uart = unsafe { Uart::new(
-            base_vaddr,
-            clk_feq,
-            baud_rate,
-            reg_io_width,
-            reg_shift,
-            false,
-        )};
-        log::info!("mapping uart mmio paddr {:x} to vaddr {:x}", base_paddr, base_vaddr);
-        Arc::new(Serial::new(base_paddr, size, irq_no, Box::new(uart)))
+        let serial = DEVICE_MANAGER.lock()
+        .find_dev_by_major(DeviceMajor::Serial)
+        .into_iter()
+        .map(|device| device.as_char().unwrap())
+        .next()
+        .unwrap();
+        serial.clone()
     };
 }
 
-trait UartDriver: Send + Sync {
+pub trait UartDriver: Send + Sync {
     fn init(&mut self);
     fn putc(&mut self, byte: u8);
     fn getc(&mut self) -> u8;
@@ -61,7 +50,7 @@ unsafe impl Send for Serial {}
 unsafe impl Sync for Serial {}
 
 impl Serial {
-    fn new(mmio_base: usize, mmio_size: usize, irq_no: usize, driver: Box<dyn UartDriver>) -> Self {
+    pub fn new(mmio_base: usize, mmio_size: usize, irq_no: usize, driver: Box<dyn UartDriver>) -> Self {
         let meta = DeviceMeta {
             dev_id: DevId {
                 major: DeviceMajor::Serial,
@@ -136,3 +125,36 @@ impl CharDevice for Serial {
     }
 }
 
+impl Device for Serial {
+    fn meta(&self) -> &DeviceMeta {
+        &self.meta
+    }
+
+    fn init(&self) {
+        unsafe { &mut *self.uart.get() }.as_mut().init();
+    }
+
+    fn handle_irq(&self) {
+        let uart = self.uart();
+        self.with_mut_inner(|inner| {
+            while uart.poll_in() {
+                let byte = uart.getc();
+                log::info!(
+                    "Serial interrupt handler got byte: {}, ascii: {byte}",
+                    core::str::from_utf8(&[byte]).unwrap()
+                );
+                if inner.read_buf.enqueue(byte).is_none() {
+                    break;
+                }
+            }
+            // Round Robin
+            if let Some(waiting) = inner.pollin_queue.pop_front() {
+                waiting.wake();
+            }
+        });
+    }
+
+    fn as_char(self: Arc<Self>) -> Option<Arc<dyn CharDevice>> {
+        Some(self)
+    }
+}

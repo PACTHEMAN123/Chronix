@@ -87,6 +87,7 @@ pub fn main(id: usize) -> ! {
         info!("id: {id}");
         info!("[kernel] Hello, world!");
         mm::init();
+        devices::init();
         processor::processor::init(id);
         hal::trap::init();
         fs::init();
