@@ -30,7 +30,7 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let tty_inode = TtyInode::new(sb.clone());
     tty_dentry.set_inode(tty_inode);
     root_dentry.add_child(tty_dentry.clone());
-    log::info!("dcache insert: {}", tty_dentry.path());
+    log::debug!("dcache insert: {}", tty_dentry.path());
     DCACHE.lock().insert(tty_dentry.path(), tty_dentry.clone());
     let tty_file = TtyFile::new(tty_dentry);
     TTY.call_once(|| tty_file);
@@ -40,7 +40,7 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let null_inode = NullInode::new(sb.clone());
     null_dentry.set_inode(null_inode);
     root_dentry.add_child(null_dentry.clone());
-    log::info!("dcache insert: {}", null_dentry.path());
+    log::debug!("dcache insert: {}", null_dentry.path());
     DCACHE.lock().insert(null_dentry.path(), null_dentry.clone());
 
     // add /dev/rtc
@@ -48,7 +48,7 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let rtc_inode = RtcInode::new(sb.clone());
     rtc_dentry.set_inode(rtc_inode);
     root_dentry.add_child(rtc_dentry.clone());
-    log::info!("dcache insert: {}", rtc_dentry.path());
+    log::debug!("dcache insert: {}", rtc_dentry.path());
     DCACHE.lock().insert(rtc_dentry.path(), rtc_dentry.clone());
 
     // add /dev/urandom
@@ -56,7 +56,7 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     let urandom_inode = UrandomInode::new(sb.clone());
     urandom_dentry.set_inode(urandom_inode);
     root_dentry.add_child(urandom_dentry.clone());
-    log::info!("dcache insert: {}", urandom_dentry.path());
+    log::debug!("dcache insert: {}", urandom_dentry.path());
     DCACHE.lock().insert(urandom_dentry.path(), urandom_dentry.clone());
     
 }
