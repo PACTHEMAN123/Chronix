@@ -1,11 +1,21 @@
 #![allow(dead_code)]
+
 pub mod net;
-use core::any::Any;
+pub mod serial;
+pub mod manager;
+use core::{any::Any, arch::global_asm};
 use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use downcast_rs::DowncastSync;
+use hal::println;
+use manager::DeviceManager;
 use net::{EthernetAddress, NetBuf};
+use serial::scan_char_device;
 use smoltcp::phy::{DeviceCapabilities,RxToken, TxToken};
+use spin::Once;
+
+use crate::sync::mutex::SpinNoIrqLock;
+use lazy_static::lazy_static;
 
 
 /// General Device Operations
@@ -47,7 +57,7 @@ pub struct DeviceMeta {
     pub mmio_size: usize,
     /// Interrupt number.
     pub irq_no: Option<usize>,
-    /// Device type.
+    /// Device type. (TODO: maybe dup with DeviceMajor?)
     pub dtype: DeviceType,
 }
 
@@ -78,7 +88,9 @@ pub type DevResult<T = ()> = Result<T, DevError>;
 pub trait Device: Sync + Send + DowncastSync {
     fn meta(&self) -> &DeviceMeta;
 
-    fn init(&self);
+    fn init(&self) {
+        // default: do nothing
+    }
 
     fn handle_irq(&self);
 
@@ -189,4 +201,44 @@ pub(crate) const fn as_dev_err(e: virtio_drivers::Error) -> DevError {
         ConfigSpaceMissing => DevError::BadState,
         _ => DevError::BadState,
     }
+}
+
+global_asm!(include_str!("dtree.S"));
+
+pub fn get_device_tree_addr() -> usize {
+    unsafe extern "C" {
+        fn _dtb_start();
+    }
+    _dtb_start as *const usize as usize
+}
+
+
+
+lazy_static! {
+    pub static ref DEVICE_MANAGER: SpinNoIrqLock<DeviceManager> = SpinNoIrqLock::new(DeviceManager::new());
+}
+
+
+pub fn init() {
+    let device_tree_addr = get_device_tree_addr();
+    log::info!("get device tree addr: {:#x}", device_tree_addr);
+    
+    let device_tree = unsafe {
+        fdt::Fdt::from_ptr(device_tree_addr as _).expect("parse DTB failed!")
+    };
+
+    if let Some(bootargs) = device_tree.chosen().bootargs() {
+        println!("Bootargs: {:?}", bootargs);
+    }
+
+    println!("Device: {}", device_tree.root().model());
+
+    // find all devices
+    DEVICE_MANAGER.lock().map_devices(&device_tree);
+
+    // map the mmap area
+    DEVICE_MANAGER.lock().map_mmio_area();
+
+    // init devices
+    DEVICE_MANAGER.lock().init_devices();
 }

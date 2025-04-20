@@ -18,3 +18,5 @@ pushall.sh
 .gdb_history
 .gdbinit
 *.img
+*.o
+*.dtb

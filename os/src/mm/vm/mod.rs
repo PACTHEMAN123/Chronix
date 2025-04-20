@@ -112,7 +112,7 @@ pub struct KernVmArea {
 
 #[allow(missing_docs, unused)]
 impl KernVmArea {
-    fn new(
+    pub fn new(
         range_va: Range<VirtAddr>, 
         vma_type: KernVmAreaType, 
         map_perm: MapPerm
