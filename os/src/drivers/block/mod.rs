@@ -1,18 +1,35 @@
 //! Block device driver
 
 mod virtio_blk;
+mod pci_blk;
+mod mmio_blk;
 
 use hal::println;
 pub use virtio_blk::VirtIOBlock;
+pub use pci_blk::VirtIOPCIBlock;
+pub use mmio_blk::VirtIOMMIOBlock;
 
 use alloc::sync::Arc;
-use crate::devices::BlockDevice;
+use crate::devices::{BlockDevice, DeviceMajor, DEVICE_MANAGER};
 use lazy_static::*;
 
-pub type BlockDeviceImpl = crate::drivers::block::VirtIOBlock;
+// pub type BlockDeviceImpl = crate::drivers::block::VirtIOBlock;
+
+// lazy_static! {
+//     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
+// }
 
 lazy_static! {
-    pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
+    /// WARNING: should only be called after devices manager finish init
+    pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = {
+        let blk = DEVICE_MANAGER.lock()
+        .find_dev_by_major(DeviceMajor::Block)
+        .into_iter()
+        .map(|device| device.as_blk().unwrap())
+        .next()
+        .unwrap();
+        blk.clone()
+    };
 }
 
 #[allow(unused)]

@@ -196,6 +196,8 @@ endif
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
 	$(call success, "building $(FS_IMG) finished")
+	@cp $(FS_IMG) $(FS_IMG_COPY)
+	$(call success, "cp $(FS_IMG) to $(FS_IMG_COPY) finished")
 
 .PHONY: fs-img
 
@@ -309,11 +311,12 @@ clean:
 	@cd os && cargo clean
 	@cd user && cargo clean
 	@sudo rm -f $(FS_IMG)
+	@sudo rm -f $(FS_IMG_COPY)
 	@sudo rm -rf mnt
 	@sudo rm -rf cross-compiler/kendryte-toolchain
 	@make -C $(BUSY_BOX_DIR) clean
 
-.PHONY: build env run-inner run clean
+.PHONY: build env run-inner run clean $(KERNEL_BIN)
 
 ########################################################
 # USER
