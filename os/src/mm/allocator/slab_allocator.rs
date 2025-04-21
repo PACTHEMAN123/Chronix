@@ -3,7 +3,7 @@ use core::{marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut,
 use alloc::{alloc::{AllocError, Allocator, Global}, collections::btree_map::BTreeMap};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, println, util::mutex::Mutex};
 
-use crate::sync::mutex::{spin_mutex::SpinMutex, Spin};
+use crate::sync::mutex::{spin_mutex::SpinMutex, Spin, SpinNoIrqLock};
 
 use super::FrameAllocator;
 
@@ -13,19 +13,19 @@ pub static SLAB_ALLOCATOR_INNER: SlabAllocatorInner = SlabAllocatorInner::new();
 
 /// Slab Allocator's Inner
 pub struct SlabAllocatorInner {
-    pub cache8: SpinMutex<SlabCache<8>, Spin>, 
-    pub cache16: SpinMutex<SlabCache<16>, Spin>, 
-    pub cache32: SpinMutex<SlabCache<32>, Spin>, 
-    pub cache64: SpinMutex<SlabCache<64>, Spin>, 
-    pub cache96: SpinMutex<SlabCache<96>, Spin>,
-    pub cache128: SpinMutex<SlabCache<128>, Spin>, 
-    pub cache192: SpinMutex<SlabCache<192>, Spin>, 
-    pub cache256: SpinMutex<SlabCache<256>, Spin>, 
-    pub cache512: SpinMutex<SlabCache<512>, Spin>, 
-    pub cache1024: SpinMutex<SlabCache<1024>, Spin>,
-    pub cache2048: SpinMutex<SlabCache<2048>, Spin>, 
-    pub cache4096: SpinMutex<SlabCache<4096>, Spin>, 
-    pub cache8192: SpinMutex<SlabCache<8192>, Spin>, 
+    pub cache8: SpinNoIrqLock<SlabCache<8>>, 
+    pub cache16: SpinNoIrqLock<SlabCache<16>>, 
+    pub cache32: SpinNoIrqLock<SlabCache<32>>, 
+    pub cache64: SpinNoIrqLock<SlabCache<64>>, 
+    pub cache96: SpinNoIrqLock<SlabCache<96>>,
+    pub cache128: SpinNoIrqLock<SlabCache<128>>, 
+    pub cache192: SpinNoIrqLock<SlabCache<192>>, 
+    pub cache256: SpinNoIrqLock<SlabCache<256>>, 
+    pub cache512: SpinNoIrqLock<SlabCache<512>>, 
+    pub cache1024: SpinNoIrqLock<SlabCache<1024>>,
+    pub cache2048: SpinNoIrqLock<SlabCache<2048>>, 
+    pub cache4096: SpinNoIrqLock<SlabCache<4096>>, 
+    pub cache8192: SpinNoIrqLock<SlabCache<8192>>, 
 }
 
 unsafe impl Sync for SlabAllocatorInner {}
@@ -37,15 +37,23 @@ pub struct SlabAllocator;
 
 unsafe impl Allocator for SlabAllocator {
     fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
-        Ok(SLAB_ALLOCATOR_INNER.alloc_by_layout(layout).map(
-            |ptr| {
-                NonNull::slice_from_raw_parts(ptr, layout.size())
-            }
-        ).ok_or(AllocError)?)
+        if SlabAllocatorInner::check_layout(layout) {
+            Ok(SLAB_ALLOCATOR_INNER.alloc_by_layout(layout).map(
+                |ptr| {
+                    NonNull::slice_from_raw_parts(ptr, layout.size())
+                }
+            ).ok_or(AllocError)?)
+        } else {
+            FrameAllocator.allocate(layout)
+        }
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: core::alloc::Layout) {
-        SLAB_ALLOCATOR_INNER.dealloc_by_layout(ptr, layout);
+        if SlabAllocatorInner::check_layout(layout) {
+            SLAB_ALLOCATOR_INNER.dealloc_by_layout(ptr, layout);
+        } else {
+            FrameAllocator.deallocate(ptr, layout);
+        }
     }
 }
 
@@ -54,20 +62,24 @@ impl SlabAllocatorInner {
     /// new
     pub const fn new() -> Self {
         Self {
-            cache8: SpinMutex::new(SlabCache::<8>::new()),
-            cache16: SpinMutex::new(SlabCache::<16>::new()),
-            cache32: SpinMutex::new(SlabCache::<32>::new()),
-            cache64: SpinMutex::new(SlabCache::<64>::new()),
-            cache96: SpinMutex::new(SlabCache::<96>::new()),
-            cache128: SpinMutex::new(SlabCache::<128>::new()),
-            cache192: SpinMutex::new(SlabCache::<192>::new()),
-            cache256: SpinMutex::new(SlabCache::<256>::new()),
-            cache512: SpinMutex::new(SlabCache::<512>::new()),
-            cache1024: SpinMutex::new(SlabCache::<1024>::new()),
-            cache2048: SpinMutex::new(SlabCache::<2048>::new()),
-            cache4096: SpinMutex::new(SlabCache::<4096>::new()),
-            cache8192: SpinMutex::new(SlabCache::<8192>::new()),
+            cache8: SpinNoIrqLock::new(SlabCache::<8>::new()),
+            cache16: SpinNoIrqLock::new(SlabCache::<16>::new()),
+            cache32: SpinNoIrqLock::new(SlabCache::<32>::new()),
+            cache64: SpinNoIrqLock::new(SlabCache::<64>::new()),
+            cache96: SpinNoIrqLock::new(SlabCache::<96>::new()),
+            cache128: SpinNoIrqLock::new(SlabCache::<128>::new()),
+            cache192: SpinNoIrqLock::new(SlabCache::<192>::new()),
+            cache256: SpinNoIrqLock::new(SlabCache::<256>::new()),
+            cache512: SpinNoIrqLock::new(SlabCache::<512>::new()),
+            cache1024: SpinNoIrqLock::new(SlabCache::<1024>::new()),
+            cache2048: SpinNoIrqLock::new(SlabCache::<2048>::new()),
+            cache4096: SpinNoIrqLock::new(SlabCache::<4096>::new()),
+            cache8192: SpinNoIrqLock::new(SlabCache::<8192>::new()),
         }
+    }
+
+    pub fn check_layout(layout: core::alloc::Layout) -> bool{
+        layout.size() <= 8192 && layout.align() <= 8
     }
 
     /// release useless frames
@@ -242,7 +254,7 @@ impl<const S: usize> LinkedNode for SlabBlock<S> {
 
 #[allow(unused, missing_docs)]
 pub struct SlabCache<const S: usize> {
-    blocks: BTreeMap<PhysPageNum, SlabBlock<S>>,
+    blocks: BTreeMap<PhysPageNum, SlabBlock<S>, FrameAllocator>,
     empty_blk_list: LinkedStack<SlabBlock<S>>,
     free_blk_list: LinkedStack<SlabBlock<S>>,
     full_blk_list: LinkedStack<SlabBlock<S>>,
@@ -252,7 +264,7 @@ pub struct SlabCache<const S: usize> {
 impl<const S: usize> SlabCache<S> {
     pub const fn new() -> Self {
         Self {
-            blocks: BTreeMap::new(),
+            blocks: BTreeMap::new_in(FrameAllocator),
             empty_blk_list: LinkedStack::new(),
             free_blk_list: LinkedStack::new(),
             full_blk_list: LinkedStack::new(),
@@ -260,12 +272,10 @@ impl<const S: usize> SlabCache<S> {
     }
 
     pub fn alloc(&mut self) -> Option<NonNull<u8>> {
-        loop {
-            if self.free_blk_list.is_empty() {
-                if let Some(t) = self.empty_blk_list.pop() {
-                    self.free_blk_list.push(t);
-                    continue;
-                }
+        if self.free_blk_list.is_empty() {
+            if let Some(t) = self.empty_blk_list.pop() {
+                self.free_blk_list.push(t);
+            } else {
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
                     super::log2(SlabBlock::<S>::page_cnt())
@@ -293,23 +303,24 @@ impl<const S: usize> SlabCache<S> {
                 }
                 last.next = null_mut();
                 self.free_blk_list.push(blk);
-                continue;
             }
-
-            let blk = unsafe { &mut *self.free_blk_list.head };
-            if blk.head.is_null() {
-                self.free_blk_list.pop();
-                self.full_blk_list.push(blk);
-                continue;
-            }
-            let ret = blk.head;
-            unsafe {
-                blk.head = (*blk.head).next;
-                (*ret).next = 0 as _;
-            }
-            blk.size += 1;
-            break NonNull::new(ret as *mut u8);
         }
+
+        let blk = unsafe { &mut *self.free_blk_list.head };
+        if blk.head.is_null() {
+            panic!("SlabBlock head is null");
+        }
+        let ret = blk.head;
+        unsafe {
+            blk.head = (*blk.head).next;
+            (*ret).next = 0 as _;
+        }
+        blk.size += 1;
+        if blk.head.is_null() {
+            self.free_blk_list.pop();
+            self.full_blk_list.push(blk);
+        }
+        NonNull::new(ret as *mut u8)
     }
 
     pub fn dealloc(&mut self, ptr: NonNull<u8>) -> Option<()> {
