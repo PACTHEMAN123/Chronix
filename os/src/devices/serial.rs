@@ -8,31 +8,27 @@ use crate::drivers::serial::{uart::Uart, Serial};
 
 /// scan the device tree and return a Serial
 pub fn scan_char_device(device_tree: &Fdt) -> Arc<Serial> {
-    let chosen = device_tree.chosen();
-    let mut stdout = chosen.stdout();
-    if stdout.is_none() {
-        log::info!("[device tree]: no standard stdout device, trying another");
-        let chosen = device_tree.find_node("/chosen").expect("No chosen node!");
-        let stdout_path = chosen
-            .properties()
-            .find(|n| n.name == "stdout-path")
-            .and_then(|n| {
-                let bytes = unsafe {
-                    core::slice::from_raw_parts_mut((n.value.as_ptr()) as *mut u8, n.value.len())
-                };
-                let mut len = 0;
-                for byte in bytes.iter() {
-                    if *byte == b':' {
-                        return core::str::from_utf8(&n.value[..len]).ok();
-                    }
-                    len += 1;
+    let mut stdout;
+    let chosen = device_tree.find_node("/chosen").expect("No chosen node!");
+    let stdout_path = chosen
+        .properties()
+        .find(|n| n.name == "stdout-path")
+        .and_then(|n| {
+            let bytes = unsafe {
+                core::slice::from_raw_parts_mut((n.value.as_ptr()) as *mut u8, n.value.len())
+            };
+            let mut len = 0;
+            for byte in bytes.iter() {
+                if *byte == b':' {
+                    return core::str::from_utf8(&n.value[..len]).ok();
                 }
-                core::str::from_utf8(&n.value[..n.value.len() - 1]).ok()
-            })
-            .unwrap();
-        log::info!("[device tree]: searching stdout: {}", stdout_path);
-        stdout = device_tree.find_node(stdout_path);
-    }
+                len += 1;
+            }
+            core::str::from_utf8(&n.value[..n.value.len() - 1]).ok()
+        })
+        .unwrap();
+    log::info!("[device tree]: searching stdout: {}", stdout_path);
+    stdout = device_tree.find_node(stdout_path);
     if stdout.is_none() {
         log::info!("Unable to parse /chosen, choosing first serial device");
         stdout = device_tree.find_compatible(&[

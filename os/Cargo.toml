@@ -27,7 +27,12 @@ rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_r
 fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
 range-map = { path = "../utils/range-map" }
 downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
-fdt = "0.1.5"
+
+[dependencies.fdt]
+git = "https://github.com/repnop/fdt.git"
+rev = "059bb2383873f8001959456e36ec123228f67642"
+default-feature = true
+
 [dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"
 rev = "5ac01e106e3ec6daac84bba40510cf1791f0396c"  

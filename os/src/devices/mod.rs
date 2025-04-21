@@ -2,6 +2,7 @@
 
 pub mod net;
 pub mod serial;
+pub mod block;
 pub mod manager;
 use core::{any::Any, arch::global_asm};
 use alloc::{boxed::Box, string::String, sync::Arc};
@@ -51,6 +52,9 @@ pub struct DeviceMeta {
     pub dev_id: DevId,
     /// Name of the device.
     pub name: String,
+    /// if the device needed mapping
+    /// the device wont be map in device manager if false
+    pub need_mapping: bool,
     /// Mmio start address.
     pub mmio_base: usize,
     /// Mmio size.
@@ -230,8 +234,6 @@ pub fn init() {
     if let Some(bootargs) = device_tree.chosen().bootargs() {
         println!("Bootargs: {:?}", bootargs);
     }
-
-    println!("Device: {}", device_tree.root().model());
 
     // find all devices
     DEVICE_MANAGER.lock().map_devices(&device_tree);
