@@ -1,7 +1,7 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
 use crate::sync::mutex::spin_mutex::SpinMutex;
-use crate::sync::mutex::Spin;
+use crate::sync::mutex::{Spin, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
 use alloc::alloc::Allocator;
 use alloc::vec::Vec;
@@ -16,6 +16,7 @@ use core::ops::Range;
 use core::ptr::NonNull;
 use lazy_static::*;
 
+/// Bitmap Frame Allocator, the supported maximum memory space is 64GiB
 struct BitMapFrameAllocator {
     range: Range<PhysPageNum>,
     inner: bitmap_allocator::BitAlloc16M,
@@ -38,7 +39,7 @@ impl BitMapFrameAllocator {
 
 
 /// frame allocator
-static FRAME_ALLOCATOR: SpinMutex<BitMapFrameAllocator, Spin> = SpinMutex::new(BitMapFrameAllocator::new());
+static FRAME_ALLOCATOR: SpinNoIrqLock<BitMapFrameAllocator> = SpinNoIrqLock::new(BitMapFrameAllocator::new());
 
 #[allow(missing_docs)]
 #[derive(Clone)]

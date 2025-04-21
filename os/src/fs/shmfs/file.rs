@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use alloc::{borrow::ToOwned, boxed::Box, collections::btree_map::BTreeMap, sync::{Arc, Weak}, vec::Vec};
 use hal::println;
-use crate::{fs::vfs::{File, FileInner, Inode}, sync::mutex::SpinNoIrqLock, syscall::SysError, task::{TidAllocator, TidHandle}};
+use crate::{fs::vfs::{File, FileInner, Inode}, mm::allocator::{FrameAllocator, SlabAllocator}, sync::mutex::SpinNoIrqLock, syscall::SysError, task::{TidAllocator, TidHandle}};
 
 use super::inode::ShmInode;
 
@@ -92,7 +92,7 @@ impl ShmManager {
 ///Shm Id Allocator struct
 pub struct ShmIdAllocator {
     current: usize,
-    recycled: Vec<usize>,
+    recycled: Vec<usize, SlabAllocator>,
 }
 
 impl ShmIdAllocator {
@@ -100,7 +100,7 @@ impl ShmIdAllocator {
     pub const fn new() -> Self {
         Self {
             current: 0,
-            recycled: Vec::new(),
+            recycled: Vec::new_in(SlabAllocator),
         }
     }
     ///Allocate a tid
