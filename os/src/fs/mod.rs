@@ -14,6 +14,7 @@ pub mod utils;
 pub mod simplefs;
 pub mod procfs;
 pub mod shmfs;
+pub mod tmpfs;
 
 use devfs::{fstype::DevFsType, init_devfs};
 use ext4::Ext4FSType;
@@ -23,6 +24,7 @@ use procfs::{fstype::ProcFSType, init_procfs};
 pub use stdio::{Stdin, Stdout};
 
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc};
+use tmpfs::{fstype::TmpFSType, init_tmpfs};
 use vfs::{fstype::{FSType, MountFlags}, DCACHE};
 
 use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
@@ -61,6 +63,9 @@ fn register_all_fs() {
 
     let procfs = ProcFSType::new();
     FS_MANAGER.lock().insert(procfs.name().to_string(), procfs);
+
+    let tmpfs = TmpFSType::new();
+    FS_MANAGER.lock().insert(tmpfs.name().to_string(), tmpfs);
 }
 
 /// get the file system by name
@@ -92,6 +97,14 @@ pub fn init() {
     diskfs_root.add_child(procfs_root.clone());
     log::info!("insert path: {}", procfs_root.path());
     DCACHE.lock().insert(procfs_root.path(), procfs_root);
+
+    // mount the tmp file system under diskfs
+    let tmpfs = get_filesystem("tmpfs");
+    let tmpfs_root = tmpfs.mount("tmp", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
+    init_tmpfs(tmpfs_root.clone());
+    diskfs_root.add_child(tmpfs_root.clone());
+    log::info!("insert path: {}", tmpfs_root.path());
+    DCACHE.lock().insert(tmpfs_root.path(), tmpfs_root);
 
     info!("fs finish init");
 }

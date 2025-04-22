@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use core::ptr::copy_nonoverlapping;
+use core::{any::Any, ptr::copy_nonoverlapping};
 
 use alloc::{string::ToString, sync::Arc, vec};
 use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
@@ -20,7 +20,7 @@ use crate::processor::processor::{current_processor,current_task,current_user_to
 /// syscall: write
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    //info!("task {} trying to write fd {}", task.gettid(), fd);
+    log::debug!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
 
     let start = buf & !(Constant::PAGE_SIZE - 1);
@@ -155,7 +155,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        log::debug!("trying to open {}, flags: {:?}", path, flags);
+        log::debug!("task {} trying to open {}, flags: {:?}", task.tid(), path, flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
         if flags.contains(OpenFlags::O_CREAT) {
             // inode not exist, create it as a regular file
@@ -166,7 +166,6 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             let name = abs_path_to_name(&path).unwrap();
             let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
             dentry.set_inode(new_inode);
-            dentry.set_state(DentryState::USED);
             // we shall not add child to parent until child is valid!
             parent.add_child(dentry.clone());
         }
@@ -183,7 +182,6 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         let fd = task.with_mut_fd_table(|table| table.alloc_fd());
         let fd_info = FdInfo { file, flags: flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
-        log::debug!("open success, return fd: {}", fd);
         return Ok(fd as isize)
     } else {
         log::info!("[sys_openat]: pathname is empty!");
@@ -458,7 +456,10 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     }
     // use parent inode to remove the inode in the fs
     let name = abs_path_to_name(&path).unwrap();
-    dentry.parent().unwrap().inode().unwrap().remove(&name, inode.inode_inner().mode).expect("remove failed");
+    let parent = dentry.parent().unwrap();
+    parent.inode().unwrap().remove(&name, inode.inode_inner().mode).expect("remove failed");
+    parent.remove_child(&name);
+
     //inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
     Ok(0)
