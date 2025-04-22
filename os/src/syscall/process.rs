@@ -94,6 +94,7 @@ bitflags! {
 
 /// get the pid of the current process
 pub fn sys_getpid() -> SysResult {
+    // log::info!("[sys_getpid]: in get pid");
     Ok(current_task().unwrap().pid() as isize)
 }
 /// get the tid of the current thread
@@ -316,45 +317,57 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         return Ok(0);
     } else {
         log::debug!("[sys_waitpid]: TCB {} waiting for SIGCHLD", task.gettid());
-        let (child_pid, exit_code) = loop {
+        let (child_pid, exit_code,child_user_time,child_kernel_time) = loop {
             task.set_interruptable();
-            task.set_wake_up_sigs(SigSet::SIGCHLD);
+            let block_sig = task.with_sig_manager(|sig_manager|{
+                sig_manager.blocked_sigs
+            });
+            task.set_wake_up_sigs(!block_sig);
             suspend_now().await;
             task.set_running();
             
             // todo: missing check if getting the expect signal
             // now check the child one more time
-            let children = task.children();
-            let child = match pid {
-                -1 => {
-                    children
-                    .values()
-                    .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
-                }
-                pid if pid > 0 => {
-                    if let Some(child) = children.get(&(pid as usize)) {
-                        if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
-                            Some(child)
-                        } else {
-                            None
-                        }
-                    } else {
-                        panic!("[sys_waitpid]: no child with pid {}", pid);
+            let si = task.with_mut_sig_manager(|sig_manager|{
+                sig_manager.check_pending(SigSet::SIGCHLD)
+            });
+            if let Some(si) = si {
+                log::info!("[sys_waitpid] get signal: {}", si.si_signo);
+                let children = task.children();
+                let child = match pid {
+                    -1 => {
+                        children
+                        .values()
+                        .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
                     }
+                    pid if pid > 0 => {
+                        if let Some(child) = children.get(&(pid as usize)) {
+                            if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
+                                Some(child)
+                            } else {
+                                None
+                            }
+                        } else {
+                            panic!("[sys_waitpid]: no child with pid {}", pid);
+                        }
+                    }
+                    _ => {
+                        panic!("[sys_waitpid]: not implement");
+                    }
+                };
+                if let Some(child) = child {
+                    break (
+                        child.pid(),
+                        child.exit_code(),
+                        child.time_recorder().user_time(),
+                        child.time_recorder().kernel_time()
+                    );
                 }
-                _ => {
-                    panic!("[sys_waitpid]: not implement");
-                }
-            };
-            if let Some(child) = child {
-                break (
-                    child.pid(),
-                    child.exit_code(),
-                );
-            } else {
-                panic!("[sys_waitpid] unexpected result");
+            }else {
+                return Err(SysError::EINTR);
             }
         };
+        task.time_recorder().update_child_time((child_user_time,child_kernel_time));
         // write into exit code pointer
         if exit_code_ptr != 0 {
             log::debug!("[sys_waitpid]: TCB {} get child {}, exit code {}", task.tid(), child_pid, exit_code);

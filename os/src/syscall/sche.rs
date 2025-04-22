@@ -83,4 +83,19 @@ pub fn sys_sched_getaffinity(_pid: usize, cpusetusize: usize, mask: usize) -> Sy
         }   
         Ok(0)
     }
-} 
+}
+///
+pub fn sys_sched_setscheduler() -> SysResult {
+    log::warn!("[sys_sched_setscheduler] unimplemented");
+    Ok(0)
+}
+///
+pub fn sys_sched_getscheduler() -> SysResult {
+    log::warn!("[sys_sched_getscheduler] unimplemented");
+    Ok(0)
+}
+/// 
+pub fn sys_sched_getparam() -> SysResult {
+    log::warn!("[sys_sched_getparam] unimplemented");
+    Ok(0)
+}
