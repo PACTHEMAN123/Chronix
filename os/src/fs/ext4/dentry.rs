@@ -87,4 +87,12 @@ impl Dentry for Ext4Dentry {
         }
         child_dentrys
     }
+
+    fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
+        let neg_dentry = Arc::new(Self {
+            inner: DentryInner::new(name, self.superblock(), Some(self.clone()))
+        });
+        neg_dentry.set_state(DentryState::NEGATIVE);
+        neg_dentry
+    }
 }

@@ -1,16 +1,18 @@
-use crate::fs::{fat32::file::FatFile, vfs::{Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock};
 use alloc::{sync::Arc, vec::Vec};
 
+use crate::fs::{tmpfs::file::TmpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock};
 
-/// fat32 file system dentry implement for VFS
-pub struct FatDentry {
+
+
+/// tmp file system
+pub struct TmpDentry {
     inner: DentryInner,
 }
 
-unsafe impl Send for FatDentry {}
-unsafe impl Sync for FatDentry {}
+unsafe impl Send for TmpDentry {}
+unsafe impl Sync for TmpDentry {}
 
-impl FatDentry {
+impl TmpDentry {
     pub fn new(
         name: &str,
         superblock: Arc<dyn SuperBlock>,
@@ -23,12 +25,11 @@ impl FatDentry {
     }
 }
 
-impl Dentry for FatDentry {
+impl Dentry for TmpDentry {
     fn dentry_inner(&self) -> &DentryInner {
         &self.inner
     }
-    fn new(
-        &self,
+    fn new(&self,
         name: &str,
         superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
@@ -38,10 +39,19 @@ impl Dentry for FatDentry {
         });
         dentry
     }
-    fn open(self: Arc<Self>, flags: OpenFlags) -> Option<Arc<dyn File>> {
+    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
         assert!(self.state() == DentryState::USED);
-        let (readable, writable) = flags.read_write();
-        Some(Arc::new(FatFile::new(readable, writable, self.clone())))
+        Some(Arc::new(TmpFile::new(self.clone())))
+    }
+    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+        let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
+        for (_, child) in self.children().iter() {
+            if child.state() == DentryState::NEGATIVE {
+                continue;
+            }
+            child_dentrys.push(child.clone());
+        }
+        child_dentrys
     }
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
         let neg_dentry = Arc::new(Self {
