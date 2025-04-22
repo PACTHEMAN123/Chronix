@@ -267,8 +267,7 @@ impl TcpSocket {
     }
     
     pub fn listen(&self) -> SockResult<()> {
-        let binding = current_task().unwrap().clone();
-        let waker = binding.waker_ref().as_ref().unwrap();
+        let waker = current_task().unwrap().waker_ref().as_ref().unwrap();
         self.update_state(SocketState::Closed, SocketState::Listening, ||{
             let inner_endpoint = self.robost_port_endpoint()?;
             self.set_local_endpoint_with_port(inner_endpoint.port);
@@ -500,8 +499,15 @@ impl TcpSocket {
                         Err(SysError::EAGAIN) => {
                             log::warn!("[block_on_future] ret state:EAGAIN!");
                             suspend_now().await;
-                            // TODO: check if the socket is still valid
-                            continue;
+                            let task = current_task().unwrap();
+                            let has_signal_flag = task.with_sig_manager(|sig_manager| {
+                                let block_sig = sig_manager.blocked_sigs;
+                                sig_manager.check_pending_flag(!block_sig)
+                            });
+                            if has_signal_flag {
+                                log::warn!("[block_on] has signal flag, return EINTR");
+                                return Err(SysError::EINTR);
+                            }
                         }
                         Err(e) => {
                             return Err(e);
@@ -527,7 +533,15 @@ impl TcpSocket {
                     }
                     Err(SysError::EAGAIN) => {
                         suspend_now().await;
-                        continue;
+                        let task = current_task().unwrap();
+                        let has_signal_flag = task.with_sig_manager(|sig_manager| {
+                            let block_sig = sig_manager.blocked_sigs;
+                            sig_manager.check_pending_flag(!block_sig)
+                        });
+                        if has_signal_flag {
+                            log::warn!("[block_on] has signal flag, return EINTR");
+                            return Err(SysError::EINTR);
+                        }
                     }
                     Err(e) => {
                         return Err(e);

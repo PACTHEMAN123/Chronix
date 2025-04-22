@@ -31,7 +31,7 @@
 #![feature(allocator_api)]
 #![feature(btreemap_alloc)]
 #![feature(arbitrary_self_types)]
-
+#![feature(new_zeroed_alloc)]
 extern crate alloc;
 
 #[macro_use]

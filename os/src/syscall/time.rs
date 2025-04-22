@@ -126,7 +126,7 @@ pub fn sys_setitimer(
 
     if !new.it_value.is_zero(){
         let timer = Timer::new(next_expire, Box::new(RealITimer{
-            task: Arc::downgrade(&task),
+            task: Arc::downgrade(task),
             id: id
         }));
         TIMER_MANAGER.add_timer(timer);

@@ -1,6 +1,6 @@
 //! virtual file system dentry
 
-use core::default;
+use core::{default, mem::MaybeUninit};
 
 use crate::{fs::{vfs::{dentry, inode::InodeMode}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
@@ -289,4 +289,19 @@ pub fn global_find_dentry(path: &str) -> Arc<dyn Dentry> {
         Arc::clone(dcache.get("/").unwrap())
     };
     root_dentry.walk(path)
+}
+
+impl<T: Send + Sync + 'static> Dentry for MaybeUninit<T> {
+    fn dentry_inner(&self) -> &DentryInner {
+        todo!()
+    }
+
+    fn new(
+        &self,
+        _name: &str,
+        _superblock: Arc<dyn SuperBlock>,
+        _parent: Option<Arc<dyn Dentry>>,
+    ) -> Arc<dyn Dentry> {
+        todo!()
+    }
 }

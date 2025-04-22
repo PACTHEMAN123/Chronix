@@ -7,7 +7,7 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
 use spin::RwLock;
 
-use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, utils::{get_waker, suspend_now, yield_now}};
+use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::{get_waker, suspend_now, yield_now}};
 
 use super::{addr::{is_unspecified, to_endpoint, SockAddr, UNSPECIFIED_LISTEN_ENDPOINT}, socket::{PollState, SockResult}, SocketSetWrapper, PORT_MANAGER, SOCKET_SET};
 
@@ -181,7 +181,7 @@ impl UdpSocket {
                 }
             })
         }).await?;
-        log::info!("[UdpSocket::send_impl] send {bytes}bytes to {remote_endpoint:?}");
+        // log::info!("[UdpSocket::send_impl] send {bytes}bytes to {remote_endpoint:?}");
         yield_now().await;
         return Ok(bytes);
     }
@@ -327,6 +327,15 @@ impl UdpSocket {
                     Err(SysError::EAGAIN) => {
                         log::info!("[UdpSocket::block_on] handle, EAGAIN, suspend now");
                         suspend_now().await;
+                        let task = current_task().unwrap();
+                        let has_signal_flag = task.with_sig_manager(|sig_manager| {
+                            let block_sig = sig_manager.blocked_sigs;
+                            sig_manager.check_pending_flag(!block_sig)
+                        });
+                        if has_signal_flag {
+                            log::warn!("[block_on] has signal flag, return EINTR");
+                            return Err(SysError::EINTR);
+                        }
                     }
                     Err(e) => return Err(e),
                 }
@@ -337,6 +346,7 @@ impl UdpSocket {
 
 impl Drop for UdpSocket {
     fn drop(&mut self) {
+        log::info!("[UdpSocket::drop] handle {} dropped", self.handle);
         self.shutdown().ok();
         SOCKET_SET.remove(self.handle);
         if let Ok(addr) = self.local_addr() {

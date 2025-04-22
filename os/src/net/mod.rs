@@ -292,7 +292,7 @@ pub fn poll_interfaces() -> smoltcp::time::Instant {
 /// modify the socket first, a helper method for use smoltcp consume
 pub fn modify_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
     use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
-    log::info!("[modify packet]receive packet");
+    // log::info!("[modify packet]receive packet");
     let ipv4_packet = if is_ethernet {
         let ether_frame = EthernetFrame::new_checked(buf)?;
         Ipv4Packet::new_checked(ether_frame.payload())?
@@ -305,7 +305,7 @@ pub fn modify_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool)
         let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
         let first_flag = tcp_packet.syn() && !tcp_packet.ack();
         if first_flag {
-            info!("[modify packet]receive packet");
+            // info!("[modify packet]receive packet");
             LISTEN_TABLE.handle_coming_packet(src_addr, dst_addr, sockets);
         }
     }

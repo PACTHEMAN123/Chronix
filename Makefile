@@ -117,7 +117,7 @@ disasm-vim: kernel
 fmt:
 	cd os ; cargo fmt;  cd ..
 
-.PHONY: kernel disasm disasm-vim fmt
+.PHONY: kernel disasm disasm-vim fmt $(KERNEL_BIN)
 
 ########################################################
 # ROOT FILE SYSTEM IMAGE
@@ -165,6 +165,7 @@ endif
 	$(call building, "copying libc-test to the $(FS_IMG)")
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
+#	@sudo cp $(LIBC_TEST_BIR)/all.sh mnt/libc-test
 
 ifneq ($(NT),)
 	$(call building, "copying netperf to the $(FS_IMG)")
@@ -196,6 +197,8 @@ endif
 	@sudo rm -rf mnt
 	@sudo chmod 777 $(FS_IMG)
 	$(call success, "building $(FS_IMG) finished")
+	@cp $(FS_IMG) $(FS_IMG_COPY)
+
 
 .PHONY: fs-img
 
@@ -292,6 +295,7 @@ gdbclient:
 ########################################################
 
 build: env $(KERNEL_BIN) #fs-img: should make fs-img first
+	$(call building, "cp $(FS_IMG) to $(FS_IMG_COPY)")
 	@cp $(FS_IMG) $(FS_IMG_COPY)
 
 env:
