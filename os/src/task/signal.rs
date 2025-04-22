@@ -117,7 +117,7 @@ impl TaskControlBlock {
                         core::mem::size_of::<UContext>(),
                     )
                 };
-                // println!("copy_out to {:#x}", new_sp);
+                println!("copy_out to {:#x}", new_sp);
                 copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
 

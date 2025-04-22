@@ -65,7 +65,7 @@ impl SigManager {
                 return Some(self.pending_sigs[i]);
             }
         }
-        log::warn!("[SigManager] check_pending failed, should not happen");
+        // log::warn!("[SigManager] check_pending failed, should not happen");
         None
     }
     /// bool flag to check if there is any pending signal expected

@@ -577,19 +577,22 @@ impl TaskControlBlock {
             initproc.children.lock().extend(children.clone()); 
             children.clear();      
         });
+        // leader will be removed by parent calling sys_waitpid
+        if let Some(parent) = self.parent() {
+            if let Some(parent) = parent.upgrade() {
+                parent.recv_sigs_process_level(
+                    SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
+                );
+            }else {
+                log::error!("no parent !");
+            }
+        }
+        self.with_mut_fd_table(|table|table.fd_table.clear());
         if self.is_leader() {
             self.set_zombie();
         }else {
             self.get_leader().set_zombie();
         }
-        // send signal to parent
-        if let Some(parent) = self.parent() {
-            //info!("task {} exit, send SIGCHLD to parent", self.pid());
-            let parent = parent.upgrade().unwrap();
-            parent.recv_sigs(SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None });
-        }
-        // set the end time
-        self.time_recorder().update_child_time(self.time_recorder().time_pair());
     }
 }
 
