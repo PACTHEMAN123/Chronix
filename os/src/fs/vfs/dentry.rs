@@ -137,8 +137,12 @@ pub trait Dentry: Send + Sync {
     /// can also be use to update
     /// since the on-disk fs dentry dont know child until lookup by inode
     /// we assert that only dir dentry will call this method
-    /// it will insert into DCAHE by the way
+    /// it will insert into DCACHE by the way
     fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+        todo!()
+    }
+    /// create a negative child which share the same type with self
+    fn new_neg_dentry(self: Arc<Self>, _name: &str) -> Arc<dyn Dentry> {
         todo!()
     }
 }
@@ -205,12 +209,15 @@ impl dyn Dentry {
                     current_dentry = child_dentry;
                 } else {
                     // child not exist
-                    let neg_dentry = self.new(
-                        name,
-                        self.superblock(),
-                        Some(current_dentry)
-                    );
-                    neg_dentry.set_state(DentryState::NEGATIVE);
+                    // create a negative dentry
+                    // WARNING: the neg dentry and its parent should have same types
+                    // let neg_dentry = self.new(
+                    //     name,
+                    //     self.superblock(),
+                    //     Some(current_dentry)
+                    // );
+                    // neg_dentry.set_state(DentryState::NEGATIVE);
+                    let neg_dentry = current_dentry.new_neg_dentry(name);
                     //info!("[DCACHE]: insert key: {}", neg_dentry.path());
                     DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
                     return neg_dentry;

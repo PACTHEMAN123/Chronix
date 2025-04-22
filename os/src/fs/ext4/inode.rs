@@ -519,7 +519,7 @@ impl Inode for Ext4Inode {
         let parent_path = String::from(file.get_path().to_str().unwrap());
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
 
-        info!("remove ext4fs: {}", fpath);
+        log::info!("[Ext4Inode] remove {}", fpath);
         //let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
 

@@ -14,7 +14,7 @@ use uart::{Uart, UART_BAUD_RATE, UART_BUF_LEN};
 use crate::{devices::{CharDevice, DevId, Device, DeviceMajor, DeviceMeta, DeviceType, DEVICE_MANAGER}, sync::{mutex::SpinNoIrqLock, UPSafeCell}, utils::{get_waker, suspend_now, RingBuffer}, with_methods};
 
 lazy_static! {
-    /// WARNING: should only be called after deveices finish init
+    /// WARNING: should only be called after devices manager finish init
     pub static ref UART0: Arc<dyn CharDevice> = {
         let serial = DEVICE_MANAGER.lock()
         .find_dev_by_major(DeviceMajor::Serial)
@@ -57,6 +57,7 @@ impl Serial {
                 minor: 0,
             },
             name: "serial".to_string(),
+            need_mapping: true,
             mmio_base,
             mmio_size,
             irq_no: Some(irq_no),
