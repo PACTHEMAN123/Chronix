@@ -1,10 +1,10 @@
-use core::task::Poll;
+use core::{sync::atomic::AtomicUsize, task::Poll};
 
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;
@@ -147,7 +147,7 @@ pub struct Socket {
     /// socket type
     pub sk_type: SocketType,
     /// fd flags
-    pub fd_flags: SpinNoIrqLock<OpenFlags>,
+    pub file_inner: FileInner,
 }
 
 impl Socket {
@@ -171,7 +171,11 @@ impl Socket {
         Self {
             sk_type: sk_type,
             sk: sk,
-            fd_flags: SpinNoIrqLock::new(fd_flags),
+            file_inner: FileInner {
+                dentry: Arc::<usize>::new_zeroed(),
+                offset: AtomicUsize::new(0),
+                flags: SpinNoIrqLock::new(fd_flags),
+            },
         }
     }
     /// new a socket with a given socket 
@@ -179,7 +183,11 @@ impl Socket {
         Self {
             sk: sk,
             sk_type: another.sk_type,
-            fd_flags: SpinNoIrqLock::new(OpenFlags::O_RDWR),
+            file_inner: FileInner{
+                dentry: Arc::<usize>::new_zeroed(),
+                offset: AtomicUsize::new(0),
+                flags: SpinNoIrqLock::new(OpenFlags::O_RDWR),
+            },
         }
     }
 }
@@ -188,7 +196,7 @@ impl Socket {
 impl File for Socket {
     #[doc ="get basic File object"]
     fn file_inner(&self) ->  &FileInner {
-        unreachable!()
+        &self.file_inner
     }
 
     #[doc = " If readable"]

@@ -203,7 +203,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
         SYSCALL_GETRANDOM => sys_getrandom(args[0], args[1], args[2]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
-        SYSCALL_SOCKET => sys_socket(args[0], args[1], args[2]),
+        SYSCALL_SOCKET => sys_socket(args[0], args[1] as i32, args[2]),
         SYSCALL_SOCKETPAIR => sys_socketpair(args[0], args[1],  args[2], args[3]),
         SYSCALL_BIND => sys_bind(args[0], args[1], args[2]),
         SYSCALL_LISTEN => sys_listen(args[0], args[1]),

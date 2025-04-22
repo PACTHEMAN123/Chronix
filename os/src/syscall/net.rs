@@ -48,7 +48,7 @@ impl TryFrom<i32> for SocketType {
 /// Set O_NONBLOCK flag on the open fd
 pub const SOCK_NONBLOCK: i32 = 0x800;
 /// Set FD_CLOEXEC flag on the new fd
-pub const SOCK_CLOEXEC: i32 = 0x80000;
+pub const SOCK_CLOEXEC: i32 = 0x8000;
 
 /// create an endpoint for communication and returns a file decriptor refers to the endpoint
 /// Since Linux 2.6.27, the type argument serves a second purpose: in
@@ -65,7 +65,8 @@ pub const SOCK_CLOEXEC: i32 = 0x80000;
 //        Set the close-on-exec (FD_CLOEXEC) flag on the new file
 //        descriptor.  See the description of the O_CLOEXEC flag in
 //        open(2) for reasons why this may be useful.
-pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
+pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
+    log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, _protocol);
     let domain = SaFamily::try_from(domain as u16)?;
     let mut types = types as i32;
     let mut nonblock = false;
@@ -92,12 +93,13 @@ pub fn sys_socket(domain: usize, types: usize, _protocol: usize) -> SysResult {
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
-    // log::info!("[sys_socket] fd: {}", fd);
+    log::info!("[sys_socket]socket types:{:?}, fd: {}", types,fd);
     Ok(fd as isize)
 }
 /// “assigning a name to a socket”
 pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
-    let task = current_task().unwrap().clone();
+    log::info!("[sys_bind] fd: {}, addr: {:?}, addr_len: {}", fd, addr, addr_len);
+    let task = current_task().unwrap();
     let family = SaFamily::try_from(unsafe {
         Instruction::set_sum();
         *(addr as *const u16)
@@ -130,6 +132,7 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .downcast_arc::<socket::Socket>().unwrap_or_else(|_| {
         panic!("Failed to downcast to socket::Socket")
     });
+    log::info!("[sys_bind] socket_file_type {:#?}, fd_type {:#?}", socket_file.sk_type, fd);
     socket_file.sk.bind(fd, local_addr)?;
     Ok(0)
 }
@@ -154,7 +157,7 @@ pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
 /// `sockaddr` structure that contains the address of the remote socket.
 /// The `addrlen` argument specifies the size of this structure.
 pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     let remote_addr = match SaFamily::try_from(unsafe {
         Instruction::set_sum();
         *(addr as *const u16)
@@ -265,7 +268,7 @@ pub async fn sys_sendto(
     addr: usize,
     addr_len: usize,
 )-> SysResult {
-    // log::info!("addr is {}, addr_len is {}", addr, addr_len);
+    log::info!("addr is {}, addr_len is {}", addr, addr_len);
     let task = current_task().unwrap();
     let buf_slice = unsafe {
         core::slice::from_raw_parts_mut(buf as *mut u8, len)
@@ -331,6 +334,7 @@ pub async fn sys_recvfrom(
     addr: usize,
     addrlen: usize,
 ) -> SysResult {
+    log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(sockfd)})?
@@ -378,7 +382,7 @@ pub async fn sys_recvfrom(
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
-    // log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
+    log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)
@@ -662,6 +666,7 @@ pub fn sys_shutdown(fd: usize, how: usize) -> SysResult {
             panic!("Failed to downcast to socket::Socket")
         });
     socket_file.sk.shutdown(how as u8)?;
+    log::info!("shutdown: fd: {}, how: {}", fd, how);
     Ok(0)
 }
 /// create a pair of connected sockets
