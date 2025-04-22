@@ -6,7 +6,7 @@ use hal::{constant::{Constant, ConstantsHal}, pagetable::MapPerm};
 
 use crate::{drivers::serial::UART0, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE}};
 
-use super::{serial::scan_char_device, DevId, Device, DeviceMajor};
+use super::{block::{scan_mmio_blk_device, scan_pci_blk_device}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
 type IrqNo = usize;
 
@@ -40,6 +40,22 @@ impl DeviceManager {
         self.irq_map.insert(serial.irq_no().unwrap(), serial.clone());
         
         // map block device
+        // now not support for blk interrupt
+        #[cfg(target_arch="loongarch64")]
+        {
+            let virtio_pci_blk = scan_pci_blk_device(device_tree);
+            if let Some(blk) = virtio_pci_blk {
+                self.devices.insert(blk.dev_id(), blk.clone());
+            };
+        }
+        
+
+        let virtio_mmio_blk = scan_mmio_blk_device(device_tree);
+        if let Some(blk) = virtio_mmio_blk {
+            self.devices.insert(blk.dev_id(), blk.clone());
+        };
+
+
         // TODO
     }
 
@@ -52,6 +68,9 @@ impl DeviceManager {
             let paddr_start = dev.mmio_base();
             let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
             let size = dev.mmio_size();
+            if dev.meta().need_mapping == false {
+                continue;
+            }
             log::info!("[Device Manager]: mapping {}, from phys addr {:#x} to virt addr {:#x}, size {:#x}", dev.name(), paddr_start, vaddr_start, size);
             KVMSPACE.lock().push_area(
                 KernVmArea::new(
