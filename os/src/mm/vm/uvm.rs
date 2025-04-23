@@ -534,7 +534,7 @@ impl UserVmArea {
                     unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                 }
             }
-        }
+        } 
         Ok(Self {
             range_va: self.range_va.clone(), 
             frames: self.frames.clone(), 
@@ -762,7 +762,7 @@ impl PageFaultProcessor {
                     new_perm.remove(MapPerm::W);
                 }
                 let pte = page_table
-                    .map(vpn, page.ppn(), perm, PageLevel::Small)
+                    .map(vpn, page.ppn(), new_perm, PageLevel::Small)
                     .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
                 frames.insert(vpn, page.frame());
             }
