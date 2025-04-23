@@ -58,7 +58,10 @@ pub const INITPROC_PID: usize = 1;
 pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
     let task = current_task().unwrap().clone();
-    task.exit_code.store(exit_code, Ordering::Relaxed);
+    if task.is_leader() {
+         task.exit_code.store(exit_code, Ordering::Relaxed);
+    }
+   
     let tid = task.gettid();
     println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
     if tid == IDLE_PID {

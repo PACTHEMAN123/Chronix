@@ -182,6 +182,16 @@ impl FdTable {
             // self.fd_table.truncate(self.rlimit.rlim_max)
         }
     }
+    /// handle close-on-exec flag
+    pub fn do_close_on_exec(&mut self) {
+        for fd_info in self.fd_table.iter_mut() {
+            if let Some(fd) = fd_info {
+                if fd.flags.contains(FdFlags::CLOEXEC){
+                    *fd_info = None;
+                }
+            }
+        }
+    }
 }
 
 

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 use crate::{fs::StatxTimestamp, sync::mutex::SpinNoIrqLock, syscall::SysError, utils::{get_waker, RingBuffer}};
 
-use super::{vfs::{file::PollEvents, inode::InodeMode, File, FileInner, Inode, InodeInner}, Kstat, Xstat, XstatMask};
+use super::{vfs::{file::PollEvents, inode::InodeMode, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, Xstat, XstatMask};
 
 
 
@@ -190,14 +190,21 @@ impl Future for PipeReadFuture {
 
 pub struct PipeFile {
     pipe: Arc<PipeInode>,
-    operate: bool
+    operate: bool,
+    inner: FileInner,
 }
 
 impl PipeFile {
     fn new(inode: Arc<PipeInode>, is_reader: bool) -> Arc<Self> {
+        let inner = FileInner {
+            offset: 0.into(),
+            dentry: Arc::<usize>::new_zeroed(),
+            flags: SpinNoIrqLock::new(OpenFlags::empty()),
+        };
         Arc::new(Self {
             pipe: inode,
             operate: is_reader,
+            inner: inner,
         })
     }
 }
@@ -205,7 +212,7 @@ impl PipeFile {
 #[async_trait]
 impl File for PipeFile {
     fn file_inner(&self) ->  &FileInner {
-        panic!("no inner for pipe file")
+        &self.inner
     }
 
     fn readable(&self) -> bool {

@@ -416,6 +416,7 @@ impl TaskControlBlock {
         user_sp = new_user_sp;
         // substitute memory_set
         self.with_mut_vm_space(|m| *m = vm_space);
+        self.with_mut_fd_table(|fd_table|fd_table.do_close_on_exec());
         // **** access current TCB exclusively
         unsafe {*self.trap_cx_ppn.get() = trap_cx_ppn};
         // initialize trap_cx

@@ -11,7 +11,7 @@ pub const SIG_IGN: usize = 1;
 
 pub fn term_sig_handler(signo: usize) {
     info!("[term_sig_handler]: term sig handler, sig {}", signo);
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     task.with_thread_group(|tg| {
         for t in tg.iter() {
             t.set_zombie();

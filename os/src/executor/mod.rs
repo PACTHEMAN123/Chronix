@@ -116,9 +116,9 @@ pub fn run_until_idle() -> usize{
         //info!("already fetch a runnable");
         runnable.run();
         len += 1;
-        if len > 1000000 {
-            panic!("too long , something wrong");
-        }
+        // if len > 1000000 {
+        //     panic!("too long , something wrong");
+        // }
     }
     #[cfg(feature = "smp")]
     if current_processor().need_migrate_check() {
