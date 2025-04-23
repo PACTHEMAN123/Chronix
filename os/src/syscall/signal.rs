@@ -285,3 +285,22 @@ pub async fn sys_rt_sigtimedwait(
         return Err(SysError::EAGAIN);
     }
 }
+/// tkill() is an obsolete predecessor to tgkill().  It allows only
+///        the target thread ID to be specified, which may result in the
+///        wrong thread being signaled if a thread terminates and its thread
+///        ID is recycled.  Avoid using this system call.
+pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
+    if (sig < 0) || sig as usize >= SIG_NUM || tid < 0{
+        return Err(SysError::EINVAL);
+    }
+    let task = TASK_MANAGER.get_task(tid as usize)
+    .ok_or(SysError::ESRCH)?;
+    task.recv_sigs(
+        SigInfo {
+            si_signo: sig as usize,
+            si_code: SigInfo::TKILL,
+            si_pid: Some(task.pid()),
+        }
+    );
+    Ok(0)
+}
