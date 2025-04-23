@@ -46,6 +46,14 @@ pub async fn user_trap_handler()  {
     let trap_type = TrapType::get();
     unsafe { Instruction::enable_interrupt() };
     match trap_type{
+        TrapType::Breakpoint => {
+            let task = current_task().unwrap();
+            log::warn!(
+                "[user_trap_handler] task {} break point",
+                task.tid()
+            );
+            exit_current_and_run_next(-1);
+        }
         TrapType::Syscall => {
             let _sum = SumGuard::new();
             let cx = unsafe {

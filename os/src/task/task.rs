@@ -357,7 +357,7 @@ impl TaskControlBlock {
             0,
             0,
         );
-        task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
+        // task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
         Ok(task_control_block)
     }
 

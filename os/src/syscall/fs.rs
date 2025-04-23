@@ -605,7 +605,7 @@ pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
         FcntlOp::F_DUPFD_CLOEXEC => {
             // As for F_DUPFD, but additionally set the close-on-exec flag
             // for the duplicate file descriptor.
-            let new_fd = task.with_mut_fd_table(|t| t.dup_with_bound(fd, arg, FdFlags::CLOEXEC))?;
+            let new_fd = task.with_mut_fd_table(|t| t.dup_with_bound(fd, arg, OpenFlags::O_CLOEXEC.into()))?;
             Ok(new_fd as isize)
         }
         FcntlOp::F_GETFD => {
