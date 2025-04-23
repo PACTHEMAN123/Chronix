@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(linkage)]
 #![feature(alloc_error_handler)]
+#![feature(naked_functions)]
 
 #[macro_use]
 pub mod console;
@@ -29,7 +30,18 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 
 #[no_mangle]
 #[link_section = ".text.entry"]
-pub extern "C" fn _start(p: *const usize) -> ! {
+#[naked]
+pub unsafe extern "C" fn _start() {
+    core::arch::naked_asm!(
+        "
+        mv a0, sp
+        jal x0, _rust_start
+        "
+    );
+}
+
+#[no_mangle]
+pub fn _rust_start(p: *const usize) -> ! {
 
     let argc = unsafe { p.read_volatile() };
     let argv = unsafe { p.add(1) as usize };
