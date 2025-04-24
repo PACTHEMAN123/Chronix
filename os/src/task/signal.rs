@@ -85,15 +85,19 @@ impl TaskControlBlock {
             };
             while cnt < len {
                 signo = sig_manager.pending_sigs.pop_front().unwrap();
-                cnt += 1;
                 // block the signals
                 if signo.si_signo != SIGKILL && signo.si_signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo.si_signo) {
+                    cnt += 1;
                     //info!("[SIGHANDLER] signal {} blocked", signo);
                     sig_manager.pending_sigs.push_back(signo);
                     continue;
                 }
-                //info!("[SIGHANDLER] receive signal {}", signo);
+                log::info!("[SIGHANDLER] receive signal {:?}", signo);
                 break;
+            }
+            if cnt == len {
+                log::info!("[SIGHANDLER] no pending signal");
+                return;
             }
             // handle a signal
             assert!(signo.si_signo != 0);
@@ -117,7 +121,8 @@ impl TaskControlBlock {
                         core::mem::size_of::<UContext>(),
                     )
                 };
-                println!("copy_out to {:#x}", new_sp);
+                // println!("copy_out to {:#x}", new_sp);
+                println!("copy_out tid: {}", self.tid());
                 copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
 
