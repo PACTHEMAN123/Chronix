@@ -406,7 +406,7 @@ impl UserVmSpace {
         log::info!("[load_dl] interp {}", interp);
 
         let interp_file;
-        let dentry = global_find_dentry(&interp);
+        let dentry = global_find_dentry(&interp).expect("cannot find interp dentry");
         if dentry.state() == DentryState::NEGATIVE {
             return Err(SysError::ENOENT);
         }

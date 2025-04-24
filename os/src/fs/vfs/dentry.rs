@@ -72,6 +72,7 @@ pub trait Dentry: Send + Sync {
     }
     /// set the inode it points to
     fn set_inode(&self, inode: Arc<dyn Inode>) {
+        log::debug!("dentry: {} set inode", self.path());
         if self.dentry_inner().inode.lock().is_some() {
             warn!("[Dentry] trying to replace inode with {:?}", self.name());
         }
@@ -80,6 +81,7 @@ pub trait Dentry: Send + Sync {
     }
     /// clear the inode, now it doesnt have a inode
     fn clear_inode(&self) {
+        log::debug!("dentry: {} clear inode", self.path());
         *self.dentry_inner().inode.lock() = None;
         self.set_state(DentryState::NEGATIVE);
     }
@@ -138,8 +140,8 @@ pub trait Dentry: Send + Sync {
     /// since the on-disk fs dentry dont know child until lookup by inode
     /// we assert that only dir dentry will call this method
     /// it will insert into DCACHE by the way
-    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
-        todo!()
+    fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
+        Err(SysError::ENOTDIR)
     }
     /// create a negative child which share the same type with self
     fn new_neg_dentry(self: Arc<Self>, _name: &str) -> Arc<dyn Dentry> {
@@ -153,7 +155,7 @@ impl dyn Dentry {
     /// first look up the dcache
     /// if missed, try to search, start from this dentry
     /// only return USED dentry, panic on invalid path
-    pub fn find(self: &Arc<Self>, path: &str) -> Option<Arc<dyn Dentry>> {
+    pub fn find(self: &Arc<Self>, path: &str) -> Result<Option<Arc<dyn Dentry>>, SysError> {
         // the path should be relative!
         let path = path.trim_start_matches("/");
         // dcache lock must be release before calling other dentry trait
@@ -164,19 +166,19 @@ impl dyn Dentry {
             if let Some(dentry) = cache.get(&abs_path) {
                 //info!("[DCACHE] hit one: {:?}", dentry.name());
                 if dentry.state() == DentryState::NEGATIVE {
-                    return None;
+                    return Ok(None);
                 } else {
-                    return Some(dentry.clone());
+                    return Ok(Some(dentry.clone()));
                 }  
             }
         }
         //info!("[DCACHE] miss one: {:?}, start to search from {}", path, self.path());
-        let dentry = self.clone().walk(path);
+        let dentry = self.clone().walk(path)?;
         if dentry.state() == DentryState::NEGATIVE {
             //info!("[DENTRY] invalid path!");
-            None
+            Ok(None)
         } else {
-            Some(dentry.clone())
+            Ok(Some(dentry.clone()))
         }
     }
 
@@ -186,7 +188,7 @@ impl dyn Dentry {
     /// once find the target dentry or reach unexisted path, return
     /// if find, should return a USED dentry
     /// if not find, should return a NEGATIVE dentry
-    pub fn walk(self: Arc<Self>, path: &str) -> Arc<dyn Dentry> {
+    pub fn walk(self: Arc<Self>, path: &str) -> Result<Arc<dyn Dentry>, SysError> {
         let mut current_dentry = self.clone();
         // break down the path: string a/b/c -> vec [a, b, c]
         let name_vec: Vec<&str> = path
@@ -203,7 +205,7 @@ impl dyn Dentry {
                 current_dentry = child_dentry;
             } else {
                 // not found, try to update the children
-                current_dentry.clone().load_child_dentry();
+                current_dentry.clone().load_child_dentry()?;
                 if let Some(child_dentry) = current_dentry.get_child(name) {
                     // after update find child
                     current_dentry = child_dentry;
@@ -220,12 +222,12 @@ impl dyn Dentry {
                     let neg_dentry = current_dentry.new_neg_dentry(name);
                     //info!("[DCACHE]: insert key: {}", neg_dentry.path());
                     DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
-                    return neg_dentry;
+                    return Ok(neg_dentry);
                 }
             }
         }
 
-        return current_dentry.clone();
+        return Ok(current_dentry.clone());
     }
 
     /// follow the link and jump until reach the first NOT link Inode or reach the max depth
@@ -243,7 +245,7 @@ impl dyn Dentry {
             if mode.contains(InodeMode::LINK) {
                 // follow to the next
                 let path =  current.inode().unwrap().readlink()?;
-                let new_dentry = global_find_dentry(&path);
+                let new_dentry = global_find_dentry(&path)?;
                 current = new_dentry;
             } else {
                 return Ok(current)
@@ -282,12 +284,12 @@ pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> =
 /// return the target dentry: maybe negative
 /// first lookup in the dcache
 /// if not found, search from root
-pub fn global_find_dentry(path: &str) -> Arc<dyn Dentry> {
+pub fn global_find_dentry(path: &str) -> Result<Arc<dyn Dentry>, SysError> {
     log::debug!("global find dentry: {}", path);
     {
         let cache = DCACHE.lock();
         if let Some(dentry) = cache.get(path) {
-            return dentry.clone();
+            return Ok(dentry.clone());
         }
     }
     // get the root dentry

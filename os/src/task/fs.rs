@@ -46,28 +46,35 @@ impl FdTable {
     }
     /// allocate a new fd for the task
     /// will not expend the fd table
-    pub fn alloc_fd(&mut self) -> usize {
+    pub fn alloc_fd(&mut self) -> Result<usize, SysError> {
         if let Some (fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
+            Ok(fd)
+        } else if self.fd_table.len() < self.rlimit.rlim_max {
             self.fd_table.push(None);
-            self.fd_table.len() - 1
+            Ok(self.fd_table.len() - 1)
+        } else {
+            Err(SysError::EBADF)
         }
     }
     /// allocate a new fd greater or equal to given bound
     /// expend the table if the max fd is not enough
-    /// WARN: assume we have infinity fd, assume never fail
-    pub fn alloc_fd_from(&mut self, bound: usize) -> usize {
+    pub fn alloc_fd_from(&mut self, bound: usize) -> Result<usize, SysError> {
+        if bound > self.rlimit.rlim_max {
+            return Err(SysError::EBADF)
+        }
+
         if self.fd_table.len() <= bound {
             // expand the fd table
             self.fd_table.resize(bound + 1, None);
         }
         if let Some(fd) = (bound..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
+            Ok(fd)
+        } else if self.fd_table.len() < self.rlimit.rlim_max {
             // no space, append to end
             self.fd_table.push(None);
-            self.fd_table.len() - 1
+            Ok(self.fd_table.len() - 1)
+        } else {
+            return Err(SysError::EMFILE)
         }
     }
     /// get the fd_info using fd
@@ -133,9 +140,10 @@ impl FdTable {
     /// dup fd in file table with bound, return new fd
     /// new fd will use the given flags
     pub fn dup_with_bound(&mut self, old_fd: usize, bound: usize, flags: FdFlags) -> Result<usize, SysError> {
+        log::debug!("dup with bound: old fd {}, bound {}", old_fd, bound);
         let file = self.get_file(old_fd)?;
         let fd_info = FdInfo {file, flags};
-        let new_fd = self.alloc_fd_from(bound);
+        let new_fd = self.alloc_fd_from(bound)?;
         self.put_file(new_fd, fd_info)?;
         assert!(new_fd >= bound);
         Ok(new_fd)
@@ -146,7 +154,7 @@ impl FdTable {
     pub fn dup_no_flag(&mut self, old_fd: usize) -> Result<usize, SysError> {
         let file = self.get_file(old_fd)?;
         let fd_info = FdInfo {file, flags: FdFlags::empty()};
-        let new_fd = self.alloc_fd_from(0);
+        let new_fd = self.alloc_fd_from(0)?;
         self.put_file(new_fd, fd_info)?;
         Ok(new_fd)
     }

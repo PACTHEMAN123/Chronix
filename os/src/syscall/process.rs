@@ -225,7 +225,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         path = "/busybox".to_string();
         argv_vec.insert(0, "busybox".to_string());
         argv_vec.insert(1, "sh".to_string());
-        global_find_dentry(&path)
+        global_find_dentry(&path)?
     } else {
         at_helper(task, AT_FDCWD, pathname as *const u8, OpenFlags::empty())?
     };
@@ -467,6 +467,13 @@ pub fn sys_getuid() -> SysResult {
 /// returns the effective user ID of the calling process.
 /// todo
 pub fn sys_geteuid() -> SysResult {
+    Ok(0)
+}
+
+/// syscall: getegid
+/// getegid() returns the effective group ID of the calling process.
+/// todo
+pub fn sys_getegid() -> SysResult {
     Ok(0)
 }
 

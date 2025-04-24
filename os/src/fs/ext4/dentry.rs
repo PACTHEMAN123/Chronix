@@ -1,4 +1,4 @@
-use crate::fs::{ext4::Ext4File, vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock};
+use crate::{fs::{ext4::Ext4File, vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock}, syscall::SysError};
 
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
@@ -45,7 +45,7 @@ impl Dentry for Ext4Dentry {
         let (readable, writable) = flags.read_write();
         Some(Arc::new(Ext4File::new(readable, writable, self.clone())))
     }
-    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+    fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
         //info!("in child dentry, under: {}", self.path());
         let inode = self.inode().unwrap().clone();
         let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
@@ -85,7 +85,7 @@ impl Dentry for Ext4Dentry {
                 child_dentrys.push(child_dentry);
             }
         }
-        child_dentrys
+        Ok(child_dentrys)
     }
 
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {

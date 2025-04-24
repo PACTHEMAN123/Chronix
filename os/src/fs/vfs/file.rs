@@ -192,7 +192,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
     };
     
     if flags.contains(OpenFlags::O_CREAT) {
-        if let Some(dentry) = root_dentry.find(path) {
+        if let Some(dentry) = root_dentry.find(path).expect("failed") {
             // clear size
             let inode = dentry.inode().unwrap();
             inode.truncate(0).expect("Error when truncating inode");
@@ -201,7 +201,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
             // create file (todo: now only support root create)
             let name = abs_path_to_name(&path).unwrap();
             let parent_path = abs_path_to_parent(&path).unwrap();
-            let parent_dentry = global_find_dentry(&parent_path);
+            let parent_dentry = global_find_dentry(&parent_path).expect("no parent");
             assert!(parent_dentry.state() == DentryState::USED);
             let inode = parent_dentry.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
             let dentry = parent_dentry.new(&name, parent_dentry.superblock(), Some(parent_dentry.clone()));
@@ -210,7 +210,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
             dentry.open(flags)
         }
     } else {
-        if let Some(dentry) = root_dentry.find(path) {
+        if let Some(dentry) = root_dentry.find(path).expect("failed") {
             // get the dentry and it is valid (see dentry::find)
             let inode = dentry.inode().unwrap();
             if flags.contains(OpenFlags::O_TRUNC) {
