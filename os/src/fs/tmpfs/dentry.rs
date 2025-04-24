@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 
-use crate::fs::{tmpfs::file::TmpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock};
+use crate::{fs::{tmpfs::file::TmpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock}, syscall::SysError};
 
 
 
@@ -43,7 +43,7 @@ impl Dentry for TmpDentry {
         assert!(self.state() == DentryState::USED);
         Some(Arc::new(TmpFile::new(self.clone())))
     }
-    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+    fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
         let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
         for (_, child) in self.children().iter() {
             if child.state() == DentryState::NEGATIVE {
@@ -51,7 +51,7 @@ impl Dentry for TmpDentry {
             }
             child_dentrys.push(child.clone());
         }
-        child_dentrys
+        Ok(child_dentrys)
     }
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
         let neg_dentry = Arc::new(Self {
@@ -59,5 +59,11 @@ impl Dentry for TmpDentry {
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
         neg_dentry
+    }
+    fn clear_inode(&self) {
+        // like tmpfile(), its ok to read / write the file
+        // even it is unlink, as long as someone owns the file (like fd table)
+        // since in tmpfs, dentry is the only thing that holds inode
+        // should not drop inode here.
     }
 }

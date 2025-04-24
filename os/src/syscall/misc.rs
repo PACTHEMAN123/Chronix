@@ -191,9 +191,9 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             Instruction::set_sum();
             (new_limit as *const RLimit).read()
         };
-        log::info!("[sys_prlimit64] new_limit: {limit:?}");
         match resource {
             Resource::NOFILE => {
+                log::debug!("[sys_prlimit64] new_limit: {limit:?}");
                 task.with_mut_fd_table(|table| table.set_rlimit(limit));
             }
             r => {

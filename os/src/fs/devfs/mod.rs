@@ -9,6 +9,7 @@ use null::{NullDentry, NullInode};
 use rtc::{RtcDentry, RtcInode};
 use tty::{TtyDentry, TtyFile, TtyInode, TTY};
 use urandom::{UrandomDentry, UrandomInode};
+use zero::{ZeroDentry, ZeroInode};
 
 use crate::sync::mutex::SpinNoIrqLock;
 
@@ -20,6 +21,7 @@ pub mod superblock;
 pub mod fstype;
 pub mod rtc;
 pub mod urandom;
+pub mod zero;
 
 /// init the whole /dev
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
@@ -58,6 +60,14 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     root_dentry.add_child(urandom_dentry.clone());
     log::debug!("dcache insert: {}", urandom_dentry.path());
     DCACHE.lock().insert(urandom_dentry.path(), urandom_dentry.clone());
+
+    // add /dev/zero
+    let zero_dentry = ZeroDentry::new("zero", sb.clone(), Some(root_dentry.clone()));
+    let zero_inode = ZeroInode::new(sb.clone());
+    zero_dentry.set_inode(zero_inode);
+    root_dentry.add_child(zero_dentry.clone());
+    log::debug!("dcache insert: {}", zero_dentry.path());
+    DCACHE.lock().insert(zero_dentry.path(), zero_dentry.clone());
     
 }
 

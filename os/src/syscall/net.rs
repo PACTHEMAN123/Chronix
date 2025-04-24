@@ -89,7 +89,7 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
         flags: flags.into(),
     };
     let task = current_task().unwrap();
-    let fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    let fd = task.with_mut_fd_table(|t|t.alloc_fd())?;
     task.with_mut_fd_table(|t| {
         t.put_file(fd, fd_info).or_else(|e|Err(e))
     })?;
@@ -251,7 +251,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         file: accept_socket,
         flags: OpenFlags::empty().into(),
     };
-    let new_fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    let new_fd = task.with_mut_fd_table(|t|t.alloc_fd())?;
     task.with_mut_fd_table(|t| {
         t.put_file(new_fd, fd_info)
     })?;
@@ -674,13 +674,13 @@ pub fn sys_socketpair(_domain: usize, _types: usize, _protocol: usize, sv: usize
     let task = current_task().unwrap();
     let (pipe_read, pipe_write) = pipefs::make_pipe(PAGE_SIZE);
     let pipe = task.with_mut_fd_table(|table| {
-        let fd_read = table.alloc_fd();
+        let fd_read = table.alloc_fd()?;
         let fd_info_read = FdInfo {
             file: pipe_read,
             flags: FdFlags::empty(),
         };
         table.put_file(fd_read, fd_info_read)?;
-        let fd_write = table.alloc_fd();
+        let fd_write = table.alloc_fd()?;
         let fd_info_write = FdInfo {
             file: pipe_write,
             flags: FdFlags::empty(),    

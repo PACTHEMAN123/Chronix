@@ -91,6 +91,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
         Whence::SeekEnd => file.seek(SeekFrom::End(offset as i64))?,
         _ => todo!()
     };
+    log::debug!("[sys_lseek]: ret: {}, file: {}", ret, file.dentry().unwrap().path());
     Ok(ret as isize)
 }
 
@@ -125,6 +126,7 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
 
 /// syscall: dup
 pub fn sys_dup(old_fd: usize) -> SysResult {
+    log::debug!("dup old fd: {}", old_fd);
     let task = current_task().unwrap();
     let new_fd = task.with_mut_fd_table(|table| table.dup_no_flag(old_fd))?;
     Ok(new_fd as isize)
@@ -132,7 +134,7 @@ pub fn sys_dup(old_fd: usize) -> SysResult {
 
 /// syscall: dup3
 pub fn sys_dup3(old_fd: usize, new_fd: usize, flags: u32) -> SysResult {
-    //info!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
+    log::debug!("dup3: old_fd = {}, new_fd = {}", old_fd, new_fd);
     let task = current_task().unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(SysError::EINVAL)?;
     if old_fd == new_fd {
@@ -179,7 +181,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         }
         let file = dentry.open(flags).unwrap();
         file.set_flags(flags);
-        let fd = task.with_mut_fd_table(|table| table.alloc_fd());
+        let fd = task.with_mut_fd_table(|table| table.alloc_fd())?;
         let fd_info = FdInfo { file, flags: flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
         return Ok(fd as isize)
@@ -247,7 +249,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
 /// is set to indicate the error.
 pub fn sys_chdir(path: *const u8) -> SysResult {
     let path = user_path_to_string(path).unwrap();
-    let dentry = global_find_dentry(&path);
+    let dentry = global_find_dentry(&path)?;
     if dentry.state() == DentryState::NEGATIVE {
         info!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);
@@ -273,9 +275,9 @@ pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SysResult {
     let task = current_task().unwrap().clone();
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
     let (read_file, write_file) = make_pipe(PIPE_BUF_LEN);
-    let read_fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    let read_fd = task.with_mut_fd_table(|t|t.alloc_fd())?;
     task.with_mut_fd_table(|t| t.put_file(read_fd, FdInfo { file: read_file, flags: flags.into() }))?;
-    let write_fd = task.with_mut_fd_table(|t|t.alloc_fd());
+    let write_fd = task.with_mut_fd_table(|t|t.alloc_fd())?;
     task.with_mut_fd_table(|t| t.put_file(write_fd, FdInfo { file: write_file, flags: flags.into() }))?;
 
     let _sum = SumGuard::new();
@@ -396,7 +398,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     let dentry = file.dentry().unwrap();
     let mut buf_it = buf_slice;
     let mut writen_len = 0;
-    for child in dentry.load_child_dentry().iter().skip(file.pos()) {
+    for child in dentry.load_child_dentry()?.iter().skip(file.pos()) {
         assert!(child.state() != DentryState::NEGATIVE);
         // align to 8 bytes
         let c_name_len = child.name().len() + 1;
@@ -442,6 +444,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(pathname).unwrap();
+    log::debug!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
     let dentry = at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
@@ -510,29 +513,30 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let inner = inode.as_ref().inode_inner();
+    let inner = inode.inode_inner();
     
     let current_time = TimeSpec::from(get_current_time_duration());
     if times == 0 {
-        *inner.atime.lock() = current_time;
-        *inner.ctime.lock() = current_time;
-        *inner.mtime.lock() = current_time;
+        inner.set_atime(current_time);
+        inner.set_ctime(current_time);
+        inner.set_mtime(current_time);
     } else {
         let times = unsafe {
             Instruction::set_sum();
             core::slice::from_raw_parts_mut(times as *mut TimeSpec, 2)
         };
+        log::info!("[sys_utimensat] times {:?}", times);
         match times[0].tv_nsec {
-            UTIME_NOW => *inner.atime.lock() = current_time,
+            UTIME_NOW => inner.set_atime(current_time),
             UTIME_OMIT => {}
-            _ => *inner.atime.lock() = current_time,
+            _ => inner.set_atime(times[0]),
         }
-        match times[0].tv_nsec {
+        match times[1].tv_nsec {
             UTIME_NOW => *inner.mtime.lock() = current_time,
             UTIME_OMIT => {}
-            _ => *inner.mtime.lock() = current_time,
+            _ => inner.set_mtime(times[1]),
         }
-        *inner.ctime.lock() = current_time;
+        inner.set_ctime(current_time);
     }
     Ok(0)
 }
@@ -826,7 +830,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
     let dentry = match user_path_to_string(pathname) {
         Some(path) => {
             if path.starts_with("/") {
-                global_find_dentry(&path)
+                global_find_dentry(&path)?
             } else {
                 // getting full path (absolute path)
                 let fpath = if dirfd == AT_FDCWD {
@@ -840,7 +844,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
                     let dentry = dir.dentry().unwrap();
                     rel_path_to_abs(&dentry.path(), &path).unwrap()
                 };
-                global_find_dentry(&fpath)
+                global_find_dentry(&fpath)?
             }
         }
         None => {

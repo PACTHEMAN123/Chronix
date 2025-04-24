@@ -40,7 +40,7 @@ impl File for TmpFile {
     }
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
-
+        log::debug!("[Tmp file] read start from pos {}", self.pos());
         let size = inode.cache_read_at(self.pos(), buf).unwrap();
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
         Ok(size)
@@ -50,8 +50,10 @@ impl File for TmpFile {
             self.set_pos(self.size());
         }
         let pos = self.pos();
+        log::debug!("[Tmp file] writing {}, state: {:?}", self.dentry().unwrap().path(), self.dentry().unwrap().state());
         let inode = self.dentry().unwrap().inode().unwrap();
         let size = inode.cache_write_at(pos, buf).unwrap();
+        log::debug!("[Tmp file] set pos at {}", pos + size);
         self.set_pos(pos + size);
         Ok(size)
     }

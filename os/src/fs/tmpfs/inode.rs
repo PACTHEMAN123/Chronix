@@ -33,7 +33,7 @@ impl Inode for TmpInode {
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
         let size = self.inner.size();
         if offset >= size {
-            log::info!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
+            log::debug!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
         let page_cache = self.cache();
@@ -53,6 +53,12 @@ impl Inode for TmpInode {
     }
 
     fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        let size = self.inner.size();
+        log::debug!("cur size: {}, buf size: {}", size, buf.len());
+        if offset >= size {
+            log::debug!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
+            return Ok(0);
+        }
         let mut total_read_size = 0usize;
         let mut current_offset = offset;
         let mut buf_offset = 0usize;
@@ -68,10 +74,16 @@ impl Inode for TmpInode {
             } else {
                 let page = Page::new(page_offset);
                 cache.insert_page(page_offset, page.clone());
-                cache.update_end(page_offset + PAGE_SIZE);
+                // cache.update_end(page_offset + PAGE_SIZE);
                 page
             };
             let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..]);
+            // should truncate the read size if larger than file size
+            if current_offset + page_read_size > size {
+                assert!(size >= current_offset);
+                total_read_size += size - current_offset;
+                break;
+            }
             total_read_size += page_read_size;
             buf_offset += page_read_size;
             current_offset += page_read_size; 
@@ -99,6 +111,7 @@ impl Inode for TmpInode {
             let page_write_size = page.write_at(in_page_offset, &buf[buf_offset..]);
             page.set_dirty();
             cache.update_end(page_offset + page_write_size);
+            self.inner.set_size(cache.end());
 
             total_write_size += page_write_size;
             buf_offset += page_write_size;

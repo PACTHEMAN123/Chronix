@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 
-use crate::fs::{simplefs::file::SpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock};
+use crate::{fs::{simplefs::file::SpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock}, syscall::SysError};
 
 
 pub struct SpDentry {
@@ -37,13 +37,13 @@ impl Dentry for SpDentry {
         });
         dentry
     }
-    fn load_child_dentry(self: Arc<Self>) -> Vec<Arc<dyn Dentry>> {
+    fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
         let mut child_dentrys = Vec::new();
         let children = self.children();
         for (_, child) in children.iter() {
             child_dentrys.push(child.clone());
         }
-        child_dentrys
+        Ok(child_dentrys)
     }
     fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
         assert!(self.state() == DentryState::USED);
