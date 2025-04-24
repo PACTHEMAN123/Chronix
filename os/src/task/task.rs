@@ -9,14 +9,14 @@ use crate::fs::devfs::tty::TTY;
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
-use crate::mm::{copy_out, copy_out_str, UserVmSpace, KVMSPACE};
+use crate::mm::{copy_out, copy_out_str, translate_uva_checked, UserVmSpace, KVMSPACE};
 use crate::processor::processor::{current_processor, PROCESSORS};
 #[cfg(feature = "smp")]
 use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::syscall::futex::RobustListHead;
+use crate::syscall::futex::{futex_manager, FutexHashKey, RobustListHead};
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
@@ -544,6 +544,23 @@ impl TaskControlBlock {
     }
     /// 
     pub fn handle_zombie(self: &Arc<Self>){
+        if let Some(address) = self.tid_address_ref().clear_child_tid {
+            log::info!("[handle_zombie] clear_child_tid: {:x}", address);
+            let paddr = 
+                translate_uva_checked(
+                    &mut self.vm_space.lock(), 
+                    VirtAddr::from(address), 
+                    PageFaultAccessType::WRITE
+                ).unwrap();
+            unsafe { paddr.get_ptr::<i32>().write(0); }
+            let key = FutexHashKey::Shared { paddr };
+            let _ = futex_manager().wake(&key, 1);
+            let key = FutexHashKey::Private {
+                mm: self.get_raw_vm_ptr(),
+                vaddr: address.into()
+            };
+            let _ = futex_manager().wake(&key, 1);
+        }
         let mut thread_group = self.thread_group.lock();
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
         {
@@ -594,6 +611,10 @@ impl TaskControlBlock {
         }else {
             self.get_leader().set_zombie();
         }
+    }
+
+    pub fn get_raw_vm_ptr(self: &Arc<Self>) -> usize {
+        Arc::as_ptr(&self.vm_space) as usize
     }
 }
 

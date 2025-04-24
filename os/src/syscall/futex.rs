@@ -21,7 +21,7 @@ pub async fn sys_futex(
     futex_op.remove(FutexOp::PRIVATE);
     let key = if is_private {
         FutexHashKey::Private {
-            mm: task.with_vm_space(|vm| vm as *const _ as usize),
+            mm: task.get_raw_vm_ptr(),
             vaddr: VirtAddr::from(uaddr.0 as usize),
         }
     } else {
@@ -84,7 +84,7 @@ pub async fn sys_futex(
             let n_wake = futex_manager().wake(&key, val)?;
             let new_key = if is_private {
                 FutexHashKey::Private {
-                    mm: task.with_vm_space(|vm| vm as *const _ as usize),
+                    mm: task.get_raw_vm_ptr(),
                     vaddr: (uaddr2.0 as usize).into(),
                 }
             } else {
@@ -111,7 +111,7 @@ pub async fn sys_futex(
             let n_wake = futex_manager().wake(&key, val)?;
             let new_key = if is_private {
                 FutexHashKey::Private {
-                    mm: task.with_vm_space(|vm| vm as *const _ as usize),
+                    mm: task.get_raw_vm_ptr(),
                     vaddr: (uaddr2.0 as usize).into(),
                 }
             } else {

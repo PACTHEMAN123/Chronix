@@ -319,7 +319,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
             let block_sig = task.with_sig_manager(|sig_manager|{
                 sig_manager.blocked_sigs
             });
-            task.set_wake_up_sigs(!block_sig);
+            task.set_wake_up_sigs(!block_sig | SigSet::SIGCHLD);
             suspend_now().await;
             task.set_running();
             
