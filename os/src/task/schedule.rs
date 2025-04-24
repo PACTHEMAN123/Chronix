@@ -91,7 +91,7 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
         // println!("trap_return");
         user_trap_handler().await;
         if task.is_zombie(){
-            //info!("zombie task exit");
+            //info!("zombie task {} exit", task.tid());
             //info!("user time {}, kernel time {:?}", task.time_recorder().user_time().as_micros() , task.time_recorder().kernel_time());
             break;
         }
