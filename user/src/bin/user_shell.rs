@@ -188,7 +188,12 @@ pub fn main() -> i32 {
                         }
                         let mut exit_code: i32 = 0;
                         for pid in children.into_iter() {
-                            let exit_pid = waitpid(pid as usize, &mut exit_code);
+                            let exit_pid = loop { 
+                                let res = waitpid(pid as usize, &mut exit_code);
+                                if res != -4 {
+                                    break res;
+                                }
+                            };
                             assert_eq!(pid, exit_pid);
                             // println!("Shell: Process {} exited with code {}", pid, exit_code);
                         }

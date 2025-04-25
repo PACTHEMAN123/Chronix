@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP}};
+use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP}, task::INITPROC_PID};
 
 use super::task::TaskControlBlock;
 
@@ -122,7 +122,6 @@ impl TaskControlBlock {
                     )
                 };
                 // println!("copy_out to {:#x}", new_sp);
-                println!("copy_out tid: {}", self.tid());
                 copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
 
@@ -143,6 +142,7 @@ impl TaskControlBlock {
                     )
                 };
                 handler(signo.si_signo);
+                sig_manager.bitmap.remove_sig(signo.si_signo);
             }
         });
     }

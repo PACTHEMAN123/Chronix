@@ -296,7 +296,7 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     let stat = file.dentry().unwrap().inode().unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
-        Instruction::set_sum();
+        let _sum_guard = SumGuard::new();
         *stat_ptr = stat;
     }
     return Ok(0);
