@@ -57,9 +57,12 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
             translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
         });
         let data = pa.get_slice_mut(len);
-        ret += file.read(data).await?;
+        let read_size = file.read(data).await?;
+        ret += read_size;
+        if read_size < len {
+            break;
+        }
     }
-
     return Ok(ret as isize);
 }
 
@@ -91,7 +94,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
         Whence::SeekEnd => file.seek(SeekFrom::End(offset as i64))?,
         _ => todo!()
     };
-    log::debug!("[sys_lseek]: ret: {}, file: {}", ret, file.dentry().unwrap().path());
+    log::debug!("[sys_lseek]: ret: {}, file: {}", ret, fd);
     Ok(ret as isize)
 }
 
@@ -261,7 +264,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
 }
 
 
-const PIPE_BUF_LEN: usize = PAGE_SIZE;
+const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
 /// pipe() creates a pipe, a unidirectional data channel 
 /// that can be used for interprocess communication. 
 /// The array pipefd is used to return two file descriptors 
@@ -293,7 +296,8 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let stat = file.dentry().unwrap().inode().unwrap().getattr();
+    let stat = file.inode().unwrap().getattr();
+    log::debug!("[sys_fstat]: fstat file {}, size {}", fd, stat.st_size);
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
         Instruction::set_sum();
