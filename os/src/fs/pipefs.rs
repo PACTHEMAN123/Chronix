@@ -223,6 +223,11 @@ impl File for PipeFile {
         !self.operate
     }
 
+    /// override the inode, some test will need pipe inode
+    fn inode(&self) -> Option<Arc<dyn Inode>> {
+        Some(self.pipe.clone())
+    }
+
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         assert!(self.operate == true);
         let pipe = self.pipe.clone();
@@ -234,7 +239,7 @@ impl File for PipeFile {
         assert!(revents.contains(PollEvents::IN));
         let mut meta = pipe.pipe_meta.lock();
 
-        log::debug!("reading into buf ptr: {:p}", buf.as_ptr());
+        // log::info!("reading into buf ptr: {:p}", buf.as_ptr());
         let len = meta.ring_buffer.read(buf);
         if let Some(waker) = meta.write_waker.pop_front() {
             waker.wake();

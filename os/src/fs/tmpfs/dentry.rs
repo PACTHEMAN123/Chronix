@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 
-use crate::{fs::{tmpfs::file::TmpFile, vfs::{Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock}, syscall::SysError};
+use crate::{fs::{tmpfs::{file::TmpFile, inode::TmpInode}, vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, File}, OpenFlags, SuperBlock}, syscall::SysError};
 
 
 
@@ -39,10 +39,27 @@ impl Dentry for TmpDentry {
         });
         dentry
     }
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
+
+    /// tmpfs should support O_TMPFILE open flags
+    /// Create an unnamed temporary regular file.  The pathname
+    /// argument specifies a directory; an unnamed inode will be
+    /// created in that directory's filesystem.  Anything written
+    /// to the resulting file will be lost when the last file
+    /// descriptor is closed, unless the file is given a name.
+    fn open(self: Arc<Self>, flags: OpenFlags) -> Option<Arc<dyn File>> {
         assert!(self.state() == DentryState::USED);
+        if flags.contains(OpenFlags::O_TMPFILE) {
+            // only the fd table will hold the file
+            let new_inode = TmpInode::new(self.superblock(), InodeMode::FILE);
+            let new_dentry = TmpDentry::new("unname,shit!", self.superblock(), None);
+            new_dentry.set_inode(new_inode);
+            new_dentry.set_state(DentryState::NEGATIVE); // cannot use dir to find it
+            return Some(Arc::new(TmpFile::new(new_dentry)));
+        }
+
         Some(Arc::new(TmpFile::new(self.clone())))
     }
+
     fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
         let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
         for (_, child) in self.children().iter() {
