@@ -289,7 +289,7 @@ impl TaskControlBlock {
 
 impl TaskControlBlock {
     /// new a task with elf data
-    pub fn new<T: Reader + ?Sized>(elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> Result<Self, SysError> {
+    pub fn new<T: Reader + ?Sized>(elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> Result<Arc<Self>, SysError> {
         // note: the kernel stack must be allocated before the user page table is created
         // alloc a pid and a kernel stack in kernel space
         let tid_handle = tid_alloc();
@@ -317,7 +317,7 @@ impl TaskControlBlock {
             Arc::clone(dcache.get("/").unwrap())
         };
 
-        let task_control_block = Self {
+        let task_control_block = Arc::new(Self {
             tid: tid_handle,
             leader: None,
             is_leader: true,
@@ -346,7 +346,7 @@ impl TaskControlBlock {
             cpu_allowed: AtomicUsize::new(15), 
             #[cfg(feature = "smp")]
             processor_id: AtomicUsize::new(current_processor().id())  
-        };
+        });
         info!("in new");
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -358,6 +358,7 @@ impl TaskControlBlock {
             0,
         );
         // task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
+        task_control_block.with_mut_thread_group(|thread_group|thread_group.push(task_control_block.clone()));
         Ok(task_control_block)
     }
 

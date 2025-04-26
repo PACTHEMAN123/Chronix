@@ -50,10 +50,10 @@ pub fn suspend_current_and_run_next() {
     // replace by yield_now in async_utils
 }
 
-/// pid of usertests app in make run TEST=1
-pub const IDLE_PID: usize = 0;
+// /// pid of usertests app in make run TEST=1
+// pub const IDLE_PID: usize = 0;
 /// pid of the init process
-pub const INITPROC_PID: usize = 1;
+pub const INITPROC_PID: usize = 0;
 /// Exit the current 'Running' task ////and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32)  {
     // take from Processor
@@ -64,9 +64,9 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
    
     let tid = task.gettid();
     println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
-    if tid == IDLE_PID {
+    if tid == INITPROC_PID {
         println!(
-            "[kernel] Idle process exit with exit_code {} ...",
+            "[kernel] Initproc process exit with exit_code {} ...",
             exit_code
         );
         if exit_code != 0 {
@@ -87,7 +87,7 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
 
 lazy_static! {
     ///Globle process that init user shell
-    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
+    pub static ref INITPROC: Arc<TaskControlBlock> = {
         //info!("trying to open initproc");
         let file = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
         let reader = FileReader::new(file.clone());
@@ -95,7 +95,7 @@ lazy_static! {
         TaskControlBlock::new(&elf, Some(file)).unwrap()
         // let v = inode.read_all();
         // TaskControlBlock::new(v.as_slice())
-    });
+    };
 }
 ///Add init process to the manager
 pub fn add_initproc() {
