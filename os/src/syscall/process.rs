@@ -2,6 +2,7 @@
 
 use core::ptr::null;
 use core::sync::atomic::Ordering;
+use crate::config::PAGE_SIZE;
 use crate::fs::fat32::dentry;
 use crate::fs::utils::FileReader;
 use crate::fs::vfs::dentry::global_find_dentry;
@@ -24,6 +25,7 @@ use crate::utils::{suspend_now, user_path_to_string};
 use alloc::string::ToString;
 use alloc::{sync::Arc, vec::Vec, string::String};
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
+use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{TrapContext, TrapContextHal};
@@ -77,6 +79,8 @@ bitflags! {
         const NEWNET = 0x40000000;
         /// Clone I/O context.
         const IO = 0x80000000 ;
+        /// CLone_legacy_flag
+        const LEGACY_FLAGS = 0xffffffff ;
     }
 }
 
@@ -138,7 +142,7 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
-    // info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
+    info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
@@ -477,3 +481,96 @@ pub fn sys_getegid() -> SysResult {
     Ok(0)
 }
 
+///
+pub fn sys_setsid() -> SysResult {
+    let task = current_task().unwrap();
+    Ok(task.pid() as isize)
+}
+///  long syscall(SYS_clone3, struct clone_args *cl_args, size_t size);
+///  glibc provides no wrapper for clone3(), necessitating the
+/// use of syscall(2).
+pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
+    log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
+    if size > PAGE_SIZE {
+        return Err(SysError::E2BIG);
+    }
+    if size < CLONE_ARGS_SIZE_VER0 {
+        return Err(SysError::EINVAL);
+    }
+    let cl_args = unsafe {
+        Instruction::set_sum();
+        *(cl_args_ptr as *const CloneArgs)
+    };
+    let flags = cl_args.flags;
+    log::info!("[sys_clone3]: flags: {:x}", flags);
+    let stack = VirtAddr(cl_args.stack);
+    log::info!("[sys_clone3]: stack: {:x}", stack.0);
+    let parent_tid = VirtAddr(cl_args.parent_tid);
+    log::info!("[sys_clone3]: parent_tid: {:x}", parent_tid.0);
+    let tls = VirtAddr(cl_args.tls);
+    log::info!("[sys_clone3]: tls: {:x}", tls.0);
+    let child_tid = VirtAddr(cl_args.child_tid);
+    log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
+
+    sys_clone(flags, stack, parent_tid, tls, child_tid)
+}
+
+//  * @flags:        Flags for the new process.
+//  *                All flags are valid except for CSIGNAL and
+//  *                CLONE_DETACHED.
+//  * @pidfd:        If CLONE_PIDFD is set, a pidfd will be
+//  *                returned in this argument.
+//  * @child_tid:    If CLONE_CHILD_SETTID is set, the TID of the
+//  *                child process will be returned in the child's
+//  *                memory.
+//  * @parent_tid:   If CLONE_PARENT_SETTID is set, the TID of
+//  *                the child process will be returned in the
+//  *                parent's memory.
+//  * @exit_signal:  The exit_signal the parent process will be
+//  *                sent when the child exits.
+//  * @stack:        Specify the location of the stack for the
+//  *                child process.
+//  *                Note, @stack is expected to point to the
+//  *                lowest address. The stack direction will be
+//  *                determined by the kernel and set up
+//  *                appropriately based on @stack_size.
+//  * @stack_size:   The size of the stack for the child process.
+//  * @tls:          If CLONE_SETTLS is set, the tls descriptor
+//  *                is set to tls.
+//  * @set_tid:      Pointer to an array of type *pid_t. The size
+//  *                of the array is defined using @set_tid_size.
+//  *                This array is used to select PIDs/TIDs for
+//  *                newly created processes. The first element in
+//  *                this defines the PID in the most nested PID
+//  *                namespace. Each additional element in the array
+//  *                defines the PID in the parent PID namespace of
+//  *                the original PID namespace. If the array has
+//  *                less entries than the number of currently
+//  *                nested PID namespaces only the PIDs in the
+//  *                corresponding namespaces are set.
+//  * @set_tid_size: This defines the size of the array referenced
+//  *                in @set_tid. This cannot be larger than the
+//  *                kernel's limit of nested PID namespaces.
+//  * @cgroup:       If CLONE_INTO_CGROUP is specified set this to
+//  *                a file descriptor for the cgroup.
+/// clone_args structure for clone3()
+/// * struct clone_args - arguments for the clone3 syscall
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct CloneArgs {
+    pub flags: usize,
+    pub pidfd: usize,
+    pub child_tid: usize,
+    pub parent_tid: usize,
+    pub exit_signal: usize,
+    pub stack: usize,
+    pub stack_size: usize,
+    pub tls: usize,
+    pub set_tid: usize,
+    pub set_tid_size: usize,
+    pub cgroup: usize,
+}
+
+const  CLONE_ARGS_SIZE_VER0: usize = 64;
+const _CLONE_ARGS_SIZE_VER1:usize =  80; /* sizeof second published struct */
+const _CLONE_ARGS_SIZE_VER2: usize =  88; /* sizeof third published struct */

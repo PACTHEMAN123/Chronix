@@ -384,15 +384,10 @@ pub async fn sys_recvfrom(
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
-    let socket_file = task.with_fd_table(|table| {
-        table.get_file(fd)
-        .clone()
-        .unwrap()
-        .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        })
-    });
+    let socket_file = task.with_fd_table(|table| -> Result<Arc<socket::Socket>, SysError> {
+        let arc = table.get_file(fd).clone()?;
+        arc.downcast_arc::<socket::Socket>().map_err(|_| panic!("Failed to downcast to socket::Socket"))
+    })?;
     let local_addr = socket_file.sk.local_addr()?;
     // log::info!("Get local address of socket: {:?}", local_addr);
     // write to pointer

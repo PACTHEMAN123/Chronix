@@ -87,7 +87,7 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
 
 lazy_static! {
     ///Globle process that init user shell
-    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
+    pub static ref INITPROC: Arc<TaskControlBlock> = {
         //info!("trying to open initproc");
         let file = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
         let reader = FileReader::new(file.clone());
@@ -95,7 +95,7 @@ lazy_static! {
         TaskControlBlock::new(&elf, Some(file)).unwrap()
         // let v = inode.read_all();
         // TaskControlBlock::new(v.as_slice())
-    });
+    };
 }
 ///Add init process to the manager
 pub fn add_initproc() {
