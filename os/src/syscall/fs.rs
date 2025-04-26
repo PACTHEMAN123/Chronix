@@ -300,7 +300,7 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
     log::debug!("[sys_fstat]: fstat file {}, size {}", fd, stat.st_size);
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
-        Instruction::set_sum();
+        let _sum_guard = SumGuard::new();
         *stat_ptr = stat;
     }
     return Ok(0);
