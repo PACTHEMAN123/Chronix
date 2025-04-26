@@ -4,7 +4,7 @@ use alloc::{sync::Arc, vec::Vec};
 use fatfs::info;
 use log::warn;
 
-use crate::{fs::{devfs::tty::TTY, vfs::{Dentry, File}, OpenFlags, Stdin}, syscall::{misc::RLimit, SysError}};
+use crate::{fs::{devfs::tty::TTY, vfs::{Dentry, File}, OpenFlags, Stdin}, syscall::{misc::RLimit, SysError}, task::current_task};
 
 use super::task::TaskControlBlock;
 
@@ -195,6 +195,9 @@ impl FdTable {
         for fd_info in self.fd_table.iter_mut() {
             if let Some(fd) = fd_info {
                 if fd.flags.contains(FdFlags::CLOEXEC){
+                    // let socket_file = &fd.file.clone().downcast_arc::<crate::net::socket::Socket>().unwrap_or_else(|_| {
+                    //     panic!("Failed to downcast to socket::Socket")});
+                    // log::info!("[do_close_on_exec]: file {:?} close on exec", socket_file.sk_type);
                     *fd_info = None;
                 }
             }
