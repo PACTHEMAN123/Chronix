@@ -101,7 +101,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
         old_action as usize,
         core::mem::size_of::<SigAction>()
     );
-    if signo < 0 || signo as usize > SIG_NUM {
+    if signo < 0 || signo as usize > SIGRTMAX {
         info!("[sys_rt_sigaction]: error");
         return Err(SysError::EINVAL);
     }
@@ -290,7 +290,7 @@ pub async fn sys_rt_sigtimedwait(
 ///        wrong thread being signaled if a thread terminates and its thread
 ///        ID is recycled.  Avoid using this system call.
 pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
-    if (sig < 0) || sig as usize >= SIG_NUM || tid < 0{
+    if (sig < 0) || sig as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }
     let task = TASK_MANAGER.get_task(tid as usize)
