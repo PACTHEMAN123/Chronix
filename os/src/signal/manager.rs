@@ -4,23 +4,27 @@
 
 use core::arch::global_asm;
 
-use alloc::collections::vec_deque::VecDeque;
+use alloc::collections::{btree_map::BTreeMap, vec_deque::VecDeque};
 use hal::{addr::VirtAddr, signal::*};
 use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::*;
 use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
 
-use super::{action::KSigAction, get_default_handler, ign_sig_handler, SigInfo, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
+use super::{action::KSigAction, get_default_handler, ign_sig_handler, SigInfo, SigSet, SIGKILL, SIGRTMAX, SIGRTMIN, SIGSTOP};
 
 pub struct SigManager {
-    /// Pending signals
+    /// Pending standard signals
     pub pending_sigs: VecDeque<SigInfo>,
-    /// bitmap to avoid dup signal
+    /// Pending real-time signals
+    /// low-numbered signals have highest priority.
+    /// Multiple instances of real-time signals can be queued
+    pub pending_rt_sigs: BTreeMap<usize, VecDeque<SigInfo>>,
+    /// bitmap to avoid dup standard signal
     pub bitmap: SigSet,
     /// Blocked signals
     pub blocked_sigs: SigSet,
     /// Signal handler for every signal
-    pub sig_handler: [KSigAction; SIG_NUM + 1],
+    pub sig_handler: [KSigAction; SIGRTMAX + 1],
     /// Wake up signals
     pub wake_sigs: SigSet,
 }
@@ -30,6 +34,7 @@ impl SigManager {
     pub fn new() -> Self {
         Self {
             pending_sigs: VecDeque::new(),
+            pending_rt_sigs: BTreeMap::new(),
             bitmap: SigSet::empty(),
             blocked_sigs: SigSet::empty(),
             sig_handler: core::array::from_fn(|signo| KSigAction::new(signo, false)),
@@ -41,6 +46,7 @@ impl SigManager {
         // use the same action from another
         Self {
             pending_sigs: VecDeque::new(),
+            pending_rt_sigs: BTreeMap::new(),
             bitmap: SigSet::empty(),
             blocked_sigs: SigSet::empty(),
             sig_handler: sig_manager.sig_handler,
@@ -51,10 +57,21 @@ impl SigManager {
     /// according to linux manual, a process will only receive
     /// the information associated with the first instance of the signal.
     pub fn receive(&mut self, signo_info: SigInfo) {
-        if !self.bitmap.contain_sig(signo_info.si_signo) {
-            self.bitmap.add_sig(signo_info.si_signo);
-            self.pending_sigs.push_back(signo_info);
+        let signo = signo_info.si_signo;
+        if signo < SIGRTMIN {
+            if !self.bitmap.contain_sig(signo) {
+                self.bitmap.add_sig(signo);
+                self.pending_sigs.push_back(signo_info);
+            }
+        } else {
+            assert!(signo >= SIGRTMIN);
+            assert!(signo <= SIGRTMAX);
+            self.pending_rt_sigs
+                .entry(signo)
+                .or_insert_with(VecDeque::new)
+                .push_back(signo_info);
         }
+        
     }
     /// check if there is any expected SigInfo in the pending_sigs
     pub fn check_pending(&mut self, expected: SigSet) -> Option<SigInfo> {
@@ -71,6 +88,7 @@ impl SigManager {
         None
     }
     /// bool flag to check if there is any pending signal expected
+    /// TODO: add check for real-time signal
     pub fn check_pending_flag(&self, expected: SigSet) -> bool {
         !(expected & self.bitmap).is_empty()
     }
@@ -80,14 +98,16 @@ impl SigManager {
             warn!("SIGKILL or SIGSTOP cannot be caught or ignored");
             return;
         }
-        if signo < SIG_NUM {
+        if signo <= SIGRTMAX {
             self.sig_handler[signo] = sigaction;
         }
     }
     /// dequeue a pending signal to handle
     /// called by `check_and_handle`
-    /// TODO: add priority
     pub fn dequeue_one(&mut self) -> Option<SigInfo> {
+        // If both standard and real-time signals are pending for a process,
+        // Chronix, like many other implementations, gives priority to standard signals
+        // stage1: check standard signals
         let len = self.pending_sigs.len();
         let mut cnt = 0usize;
         while cnt < len {
@@ -99,8 +119,21 @@ impl SigManager {
                 continue;
             }
             self.bitmap.remove_sig(sig.si_signo);
-            log::info!("[SigManager] dequeue signal {:?}", sig);
+            log::info!("[SigManager] dequeue standard signal {:?}", sig);
             return Some(sig);
+        }
+        assert!(cnt == len);
+        // stage2: check real-time signals
+        for (&signo, queue) in self.pending_rt_sigs.iter_mut() {
+            assert!(signo >= SIGRTMIN);
+            assert!(signo <= SIGRTMAX);
+            if self.blocked_sigs.contain_sig(signo) {
+                continue;
+            }
+            if let Some(sig) = queue.pop_front() {
+                log::info!("[SigManager] dequeue real-time signal {:?}", sig);
+                return Some(sig);
+            }
         }
         log::debug!("[SigManager] no signals to be handled");
         None
@@ -128,7 +161,7 @@ impl SigManager {
         // During an execve(2), the dispositions of handled
         // signals are reset to the default; the dispositions of ignored
         // signals are left unchanged.
-        for signo in 1..SIG_NUM {
+        for signo in 1..SIGRTMAX {
             let old_action = self.sig_handler[signo];
             if old_action.sa.sa_handler == ign_sig_handler as *const() as usize {
                 // handler is ignore, 2 cases

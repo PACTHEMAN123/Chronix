@@ -165,7 +165,7 @@ endif
 	$(call building, "copying libc-test to the $(FS_IMG)")
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
-#	@sudo cp $(LIBC_TEST_BIR)/all.sh mnt/libc-test
+	@sudo cp $(LIBC_TEST_BIR)/all.sh mnt/libc-test
 
 ifneq ($(NT),)
 	$(call building, "copying netperf to the $(FS_IMG)")

@@ -6,7 +6,7 @@
 
 use log::*;
 
-use crate::{signal::{SigSet, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ, SIG_NUM}, task::current_task};
+use crate::{signal::{SigSet, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGRTMAX, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ}, task::current_task};
 
 pub const SIG_ERR: usize = usize::MAX;
 /// when sig_handler is set to SIG_DFL
@@ -90,7 +90,7 @@ pub fn cont_sig_handler(signo: usize) {
 
 /// get the default "Action" (here, aka. handlers) of given signo
 pub fn get_default_handler(signo: usize) -> usize {
-    assert!(signo <= SIG_NUM);
+    assert!(signo <= SIGRTMAX);
     let handler = match signo {
         SIGHUP => term_sig_handler,
         SIGINT => term_sig_handler,
@@ -123,7 +123,9 @@ pub fn get_default_handler(signo: usize) -> usize {
         SIGIO => term_sig_handler,
         SIGPWR => term_sig_handler,
         SIGSYS => core_sig_handler,
-        _ => ign_sig_handler,
+        // The default action for an unhandled real-time signal is to
+        // terminate the receiving process.
+        _ => term_sig_handler,
     } as *const () as usize;
     handler
 }
