@@ -48,7 +48,7 @@ impl TryFrom<i32> for SocketType {
 /// Set O_NONBLOCK flag on the open fd
 pub const SOCK_NONBLOCK: i32 = 0x800;
 /// Set FD_CLOEXEC flag on the new fd
-pub const SOCK_CLOEXEC: i32 = 0x8000;
+pub const SOCK_CLOEXEC: i32 = 0x80000;
 
 /// create an endpoint for communication and returns a file decriptor refers to the endpoint
 /// Since Linux 2.6.27, the type argument serves a second purpose: in

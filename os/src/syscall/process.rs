@@ -511,8 +511,8 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     log::info!("[sys_clone3]: tls: {:x}", tls.0);
     let child_tid = VirtAddr(cl_args.child_tid);
     log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
-
-    sys_clone(flags, stack, parent_tid, tls, child_tid)
+    log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
+    sys_clone(flags, stack + PAGE_SIZE, parent_tid, tls, child_tid)
 }
 
 //  * @flags:        Flags for the new process.

@@ -357,7 +357,7 @@ impl TaskControlBlock {
             0,
         );
         // task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
-        task_control_block.with_mut_thread_group(|thread_group|thread_group.push(task_control_block.clone()));
+        task_control_block.with_mut_thread_group(|thread_group|thread_group.push(Arc::clone(&task_control_block)));
         Ok(task_control_block)
     }
 
