@@ -25,8 +25,7 @@ use hal::addr::VirtAddr;
 use crate::utils::async_utils::yield_now;
 use crate::executor;
 use crate::processor::context::SumGuard;
-use crate::signal::check_signal_for_current_task;
-use crate::syscall::syscall;
+use crate::syscall::{syscall, SysError};
 use crate::task::task::TaskControlBlock;
 use crate::task::{
      current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
@@ -41,11 +40,12 @@ use core::sync::atomic::Ordering;
 hal::define_user_trap_handler!(user_trap_handler);
 
 /// handle an interrupt, exception, or system call from user space
-pub async fn user_trap_handler()  {
+/// return true if it is syscall and has been interrupted
+pub async fn user_trap_handler() -> bool {
     set_kernel_trap_entry();
     let trap_type = TrapType::get();
     unsafe { Instruction::enable_interrupt() };
-    match trap_type{
+    match trap_type {
         TrapType::Breakpoint => {
             let task = current_task().unwrap();
             log::warn!(
@@ -73,9 +73,15 @@ pub async fn user_trap_handler()  {
                     cx.syscall_arg_nth(5)
                 ]
             ).await;
+            // save last user arg0 to restore for possible SA_RESTART flag in signal
+            cx.save_last_user_arg0();
             // cx is changed during sys_exec, so we have to call it again
             cx.save_to(0, cx.ret_nth(0));
             cx.set_ret_nth(0, result as usize);
+            // report that the syscall is interrupt
+            if result == SysError::EINTR as isize {
+                return true;
+            }
         }
         TrapType::StorePageFault(stval)
         | TrapType::InstructionPageFault(stval)
@@ -127,6 +133,7 @@ pub async fn user_trap_handler()  {
             );
         }
     }
+    false
     // println!("before trap_return");
 }
 
@@ -134,7 +141,7 @@ pub async fn user_trap_handler()  {
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return(task: &Arc<TaskControlBlock>) {
+pub fn trap_return(task: &Arc<TaskControlBlock>, is_intr: bool) {
     unsafe {
         Instruction::disable_interrupt();  
     }
@@ -145,7 +152,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>) {
     let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
 
     // handler the signal before return
-    task.check_and_handle();
+    task.check_and_handle(is_intr);
 
     // restore float pointer and set status
     task.get_trap_cx().fx_restore();
