@@ -196,7 +196,6 @@ impl TaskControlBlock {
         Running,
         Zombie,
         Stopped,
-        Terminated,
         Interruptable,
         UnInterruptable
     );
@@ -238,7 +237,7 @@ impl TaskControlBlock {
         self.vm_space.lock().get_page_table().get_token()
     }
     /// get task_status of the task
-    fn get_status(&self) -> TaskStatus{
+    pub fn get_status(&self) -> TaskStatus {
         *self.task_status.lock()
     }
     /// switch to the task's page table
@@ -407,18 +406,24 @@ impl TaskControlBlock {
             }
             pid
         });
-        //change hart page table
+
+        // change hart page table
         vm_space.enable();
-        // todo: close fdtable when exec
+
         // alloc user resource for main thread again since vm_space has changed
         // push argument to user_stack
         let (new_user_sp, argc, argv, envp) = user_stack_init(&mut vm_space, user_sp, argv, envp, auxv);
-        
         user_sp = new_user_sp;
+
         // substitute memory_set
         self.with_mut_vm_space(|m| *m = vm_space);
+
+        // close fd on exec
         self.with_mut_fd_table(|fd_table|fd_table.do_close_on_exec());
-        // **** access current TCB exclusively
+
+        // reset the signal manager on exec
+        self.with_mut_sig_manager(|sig_manager| sig_manager.reset_on_exec());
+
         unsafe {*self.trap_cx_ppn.get() = trap_cx_ppn};
         // initialize trap_cx
         let mut trap_cx = TrapContext::app_init_context(
@@ -431,7 +436,6 @@ impl TaskControlBlock {
         //trap_cx.set_arg_nth(0, user_sp); // set a0 to user_sp
         log::debug!("entry: {:x}, argc: {:x}, argv: {:x}, envp: {:x}, sp: {:x}", entry_point, trap_cx.arg_nth(0), trap_cx.arg_nth(1), trap_cx.arg_nth(2), trap_cx.sp());
         *self.get_trap_cx() = trap_cx;
-        // **** release current PCB
         Ok(())
     }
     /// 
@@ -662,8 +666,6 @@ pub enum TaskStatus {
     Ready,
     /// task is currently running
     Running,
-    /// task has terminated for user mode, but hasnt call [exit]
-    Terminated,
     /// task has [exit], but the TCB hasnt release
     Zombie,
     /// task has stopped, due to stop signal

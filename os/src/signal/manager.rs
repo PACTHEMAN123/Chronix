@@ -10,7 +10,7 @@ use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::*;
 use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
 
-use super::{action::KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
+use super::{action::KSigAction, get_default_handler, ign_sig_handler, SigInfo, SigSet, SIGKILL, SIGSTOP, SIG_NUM};
 
 pub struct SigManager {
     /// Pending signals
@@ -38,7 +38,7 @@ impl SigManager {
     }
     pub fn from_another(sig_manager: &SigManager) -> Self {
         // clean up the pending sigs and blocked sigs
-        // use the same action fomr another
+        // use the same action from another
         Self {
             pending_sigs: VecDeque::new(),
             bitmap: SigSet::empty(),
@@ -48,6 +48,8 @@ impl SigManager {
         }
     }
     /// signal manager receive a new signal
+    /// according to linux manual, a process will only receive
+    /// the information associated with the first instance of the signal.
     pub fn receive(&mut self, signo_info: SigInfo) {
         if !self.bitmap.contain_sig(signo_info.si_signo) {
             self.bitmap.add_sig(signo_info.si_signo);
@@ -74,9 +76,34 @@ impl SigManager {
     }
     /// signal manager set signal action
     pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
+        if signo == SIGSTOP || signo == SIGKILL {
+            warn!("SIGKILL or SIGSTOP cannot be caught or ignored");
+            return;
+        }
         if signo < SIG_NUM {
             self.sig_handler[signo] = sigaction;
         }
+    }
+    /// dequeue a pending signal to handle
+    /// called by `check_and_handle`
+    /// TODO: add priority
+    pub fn dequeue_one(&mut self) -> Option<SigInfo> {
+        let len = self.pending_sigs.len();
+        let mut cnt = 0usize;
+        while cnt < len {
+            let sig = self.pending_sigs.pop_front().unwrap();
+            cnt += 1;
+            if sig.si_signo != SIGKILL && sig.si_signo != SIGSTOP && self.blocked_sigs.contain_sig(sig.si_signo) {
+                // cannot handle currently, push back to wait for unblock
+                self.pending_sigs.push_back(sig);
+                continue;
+            }
+            self.bitmap.remove_sig(sig.si_signo);
+            log::info!("[SigManager] dequeue signal {:?}", sig);
+            return Some(sig);
+        }
+        log::debug!("[SigManager] no signals to be handled");
+        None
     }
     /// dequeue a specific signal 
     pub fn dequeue_expected(&mut self, expected: SigSet) -> Option<SigInfo> {
@@ -94,5 +121,28 @@ impl SigManager {
         log::warn!("[SigManager] dequeue_expected failed, should not happen");
         None
     }
-    
+    /// reset the signal manager
+    /// see https://man7.org/linux/man-pages/man7/signal.7.html
+    pub fn reset_on_exec(&mut self) {
+        // 1. Signal dispositions
+        // During an execve(2), the dispositions of handled
+        // signals are reset to the default; the dispositions of ignored
+        // signals are left unchanged.
+        for signo in 1..SIG_NUM {
+            let old_action = self.sig_handler[signo];
+            if old_action.sa.sa_handler == ign_sig_handler as *const() as usize {
+                // handler is ignore, 2 cases
+                // 1. default handler is IGN
+                // 2. default handler is not IGN, but explictly set to SIG_IGN
+                // for both case, left unchanged
+                continue;
+            } else {
+                let new_action = KSigAction::new(signo, false);
+                self.sig_handler[signo] = new_action;
+            }
+        }
+        // 2. Signal mask and pending signals
+        // the signal mask is preserved across execve(2).
+        // the pending signal set is preserved across an execve(2).
+    }
 }

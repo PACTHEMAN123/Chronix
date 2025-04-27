@@ -11,40 +11,73 @@ pub use manager::*;
 
 use crate::task::current_task;
 
+/// Hangup detected on controlling terminal
+/// or death of controlling process
 pub const SIGHUP: usize = 1;
+/// Interrupt from keyboard
 pub const SIGINT: usize = 2;
+/// Quit from keyboard
 pub const SIGQUIT: usize = 3;
+/// Illegal Instruction
 pub const SIGILL: usize = 4;
+/// Trace/breakpoint trap
 pub const SIGTRAP: usize = 5;
+/// Abort signal from abort(3)
 pub const SIGABRT: usize = 6;
+/// Bus error (bad memory access)
 pub const SIGBUS: usize = 7;
+/// Erroneous arithmetic operation
 pub const SIGFPE: usize = 8;
+/// Kill signal
 pub const SIGKILL: usize = 9;
+/// User-defined signal 1
 pub const SIGUSR1: usize = 10;
+/// Invalid memory reference
 pub const SIGSEGV: usize = 11;
+/// User-defined signal 2
 pub const SIGUSR2: usize = 12;
+/// Broken pipe: write to pipe with no readers; see pipe(7)
 pub const SIGPIPE: usize = 13;
+/// Timer signal from alarm(2)
 pub const SIGALRM: usize = 14;
+/// Termination signal
 pub const SIGTERM: usize = 15;
+/// Stack fault on coprocessor (unused)
 pub const SIGSTKFLT: usize = 16;
+/// Child stopped or terminated
 pub const SIGCHLD: usize = 17;
+/// Continue if stopped
 pub const SIGCONT: usize = 18;
+/// Stop process
 pub const SIGSTOP: usize = 19;
+/// Stop typed at terminal
 pub const SIGTSTP: usize = 20;
+/// Terminal input for background process
 pub const SIGTTIN: usize = 21;
+/// Terminal output for background process
 pub const SIGTTOU: usize = 22;
+/// Urgent condition on socket (4.2BSD)
 pub const SIGURG: usize = 23;
+/// CPU time limit exceeded (4.2BSD);
+/// see setrlimit(2)
 pub const SIGXCPU: usize = 24;
+/// File size limit exceeded (4.2BSD);
+/// see setrlimit(2)
 pub const SIGXFSZ: usize = 25;
+/// Virtual alarm clock (4.2BSD)
 pub const SIGVTALRM: usize = 26;
+/// Profiling timer expired
 pub const SIGPROF: usize = 27;
+/// Window resize signal (4.3BSD, Sun)
 pub const SIGWINCH: usize = 28;
+/// I/O now possible (4.2BSD)
 pub const SIGIO: usize = 29;
+/// Power failure (System V)
 pub const SIGPWR: usize = 30;
+/// Bad system call (SVr4);
 pub const SIGSYS: usize = 31;
 pub const SIGRTMIN: usize = 32;
 pub const SIGRT_1: usize = SIGRTMIN + 1;
-
 pub const SIG_NUM: usize = 33;
 
 
@@ -100,10 +133,6 @@ impl SigSet {
     }
 }
 
-pub fn check_signal_for_current_task() {
-    current_task().unwrap().check_and_handle();
-}
-
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 /// Unix signal info structure
@@ -152,4 +181,14 @@ impl SigInfo {
     /// stopped child has continued
     pub const CLD_CONTINUED: i32 = 6;
     pub const NSIGCHLD: i32 = 6;
+}
+
+#[derive(Default, Copy, Clone)]
+#[repr(C)]
+pub struct LinuxSigInfo {
+    pub si_signo: i32,
+    pub si_errno: i32,
+    pub si_code: i32,
+    pub _pad: [i32; 29],
+    _align: [u64; 0],
 }

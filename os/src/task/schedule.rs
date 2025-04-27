@@ -85,18 +85,35 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
         current_task().unwrap().inner_exclusive_access().get_trap_cx().sepc,
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );*/
+    let mut is_interrupted = false;
 
     loop {
-        trap_return(&task);
-        // println!("trap_return");
-        user_trap_handler().await;
-        if task.is_zombie(){
-            //info!("zombie task {} exit", task.tid());
-            //info!("user time {}, kernel time {:?}", task.time_recorder().user_time().as_micros() , task.time_recorder().kernel_time());
-            break;
+        // check current task status before return
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {}
+        }
+
+        // return to user space
+        trap_return(&task, is_interrupted);
+
+        // back from user space
+        is_interrupted = user_trap_handler().await;
+
+        // check current task status after return
+        // task status maybe already change
+        match task.get_status() {
+            TaskStatus::Zombie => {
+                //info!("zombie task {} exit", task.tid());
+                //info!("user time {}, kernel time {:?}", task.time_recorder().user_time().as_micros() , task.time_recorder().kernel_time());
+                break
+            },
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {}
         }
     }
-    // wehen the task is zombie, we should switch to the next task
+    // when the task is zombie, we should switch to the next task
     //info!("now exit run_tasks");
     task.handle_zombie();
     //info!("now task {} dropped", task.tid());

@@ -52,6 +52,9 @@ pub trait TrapContextHal {
 
     fn fx_restore(&mut self);
 
+    fn save_last_user_arg0(&mut self);
+
+    fn restore_last_user_arg0(&mut self);
 } 
 pub trait FloatContextHal {
     fn new() -> Self;

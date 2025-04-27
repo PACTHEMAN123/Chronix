@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, SigInfo, SigSet, SIGKILL, SIGSTOP}, task::INITPROC_PID};
+use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigInfo, SigSet, SIGKILL, SIGSTOP}, task::INITPROC_PID};
 
 use super::task::TaskControlBlock;
 
@@ -70,42 +70,30 @@ impl TaskControlBlock {
     /// signal manager should check the signal queue
     /// before a task return form kernel to user
     /// and make correspond handle action
-    pub fn check_and_handle(&self) {
+    pub fn check_and_handle(&self, is_intr: bool) {
         self.with_mut_sig_manager(|sig_manager| {
-            // check the signal, try to find first handle signal
-            if sig_manager.pending_sigs.is_empty() {
+            let sig = if let Some(sig) = sig_manager.dequeue_one() {
+                sig
+            } else {
                 return;
-            }
-            let len = sig_manager.pending_sigs.len();
-            let mut cnt = 0;
-            let mut signo = SigInfo{
-                si_signo: 0,
-                si_code: 0,
-                si_pid: None
             };
-            while cnt < len {
-                signo = sig_manager.pending_sigs.pop_front().unwrap();
-                // block the signals
-                if signo.si_signo != SIGKILL && signo.si_signo != SIGSTOP && sig_manager.blocked_sigs.contain_sig(signo.si_signo) {
-                    cnt += 1;
-                    //info!("[SIGHANDLER] signal {} blocked", signo);
-                    sig_manager.pending_sigs.push_back(signo);
-                    continue;
-                }
-                log::info!("[SIGHANDLER] receive signal {:?}", signo);
-                break;
-            }
-            if cnt == len {
-                log::info!("[SIGHANDLER] no pending signal");
-                return;
-            }
+            
             // handle a signal
-            assert!(signo.si_signo != 0);
-            let sig_action = sig_manager.sig_handler[signo.si_signo];
+            assert!(sig.si_signo != 0);
+            let sig_action = sig_manager.sig_handler[sig.si_signo];
+            let sa_flags = SigActionFlag::from_bits_truncate(sig_action.sa.sa_flags);
             let trap_cx = self.get_trap_cx();
+
+            // check for SA_RESTART flag
+            if is_intr && sa_flags.contains(SigActionFlag::SA_RESTART) {
+                log::warn!("using SA_RESTART flags, restart syscall");
+                *trap_cx.sepc() -= 4;
+                trap_cx.restore_last_user_arg0();
+            }
+
             if sig_action.is_user {
                 let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
-                sig_manager.blocked_sigs.add_sig(signo.si_signo);
+                sig_manager.blocked_sigs.add_sig(sig.si_signo);
                 sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
                 // save fx state
                 trap_cx.fx_encounter_signal();
@@ -113,7 +101,7 @@ impl TaskControlBlock {
                 // (todo) notice that user may provide signal stack
                 // but now we dont support this flag
                 let sp = *trap_cx.sp();
-                let new_sp = sp - size_of::<UContext>();
+                let mut new_sp = sp - size_of::<UContext>();
                 let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
                 let ucontext_bytes: &[u8] = unsafe {
                     core::slice::from_raw_parts(
@@ -124,13 +112,35 @@ impl TaskControlBlock {
                 // println!("copy_out to {:#x}", new_sp);
                 copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
                 self.set_sig_ucontext_ptr(new_sp);
+                
+                // the first argument of every signal handlers is signo
+                trap_cx.set_arg_nth(0, sig.si_signo);
+
+                // SA_SIGINFO flag is set, need to pass more args
+                // void (*sa_sigaction)(int, siginfo_t *, void *ucontext)
+                if sa_flags.contains(SigActionFlag::SA_SIGINFO) {
+                    log::warn!("using SA_SIGINFO flags, pass more arguments");
+                    // the second argument
+                    trap_cx.set_arg_nth(1, new_sp);
+                    // the third argument
+                    let mut siginfo_v = LinuxSigInfo::default();
+                    siginfo_v.si_signo = sig.si_signo as _;
+                    siginfo_v.si_code = sig.si_code;
+                    new_sp -= size_of::<LinuxSigInfo>();
+                    let siginfo_v_bytes: &[u8] = unsafe {
+                        core::slice::from_raw_parts(
+                            &siginfo_v as *const LinuxSigInfo as *const u8,
+                            core::mem::size_of::<LinuxSigInfo>(),
+                        )
+                    };
+                    copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), siginfo_v_bytes);
+                    trap_cx.set_arg_nth(2, new_sp);
+                }
 
                 // set the current trap cx sepc to reach user handler
                 // log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
                 *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
-                // a0
-                trap_cx.set_arg_nth(0, signo.si_signo);
-                // sp used by sys_sigreturn to restore ucontext
+                // sp
                 *trap_cx.sp() = new_sp;
                 // ra: when user signal handler ended, return to sigreturn_trampoline
                 // which calls sys_sigreturn
@@ -141,8 +151,8 @@ impl TaskControlBlock {
                         sig_action.sa.sa_handler as *const (),
                     )
                 };
-                handler(signo.si_signo);
-                sig_manager.bitmap.remove_sig(signo.si_signo);
+                handler(sig.si_signo);
+                // sig_manager.bitmap.remove_sig(signo.si_signo);
             }
         });
     }
