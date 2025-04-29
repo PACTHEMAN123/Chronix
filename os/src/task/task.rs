@@ -71,8 +71,7 @@ pub struct TaskControlBlock {
     /// whether this task is the leader of the thread group
     pub is_leader: bool,
     // ! mutable only in self context , only accessed by current task
-    /// trap context physical page number
-    pub trap_cx_ppn: UPSafeCell<PhysPageNum>,
+    pub trap_context: UPSafeCell<TrapContext>,
     /// waker for waiting on events
     pub waker: UPSafeCell<Option<Waker>>,
     /// address of task's thread ID
@@ -224,13 +223,9 @@ impl TaskControlBlock {
     pub fn tid(&self) -> Tid {
         self.tid.0
     }
-    /// get trap_cx_ppn of the task
-    pub fn get_trap_cx_ppn_access(&self) -> &mut PhysPageNum {
-        self.trap_cx_ppn.exclusive_access()    
-    }
     /// get trap_cx of the task
-    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        self.trap_cx_ppn.exclusive_access().start_addr().get_mut()
+    pub fn get_trap_cx(&self) -> &mut TrapContext {
+        self.trap_context.exclusive_access()
     }
     /// get vm_space of the task
     pub fn get_user_token(&self) -> usize {
@@ -301,10 +296,6 @@ impl TaskControlBlock {
             _auxv
         ) = UserVmSpace::from_elf(&elf, elf_file.clone())?;
 
-        let trap_cx_ppn = vm_space.get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
-            .unwrap();
-
         // set argc to zero
         user_sp -= 8;
         // let _ = vm_space.handle_page_fault(VirtAddr::from(user_sp), PageFaultAccessType::WRITE);
@@ -320,7 +311,15 @@ impl TaskControlBlock {
             tid: tid_handle,
             leader: None,
             is_leader: true,
-            trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
+            trap_context: UPSafeCell::new(
+                TrapContext::app_init_context(
+                    entry_point,
+                    user_sp,
+                    0,
+                    0,
+                    0,
+                )
+            ),
             waker: UPSafeCell::new(None),
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
@@ -347,15 +346,6 @@ impl TaskControlBlock {
             processor_id: AtomicUsize::new(current_processor().id())  
         });
         info!("in new");
-        // prepare TrapContext in user space
-        let trap_cx = task_control_block.get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            0,
-            0,
-            0,
-        );
         // task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
         task_control_block.with_mut_thread_group(|thread_group|thread_group.push(Arc::clone(&task_control_block)));
         Ok(task_control_block)
@@ -385,11 +375,7 @@ impl TaskControlBlock {
             entry_point, 
             auxv
         ) = UserVmSpace::from_elf(&elf, elf_file.clone())?;
-        // update trap_cx ppn
-        let trap_cx_ppn = vm_space
-            .get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
-            .unwrap();
+
         // update the executing elf file
         self.with_mut_elf(|elf| *elf = elf_file );
         //  NOTE: should do termination before switching page table, so that other
@@ -424,7 +410,6 @@ impl TaskControlBlock {
         // reset the signal manager on exec
         self.with_mut_sig_manager(|sig_manager| sig_manager.reset_on_exec());
 
-        unsafe {*self.trap_cx_ppn.get() = trap_cx_ppn};
         // initialize trap_cx
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
@@ -481,7 +466,7 @@ impl TaskControlBlock {
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
-            //info!("cloning a vm");
+            info!("cloning a vm");
             vm_space = self.vm_space.clone();
         }else {
             vm_space = new_shared(
@@ -498,16 +483,11 @@ impl TaskControlBlock {
         } else {
             new_shared(self.fd_table.lock().clone())
         };
-        let trap_cx_ppn = vm_space
-            .lock()
-            .get_page_table()
-            .translate_vpn(VirtAddr::from(Constant::USER_TRAP_CONTEXT_BOTTOM).floor())
-            .unwrap();
         let task_control_block = Arc::new(TaskControlBlock {
             tid: tid_handle,
             leader,
             is_leader,
-            trap_cx_ppn: UPSafeCell::new(trap_cx_ppn),
+            trap_context: UPSafeCell::new(self.get_trap_cx().clone()),
             waker: UPSafeCell::new(None),
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),

@@ -56,9 +56,7 @@ pub async fn user_trap_handler() -> bool {
         }
         TrapType::Syscall => {
             let _sum = SumGuard::new();
-            let cx = unsafe {
-                &mut *(Constant::USER_TRAP_CONTEXT_BOTTOM as *mut TrapContext)
-            };
+            let cx = current_task().unwrap().get_trap_cx();
             // jump to next instruction anyway
             *cx.sepc() += 4;
             // get system call return value
@@ -149,19 +147,19 @@ pub fn trap_return(task: &Arc<TaskControlBlock>, is_intr: bool) {
     
     task.time_recorder().record_trap_return();
 
-    let trap_cx_ptr = Constant::USER_TRAP_CONTEXT_BOTTOM;
+    let trap_cx = task.get_trap_cx();
 
     // handler the signal before return
     task.check_and_handle(is_intr);
 
     // restore float pointer and set status
-    task.get_trap_cx().fx_restore();
+    trap_cx.fx_restore();
     
     Instruction::set_float_status_clean();
     // restore
-    hal::trap::restore(trap_cx_ptr);
-
-    task.get_trap_cx().mark_fx_save();
+    hal::trap::restore(trap_cx);
+    
+    trap_cx.mark_fx_save();
 
     // set up time recorder for trap
     task.time_recorder().record_trap();

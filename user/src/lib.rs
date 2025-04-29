@@ -32,10 +32,18 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 #[link_section = ".text.entry"]
 #[naked]
 pub unsafe extern "C" fn _start() {
+    #[cfg(target_arch="riscv64")]
     core::arch::naked_asm!(
         "
         mv a0, sp
-        jal x0, _rust_start
+        jal ra, _rust_start
+        "
+    );
+    #[cfg(target_arch="loongarch64")]
+    core::arch::naked_asm!(
+        "
+        move $a0, $sp
+        bl _rust_start
         "
     );
 }

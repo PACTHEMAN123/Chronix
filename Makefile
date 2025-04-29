@@ -403,7 +403,7 @@ LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
 libc-test:
 	$(call building, "building libc-test")
-	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-linux-gnu- clean disk
+	@make -C $(LIBC_TEST_BIR) PREFIX=loongarch64-linux-gnu- clean disk
 	$(call success, "libc test build finished")
 
 

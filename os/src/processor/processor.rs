@@ -190,7 +190,7 @@ pub fn current_user_token(processor: &Processor) -> usize {
     token
 }
 ///Get the mutable reference to trap context of current task
-pub fn current_trap_cx(processor: &Processor) -> &'static mut TrapContext {
+pub fn current_trap_cx(processor: &Processor) -> &mut TrapContext {
     processor.current()
         .unwrap()
         .get_trap_cx()

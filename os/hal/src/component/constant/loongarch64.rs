@@ -33,12 +33,8 @@ impl ConstantsHal for Constant {
 
     const USER_STACK_SIZE: usize = 16 * 4096;
     
-    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM;
+    const USER_STACK_TOP: usize = Self::USER_ADDR_SPACE.end - Self::PAGE_SIZE;
     
-    const USER_TRAP_CONTEXT_SIZE: usize = Self::PAGE_SIZE;
-    
-    const USER_TRAP_CONTEXT_TOP: usize = Self::USER_ADDR_SPACE.end - Self::PAGE_SIZE;
-
     // put the file mmap area under user stack
     const USER_FILE_END: usize = Self::USER_STACK_BOTTOM;
     const USER_FILE_SIZE: usize = 0x2_0000_0000;

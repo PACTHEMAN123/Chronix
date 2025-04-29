@@ -33,7 +33,7 @@ impl ConstantsHal for Constant {
     
     const USER_STACK_SIZE: usize = 16 * 4096;
     
-    const USER_STACK_TOP: usize = Self::USER_TRAP_CONTEXT_BOTTOM - Self::PAGE_SIZE;
+    const USER_STACK_TOP: usize = Self::USER_ADDR_SPACE.end - Self::PAGE_SIZE;
 
     // put the file mmap area under user stack
     const USER_FILE_END: usize = Self::USER_STACK_BOTTOM - Self::PAGE_SIZE;
@@ -42,10 +42,6 @@ impl ConstantsHal for Constant {
     // put the share mmap area under file mmap area
     const USER_SHARE_END: usize = Self::USER_FILE_BEG  - Self::PAGE_SIZE;
     const USER_SHARE_SIZE: usize = 0x2_0000_0000;
-    
-    const USER_TRAP_CONTEXT_SIZE: usize = Self::PAGE_SIZE;
-    
-    const USER_TRAP_CONTEXT_TOP: usize = Self::USER_ADDR_SPACE.end;
 
     const DL_INTERP_OFFSET: usize = 0x20_0000_0000;
 }

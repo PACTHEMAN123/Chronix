@@ -107,6 +107,7 @@ pub fn sys_mmap(
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_anon_area(addr, length, perm, flags, false)
                 })?;
+                log::info!("[sys_mmap] private anonymous: {:#x}", start_va);
                 Ok(start_va)
             } else {
                 let file = task.with_fd_table(|t| t.get_file(fd))?;

@@ -347,11 +347,11 @@ fn get_trap_type() -> TrapType {
     }
 }
 
-pub fn restore(cx: usize) {
-    unsafe {
-        core::arch::asm!(
-            "call __restore",    
-            in("a0") cx,      
-        );
+pub fn restore(cx: &mut TrapContext) {
+    unsafe extern "C" {
+        fn __restore(cx: usize);
+    }
+    unsafe { 
+        __restore(cx as *mut _ as _);
     }
 }
