@@ -46,10 +46,6 @@ pub trait ConstantsHal {
     const USER_SHARE_SIZE: usize;
     const USER_SHARE_END: usize;
 
-    const USER_TRAP_CONTEXT_SIZE: usize;
-    const USER_TRAP_CONTEXT_TOP: usize;
-    const USER_TRAP_CONTEXT_BOTTOM: usize = Self::USER_TRAP_CONTEXT_TOP - Self::USER_TRAP_CONTEXT_SIZE;
-
     const DL_INTERP_OFFSET: usize;
 
 }

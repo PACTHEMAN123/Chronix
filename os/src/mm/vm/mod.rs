@@ -36,9 +36,7 @@ pub enum UserVmAreaType {
     /// heap
     Heap, 
     /// stack
-    Stack, 
-    /// trap context
-    TrapContext,
+    Stack,
     /// file mmap
     Mmap,
     /// shared memory

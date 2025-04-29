@@ -1,4 +1,4 @@
-use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, task::Waker};
+use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32, Ordering}, task::Waker};
 
 use alloc::vec::Vec;
 use hal::addr::{PhysAddr, VirtAddr};
@@ -9,37 +9,61 @@ use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal
 
 use super::{SysError, SysResult};
 
+const FUTEX_OP_SET: u32 = 0;
+const FUTEX_OP_ADD: u32 = 1;
+const FUTEX_OP_OR: u32 = 2;
+const FUTEX_OP_ANDN: u32 = 3;
+const FUTEX_OP_XOR: u32 = 4;
+const FUTEX_OP_ARG_SHIFT: u32 = 8;
+
+const FUTEX_OP_CMP_EQ: u32 = 0;
+const FUTEX_OP_CMP_NE: u32 = 1;
+const FUTEX_OP_CMP_LT: u32 = 2;
+const FUTEX_OP_CMP_LE: u32 = 3;
+const FUTEX_OP_CMP_GT: u32 = 4;
+const FUTEX_OP_CMP_GE: u32 = 5;
+
 /// get futex
 #[allow(unused_variables)]
 pub async fn sys_futex(
-    uaddr: SendWrapper<*const u32>, futex_op: i32, val: u32, 
-    timeout: SendWrapper<*const TimeSpec>, uaddr2: SendWrapper<*const u32>, val3: u32
+    uaddr: usize, mut futex_op: i32, val: u32,
+    timeout: SendWrapper<*const TimeSpec>, // or val2: u32
+    uaddr2: usize, val3: u32
 ) -> SysResult {
-    let mut futex_op = FutexOp::from_bits_truncate(futex_op);
+    let _sum = SumGuard::new();
+    let uaddr = unsafe {
+        &*(uaddr as *mut AtomicU32)
+    };
+    let uaddr2 = unsafe {
+        &*(uaddr2 as *mut AtomicU32)
+    };
+
+    let is_private = futex_op & FUTEX_PRIVATE_FLAG_BITMASK != 0;
+    futex_op &= !(FUTEX_PRIVATE_FLAG_BITMASK | FUTEX_CLOCK_REALTIME_BITMASK);
+
+    let futex_op = FutexOp::from(futex_op);
     let task = current_task().unwrap().clone();
-    let is_private = futex_op.contains(FutexOp::PRIVATE);
-    futex_op.remove(FutexOp::PRIVATE);
+    
     let key = if is_private {
         FutexHashKey::Private {
             mm: task.get_raw_vm_ptr(),
-            vaddr: VirtAddr::from(uaddr.0 as usize),
+            vaddr: VirtAddr::from(uaddr as *const _ as usize),
         }
     } else {
         let paddr = task.with_mut_vm_space(|vm| {
             translate_uva_checked(
                 vm, 
-                VirtAddr::from(uaddr.0 as usize), 
+                VirtAddr::from(uaddr as *const _ as usize), 
                 PageFaultAccessType::WRITE
             ).ok_or(SysError::EINVAL)
         })?;
         FutexHashKey::Shared { paddr }
     };
-
+    
     match futex_op {
-        FutexOp::WAIT => {
-            let res = unsafe { 
-                let _sum = SumGuard::new();
-                uaddr.0.read() 
+        FutexOp::Wait => {
+            let res = { 
+                uaddr.load(Ordering::Acquire)
             };
             if res != val {
                 return Err(SysError::EAGAIN);
@@ -48,7 +72,8 @@ pub async fn sys_futex(
                 &key,
                 FutexWaiter { 
                     tid: task.tid(), 
-                    waker: task.waker().clone().unwrap() 
+                    waker: task.waker().clone().unwrap(),
+                    mask: FutexWaiter::FUTEX_BITSET_MATCH_ANY
                 } 
             );
             task.set_interruptable();
@@ -60,7 +85,6 @@ pub async fn sys_futex(
                 suspend_now().await;
             } else {
                 let timeout = unsafe {
-                    let _sum = SumGuard::new();
                     timeout.0.read()
                 };
                 let rem = suspend_timeout(&task, timeout.into()).await;
@@ -76,22 +100,25 @@ pub async fn sys_futex(
             task.set_running();
             Ok(0)
         }
-        FutexOp::WAKE => {
+        FutexOp::Wake => {
             let n_wake = futex_manager().wake(&key, val)?;
             return Ok(n_wake);
         }
-        FutexOp::REQUEUE => {
-            let n_wake = futex_manager().wake(&key, val)?;
+        FutexOp::Fd => {
+            return Err(SysError::EINVAL);
+        }
+        FutexOp::Requeue => {
+            let n_woke = futex_manager().wake(&key, val)?;
             let new_key = if is_private {
                 FutexHashKey::Private {
                     mm: task.get_raw_vm_ptr(),
-                    vaddr: (uaddr2.0 as usize).into(),
+                    vaddr: (uaddr2 as *const _ as usize).into(),
                 }
             } else {
                 let paddr = task.with_mut_vm_space(|vm| {
                     translate_uva_checked(
                         vm, 
-                        (uaddr2.0 as usize).into(), 
+                        (uaddr2 as *const _ as usize).into(), 
                         PageFaultAccessType::WRITE
                     ).ok_or(SysError::EINVAL)
                 })?;
@@ -99,26 +126,26 @@ pub async fn sys_futex(
             };
             let timeout = timeout.0 as usize;
             futex_manager().requeue_waiters(key, new_key, timeout)?;
-            Ok(n_wake)
+            Ok(n_woke)
         }
-        FutexOp::CMP_REQUEUE => {
-            if unsafe {
+        FutexOp::CmpRequeue => {
+            if {
                 let _sum = SumGuard::new();
-                uaddr.0.read() as u32 
-            }  != val3 {
+                uaddr.load(Ordering::Acquire)
+            } != val3 {
                 return Err(SysError::EAGAIN);
             }
-            let n_wake = futex_manager().wake(&key, val)?;
+            let n_woke = futex_manager().wake(&key, val)?;
             let new_key = if is_private {
                 FutexHashKey::Private {
                     mm: task.get_raw_vm_ptr(),
-                    vaddr: (uaddr2.0 as usize).into(),
+                    vaddr: (uaddr2 as *const _ as usize).into(),
                 }
             } else {
                 let paddr = task.with_mut_vm_space(|vm| {
                     translate_uva_checked(
                         vm, 
-                        (uaddr2.0 as usize).into(), 
+                        (uaddr2 as *const _ as usize).into(), 
                         PageFaultAccessType::WRITE
                     ).ok_or(SysError::EINVAL)
                 })?;
@@ -126,9 +153,135 @@ pub async fn sys_futex(
             };
             let timeout = timeout.0 as usize;
             futex_manager().requeue_waiters(key, new_key, timeout)?;
-            Ok(n_wake)
+            Ok(n_woke)
         }
-        _ => panic!("unimplemented futexop {:?}", futex_op),
+        FutexOp::WakeOp => {
+            let val2 = timeout.0 as u32;
+            let op = (val3 >> 28) & 0xF;
+            let cmp = (val3 >> 24) & 0xF;
+            let oparg = (val3 >> 12) & 0xFFF;
+            let cmparg = val3 & 0xFFF;
+            
+            let actual_oparg = if (op & FUTEX_OP_ARG_SHIFT) != 0 {
+                1 << oparg
+            } else {
+                oparg
+            };
+
+            let mut spin_times = 0;
+            let mut oldval = uaddr2.load(Ordering::Acquire);
+            loop {
+                let newval;
+                match op & 0x7 {
+                    FUTEX_OP_SET => newval = actual_oparg,
+                    FUTEX_OP_ADD => newval = oldval.wrapping_add(actual_oparg),
+                    FUTEX_OP_OR => newval = oldval | actual_oparg,
+                    FUTEX_OP_ANDN => newval = oldval & !actual_oparg,
+                    FUTEX_OP_XOR => newval = oldval ^ actual_oparg,
+                    _ => panic!("Unknown futex op"),
+                };
+                match uaddr2.compare_exchange(
+                    oldval, newval, 
+                    Ordering::AcqRel, Ordering::Relaxed
+                ) {
+                    Ok(_) => break,
+                    Err(v) => oldval = v,
+                }
+                if spin_times > 100000 {
+                    log::warn!("[sys_futex] cas busy");
+                    return Err(SysError::EBUSY);
+                }
+                spin_times += 1;
+            }
+
+            let n_woke1 = futex_manager().wake(&key, val)?;
+
+            let check = match cmp {
+                FUTEX_OP_CMP_EQ => oldval == cmparg,
+                FUTEX_OP_CMP_NE => oldval != cmparg,
+                FUTEX_OP_CMP_GE => oldval >= cmparg,
+                FUTEX_OP_CMP_GT => oldval >  cmparg,
+                FUTEX_OP_CMP_LE => oldval <= cmparg,
+                FUTEX_OP_CMP_LT => oldval <  cmparg,
+                _ => panic!("Unknown futex op cmp"),
+            };
+
+            let n_woke2 = if check {
+                let key2 = if is_private {
+                    FutexHashKey::Private {
+                        mm: task.get_raw_vm_ptr(),
+                        vaddr: VirtAddr::from(uaddr2 as *const _ as usize),
+                    }
+                } else {
+                    let paddr = task.with_mut_vm_space(|vm| {
+                        translate_uva_checked(
+                            vm, 
+                            VirtAddr::from(uaddr2 as *const _ as usize), 
+                            PageFaultAccessType::WRITE
+                        ).ok_or(SysError::EINVAL)
+                    })?;
+                    FutexHashKey::Shared { paddr }
+                };
+                futex_manager().wake(&key, val2)?
+            } else {
+                0
+            };
+
+            Ok(n_woke1 + n_woke2)
+        }
+        FutexOp::WaitBitset => {
+            if val3 == 0 {
+                return Err(SysError::EINVAL);
+            }
+            let res = { 
+                uaddr.load(Ordering::Acquire)
+            };
+            if res != val {
+                return Err(SysError::EAGAIN);
+            }
+            futex_manager().add_waiter(
+                &key,
+                FutexWaiter { 
+                    tid: task.tid(), 
+                    waker: task.waker().clone().unwrap(),
+                    mask: val3
+                } 
+            );
+            task.set_interruptable();
+            let wake_up_sigs = task.with_mut_sig_manager(|sig| {
+                sig.wake_sigs = SigSet::from_bits_truncate(!sig.bitmap.bits() | SIGSTOP | SIGKILL); 
+                !sig.bitmap
+            });
+            if timeout.0.is_null() {
+                suspend_now().await;
+            } else {
+                let timeout = unsafe {
+                    timeout.0.read()
+                };
+                let rem = suspend_timeout(&task, timeout.into()).await;
+                if rem.is_zero() {
+                    futex_manager().remove_waiter(&key, task.tid());
+                }
+            }
+            if task.with_sig_manager(|sig| sig.bitmap.contains(wake_up_sigs)) {
+                log::info!("[sys_futex] Woken by signal");
+                futex_manager().remove_waiter(&key, task.tid());
+                return Err(SysError::EINTR);
+            }
+            task.set_running();
+            Ok(0)
+        }
+        FutexOp::WakeBitset => {
+            if val3 == 0 {
+                return Err(SysError::EINVAL);
+            }
+            let n_wake = futex_manager().wake_bitset(&key, val, val3)?;
+            return Ok(n_wake);
+        }
+        _ => {
+            log::warn!("unimplemented futexop {:?}", futex_op);
+            Err(SysError::EINVAL)
+        }
     }
 }
 
@@ -168,55 +321,77 @@ pub fn sys_set_robust_list(head: *const RobustListHead, len_ptr: usize) -> SysRe
 }
 
 
-bitflags::bitflags! {
-    /// Futex Operatoion
-    pub struct FutexOp: i32 {
-        /// Returns 0 if the caller was woken up.  Note that a wake-up
-        /// can also be caused by common futex usage patterns in
-        /// unrelated code that happened to have previously used the
-        /// futex word's memory location (e.g., typical futex-based
-        /// implementations of Pthreads mutexes can cause this under
-        /// some conditions).  Therefore, callers should always
-        /// conservatively assume that a return value of 0 can mean a
-        /// spurious wake-up, and use the futex word's value (i.e., the
-        /// user-space synchronization scheme) to decide whether to
-        /// continue to block or not.
-        const WAIT = 0;
-        /// Returns the number of waiters that were woken up.
-        const WAKE = 1;
-        /// Returns the new file descriptor associated with the futex.
-        const FD = 2;
-        /// Returns the number of waiters that were woken up.
-        const REQUEUE = 3;
-        /// First checks whether the location uaddr still contains the value
-        /// `val3`. If not, the operation fails with the error EAGAIN.
-        /// Otherwise, the operation wakes up a maximum of `val` waiters
-        /// that are waiting on the futex at `uaddr`. If there are more
-        /// than `val` waiters, then the remaining waiters are removed
-        /// from the wait queue of the source futex at `uaddr` and added
-        /// to the wait queue  of  the  target futex at `uaddr2`.  The
-        /// `val2` argument specifies an upper limit on the
-        /// number of waiters that are requeued to the futex at `uaddr2`.
-        const CMP_REQUEUE = 4;
-        /// 
-        const WAKE_OP = 5;
-        ///
-        const LOCK_PI = 6;
-        ///
-        const UNLOCK_PI = 7;
-        ///
-        const TRY_LOCK_PI = 8;
-        ///
-        const WAIT_BITSET = 9;
-        ///
-        const WAKE_BITSET = 10;
-        ///
-        const WAIT_BITSET_PI = 11;
-        /// Tells the kernel that the futex is process-private and not shared
-        /// with another process.
-        const PRIVATE = 128;
+/// Futex Operatoion
+#[derive(Debug, Clone, Copy)]
+pub enum FutexOp {
+    /// Returns 0 if the caller was woken up.  Note that a wake-up
+    /// can also be caused by common futex usage patterns in
+    /// unrelated code that happened to have previously used the
+    /// futex word's memory location (e.g., typical futex-based
+    /// implementations of Pthreads mutexes can cause this under
+    /// some conditions).  Therefore, callers should always
+    /// conservatively assume that a return value of 0 can mean a
+    /// spurious wake-up, and use the futex word's value (i.e., the
+    /// user-space synchronization scheme) to decide whether to
+    /// continue to block or not.
+    Wait = 0,
+    /// Returns the number of waiters that were woken up.
+    Wake = 1,
+    /// Returns the new file descriptor associated with the futex.
+    Fd = 2,
+    /// Returns the number of waiters that were woken up.
+    Requeue = 3,
+    /// First checks whether the location uaddr still contains the value
+    /// `val3`. If not, the operation fails with the error EAGAIN.
+    /// Otherwise, the operation wakes up a maximum of `val` waiters
+    /// that are waiting on the futex at `uaddr`. If there are more
+    /// than `val` waiters, then the remaining waiters are removed
+    /// from the wait queue of the source futex at `uaddr` and added
+    /// to the wait queue  of  the  target futex at `uaddr2`.  The
+    /// `val2` argument specifies an upper limit on the
+    /// number of waiters that are requeued to the futex at `uaddr2`.
+    CmpRequeue = 4,
+    /// 
+    WakeOp = 5,
+    ///
+    LockPi = 6,
+    ///
+    UnlockPi = 7,
+    ///
+    TryLockPi = 8,
+    ///
+    WaitBitset = 9,
+    ///
+    WakeBitset = 10,
+    ///
+    WaitBitsetPi = 11,
+    ///
+    Undefined = 12,
+}
+
+const FUTEX_PRIVATE_FLAG_BITMASK: i32 = 0x80;
+const FUTEX_CLOCK_REALTIME_BITMASK: i32 = 0x100;
+
+impl From<i32> for FutexOp {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => FutexOp::Wait,
+            1 => FutexOp::Wake,
+            2 => FutexOp::Fd,
+            3 => FutexOp::Requeue,
+            4 => FutexOp::CmpRequeue,
+            5 => FutexOp::WakeOp,
+            6 => FutexOp::LockPi,
+            7 => FutexOp::UnlockPi,
+            8 => FutexOp::TryLockPi,
+            9 => FutexOp::WaitBitset,
+            10 => FutexOp::WakeBitset,
+            11 => FutexOp::WaitBitsetPi,
+            _ => FutexOp::Undefined,
+        }
     }
 }
+
 
 /// futex hash key
 #[allow(missing_docs, unused)]
@@ -243,10 +418,14 @@ type Tid = usize;
 pub struct FutexWaiter {
     pub tid: Tid,
     pub waker: Waker,
+    pub mask: u32,
 }
 
 #[allow(missing_docs, unused)]
 impl FutexWaiter {
+
+    const FUTEX_BITSET_MATCH_ANY: u32 = 0xFFFF_FFFF;
+
     pub fn wake(self) {
         self.waker.wake();
     }
@@ -326,6 +505,24 @@ impl FutexManager {
             let n = core::cmp::min(n as usize, waiters.len());
             for _ in 0..n {
                 let waiter = waiters.pop().unwrap();
+                log::info!("[futex_wake] {:?} has been woken", waiter);
+                waiter.wake();
+            }
+            Ok(n as isize)
+        } else {
+            log::debug!("can not find key {key:?}");
+            Err(SysError::EINVAL)
+        }
+    }
+
+    pub fn wake_bitset(&mut self, key: &FutexHashKey, n: u32, mask: u32) -> SysResult {
+        if let Some(waiters) = self.futexs.get_mut(key) {
+            let n = core::cmp::min(n as usize, waiters.len());
+            for _ in 0..n {
+                let waiter = waiters.pop().unwrap();
+                if waiter.mask & mask == 0 {
+                    continue;
+                }
                 log::info!("[futex_wake] {:?} has been woken", waiter);
                 waiter.wake();
             }

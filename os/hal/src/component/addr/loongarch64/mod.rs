@@ -13,7 +13,7 @@ impl VirtAddrHal for VirtAddr {
         if self.0 == 0{
             VirtPageNum(0)
         } else {
-            VirtPageNum(((self.0 + Constant::PAGE_SIZE - 1) >> Constant::PAGE_SIZE_BITS) & ((1usize << Constant::VPN_WIDTH) - 1))
+            VirtPageNum(((self.0 - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS) & ((1usize << Constant::VPN_WIDTH) - 1))
         }
     }
 }
@@ -51,7 +51,7 @@ impl PhysAddrHal for PhysAddr {
         if self.0 == 0{
             PhysPageNum(0)
         } else {
-            PhysPageNum(((self.0 + Constant::PAGE_SIZE - 1) >> Constant::PAGE_SIZE_BITS) & ((1usize << Constant::PPN_WIDTH) - 1))
+            PhysPageNum(((self.0 - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS) & ((1usize << Constant::PPN_WIDTH) - 1))
         }
     }
 }

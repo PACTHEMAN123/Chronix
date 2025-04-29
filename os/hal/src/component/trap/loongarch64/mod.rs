@@ -145,7 +145,8 @@ impl TrapContextHal for TrapContext {
             era: entry,
             kernel_ctx: KernelContext::new(),
             user_fx: FloatContext::new(),
-            stored: 0
+            stored: 0,
+            last_user_arg0: 0,
         };
         *cs.sp() = sp;
         cs.set_arg_nth(0, argc);
@@ -392,11 +393,11 @@ fn get_trap_type() -> TrapType {
     }
 }
 
-pub fn restore(cx: usize) {
-    unsafe {
-        core::arch::asm!(
-            "bl __restore",    
-            in("$a0") cx,        
-        );
+pub fn restore(cx: &mut TrapContext) {
+    unsafe extern "C" {
+        fn __restore(cx: usize);
+    }
+    unsafe { 
+        __restore(cx as *mut _ as _);
     }
 }

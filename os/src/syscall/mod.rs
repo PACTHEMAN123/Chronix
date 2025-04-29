@@ -173,7 +173,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
-        SYSCALL_FUTEX => sys_futex(SendWrapper(args[0] as _), args[1] as _, args[2] as _, SendWrapper(args[3] as _), SendWrapper(args[4] as _), args[5] as _).await,
+        SYSCALL_FUTEX => sys_futex(args[0], args[1] as _, args[2] as _, SendWrapper(args[3] as _), args[4], args[5] as _).await,
         SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as _, args[1]),
         SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,

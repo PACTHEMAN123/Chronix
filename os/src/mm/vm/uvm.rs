@@ -169,19 +169,6 @@ impl UserVmSpaceHal for UserVmSpace {
             None,
         );
         
-        log::debug!("trap_context: {:#x}", Constant::USER_TRAP_CONTEXT_BOTTOM);
-        
-        let mut trap_cx_area = UserVmArea::new(
-            Constant::USER_TRAP_CONTEXT_BOTTOM.into()..(Constant::USER_TRAP_CONTEXT_TOP).into(),
-            UserVmAreaType::TrapContext,
-            MapPerm::R | MapPerm::W,
-        );
-        trap_cx_area.alloc_frames();
-        // map TrapContext
-        ret.push_area(
-            trap_cx_area,
-            None,
-        );
         Ok((
             ret,
             user_stack_top,
@@ -487,19 +474,10 @@ impl UserVmArea {
     }
 
     fn map(&mut self, page_table: &mut PageTable) {
-        if self.vma_type == UserVmAreaType::TrapContext {
-            for (&vpn, frame) in self.frames.iter() {
-                let pte = page_table
-                    .map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small)
-                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                pte.set_flags(pte.flags() | PTEFlags::D);
-            }
-        } else {
-            for (&vpn, frame) in self.frames.iter() {
-                let pte = page_table
-                    .map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small)
-                    .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-            }
+        for (&vpn, frame) in self.frames.iter() {
+            let pte = page_table
+                .map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small)
+                .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
         }
     }
 
@@ -511,10 +489,6 @@ impl UserVmArea {
     }
 
     fn clone_cow(&mut self, page_table: &mut PageTable) -> Result<Self, ()> {
-        // note: trap context cannot supprt COW
-        if self.vma_type == UserVmAreaType::TrapContext {
-            return Err(());
-        }
         if !self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
             // note: don't set C flag for readonly frames
             if self.map_perm.contains(MapPerm::W) {
@@ -569,7 +543,6 @@ impl UserVmArea {
             }
             _ => {
                 match self.vma_type {
-                    UserVmAreaType::TrapContext => return Err(()),
                     UserVmAreaType::Data =>
                         UserDataHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Stack =>

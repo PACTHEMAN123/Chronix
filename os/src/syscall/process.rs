@@ -142,7 +142,7 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
-    info!("[sys_clone]: into clone, stack addr: {:#x}", stack.0);
+    info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
@@ -503,18 +503,18 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     };
     let flags = cl_args.flags;
     log::info!("[sys_clone3]: flags: {:x}", flags);
-    let stack = VirtAddr(cl_args.stack);
+    let stack = VirtAddr::from(cl_args.stack);
     log::info!("[sys_clone3]: stack: {:x}", stack.0);
-    let parent_tid = VirtAddr(cl_args.parent_tid);
+    let parent_tid = VirtAddr::from(cl_args.parent_tid);
     log::info!("[sys_clone3]: parent_tid: {:x}", parent_tid.0);
-    let tls = VirtAddr(cl_args.tls);
+    let tls = VirtAddr::from(cl_args.tls);
     log::info!("[sys_clone3]: tls: {:x}", tls.0);
-    let child_tid = VirtAddr(cl_args.child_tid);
+    let child_tid = VirtAddr::from(cl_args.child_tid);
     log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
     log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
-    sys_clone(flags, stack + PAGE_SIZE, parent_tid, tls, child_tid)
+    sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
 }
-
+  
 //  * @flags:        Flags for the new process.
 //  *                All flags are valid except for CSIGNAL and
 //  *                CLONE_DETACHED.
