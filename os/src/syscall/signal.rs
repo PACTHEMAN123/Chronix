@@ -304,3 +304,31 @@ pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
     );
     Ok(0)
 }
+
+/// sends the signal sig to the thread with the thread ID tid
+///        in the thread group tgid.  (By contrast, kill(2) can be used to
+///        send a signal only to a process (i.e., thread group) as a whole,
+///        and the signal will be delivered to an arbitrary thread within
+///        that process.)
+pub fn sys_tgkill (tgid: isize, tid: isize, signo: i32) -> SysResult {
+    if (signo < 0) || signo as usize >= SIGRTMAX || tid < 0{
+        return Err(SysError::EINVAL);
+    }
+    if tgid < 0 || tid < 0 {
+        return Err(SysError::EINVAL);
+    }
+    let task = TASK_MANAGER.get_task(tgid as usize).ok_or(SysError::ESRCH)?;
+    if task.is_leader() {
+        task.with_mut_thread_group(|thread_group| -> SysResult {
+            for thread in thread_group.iter() {
+                if thread.tid() == tid as usize {
+                    thread.recv_sigs(SigInfo { si_signo: signo as usize, si_code: SigInfo::TKILL, si_pid: Some(task.pid())});
+                    return Ok(0)
+                }
+            }
+            return Err(SysError::ESRCH);
+        })
+    }else {
+        return Err(SysError::ESRCH);
+    }
+}

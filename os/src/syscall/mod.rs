@@ -50,6 +50,7 @@ const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_GETITIMER: usize = 102;
 const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
+const SYSCALL_CLOCK_NANOSLEEP: usize = 115;
 const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_SCHED_SETSCHEDULER: usize = 119;
 const SYSCALL_SCHED_GETSCHEDULER: usize = 120;
@@ -59,6 +60,7 @@ const SYSCALL_SCHED_GETAFFINITY:usize = 123;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_TKILL: usize = 130;
+const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_RT_SIGTIMEDWAIT: usize = 137;
@@ -97,6 +99,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECE: usize = 226;
+const SYSCALL_MADSIVE: usize = 233;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
@@ -180,6 +183,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETITIMER => sys_getitimer(args[0], args[1]),
         SYSCALL_SETITIMER => sys_setitimer(args[0],args[1],args[2]),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1]),
+        SYSCALL_CLOCK_NANOSLEEP => sys_clock_nanosleep(args[0], args[1], args[2], args[3]).await,
         SYSCALL_SYSLOG => sys_syslog(args[0], args[1], args[2]),
         SYSCALL_SCHED_SETAFFINITY => sys_sched_setaffinity(args[0] , args[1] , args[2] ),
         SYSCALL_SCHED_GETAFFINITY => sys_sched_getaffinity(args[0] , args[1] , args[2] ),
@@ -189,6 +193,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_TKILL => sys_tkill(args[0] as isize, args[1] as i32),
+        SYSCALL_TGKILL => sys_tgkill( args[0] as isize, args[1] as isize, args[2] as i32),
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(args[0] as i32, args[1] as *const SigAction, args[2] as *mut SigAction),
         SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1] as *const u32, args[2] as *mut SigSet),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
@@ -233,6 +238,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SENDMSG => sys_sendmsg(args[0], args[1], args[2]).await,
         SYSCALL_RECVMSG => sys_recvmsg(args[0], args[1], args[2]).await,
         SYSCALL_MPROTECE => sys_mprotect(args[0].into(), args[1], args[2] as _),
+        SYSCALL_MADSIVE =>  sys_temp(),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)
@@ -246,4 +252,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             -err.code() 
         }
     }
+}
+/// do nothing
+pub fn sys_temp() -> SysResult {
+    Ok(0)
 }
