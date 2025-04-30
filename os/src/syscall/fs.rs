@@ -163,6 +163,10 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         log::debug!("task {} trying to open {}, flags: {:?}", task.tid(), path, flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
         if flags.contains(OpenFlags::O_CREAT) {
+            // the dir may not exist
+            if abs_path_to_name(&path).unwrap() != abs_path_to_name(&dentry.path()).unwrap() {
+                return Err(SysError::ENOENT);
+            }
             // inode not exist, create it as a regular file
             if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
                 return Err(SysError::EEXIST);
@@ -448,7 +452,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(pathname).unwrap();
-    log::debug!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
+    log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
     let dentry = at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
