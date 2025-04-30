@@ -5,6 +5,7 @@ use core::time::Duration;
 use alloc::{boxed::Box, fmt, sync::Arc};
 use hal::instruction::{Instruction, InstructionHal};
 use log::info;
+use xmas_elf::program::Flags;
 
 use crate::{
     processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
@@ -161,4 +162,48 @@ pub fn sys_getitimer(which: usize, now_ptr: usize) -> SysResult {
         }
     }
     Ok(0)
+}
+
+/// clock_nanosleep is a more general version of nanosleep, 
+/// which allows for more precise timing control.
+pub async fn sys_clock_nanosleep(
+    clock_id: usize,
+    flags: usize,
+    t_ptr: usize,
+    rem_ptr: usize
+) -> SysResult {
+    let task = current_task().unwrap();
+    match clock_id {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            let t = unsafe {
+                Instruction::set_sum();
+                *(t_ptr as *const TimeSpec)
+            }; 
+            let req_time: Duration = t.into();
+            let remain_time = if flags == 1 {
+                let current_time = get_current_time_duration();
+                if req_time.le(&current_time){
+                    return Ok(0);
+                }
+                let sleep_time = req_time - current_time;
+                suspend_timeout(task, sleep_time).await
+            }else {
+                suspend_timeout(task, req_time).await
+            };
+            if remain_time.is_zero() {
+                Ok(0)
+            }else {
+                if rem_ptr != 0 {
+                    let remptr = rem_ptr as *mut TimeSpec;
+                    unsafe {
+                        remptr.write(remain_time.into());
+                    }
+                }
+                Err(SysError::EINTR)
+            }
+        }
+        _ => {
+            return Err(SysError::EINVAL);
+        }
+    }
 }
