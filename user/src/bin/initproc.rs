@@ -33,16 +33,18 @@ fn main() -> i32 {
         exec("user_shell\0", &[core::ptr::null::<u8>()]);
     } else {
         println!("into user mode initproc wait");
-        let mut exit_code: i32 = 0;
-        let pid = wait(&mut exit_code);
-        if pid == -1 {
-            // println!("in pid == -1");
-            return -1;
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = wait(&mut exit_code);
+            if pid == -1 {
+                // println!("in pid == -1");
+                return -1;
+            }
+            println!(
+                "[initproc] Released a zombie process, pid={}, exit_code={}",
+                pid, exit_code,
+            );
         }
-        println!(
-            "[initproc] Released a zombie process, pid={}, exit_code={}",
-            pid, exit_code,
-        );
     }
     0
 }
