@@ -1,12 +1,12 @@
 //! The global allocator
-const KERNEL_HEAP_SIZE: usize = 0x300_0000;
+const KERNEL_HEAP_SIZE: usize = 0x0; // because we don't use it
 use core::{alloc::{GlobalAlloc, Layout}, ptr::NonNull};
 
 use buddy_system_allocator::{Heap, LockedHeap};
 use hal::println;
 
 use crate::sync::mutex::SpinNoIrqLock;
-#[global_allocator]
+
 /// heap allocator instance
 static HEAP_ALLOCATOR: GlobalHeap = GlobalHeap::empty();
 //static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
