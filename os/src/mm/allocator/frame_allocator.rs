@@ -37,7 +37,6 @@ impl BitMapFrameAllocator {
     }
 }
 
-
 /// frame allocator
 static FRAME_ALLOCATOR: SpinNoIrqLock<BitMapFrameAllocator> = SpinNoIrqLock::new(BitMapFrameAllocator::new());
 
