@@ -1,5 +1,7 @@
 //! signal related syscall
 
+use core::time::Duration;
+
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
 use hal::{
@@ -8,7 +10,7 @@ use hal::{
 };
 use log::*;
 use super::{SysError,SysResult};
-use crate::processor;
+use crate::{processor, timer};
 use crate::processor::context::SumGuard;
 use crate::processor::processor::current_processor;
 use crate::signal::*;
@@ -240,7 +242,7 @@ pub async fn sys_rt_sigtimedwait(
 )-> SysResult {
     let task = current_task().unwrap();
     let mut set = unsafe {
-        Instruction::set_sum();
+        let _sum_guard = SumGuard::new();
         *(set_ptr as *mut SigSet)
     };
     set.remove(SigSet::SIGKILL | SigSet::SIGSTOP);
@@ -260,13 +262,13 @@ pub async fn sys_rt_sigtimedwait(
         suspend_now().await;
     }else {
         let timeout = unsafe {
-            Instruction::set_sum();
+            let _sum_guard = SumGuard::new();
             *(timeout_ptr as *const TimeSpec)
         };
         if !timeout.is_valid() {
             return  Err(SysError::EINVAL);
         }
-        suspend_timeout(task,timeout.into() ).await;
+        suspend_timeout(task, timeout.into()).await;
     }
     task.set_running();
     let si = task.with_mut_sig_manager(|sig_manager| {
@@ -278,7 +280,7 @@ pub async fn sys_rt_sigtimedwait(
             unsafe {
                 (info_ptr as *mut SigInfo).write(si);
             }
-        }    
+        }
         return  Ok(si.si_signo as isize);
     }else {
         log::warn!("[sys_rt_sigtimedwait] info_ptr is null, woken by timeout");

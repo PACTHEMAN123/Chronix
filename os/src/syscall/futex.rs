@@ -1,11 +1,11 @@
-use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32, Ordering}, task::Waker};
+use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32, Ordering}, task::Waker, time::Duration};
 
 use alloc::vec::Vec;
-use hal::addr::{PhysAddr, VirtAddr};
+use hal::{addr::{PhysAddr, VirtAddr}, println};
 use hashbrown::HashMap;
 use smoltcp::time;
 
-use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
+use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
 
 use super::{SysError, SysResult};
 
@@ -61,19 +61,29 @@ pub async fn sys_futex(
     };
     
     match futex_op {
-        FutexOp::Wait => {
+        FutexOp::Wait | FutexOp::WaitBitset => {
             let res = { 
                 uaddr.load(Ordering::Acquire)
             };
             if res != val {
                 return Err(SysError::EAGAIN);
             }
+            
+            let mask = if futex_op == FutexOp::WaitBitset {
+                if val3 == 0 {
+                    return Err(SysError::EINVAL);
+                } 
+                val3
+            } else {
+                FutexWaiter::FUTEX_BITSET_MATCH_ANY
+            };
+
             futex_manager().add_waiter(
                 &key,
                 FutexWaiter { 
                     tid: task.tid(), 
                     waker: task.waker().clone().unwrap(),
-                    mask: FutexWaiter::FUTEX_BITSET_MATCH_ANY
+                    mask
                 } 
             );
             task.set_interruptable();
@@ -87,14 +97,28 @@ pub async fn sys_futex(
                 let timeout = unsafe {
                     timeout.0.read()
                 };
-                let rem = suspend_timeout(&task, timeout.into()).await;
+                if !timeout.is_valid() {
+                    return Err(SysError::EINVAL);
+                }
+                let timeout = Into::<Duration>::into(timeout);
+                let cur = timer::get_current_time_duration();
+                if timeout <= cur {
+                    futex_manager().remove_waiter(&key, task.tid());
+                    task.set_running();
+                    return Err(SysError::ETIMEOUT);
+                }
+                let dur = timeout - cur;
+                let rem = suspend_timeout(&task, dur).await;
                 if rem.is_zero() {
                     futex_manager().remove_waiter(&key, task.tid());
+                    task.set_running();
+                    return Err(SysError::ETIMEOUT);
                 }
             }
             if task.with_sig_manager(|sig| sig.bitmap.contains(wake_up_sigs)) {
                 log::info!("[sys_futex] Woken by signal");
                 futex_manager().remove_waiter(&key, task.tid());
+                task.set_running();
                 return Err(SysError::EINTR);
             }
             task.set_running();
@@ -229,48 +253,6 @@ pub async fn sys_futex(
 
             Ok(n_woke1 + n_woke2)
         }
-        FutexOp::WaitBitset => {
-            if val3 == 0 {
-                return Err(SysError::EINVAL);
-            }
-            let res = { 
-                uaddr.load(Ordering::Acquire)
-            };
-            if res != val {
-                return Err(SysError::EAGAIN);
-            }
-            futex_manager().add_waiter(
-                &key,
-                FutexWaiter { 
-                    tid: task.tid(), 
-                    waker: task.waker().clone().unwrap(),
-                    mask: val3
-                } 
-            );
-            task.set_interruptable();
-            let wake_up_sigs = task.with_mut_sig_manager(|sig| {
-                sig.wake_sigs = SigSet::from_bits_truncate(!sig.bitmap.bits() | SIGSTOP | SIGKILL); 
-                !sig.bitmap
-            });
-            if timeout.0.is_null() {
-                suspend_now().await;
-            } else {
-                let timeout = unsafe {
-                    timeout.0.read()
-                };
-                let rem = suspend_timeout(&task, timeout.into()).await;
-                if rem.is_zero() {
-                    futex_manager().remove_waiter(&key, task.tid());
-                }
-            }
-            if task.with_sig_manager(|sig| sig.bitmap.contains(wake_up_sigs)) {
-                log::info!("[sys_futex] Woken by signal");
-                futex_manager().remove_waiter(&key, task.tid());
-                return Err(SysError::EINTR);
-            }
-            task.set_running();
-            Ok(0)
-        }
         FutexOp::WakeBitset => {
             if val3 == 0 {
                 return Err(SysError::EINVAL);
@@ -286,7 +268,7 @@ pub async fn sys_futex(
 }
 
 /// Futex Operatoion
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FutexOp {
     /// Returns 0 if the caller was woken up.  Note that a wake-up
     /// can also be caused by common futex usage patterns in

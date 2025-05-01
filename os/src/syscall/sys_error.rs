@@ -98,6 +98,8 @@ pub enum SysError {
     EISCONN = 106,
     /// The socket is not connected
     ENOTCONN = 107,
+    /// time out
+    ETIMEOUT = 110,
     /// Connection refused
     ECONNREFUSED = 111,
     /// The socket is nonblocking and the connection cannot be completed
