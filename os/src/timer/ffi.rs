@@ -1,5 +1,5 @@
 use alloc::collections::btree_map::Values;
-use super::get_current_time_ms;
+use super::{get_current_time_ms, NSEC_PER_SEC};
 use core::time::Duration;
 
 use super::{USEC_PER_SEC,MSEC_PER_SEC};
@@ -64,18 +64,18 @@ impl TimeVal {
 impl TimeSpec {
     /// turn a TimeSpec into a ms value
     pub fn into_ms(&self) -> usize {
-        self.tv_sec * MSEC_PER_SEC + self.tv_nsec / USEC_PER_SEC
+        self.tv_sec * MSEC_PER_SEC + (self.tv_nsec / (NSEC_PER_SEC / MSEC_PER_SEC))
     }
     /// get a TimeSpec from a ms value
     pub fn from_ms(ms: usize) -> Self {
         Self {
             tv_sec: ms / MSEC_PER_SEC,
-            tv_nsec: (ms % MSEC_PER_SEC) * USEC_PER_SEC,
+            tv_nsec: (ms % MSEC_PER_SEC) * (NSEC_PER_SEC / MSEC_PER_SEC),
         }
     }
      /// check if is valid
      pub fn is_valid(&self) -> bool {
-        self.tv_sec as isize > 0 && self.tv_nsec as isize >= 0 && self.tv_nsec  < 1000_000_000 
+        self.tv_sec as isize > 0 && self.tv_nsec as isize >= 0 && self.tv_nsec < 1000_000_000 
     }
 }
 

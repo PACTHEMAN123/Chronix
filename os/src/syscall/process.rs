@@ -161,6 +161,7 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
             (parent_tid.0 as *mut usize).write_volatile(new_tid);
         }
     }
+    #[cfg(target_arch = "riscv64")]
     if flags.contains(CloneFlags::CHILD_SETTID) {
         unsafe  {
             (child_tid.0 as *mut usize).write_volatile(new_tid);
