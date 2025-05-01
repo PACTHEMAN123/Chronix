@@ -124,7 +124,7 @@ pub mod sys_error;
 pub mod net;
 use fatfs::info;
 pub use fs::*;
-use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list};
+use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};
 use hal::{addr::VirtAddr, println};
 use io::*;
 use misc::{sys_getrandom, sys_prlimit64, sys_sysinfo};

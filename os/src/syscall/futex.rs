@@ -285,42 +285,6 @@ pub async fn sys_futex(
     }
 }
 
-/// get robust list
-#[allow(unused_variables)]
-pub fn sys_get_robust_list(
-    pid: i32, head_ptr: *mut *const RobustListHead, len_ptr: *mut usize
-) -> SysResult {
-    let task = if pid != 0 { 
-        TASK_MANAGER.get_task(pid as usize).ok_or(SysError::ESRCH)?
-    } else {
-        current_task().cloned().unwrap()
-    };
-    if !task.is_leader() {
-        return Err(SysError::ESRCH);
-    }
-    task.with_robust(|&r| {
-        unsafe {
-            head_ptr.write(r as *const RobustListHead);
-            len_ptr.write(size_of::<RobustListHead>());
-        }
-    });
-    Ok(0)
-}
-
-/// set robust list
-#[allow(unused_variables)]
-pub fn sys_set_robust_list(head: *const RobustListHead, len_ptr: usize) -> SysResult {
-    if len_ptr != size_of::<RobustListHead>() {
-        return Err(SysError::EINVAL);
-    }
-    let task = current_task().cloned().unwrap();
-    task.with_mut_robust(|r| {
-        *r = head as usize;
-    });
-    Ok(0)
-}
-
-
 /// Futex Operatoion
 #[derive(Debug, Clone, Copy)]
 pub enum FutexOp {
@@ -565,12 +529,87 @@ impl FutexManager {
 }
 
 
-/// Robust List Head
-#[derive(Clone, Copy, Default)]
+
+/// Per-lock list entry - embedded in user-space locks, somewhere close
+/// to the futex field. (Note: user-space uses a double-linked list to
+/// achieve O(1) list add and remove, but the kernel only needs to know
+/// about the forward link)
+/// 
+/// NOTE: this structure is part of the syscall ABI, and must not be
+/// changed.
+#[derive(Clone, Copy)]
 #[repr(C)]
-#[allow(missing_docs)]
+pub struct RobustList {
+    ///
+	pub next: *mut RobustList
+}
+
+/// Robust List Head
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct RobustListHead {
-    pub list: usize,
+    /// The head of the list. Points back to itself if empty:
+    pub list: RobustList,
+    /// This relative offset is set by user-space, it gives the kernel
+	/// the relative position of the futex field to examine. This way
+	/// we keep userspace flexible, to freely shape its data-structure,
+	/// without hardcoding any particular offset into the kernel:
     pub futex_offset: usize,
-    pub list_op_pending: usize,
+	/// The death of the thread may race with userspace setting
+	/// up a lock's links. So to handle this race, userspace first
+	/// sets this field to the address of the to-be-taken lock,
+	/// then does the lock acquire, and then adds itself to the
+	/// list, and then clears this field. Hence the kernel will
+	/// always have full knowledge of all locks that the thread
+	/// _might_ have taken. We check the owner TID in any case,
+	/// so only truly owned locks will be handled.
+    pub list_op_pending: *mut RobustList,
+}
+
+/// Are there any waiters for this robust futex:
+#[allow(unused)]
+pub const FUTEX_WAITERS: u32 = 0x8000_0000;
+
+/// The kernel signals via this bit that a thread holding a futex
+/// has exited without unlocking the futex. The kernel also does
+/// a FUTEX_WAKE on such futexes, after setting the bit, to wake
+/// up any possible waiters:
+pub const FUTEX_OWNER_DIED: u32 = 0x4000_0000;
+
+/// The rest of the robust-futex field is for the TID:
+pub const FUTEX_TID_MASK: u32 = 0x3fff_ffff;
+
+/// get robust list
+#[allow(unused_variables)]
+pub fn sys_get_robust_list(
+    pid: i32, head_ptr: *mut *mut RobustListHead, len_ptr: *mut usize
+) -> SysResult {
+    let task = if pid != 0 { 
+        TASK_MANAGER.get_task(pid as usize).ok_or(SysError::ESRCH)?
+    } else {
+        current_task().cloned().unwrap()
+    };
+    if !task.is_leader() {
+        return Err(SysError::ESRCH);
+    }
+    task.with_robust(|r| {
+        unsafe {
+            head_ptr.write(r.0);
+            len_ptr.write(size_of::<RobustListHead>());
+        }
+    });
+    Ok(0)
+}
+
+/// set robust list
+#[allow(unused_variables)]
+pub fn sys_set_robust_list(head: *mut RobustListHead, len: usize) -> SysResult {
+    if len != size_of::<RobustListHead>() {
+        return Err(SysError::EINVAL);
+    }
+    let task = current_task().cloned().unwrap();
+    task.with_mut_robust(|r| {
+        r.0 = head;
+    });
+    Ok(0)
 }
