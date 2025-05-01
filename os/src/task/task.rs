@@ -16,7 +16,7 @@ use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::syscall::futex::{futex_manager, FutexHashKey, RobustListHead};
+use crate::syscall::futex::{futex_manager, FutexHashKey, RobustList, RobustListHead, FUTEX_OWNER_DIED, FUTEX_WAITERS};
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
@@ -24,6 +24,7 @@ use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use crate::timer::timer::ITimer;
+use crate::utils::SendWrapper;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, task, vec};
@@ -44,6 +45,8 @@ use virtio_drivers::PAGE_SIZE;
 use core::any::Any;
 use core::arch::global_asm;
 use core::ops::Deref;
+use core::ptr::null_mut;
+use core::sync::atomic::AtomicU32;
 use core::time::Duration;
 use core::{
     ptr::slice_from_raw_parts_mut,
@@ -110,7 +113,7 @@ pub struct TaskControlBlock {
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
     /// Futexes used by the task.
-    pub robust: Shared<usize>,
+    pub robust: Shared<SendWrapper<*mut RobustListHead>>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -175,7 +178,7 @@ impl TaskControlBlock {
         cwd: Arc<dyn Dentry>,
         itimers: [ITimer;3],
         elf: Option<Arc<dyn File>>,
-        robust: usize
+        robust: SendWrapper<*mut RobustListHead>
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -337,7 +340,7 @@ impl TaskControlBlock {
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
-            robust: new_shared(0),
+            robust: new_shared(SendWrapper::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -505,7 +508,7 @@ impl TaskControlBlock {
             cwd,
             elf: self.elf.clone(),
             itimers,
-            robust: new_shared(0),
+            robust: new_shared(SendWrapper::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -529,23 +532,55 @@ impl TaskControlBlock {
     }
     /// 
     pub fn handle_zombie(self: &Arc<Self>){
-        if let Some(address) = self.tid_address_ref().clear_child_tid {
-            log::info!("[handle_zombie] clear_child_tid: {:x}", address);
+
+        fn wake(task: &Arc<TaskControlBlock>, addr: usize) {
             let paddr = 
                 translate_uva_checked(
-                    &mut self.vm_space.lock(), 
-                    VirtAddr::from(address), 
+                    &mut task.vm_space.lock(), 
+                    VirtAddr::from(addr), 
                     PageFaultAccessType::WRITE
                 ).unwrap();
             unsafe { paddr.get_ptr::<i32>().write(0); }
             let key = FutexHashKey::Shared { paddr };
             let _ = futex_manager().wake(&key, 1);
             let key = FutexHashKey::Private {
-                mm: self.get_raw_vm_ptr(),
-                vaddr: address.into()
+                mm: task.get_raw_vm_ptr(),
+                vaddr: addr.into()
             };
             let _ = futex_manager().wake(&key, 1);
         }
+
+        if let Some(addr) = self.tid_address_ref().clear_child_tid {
+            log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
+            wake(self, addr);
+        }
+        self.with_robust(|robust| {
+            if robust.0.is_null() {
+                return;
+            }
+            let _sum_guard = SumGuard::new();
+            let robust_list_head = unsafe { &mut *robust.0 };
+            let mut cur = robust_list_head.list.next;
+
+            fn exit_robust_list(task: &Arc<TaskControlBlock>, robust_list: *mut RobustList, offset: usize) {
+                let addr = robust_list as usize + offset;
+                let futex = addr as *const AtomicU32;
+                let futex = unsafe { & *futex };
+                let oldval = futex.fetch_or(FUTEX_OWNER_DIED, Ordering::AcqRel);
+                if oldval & FUTEX_WAITERS != 0 {
+                    wake(task, addr);
+                }
+            }
+
+            if !robust_list_head.list_op_pending.is_null() {
+                exit_robust_list(self, robust_list_head.list_op_pending, robust_list_head.futex_offset);
+            }
+
+            while cur != &mut robust_list_head.list && !cur.is_null() {
+                exit_robust_list(self, cur, robust_list_head.futex_offset);
+                cur = unsafe { (*cur).next };
+            }
+        });
         let mut thread_group = self.thread_group.lock();
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
         {
