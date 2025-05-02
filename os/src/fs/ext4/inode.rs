@@ -46,7 +46,7 @@ unsafe impl Sync for Ext4Inode {}
 
 impl Ext4Inode {
     /// Create a new inode
-    pub fn new(super_block: Arc<dyn SuperBlock>, path: &str, types: InodeTypes) -> Self {
+    pub fn new(super_block: Weak<dyn SuperBlock>, path: &str, types: InodeTypes) -> Self {
         //info!("Inode new {:?} {}", types, path);
         let mode = InodeMode::from_inode_type(types.clone());
         let mut file  = Ext4File::new(path, types);
@@ -54,7 +54,7 @@ impl Ext4Inode {
         // may be a bug in the future
         let size = file.file_size();
         Self {
-            inner: InodeInner::new(super_block.clone(), mode, size as usize),
+            inner: InodeInner::new(Some(super_block.clone()), mode, size as usize),
             file: UPSafeCell::new(file),
             cache: Arc::new(PageCache::new()),
         }
@@ -134,19 +134,19 @@ impl Inode for Ext4Inode {
         if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
             log::debug!("lookup {} success", name);
             return Some(Arc::new(Ext4Inode::new(
-                self.inode_inner().super_block.upgrade()?.clone(), 
+                self.inode_inner().super_block.clone().unwrap(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_REG_FILE)));
         } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_DIR) {
             log::debug!("lookup dir {} success", name);
             return Some(Arc::new(Ext4Inode::new(
-                self.inode_inner().super_block.upgrade()?.clone(), 
+                self.inode_inner().super_block.clone().unwrap(), 
                 full_path.as_str(), 
                 InodeTypes::EXT4_DE_DIR)));
         } else if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_SYMLINK) {
             log::debug!("look up symlink {} success", name);
             return Some(Arc::new(Ext4Inode::new(
-                self.inode_inner().super_block.upgrade()?.clone(),
+                self.inode_inner().super_block.clone().unwrap(),
                 full_path.as_str(),
                 InodeTypes::EXT4_DE_SYMLINK)));
         }
@@ -351,7 +351,7 @@ impl Inode for Ext4Inode {
             Ok(_) => {
                 info!("create inode success");
                 Some(Arc::new(Ext4Inode::new(
-                    self.inode_inner().super_block.upgrade()?.clone(),
+                    self.inode_inner().super_block.clone().unwrap(),
                     fpath, types)))
             }
         }
@@ -469,7 +469,7 @@ impl Inode for Ext4Inode {
         file.symlink_create(target_path).expect("symlink create failed");
         // get the symlink Inode
         Ok(Arc::new(Ext4Inode::new(
-            self.inode_inner().super_block.upgrade().unwrap().clone(),
+            self.inode_inner().super_block.clone().unwrap(),
             target_path,
             InodeTypes::EXT4_DE_SYMLINK
         )))

@@ -7,7 +7,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask, AT_FDCWD, AT_REMOVEDIR
+    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask
 }, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
@@ -44,7 +44,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    // info!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
+    log::debug!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let start = buf & !(Constant::PAGE_SIZE - 1);
     let end = buf + len;
@@ -156,19 +156,20 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, flags: u32) -> SysResult {
 /// then pathname is interpreted relative to the current working directory of the calling process (like open(2)).
 /// If pathname is absolute, then dirfd is ignored.
 pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> SysResult {
-    let flags = OpenFlags::from_bits(flags as i32).unwrap();
+    let open_flags = OpenFlags::from_bits(flags as i32).unwrap();
+    let at_flags = AtFlags::from_bits_truncate(flags as i32);
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        log::debug!("task {} trying to open {}, flags: {:?}", task.tid(), path, flags);
-        let dentry = at_helper(task.clone(), dirfd, pathname, flags)?;
-        if flags.contains(OpenFlags::O_CREAT) {
+        log::debug!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+        let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
+        if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
             if abs_path_to_name(&path).unwrap() != abs_path_to_name(&dentry.path()).unwrap() {
                 return Err(SysError::ENOENT);
             }
             // inode not exist, create it as a regular file
-            if flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
+            if open_flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
                 return Err(SysError::EEXIST);
             }
             let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
@@ -183,13 +184,13 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
-        if flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_inner().mode.get_type() != InodeMode::DIR {
+        if open_flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_inner().mode.get_type() != InodeMode::DIR {
             return Err(SysError::ENOTDIR);
         }
-        let file = dentry.open(flags).unwrap();
-        file.set_flags(flags);
+        let file = dentry.open(open_flags).unwrap();
+        file.set_flags(open_flags);
         let fd = task.with_mut_fd_table(|table| table.alloc_fd())?;
-        let fd_info = FdInfo { file, flags: flags.into() };
+        let fd_info = FdInfo { file, flags: open_flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
         return Ok(fd as isize)
     } else {
@@ -209,7 +210,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
     if let Some(path) = user_path_to_string(pathname) {
         let task = current_task().unwrap().clone();
-        let dentry = at_helper(task, dirfd, pathname, OpenFlags::empty())?;
+        let dentry = at_helper(task, dirfd, pathname, AtFlags::empty())?;
         if dentry.state() != DentryState::NEGATIVE {
             return Err(SysError::EEXIST);
         }
@@ -225,18 +226,13 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
     Ok(0)
 }
 
-const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
-
 /// syscall: fstatat
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
     let _sum_guard= SumGuard::new();
+    let at_flags = AtFlags::from_bits_truncate(flags);
     
     let task = current_task().unwrap().clone();
-    let dentry = if flags == AT_SYMLINK_NOFOLLOW {
-        at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW)?
-    } else {
-        at_helper(task.clone(), dirfd, pathname, OpenFlags::empty())?
-    };
+    let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::ENOENT);
     }
@@ -338,14 +334,13 @@ pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
 pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx_buf: VirtAddr) -> SysResult {
     let _sum_guard = SumGuard::new();
     let open_flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+    let at_flags = AtFlags::from_bits_truncate(flags);
     let mask = XstatMask::from_bits_truncate(mask);
     let task = current_task().unwrap().clone();
 
-    let dentry = if flags == AT_SYMLINK_NOFOLLOW {
-        at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW | open_flags)?
-    } else {
-        at_helper(task.clone(), dirfd, pathname, open_flags)?
-    };
+    log::debug!("[sys_statx]: statx dirfd: {}, path: {:?}, at_flags {:?}, open_flags: {:?}", dirfd, pathname, at_flags, open_flags);
+
+    let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::ENOENT);
     }
@@ -450,10 +445,11 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 /// is removed but processes which have the object open may continue to use it.
 /// (todo): now only remove, but not check for remaining referred.
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
+    const AT_REMOVEDIR: i32 = 0x200;
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(pathname).unwrap();
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
-    let dentry = at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
+    let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
@@ -483,7 +479,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
 /// too small to hold all of the contents.
 pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    let dentry = at_helper(task.clone(), dirfd, pathname, OpenFlags::O_NOFOLLOW)?;
+    let dentry = at_helper(task.clone(), dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     info!("[sys_readlinkat]: reading link {}", dentry.path());
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::EBADF);
@@ -514,8 +510,8 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
     const UTIME_NOW: usize = 0x3fffffff;
     const UTIME_OMIT: usize = 0x3ffffffe;
     let task = current_task().unwrap().clone();
-    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
-    let dentry = at_helper(task, dirfd, pathname, flags)?;
+    let at_flags = AtFlags::from_bits_truncate(flags);
+    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
     log::info!("[sys_utimensat]: path: {}", dentry.path());
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::ENOENT);
@@ -751,9 +747,9 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
 /// The linkat() system call operates in exactly the same way as link(2), 
 pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, new_pathname: *const u8, flags: i32) -> SysResult {
     let task = current_task().unwrap().clone();
-    let flags = OpenFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
-    let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, flags)?;
-    let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, flags)?;
+    let at_flags = AtFlags::from_bits_truncate(flags);
+    let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, at_flags)?;
+    let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, at_flags)?;
     log::debug!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
     let old_inode = old_dentry.inode().unwrap();
     old_inode.link(&new_dentry.path())?;
@@ -770,13 +766,10 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32
     if flags == 0x200 || flags == 0x1000 {
         log::warn!("not support flags");
     }
+    let at_flags = AtFlags::from_bits_truncate(flags);
 
     let task = current_task().unwrap().clone();
-    let _dentry = if flags == AT_SYMLINK_NOFOLLOW {
-        at_helper(task, dirfd, pathname, OpenFlags::O_NOFOLLOW)?
-    } else {
-        at_helper(task, dirfd, pathname, OpenFlags::empty())?
-    };
+    let _dentry = at_helper(task, dirfd, pathname, at_flags)?;
     Ok(0)
 }
 
@@ -790,8 +783,8 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32
 pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, new_path: *const u8, flags: i32) -> Result<isize, SysError> {
     let task = current_task().unwrap().clone();
     let flags = RenameFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
-    let old_dentry = at_helper(task.clone(), old_dirfd, old_path, OpenFlags::O_NOFOLLOW)?;
-    let new_dentry = at_helper(task.clone(), new_dirfd, new_path, OpenFlags::O_NOFOLLOW)?;
+    let old_dentry = at_helper(task.clone(), old_dirfd, old_path, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    let new_dentry = at_helper(task.clone(), new_dirfd, new_path, AtFlags::AT_SYMLINK_NOFOLLOW)?;
 
     if flags.contains(RenameFlags::RENAME_EXCHANGE)
             && (flags.contains(RenameFlags::RENAME_NOREPLACE)
@@ -833,15 +826,18 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 /// we need to write a helper function to reduce code duplication
 /// warning: for supporting more "at" syscall, emptry path is allowed here,
 /// caller should check the path before calling at_helper if it doesnt expect empty path
-pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8, flags: OpenFlags) -> Result<Arc<dyn Dentry>, SysError> {
+pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
     let _sum_guard = SumGuard::new();
+    if pathname.is_null() && !flags.contains(AtFlags::AT_EMPTY_PATH) {
+        return Err(SysError::EFAULT);
+    }
     let dentry = match user_path_to_string(pathname) {
         Some(path) => {
             if path.starts_with("/") {
                 global_find_dentry(&path)?
             } else {
                 // getting full path (absolute path)
-                let fpath = if dirfd == AT_FDCWD {
+                let fpath = if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
                     // look up in the current dentry
                     let cw_dentry = task.with_cwd(|d| d.clone());
                     rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
@@ -856,8 +852,10 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
             }
         }
         None => {
-            warn!("[at_helper]: using empty path!");
-            if dirfd == AT_FDCWD {
+            if !flags.contains(AtFlags::AT_EMPTY_PATH) {
+                return Err(SysError::ENOENT);
+            }
+            if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
                 task.with_cwd(|d| d.clone())
             } else {
                 let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
@@ -866,7 +864,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
         }
     };
 
-    if flags.contains(OpenFlags::O_NOFOLLOW) {
+    if flags.contains(AtFlags::AT_SYMLINK_NOFOLLOW) {
         Ok(dentry)
     } else {
         let dentry = dentry.follow()?;

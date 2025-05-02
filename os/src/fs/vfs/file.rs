@@ -204,7 +204,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<dyn File>> {
             let parent_dentry = global_find_dentry(&parent_path).expect("no parent");
             assert!(parent_dentry.state() == DentryState::USED);
             let inode = parent_dentry.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
-            let dentry = parent_dentry.new(&name, parent_dentry.superblock(), Some(parent_dentry.clone()));
+            let dentry = parent_dentry.new(&name, Some(parent_dentry.clone()));
             dentry.set_state(DentryState::USED);
             dentry.set_inode(inode);
             dentry.open(flags)

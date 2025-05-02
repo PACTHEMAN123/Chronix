@@ -1,6 +1,6 @@
 //! /proc/mounts file
 
-use alloc::{string::{String, ToString}, sync::Arc};
+use alloc::{string::{String, ToString}, sync::{Arc, Weak}};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -60,11 +60,10 @@ pub struct MountsDentry {
 impl MountsDentry {
     pub fn new(
         name: &str,
-        super_block: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            inner: DentryInner::new(name, super_block, parent),
+            inner: DentryInner::new(name, parent),
         })
     }
 }
@@ -79,11 +78,10 @@ impl Dentry for MountsDentry {
 
     fn new(&self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -98,10 +96,10 @@ pub struct MountsInode {
 }
 
 impl MountsInode {
-    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
+    pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
         let size = BLOCK_SIZE;
         Arc::new(Self {
-            inner: InodeInner::new(super_block, InodeMode::FILE, size),
+            inner: InodeInner::new(Some(super_block), InodeMode::FILE, size),
         })
     }
 }

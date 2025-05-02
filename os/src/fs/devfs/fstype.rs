@@ -28,10 +28,9 @@ impl FSType for DevFsType {
             Arc::from_raw(ptr)
         };
         let sb = DevSuperBlock::new(SuperBlockInner::new(dev, fs_type.clone()));
-        let root_inode = SpInode::new(sb.clone());
-        let root_dentry = SpDentry::new(name, sb.clone(), parent.clone());
+        let root_inode = SpInode::new(Arc::downgrade(&sb.clone()));
+        let root_dentry = SpDentry::new(name, parent.clone());
         root_dentry.set_inode(root_inode);
-        root_dentry.set_state(DentryState::USED);
         sb.set_root_dentry(root_dentry.clone());
         DCACHE.lock().insert(root_dentry.path(), root_dentry.clone());
         self.add_sb(&root_dentry.path(), sb);

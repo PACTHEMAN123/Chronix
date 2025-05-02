@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 
 use crate::fs::{devfs::null::NullInode, tmpfs::inode::TmpInode, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 
@@ -11,8 +11,8 @@ pub struct SpInode {
 }
 
 impl SpInode {
-    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
-        let inner = InodeInner::new(super_block, InodeMode::DIR, 0);
+    pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
+        let inner = InodeInner::new(Some(super_block), InodeMode::DIR, 0);
         Arc::new(Self { inner })
     }
 }
@@ -113,10 +113,10 @@ impl Inode for SpInode {
         match name {
             "null" => {
                 // just return another null inode
-                Some(NullInode::new(self.inode_inner().super_block.upgrade()?.clone()))
+                Some(NullInode::new(self.inode_inner().super_block.clone().unwrap()))
             }
             _ => {
-                Some(TmpInode::new(self.inode_inner().super_block.upgrade()?.clone(), mode))
+                Some(TmpInode::new(self.inode_inner().super_block.clone().unwrap(), mode))
             }
         }
     }

@@ -25,11 +25,11 @@ pub mod zero;
 
 /// init the whole /dev
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
-    let sb = root_dentry.superblock();
+    let sb = root_dentry.inode().unwrap().inode_inner().super_block.clone();
 
     // add /dev/tty
-    let tty_dentry = TtyDentry::new("tty", sb.clone(), Some(root_dentry.clone()));
-    let tty_inode = TtyInode::new(sb.clone());
+    let tty_dentry = TtyDentry::new("tty", Some(root_dentry.clone()));
+    let tty_inode = TtyInode::new(sb.clone().unwrap());
     tty_dentry.set_inode(tty_inode);
     root_dentry.add_child(tty_dentry.clone());
     log::debug!("dcache insert: {}", tty_dentry.path());
@@ -38,32 +38,32 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     TTY.call_once(|| tty_file);
 
     // add /dev/null
-    let null_dentry = NullDentry::new("null", sb.clone(), Some(root_dentry.clone()));
-    let null_inode = NullInode::new(sb.clone());
+    let null_dentry = NullDentry::new("null", Some(root_dentry.clone()));
+    let null_inode = NullInode::new(sb.clone().unwrap());
     null_dentry.set_inode(null_inode);
     root_dentry.add_child(null_dentry.clone());
     log::debug!("dcache insert: {}", null_dentry.path());
     DCACHE.lock().insert(null_dentry.path(), null_dentry.clone());
 
     // add /dev/rtc
-    let rtc_dentry = RtcDentry::new("rtc", sb.clone(), Some(root_dentry.clone()));
-    let rtc_inode = RtcInode::new(sb.clone());
+    let rtc_dentry = RtcDentry::new("rtc", Some(root_dentry.clone()));
+    let rtc_inode = RtcInode::new(sb.clone().unwrap());
     rtc_dentry.set_inode(rtc_inode);
     root_dentry.add_child(rtc_dentry.clone());
     log::debug!("dcache insert: {}", rtc_dentry.path());
     DCACHE.lock().insert(rtc_dentry.path(), rtc_dentry.clone());
 
     // add /dev/urandom
-    let urandom_dentry = UrandomDentry::new("urandom", sb.clone(), Some(root_dentry.clone()));
-    let urandom_inode = UrandomInode::new(sb.clone());
+    let urandom_dentry = UrandomDentry::new("urandom", Some(root_dentry.clone()));
+    let urandom_inode = UrandomInode::new(sb.clone().unwrap());
     urandom_dentry.set_inode(urandom_inode);
     root_dentry.add_child(urandom_dentry.clone());
     log::debug!("dcache insert: {}", urandom_dentry.path());
     DCACHE.lock().insert(urandom_dentry.path(), urandom_dentry.clone());
 
     // add /dev/zero
-    let zero_dentry = ZeroDentry::new("zero", sb.clone(), Some(root_dentry.clone()));
-    let zero_inode = ZeroInode::new(sb.clone());
+    let zero_dentry = ZeroDentry::new("zero", Some(root_dentry.clone()));
+    let zero_inode = ZeroInode::new(sb.clone().unwrap());
     zero_dentry.set_inode(zero_inode);
     root_dentry.add_child(zero_dentry.clone());
     log::debug!("dcache insert: {}", zero_dentry.path());

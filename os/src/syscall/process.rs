@@ -7,7 +7,7 @@ use crate::fs::fat32::dentry;
 use crate::fs::utils::FileReader;
 use crate::fs::vfs::dentry::global_find_dentry;
 use crate::fs::vfs::DentryState;
-use crate::fs::AT_FDCWD;
+use crate::fs::AtFlags;
 use crate::fs::{
     vfs::file::open_file,
     OpenFlags,
@@ -232,10 +232,10 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         argv_vec.insert(1, "sh".to_string());
         global_find_dentry(&path)?
     } else {
-        at_helper(task, AT_FDCWD, pathname as *const u8, OpenFlags::empty())?
+        at_helper(task, AtFlags::AT_FDCWD.bits() as _, pathname as *const u8, AtFlags::empty())?
     };
     // open file
-    log::debug!("[sys_execve]: try to open file at path {}", dentry.path());
+    log::info!("[sys_execve]: try to open file at path {}", dentry.path());
     if dentry.state() != DentryState::NEGATIVE {
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();

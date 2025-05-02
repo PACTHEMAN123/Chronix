@@ -13,11 +13,10 @@ unsafe impl Sync for FatDentry {}
 impl FatDentry {
     pub fn new(
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -30,11 +29,10 @@ impl Dentry for FatDentry {
     fn new(
         &self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -45,7 +43,7 @@ impl Dentry for FatDentry {
     }
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
         let neg_dentry = Arc::new(Self {
-            inner: DentryInner::new(name, self.superblock(), Some(self.clone()))
+            inner: DentryInner::new(name, Some(self.clone()))
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
         neg_dentry

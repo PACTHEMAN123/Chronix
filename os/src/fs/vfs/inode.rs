@@ -13,7 +13,7 @@ pub struct InodeInner {
     /// inode number
     pub ino: usize,
     /// super block that owned it
-    pub super_block: Weak<dyn SuperBlock>,
+    pub super_block: Option<Weak<dyn SuperBlock>>,
     /// size of the file in bytes
     pub size: AtomicUsize,
     /// link count
@@ -31,10 +31,10 @@ pub struct InodeInner {
 
 impl InodeInner {
     /// create a inner using super block
-    pub fn new(super_block: Arc<dyn SuperBlock>, mode: InodeMode, size: usize) -> Self {
+    pub fn new(super_block: Option<Weak<dyn SuperBlock>>, mode: InodeMode, size: usize) -> Self {
         Self {
             ino: inode_alloc(),
-            super_block: Arc::downgrade(&super_block),
+            super_block: super_block,
             size: AtomicUsize::new(size),
             nlink: AtomicUsize::new(1),
             mode: mode,

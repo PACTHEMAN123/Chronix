@@ -18,8 +18,6 @@ pub struct DentryInner {
     pub name: String,
     /// inode it points to
     pub inode: SpinNoIrqLock<Option<Arc<dyn Inode>>>,
-    /// superblock of the inode belongs to
-    pub superblock: Weak<dyn SuperBlock>,
     /// parent
     pub parent: Option<Weak<dyn Dentry>>,
     /// children
@@ -35,14 +33,11 @@ impl DentryInner {
     /// create a unused dentry: no children in it
     pub fn new(
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Self {
-        let superblock = Arc::downgrade(&superblock);
         let inode = SpinNoIrqLock::new(None);
         Self {
             name: name.to_string(),
-            superblock,
             inode,
             parent: parent.map(|p| Arc::downgrade(&p)),
             children: SpinNoIrqLock::new(BTreeMap::new()),
@@ -59,7 +54,6 @@ pub trait Dentry: Send + Sync {
     fn new(
         &self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry>;
     /// open the inode it points as File
@@ -84,10 +78,6 @@ pub trait Dentry: Send + Sync {
         log::debug!("dentry: {} clear inode", self.path());
         *self.dentry_inner().inode.lock() = None;
         self.set_state(DentryState::NEGATIVE);
-    }
-    /// get the super block field
-    fn superblock(&self) -> Arc<dyn SuperBlock> {
-        self.dentry_inner().superblock.upgrade().unwrap()
     }
     /// tidier way to get parent
     fn parent(&self) -> Option<Arc<dyn Dentry>> {
@@ -308,7 +298,6 @@ impl<T: Send + Sync + 'static> Dentry for MaybeUninit<T> {
     fn new(
         &self,
         _name: &str,
-        _superblock: Arc<dyn SuperBlock>,
         _parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         todo!()

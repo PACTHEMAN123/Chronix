@@ -186,8 +186,8 @@ impl FdTable {
     pub fn set_rlimit(&mut self, rlimit: RLimit) {
         self.rlimit = rlimit;
         if rlimit.rlim_max <= self.fd_table.len() {
-            panic!("not finish");
-            // self.fd_table.truncate(self.rlimit.rlim_max)
+            warn!("[Fd table]: set limit smaller than table size, truncate");
+            self.fd_table.truncate(rlimit.rlim_max);
         }
     }
     /// handle close-on-exec flag

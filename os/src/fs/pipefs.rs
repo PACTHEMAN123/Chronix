@@ -3,13 +3,13 @@
 
 use core::{future::Future, pin::Pin, task::{Context, Poll, Waker}};
 
-use alloc::{collections::vec_deque::VecDeque, sync::Arc};
+use alloc::{collections::vec_deque::VecDeque, string::ToString, sync::Arc};
 use alloc::boxed::Box;
 use async_trait::async_trait;
 
 use crate::{fs::StatxTimestamp, sync::mutex::SpinNoIrqLock, syscall::SysError, utils::{get_waker, RingBuffer}};
 
-use super::{vfs::{file::PollEvents, inode::InodeMode, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, Xstat, XstatMask};
+use super::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, Xstat, XstatMask};
 
 
 
@@ -28,7 +28,7 @@ pub struct PipeMeta {
 
 impl PipeInode {
     pub fn new(len: usize) -> Arc<Self> {
-        let inner = InodeInner::new(Arc::<usize>::new_uninit(), InodeMode::FIFO, len);
+        let inner = InodeInner::new(None, InodeMode::FIFO, len);
         let pipe_meta = SpinNoIrqLock::new(PipeMeta {
             is_write_closed: false,
             is_read_closed: false,
@@ -195,16 +195,16 @@ pub struct PipeFile {
 }
 
 impl PipeFile {
-    fn new(inode: Arc<PipeInode>, is_reader: bool) -> Arc<Self> {
+    fn new(dentry: Arc<dyn Dentry>, is_reader: bool, pipe: Arc<PipeInode>) -> Arc<Self> {
         let inner = FileInner {
             offset: 0.into(),
-            dentry: Arc::<usize>::new_zeroed(),
+            dentry: dentry,
             flags: SpinNoIrqLock::new(OpenFlags::empty()),
         };
         Arc::new(Self {
-            pipe: inode,
+            pipe,
             operate: is_reader,
-            inner: inner,
+            inner,
         })
     }
 }
@@ -318,10 +318,42 @@ impl Drop for PipeFile {
     }
 }
 
+pub struct PipeDentry {
+    inner: DentryInner
+}
+
+impl PipeDentry {
+    pub fn new() -> Arc<Self> {
+        let inner = DentryInner::new("", None);
+        Arc::new(Self {inner})
+    }
+}
+
+unsafe impl Sync for PipeDentry {}
+unsafe impl Send for PipeDentry {}
+
+impl Dentry for PipeDentry {
+    fn dentry_inner(&self) -> &DentryInner {
+        &self.inner
+    }
+
+    fn new(
+            &self,
+            _name: &str,
+            _parent: Option<Arc<dyn Dentry>>,
+        ) -> Arc<dyn Dentry> {
+        panic!("cannot create a pipe in this way");
+    }
+}
+
 /// global function to create a pipe and return the reader and writer file
 pub fn make_pipe(capacity: usize) -> (Arc<dyn File>, Arc<dyn File>) {
     let pipe = PipeInode::new(capacity);
-    let read_file = PipeFile::new(pipe.clone(), true);
-    let write_file = PipeFile::new(pipe, false);
+    let pipe_read_dentry = PipeDentry::new();
+    pipe_read_dentry.set_inode(pipe.clone());
+    let pipe_write_dentry = PipeDentry::new();
+    pipe_write_dentry.set_inode(pipe.clone());
+    let read_file = PipeFile::new(pipe_read_dentry,true, pipe.clone());
+    let write_file = PipeFile::new(pipe_write_dentry, false, pipe);
     (read_file, write_file)
 }

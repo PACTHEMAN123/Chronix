@@ -16,11 +16,10 @@ unsafe impl Sync for Ext4Dentry {}
 impl Ext4Dentry {
     pub fn new(
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -32,11 +31,10 @@ impl Dentry for Ext4Dentry {
     }
     fn new(&self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -74,8 +72,7 @@ impl Dentry for Ext4Dentry {
                 log::debug!("look up name: {}", name);
                 let child_inode = inode.lookup(&name).unwrap();
                 let child_dentry = self.new(
-                    &name, 
-                    self.superblock(), 
+                    &name,
                     Some(self.clone()),
                 );
                 child_dentry.set_inode(child_inode);
@@ -90,7 +87,7 @@ impl Dentry for Ext4Dentry {
 
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
         let neg_dentry = Arc::new(Self {
-            inner: DentryInner::new(name, self.superblock(), Some(self.clone()))
+            inner: DentryInner::new(name, Some(self.clone()))
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
         neg_dentry

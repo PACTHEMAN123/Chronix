@@ -1,7 +1,7 @@
 //! fake meminfo file
 //! adapt from phoenix
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -128,11 +128,10 @@ pub struct MemInfoDentry {
 impl MemInfoDentry {
     pub fn new(
         name: &str,
-        super_block: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<Self> {
         Arc::new(Self {
-            inner: DentryInner::new(name, super_block, parent),
+            inner: DentryInner::new(name, parent),
         })
     }
 }
@@ -147,11 +146,10 @@ impl Dentry for MemInfoDentry {
 
     fn new(&self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -166,10 +164,10 @@ pub struct MemInfoInode {
 }
 
 impl MemInfoInode {
-    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
+    pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
         let size = MEM_INFO.lock().serialize().len();
         Arc::new(Self {
-            inner: InodeInner::new(super_block, InodeMode::FILE, size),
+            inner: InodeInner::new(Some(super_block), InodeMode::FILE, size),
         })
     }
 }
