@@ -15,11 +15,10 @@ unsafe impl Sync for TmpDentry {}
 impl TmpDentry {
     pub fn new(
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -31,11 +30,10 @@ impl Dentry for TmpDentry {
     }
     fn new(&self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }
@@ -50,8 +48,9 @@ impl Dentry for TmpDentry {
         assert!(self.state() == DentryState::USED);
         if flags.contains(OpenFlags::O_TMPFILE) {
             // only the fd table will hold the file
-            let new_inode = TmpInode::new(self.superblock(), InodeMode::FILE);
-            let new_dentry = TmpDentry::new("unname,shit!", self.superblock(), None);
+            let sb = self.inode().unwrap().inode_inner().super_block.clone().unwrap();
+            let new_inode = TmpInode::new(sb, InodeMode::FILE);
+            let new_dentry = TmpDentry::new("unname,shit!", None);
             new_dentry.set_inode(new_inode);
             new_dentry.set_state(DentryState::NEGATIVE); // cannot use dir to find it
             return Some(Arc::new(TmpFile::new(new_dentry)));
@@ -72,7 +71,7 @@ impl Dentry for TmpDentry {
     }
     fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
         let neg_dentry = Arc::new(Self {
-            inner: DentryInner::new(name, self.superblock(), Some(self.clone()))
+            inner: DentryInner::new(name, Some(self.clone()))
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
         neg_dentry

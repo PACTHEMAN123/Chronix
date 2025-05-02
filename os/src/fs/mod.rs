@@ -109,10 +109,42 @@ pub fn init() {
     info!("fs finish init");
 }
 
-/// AT_FDCWD: a special value
-pub const AT_FDCWD: isize = -100;
-/// Remove directory instead of unlinking file.
-pub const AT_REMOVEDIR: i32 = 0x200;
+bitflags::bitflags! {
+    /// Define in <uapi/linux/fcntl.h>
+    pub struct AtFlags: i32 {
+        /// Special value for dirfd used to indicate
+        ///  openat should use the current working directory.
+        const AT_FDCWD		        = -100;
+        // Generic flags for the *at(2) family of syscalls.
+        /// do not follow symbolic links.
+        const AT_SYMLINK_NOFOLLOW   = 0x100;
+        /// Follow symbolic links.
+        const AT_SYMLINK_FOLLOW     = 0x400;
+        /// Suppress terminal automount.
+        const AT_NO_AUTOMOUNT		= 0x800;
+        /// Allow empty relative pathname to operate on dirfd directly.
+        const AT_EMPTY_PATH			= 0x1000;
+
+        // These flags are currently statx(2)-specific, 
+        // but they could be made generic in the future 
+        // and so they should not be used for other per-syscall flags.
+
+        /// Type of synchronisation required from statx()
+        const AT_STATX_SYNC_TYPE	= 0x6000;
+        /// Do whatever stat() does
+        const AT_STATX_SYNC_AS_STAT	= 0x0000;
+        /// Force the attributes to be sync'd with the server
+        const AT_STATX_FORCE_SYNC   = 0x2000;
+        /// Don't sync attributes with the server
+        const AT_STATX_DONT_SYNC	= 0x4000;
+        /// Apply to the entire subtree
+        const AT_RECURSIVE			= 0x8000;
+
+        // Per-syscall flags for the *at(2) family of syscalls.
+        // Chronix: these flags should define inside the related syscall functions.
+    }
+}
+
 
 bitflags::bitflags! {
     // Defined in <bits/fcntl-linux.h>.

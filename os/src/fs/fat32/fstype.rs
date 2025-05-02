@@ -37,7 +37,7 @@ impl FSType for Fat32FSType {
         self.add_sb(name, sb);
         let sb = self.get_static_sb(name);
         let dir = sb.get_root_inode(name);
-        let root_dentry = FatDentry::new(name, sb.clone(), parent.clone());
+        let root_dentry = FatDentry::new(name, parent.clone());
         root_dentry.set_inode(dir);
         root_dentry.set_state(DentryState::USED);
         sb.set_root_dentry(root_dentry.clone());

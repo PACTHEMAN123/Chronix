@@ -9,7 +9,7 @@ pub struct ProcSuperBlock {
 }
 
 impl ProcSuperBlock {
-    pub fn new(inner: SuperBlockInner) -> Arc<Self> {
+    pub fn new(inner: SuperBlockInner) -> Arc<dyn SuperBlock> {
         Arc::new(Self { inner })
     }
 }

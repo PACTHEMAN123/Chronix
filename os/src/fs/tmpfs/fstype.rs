@@ -28,8 +28,8 @@ impl FSType for TmpFSType {
             Arc::from_raw(ptr)
         };
         let sb = TmpSuperBlock::new(SuperBlockInner::new(dev, fs_type.clone()));
-        let root_inode = TmpInode::new(sb.clone(), InodeMode::DIR);
-        let root_dentry = TmpDentry::new(name, sb.clone(), parent.clone());
+        let root_inode = TmpInode::new(Arc::downgrade(&sb), InodeMode::DIR);
+        let root_dentry = TmpDentry::new(name, parent.clone());
         root_dentry.set_inode(root_inode);
         root_dentry.set_state(DentryState::USED);
         sb.set_root_dentry(root_dentry.clone());

@@ -3,7 +3,7 @@
 #![allow(unused)]
 
 use async_trait::async_trait;
-use alloc::{boxed::Box, sync::Arc, vec::Vec, vec};
+use alloc::{boxed::Box, sync::{Arc, Weak}, vec::{self, Vec}};
 use hal::console::console_getchar;
 use spin::Once;
 use strum::FromRepr;
@@ -285,8 +285,8 @@ pub struct TtyInode {
 }
 
 impl TtyInode {
-    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
-        let mut inner = InodeInner::new(super_block, InodeMode::CHAR, 0);
+    pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
+        let mut inner = InodeInner::new(Some(super_block), InodeMode::CHAR, 0);
         // todo: device manager to get device id
         let char_dev = UART0.clone();
         Arc::new(Self { inner, char_dev })
@@ -386,11 +386,10 @@ pub struct TtyDentry {
 impl TtyDentry {
     pub fn new(
         name: &str,
-        super_block: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>
     ) -> Arc<Self> {
         Arc::new(Self {
-            inner: DentryInner::new(name, super_block, parent)
+            inner: DentryInner::new(name, parent)
         })
     }
 }
@@ -405,11 +404,10 @@ impl Dentry for TtyDentry {
 
     fn new(&self,
         name: &str,
-        superblock: Arc<dyn SuperBlock>,
         parent: Option<Arc<dyn Dentry>>,
     ) -> Arc<dyn Dentry> {
         let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         });
         dentry
     }

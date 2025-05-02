@@ -12,7 +12,6 @@ pub mod dentry;
 pub mod file;
 
 /// init the /tmp
-pub fn init_tmpfs(root_dentry: Arc<dyn Dentry>) {
-    let _sb = root_dentry.superblock();
+pub fn init_tmpfs(_root_dentry: Arc<dyn Dentry>) {
     // do nothing
 }

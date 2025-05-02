@@ -244,7 +244,7 @@ impl Inode for FatDirInode {
     }
     fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
         let dir = self.dir.exclusive_access();
-        let super_block = self.inode_inner().super_block.upgrade()?.clone();
+        let super_block = self.inode_inner().super_block.clone();
         match mode {
             InodeMode::FILE => {
                 dir.inner
@@ -370,7 +370,7 @@ impl Inode for FatDirInode {
         if target.is_dir() {
             Some(Arc::new(FatDirInode {
                 inner: InodeInner::new(
-                self.inode_inner().super_block.upgrade()?.clone(),
+                self.inode_inner().super_block.clone(),
                 InodeMode::DIR,
                 0,
                 ),
@@ -383,7 +383,7 @@ impl Inode for FatDirInode {
         } else if target.is_file() {
             Some(Arc::new(FatFileInode {
                 inner: InodeInner::new(
-                    self.inode_inner().super_block.upgrade()?.clone(),
+                    self.inode_inner().super_block.clone(),
                 InodeMode::FILE,
                 0,
                 ),

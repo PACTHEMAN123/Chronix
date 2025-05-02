@@ -44,8 +44,8 @@ impl FSType for Ext4FSType {
             Arc::from_raw(ptr)
         };
         let sb = Ext4SuperBlock::new(SuperBlockInner::new(dev, fs_type.clone()));
-        let root_inode = Arc::new(Ext4Inode::new(sb.clone(), "/", InodeTypes::EXT4_DE_DIR)); 
-        let root_dentry = Ext4Dentry::new(name, sb.clone(), parent.clone());
+        let root_inode = Arc::new(Ext4Inode::new(Arc::downgrade(&sb), "/", InodeTypes::EXT4_DE_DIR)); 
+        let root_dentry = Ext4Dentry::new(name, parent.clone());
         root_dentry.set_inode(root_inode);
         root_dentry.set_state(DentryState::USED);
         sb.set_root_dentry(root_dentry.clone());

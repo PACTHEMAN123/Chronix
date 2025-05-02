@@ -1,6 +1,6 @@
 //! inode in memory
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 
 use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}};
 
@@ -14,8 +14,8 @@ unsafe impl Sync for TmpInode {}
 
 impl TmpInode {
     /// create a new tmp inode
-    pub fn new(super_block: Arc<dyn SuperBlock>, mode: InodeMode) -> Arc<Self> {
-        let inner = InodeInner::new(super_block, mode, 0);
+    pub fn new(super_block: Weak<dyn SuperBlock>, mode: InodeMode) -> Arc<Self> {
+        let inner = InodeInner::new(Some(super_block), mode, 0);
         let cache = Arc::new(PageCache::new());
         Arc::new(Self { inner, cache })
     }
@@ -122,7 +122,7 @@ impl Inode for TmpInode {
     }
 
     fn create(&self, _name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
-        let sb = self.inode_inner().super_block.upgrade()?.clone();
+        let sb = self.inode_inner().super_block.clone().unwrap();
         Some(TmpInode::new(sb, mode))
     }
 

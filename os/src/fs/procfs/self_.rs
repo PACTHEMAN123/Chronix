@@ -1,6 +1,6 @@
 //! /proc/self
 
-use alloc::{string::String, sync::Arc};
+use alloc::{string::String, sync::{Arc, Weak}};
 
 use crate::{fs::{simplefs::file::SpFile, vfs::{inode::InodeMode, Dentry, DentryInner, File, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError, task::current_task};
 
@@ -10,9 +10,9 @@ pub struct ExeDentry {
 }
 
 impl ExeDentry {
-    pub fn new(super_block: Arc<dyn SuperBlock>, parent: Option<Arc<dyn Dentry>>) -> Arc<Self> {
+    pub fn new(parent: Option<Arc<dyn Dentry>>) -> Arc<Self> {
         Arc::new(Self {
-            inner: DentryInner::new("exe", super_block, parent),
+            inner: DentryInner::new("exe", parent),
         })
     }
 }
@@ -29,11 +29,10 @@ impl Dentry for ExeDentry {
     fn new(
             &self,
             name: &str,
-            superblock: Arc<dyn SuperBlock>,
             parent: Option<Arc<dyn Dentry>>,
         ) -> Arc<dyn Dentry> {
         Arc::new(Self {
-            inner: DentryInner::new(name, superblock, parent)
+            inner: DentryInner::new(name, parent)
         })
     }
 
@@ -49,8 +48,8 @@ pub struct ExeInode {
 }
 
 impl ExeInode {
-    pub fn new(super_block: Arc<dyn SuperBlock>) -> Arc<Self> {
-        let inner = InodeInner::new(super_block, InodeMode::LINK, 0);
+    pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
+        let inner = InodeInner::new(Some(super_block), InodeMode::LINK, 0);
         Arc::new(Self { inner })
     }
 }

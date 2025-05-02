@@ -21,7 +21,7 @@ unsafe impl Sync for Ext4SuperBlock {}
 // EXT4 FS super block implement 
 impl Ext4SuperBlock {
     /// create a new ext4 super block using device
-    pub fn new(inner: SuperBlockInner) -> Arc<Self> {
+    pub fn new(inner: SuperBlockInner) -> Arc<dyn SuperBlock> {
         let block_device = inner.device.as_ref().unwrap().clone();
         let disk = Disk::new(block_device);
         let block = Ext4BlockWrapper::<Disk>::new(disk).expect("failed to create ext4fs");

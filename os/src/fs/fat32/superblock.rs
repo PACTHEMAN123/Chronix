@@ -39,7 +39,7 @@ impl SuperBlock for FatSuperBlock {
         };
         let dir = Arc::new(FatDirInode {
             inner: InodeInner::new(
-            sb.clone(),
+            Some(Arc::downgrade(&sb)),
             InodeMode::DIR,
             0,
             ),
