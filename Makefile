@@ -35,6 +35,9 @@ all: kernel-rv kernel-la disk-img
 
 PHONY_TARGET += setup
 setup:
+	git submodule update --init --recursive
+	chmod +x scripts/archive.sh
+	./scripts/archive.sh extract
 	
 
 PHONY_TARGET += kernel-rv
@@ -72,7 +75,7 @@ oj-run-la:
 		-drive file=disk-la.img,if=none,format=raw,id=x1 -device virtio-blk-pci,drive=x1,bus=virtio-mmio-bus.1
 
 PHONY_TARGET += disk-img
-disk-img:
+disk-img: setup
 	make -f Makefile.sub disk-img ARCH=loongarch64
 	make -f Makefile.sub disk-img ARCH=riscv64
 
@@ -81,5 +84,6 @@ clean:
 	make -f Makefile.sub clean ARCH=loongarch64
 	make -f Makefile.sub clean ARCH=riscv64
 	rm -f kernel-rv kernel-la disk.img disk-rv.img disk-la.img
+	rm -rf testcase
 
 .PHONY: $(PHONY_TARGET)

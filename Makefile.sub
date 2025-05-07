@@ -31,5 +31,6 @@ clean:
 	@sudo rm -f $(DISK_IMG)
 	@sudo rm -f $(DISK_IMG_COPY)
 	@sudo rm -rf mnt
+	@sudo rm -rf testcase
 
 .PHONY: build env run-inner run clean $(KERNEL_BIN)
