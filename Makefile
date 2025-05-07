@@ -31,5 +31,8 @@ clean:
 	@sudo rm -rf mnt
 	@sudo rm -rf cross-compiler/kendryte-toolchain
 	@make -C $(BUSY_BOX_DIR) clean
+	@make -C $(LIBC_BENCH_DIR) clean
+	@make -C $(IOZONE_DIR) clean
+	@make -C $(UNIX_BENCH_DIR) clean
 
 .PHONY: build env run-inner run clean $(KERNEL_BIN)

@@ -157,7 +157,7 @@ impl ThreadGroup {
 
 impl Drop for TaskControlBlock {
     fn drop(&mut self) {
-        info!("Dropping TCB {}", self.tid.0);
+        // info!("Dropping TCB {}", self.tid.0);
     }
 }
 
@@ -469,7 +469,7 @@ impl TaskControlBlock {
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
-            info!("cloning a vm");
+            // info!("cloning a vm");
             vm_space = self.vm_space.clone();
         }else {
             vm_space = new_shared(
@@ -551,7 +551,7 @@ impl TaskControlBlock {
         }
 
         if let Some(addr) = self.tid_address_ref().clear_child_tid {
-            log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
+            // log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
             wake(self, addr);
         }
         self.with_robust(|robust| {

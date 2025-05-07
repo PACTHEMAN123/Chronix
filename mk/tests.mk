@@ -61,9 +61,26 @@ LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
 libc-test:
 	$(call building, "building libc-test")
-	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-linux-gnu- clean disk
+	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-buildroot-linux-musl- clean disk
 	$(call success, "libc test build finished")
 
+IOZONE_DIR := $(TEST_SUITE_DIR)/iozone
+iozone:
+	$(call building, "building iozone")
+	@make -C $(IOZONE_DIR) linux CC="$(CC)" -j
+	@$(STRIP) $(IOZONE_DIR)/iozone
+
+LIBC_BENCH_DIR := $(TEST_SUITE_DIR)/libc-bench
+libc-bench:
+	$(call building, "building libc-bench")
+	@make -C $(LIBC_BENCH_DIR) CC="$(CC)" -j $(NPROC)
+	@$(STRIP) $(LIBC_BENCH_DIR)/libc-bench
+
+UNIX_BENCH_DIR := $(TEST_SUITE_DIR)/UnixBench
+unixbench:
+	$(call building, "building unixbench")
+	@mkdir -p $(UNIX_BENCH_DIR)/pgms
+	@make -C $(UNIX_BENCH_DIR) CC="$(CC)" -j $(NPROC) ARCH=$(ARCH) all
 
 # iperf test
 IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
@@ -71,4 +88,4 @@ IPERF_TEST_DIR := $(TEST_SUITE_DIR)/iperf/riscv-musl
 # netperf test
 NETPERF_TEST_DIR := $(TEST_SUITE_DIR)/netperf
 
-.PHONY: basic_test busybox lua libc-test
+.PHONY: basic_test busybox lua libc-test iozone libc-bench unixbench 

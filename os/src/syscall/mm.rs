@@ -107,7 +107,7 @@ pub fn sys_mmap(
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_anon_area(addr, length, perm, flags, false)
                 })?;
-                log::info!("[sys_mmap] private anonymous: {:#x}", start_va);
+                // log::info!("[sys_mmap] private anonymous: {:#x}", start_va);
                 Ok(start_va)
             } else {
                 let file = task.with_fd_table(|t| t.get_file(fd))?;
@@ -139,7 +139,7 @@ pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
     }
     let prot = MmapProt::from_bits_truncate(prot);
     let perm = MapPerm::from(prot);
-    log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
+    // log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
     let task = current_task().unwrap().clone();
     task.with_mut_vm_space(|vm| -> SysResult {
         let mut vma = vm.unmap(addr, len)?;

@@ -21,6 +21,7 @@ const SYSCALL_LINKAT: usize = 37;
 const SYSCALL_UMOUNT2: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
 const SYSCALL_STATFS: usize = 43;
+// const SYSCALL_FTRUNCATE: usize = 46;
 const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_FCHMODAT: usize = 53;
@@ -39,6 +40,7 @@ const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
+const SYSCALL_SYNC: usize = 81;
 const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
@@ -70,6 +72,7 @@ const SYSCALL_SETPGID: usize = 154;
 const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_SETSID: usize = 157;
 const SYSCALL_UNAME: usize = 160;
+const SYSCALL_UMASK: usize = 166;
 const SYSCALL_GETTIMEOFDAY: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
@@ -200,6 +203,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(args[0] , args[1] , args[2] ).await,
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0]),
+        SYSCALL_UMASK => sys_umask(args[0] as i32),
         SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
@@ -239,6 +243,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_RECVMSG => sys_recvmsg(args[0], args[1], args[2]).await,
         SYSCALL_MPROTECE => sys_mprotect(args[0].into(), args[1], args[2] as _),
         SYSCALL_MADSIVE =>  sys_temp(),
+        SYSCALL_SYNC => sys_temp(),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)

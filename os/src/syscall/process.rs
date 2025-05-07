@@ -142,7 +142,7 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
-    info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
+    // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
     let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
@@ -491,7 +491,7 @@ pub fn sys_setsid() -> SysResult {
 ///  glibc provides no wrapper for clone3(), necessitating the
 /// use of syscall(2).
 pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
-    log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
+    // log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
     if size > PAGE_SIZE {
         return Err(SysError::E2BIG);
     }
@@ -503,16 +503,16 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
         *(cl_args_ptr as *const CloneArgs)
     };
     let flags = cl_args.flags;
-    log::info!("[sys_clone3]: flags: {:x}", flags);
+    // log::info!("[sys_clone3]: flags: {:x}", flags);
     let stack = VirtAddr::from(cl_args.stack);
-    log::info!("[sys_clone3]: stack: {:x}", stack.0);
+    // log::info!("[sys_clone3]: stack: {:x}", stack.0);
     let parent_tid = VirtAddr::from(cl_args.parent_tid);
-    log::info!("[sys_clone3]: parent_tid: {:x}", parent_tid.0);
+    // log::info!("[sys_clone3]: parent_tid: {:x}", parent_tid.0);
     let tls = VirtAddr::from(cl_args.tls);
-    log::info!("[sys_clone3]: tls: {:x}", tls.0);
+    // log::info!("[sys_clone3]: tls: {:x}", tls.0);
     let child_tid = VirtAddr::from(cl_args.child_tid);
-    log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
-    log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
+    // log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
+    // log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
     sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
 }
   

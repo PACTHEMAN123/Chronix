@@ -6,7 +6,7 @@ FS_IMG_DIR := .
 FS_IMG_NAME := fs-$(ARCH)
 FS_IMG := $(FS_IMG_DIR)/$(FS_IMG_NAME).img
 FS_IMG_COPY := $(FS_IMG_DIR)/fs.img
-fs-img: user basic_test busybox libc-test lua
+fs-img:  user basic_test unixbench busybox libc-test lua iozone libc-bench 
 	$(call building, "building file system image")
 	$(call building, "cleaning up...")
 	@rm -f $(FS_IMG)
@@ -45,6 +45,18 @@ endif
 	@sudo mkdir mnt/libc-test
 	@sudo cp $(LIBC_TEST_DISK)/* mnt/libc-test
 	@sudo cp $(LIBC_TEST_BIR)/all.sh mnt/libc-test
+
+	$(call building, "copying libc-test to the $(FS_IMG)")
+	@sudo cp $(IOZONE_DIR)/iozone mnt/
+	@sudo cp $(TEST_SUITE_DIR)/scripts/iozone/* mnt/
+
+	$(call building, "copying libc-bench to the $(FS_IMG)")
+	@sudo cp $(LIBC_BENCH_DIR)/libc-bench mnt/
+	@sudo cp $(TEST_SUITE_DIR)/scripts/libcbench/* mnt/\
+
+	$(call building, "copying unixbench to the $(FS_IMG)")
+	@sudo cp $(TEST_SUITE_DIR)/UnixBench/pgms/* mnt/
+	@sudo cp $(TEST_SUITE_DIR)/scripts/unixbench/*.sh mnt/
 
 ifneq ($(NT),)
 	$(call building, "copying netperf to the $(FS_IMG)")

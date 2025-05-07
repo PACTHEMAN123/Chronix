@@ -877,3 +877,10 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
 pub fn sys_fchmodat() -> SysResult {
     Ok(0)
 }
+
+/// umask() sets the calling process's file mode creation mask (umask) to
+/// mask & 0777 
+pub fn sys_umask(_mask: i32) -> SysResult {
+    // TODO: implement this
+    Ok(0x777)
+}

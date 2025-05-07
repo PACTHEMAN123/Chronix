@@ -424,7 +424,7 @@ impl FutexManager {
     }
 
     pub fn add_waiter(&mut self, key: &FutexHashKey, waiter: FutexWaiter) {
-        log::info!("[futex::add_waiter] {:?} in {:?} ", waiter, key);
+        // log::info!("[futex::add_waiter] {:?} in {:?} ", waiter, key);
         if let Some(waiters) = self.futexs.get_mut(key) {
             waiters.push(waiter);
         } else {
@@ -451,7 +451,7 @@ impl FutexManager {
             let n = core::cmp::min(n as usize, waiters.len());
             for _ in 0..n {
                 let waiter = waiters.pop().unwrap();
-                log::info!("[futex_wake] {:?} has been woken", waiter);
+                // log::info!("[futex_wake] {:?} has been woken", waiter);
                 waiter.wake();
             }
             Ok(n as isize)
@@ -469,7 +469,7 @@ impl FutexManager {
                 if waiter.mask & mask == 0 {
                     continue;
                 }
-                log::info!("[futex_wake] {:?} has been woken", waiter);
+                // log::info!("[futex_wake] {:?} has been woken", waiter);
                 waiter.wake();
             }
             Ok(n as isize)
