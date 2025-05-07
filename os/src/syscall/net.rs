@@ -268,7 +268,7 @@ pub async fn sys_sendto(
     addr: usize,
     addr_len: usize,
 )-> SysResult {
-    log::info!("addr is {}, addr_len is {}", addr, addr_len);
+    // log::info!("addr is {}, addr_len is {}", addr, addr_len);
     let task = current_task().unwrap();
     let buf_slice = unsafe {
         core::slice::from_raw_parts_mut(buf as *mut u8, len)
@@ -334,7 +334,7 @@ pub async fn sys_recvfrom(
     addr: usize,
     addrlen: usize,
 ) -> SysResult {
-    log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
+    // log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(sockfd)})?
@@ -377,7 +377,7 @@ pub async fn sys_recvfrom(
             },
         }
     }
-    log::info!("now return bytes: {}",bytes);
+    // log::info!("now return bytes: {}",bytes);
     Ok(bytes as isize)
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.

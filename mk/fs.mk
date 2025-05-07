@@ -48,7 +48,6 @@ endif
 
 ifneq ($(NT),)
 	$(call building, "copying netperf to the $(FS_IMG)")
-	@sudo cp $(IPERF_TEST_DIR)/* mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netserver mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf mnt/
 	@sudo cp $(NETPERF_TEST_DIR)/netperf_testcode.sh mnt/

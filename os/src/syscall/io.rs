@@ -153,20 +153,17 @@ impl FdSet {
     /// corresponding bit of the file descriptor in the array, and set the bit
     /// to 1
     pub fn mark_fd(&mut self, fd: usize) {
-        if fd >= FD_SET_SIZE {
-            return;
-        }
-        let index = fd / (8 * core::mem::size_of::<usize>());
-        let bits = fd % (8 * core::mem::size_of::<usize>());
-        let mask = 1 << bits;
-        self.fds_bits[index] |= mask;
+        let idx = fd / 64;
+        let bit = fd % 64;
+        let mask = 1 << bit;
+        self.fds_bits[idx] |= mask;
     }
     /// check if the given fd is set
     pub fn is_set(&self, fd: usize) -> bool {
-        let index = fd / (8 * core::mem::size_of::<usize>());
-        let bits = fd % (8 * core::mem::size_of::<usize>());
-        let mask = 1 << bits;
-        self.fds_bits[index] & mask != 0
+        let idx = fd / 64;
+        let bit = fd % 64;
+        let mask = 1 << bit;
+        self.fds_bits[idx] & mask != 0
     }
 }
 
@@ -181,10 +178,10 @@ pub async fn sys_pselect6(
     timeout_ptr: usize,
     sigmask_ptr: usize,
 ) -> SysResult {
-    let task = current_task().unwrap();
     if nfds < 0 {
         return Err(SysError::EINVAL);
     }
+    let task = current_task().unwrap();
     let mut readfds = unsafe {
         if readfds_ptr == 0 {
             None
@@ -213,6 +210,7 @@ pub async fn sys_pselect6(
         if timeout_ptr == 0 {
             None
         }else {
+            Instruction::set_sum();
             Some((*(timeout_ptr as *const TimeSpec)).into())
         }
     };
@@ -223,9 +221,10 @@ pub async fn sys_pselect6(
     let new_mask = if sigmask_ptr == 0 {
         None
     } else {
-        Some(unsafe {
-            *(sigmask_ptr as *const SigSet)
-        })
+        unsafe {
+            Instruction::set_sum();
+            Some(*(sigmask_ptr as *const SigSet))
+        }
     };
 
     let mut polls= Vec::<(usize,PollEvents, Arc<dyn File>)>::with_capacity(nfds as usize);
@@ -250,18 +249,18 @@ pub async fn sys_pselect6(
     }
 
     // save the old sig mask
-    let old_mask = task.with_sig_manager(|m|m.blocked_sigs);
-    let mut current_mask = old_mask;
+    let mut prev_mask = None; 
     if let Some(mask) = new_mask {
-        task.with_mut_sig_manager(|m| m.blocked_sigs |= mask);
-        current_mask |= mask;
+        task.with_mut_sig_manager(|sig_manager| {
+            prev_mask = Some(sig_manager.blocked_sigs);
+            sig_manager.blocked_sigs |= mask;
+        })
     }
-
     task.set_interruptable();
-    task.set_wake_up_sigs(!current_mask);
+    task.set_wake_up_sigs(task.with_sig_manager(|m| !m.blocked_sigs));
     let intr_future = IntrBySignalFuture {
         task: task.clone(),
-        mask: current_mask
+        mask: task.with_sig_manager(|m|m.blocked_sigs),
     };
     let pselect_future = PSelectFuture{polls};
     let ret = if let Some(timeout) = timeout {
@@ -278,7 +277,9 @@ pub async fn sys_pselect6(
                     exceptfds.as_mut().map(|fds|fds.clear());
                     task.set_running();
                     // restore old mask
-                    task.with_mut_sig_manager(|m| m.blocked_sigs = old_mask);
+                    if let Some(mask) = prev_mask {
+                        task.with_mut_sig_manager(|m|m.blocked_sigs = mask);
+                    }
                     return Ok(0);
                 }
             }
@@ -297,7 +298,9 @@ pub async fn sys_pselect6(
 
     task.set_running(); 
     // restore old mask
-    task.with_mut_sig_manager(|m| m.blocked_sigs = old_mask);
+    if let Some(mask) = prev_mask {
+        task.with_mut_sig_manager(|m| m.blocked_sigs = mask);
+    }
     let mut res = 0;
     for (fd, events) in ret {
         if events.contains(PollEvents::IN) || events.contains(PollEvents::HUP){

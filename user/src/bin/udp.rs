@@ -11,7 +11,7 @@ const AF_INET: i32 = 2; // IPv4
 const SOCK_DGRAM: i32 = 2; // UDP
 
 const TEST_PORT: u16 = 0x15b3;
-const TEST_ADDR: u32 = 0x0a00020f; // 10.0.2.15
+const TEST_ADDR: u32 = 0x7f000001; // 10.0.2.15
 
 fn udp_server() {
     println!("udp_server: starting up");
