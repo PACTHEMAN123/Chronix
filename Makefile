@@ -33,6 +33,10 @@ run-la:
 PHONY_TARGET += all
 all: kernel-rv kernel-la disk-img
 
+PHONY_TARGET += setup
+setup:
+	
+
 PHONY_TARGET += kernel-rv
 kernel-rv:
 	make -f Makefile.sub kernel ARCH=riscv64 MODE=release
