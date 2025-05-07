@@ -564,6 +564,7 @@ impl TaskControlBlock {
 
             fn exit_robust_list(task: &Arc<TaskControlBlock>, robust_list: *mut RobustList, offset: usize) {
                 let addr = robust_list as usize + offset;
+                log::info!("[exit_robust_list] robust_list {:#x}, offset {:#x}, addr {:#x}", robust_list as usize, offset, addr);
                 let futex = addr as *const AtomicU32;
                 let futex = unsafe { & *futex };
                 let oldval = futex.fetch_or(FUTEX_OWNER_DIED, Ordering::AcqRel);

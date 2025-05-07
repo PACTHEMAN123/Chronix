@@ -1,5 +1,5 @@
 ########################################################
-# KERNEL
+# KERNEL (for local debug)
 ########################################################
 
 # features
@@ -37,12 +37,16 @@ kernel: dumpdtb
 	$(call building, "Architecture: $(ARCH)")
 	$(call building, "Platform: $(BOARD)")
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
+	@cp -r os/cargo-config os/.cargo
+	@cp -r os/hal/cargo-config os/hal/.cargo
 ifeq ($(KERNEL_FEATURES), ) 
 	@cd os && cargo  build $(MODE_ARG)
 else
 	@cd os && cargo  build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
+	@rm -rf os/.cargo
+	@rm -rf os/hal/.cargo
 	$(call success, "kernel $(KERNEL_ELF) finish building")
 
 # Disassembly
