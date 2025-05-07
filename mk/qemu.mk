@@ -28,11 +28,11 @@ endif
 ifeq ($(ARCH), riscv64)
 QEMU_RUN_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 # QEMU_ARGS += -kernel $(KERNEL_ELF) -m 1G
-QEMU_DEV_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
+QEMU_DEV_ARGS += -drive file=/dev/null,if=none,format=raw,id=x0
 QEMU_DEV_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 else ifeq ($(ARCH), loongarch64)
 QEMU_RUN_ARGS += -kernel $(KERNEL_ELF) -m 1G
-QEMU_DEV_ARGS += -drive file=$(FS_IMG_COPY),if=none,format=raw,id=x0
+QEMU_DEV_ARGS += -drive file=/dev/null,if=none,format=raw,id=x0
 QEMU_DEV_ARGS += -device virtio-blk-pci,drive=x0
 endif
 
