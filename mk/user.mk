@@ -13,9 +13,9 @@ USER_MODE := $(MODE)
 # user build
 user:
 	$(call building, "building user apps")
+	@rm -rf user/.cargo
 	@cp -r user/cargo-config user/.cargo
 	@cd user && make build MODE=$(USER_MODE) ARCH=$(ARCH)
-	@rm -rf user/.cargo
 	$(call success, "user build finished")
 
 .PHONY: user

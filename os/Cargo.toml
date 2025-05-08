@@ -1,59 +1,36 @@
 [package]
 name = "os"
 version = "0.1.0"
-authors = ["Yifan Wu <shinbokuow@163.com>"]
+authors = ["Xiaopac zlc lullabye"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-buddy_system_allocator = "0.6"
-bitflags = "1.2.1"
-# xmas-elf = "0.7.0"
-xmas-elf = { path = "../vendor/xmas-elf" }
-log = "0.4"
-spin = "0.9"
-virtio-drivers = { version = "0.9.0" }
-async-task = { version = "4.7.1", default-features = false }
-lwext4_rust = { path = "../vendor/ext4fs", default-features = false }
-bitmap-allocator = { path = "../vendor/bitmap-allocator" }
-paste = "1.0"
-hal = {path = "./hal" }
-async-trait = "0.1.88"
-hashbrown = "0.14"
-strum = { version = "0.26", default_features = false, features = ["derive"] }
-rand = {version = "0.9.0-beta.3", default-features = false, features = ["small_rng"]}
-fatfs = { path = "../vendor/rust-fatfs", default-features = false, features = ["alloc", "lfn", "unicode"] }
+lazy_static.workspace = true
+buddy_system_allocator.workspace = true
+bitflags.workspace = true
+log.workspace = true
+spin.workspace = true
+virtio-drivers.workspace = true
+async-task.workspace = true
+paste.workspace = true
+async-trait.workspace = true
+hashbrown.workspace = true
+strum.workspace = true
+rand.workspace = true
+downcast-rs.workspace = true
+bitmap-allocator.workspace = true
+fdt.workspace = true
+fatfs.workspace = true
+xmas-elf.workspace = true
+lwext4_rust.workspace = true
+smoltcp.workspace = true
+
+# use other cargos in this project
 range-map = { path = "../utils/range-map" }
-downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
+hal = { path = "../hal" }
 
-[dependencies.fdt]
-git = "https://github.com/repnop/fdt.git"
-rev = "059bb2383873f8001959456e36ec123228f67642"
-default-feature = true
-
-[dependencies.smoltcp]
-git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"
-rev = "5ac01e106e3ec6daac84bba40510cf1791f0396c"  
-default-features = false
-features = [
-    "alloc",
-    "log",             
-    "medium-ethernet",
-    "medium-ip",       
-    "proto-ipv4",
-    "proto-ipv6",      
-    "socket-raw",
-    "socket-icmp",
-    "socket-udp",
-    "socket-tcp",
-    "socket-dns",
-    "async",
-    # "fragmentation-buffer-size-65536", "proto-ipv4-fragmentation",
-    # "reassembly-buffer-size-65536", "reassembly-buffer-count-32",
-    # "assembler-max-segment-count-32",
-]
 
 [features]
 smp = []

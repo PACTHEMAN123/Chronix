@@ -24,8 +24,9 @@ run-inner: qemu-version-check build
 run: run-inner
 
 clean:
-	@cd os && cargo clean
-	@cd user && cargo clean
+	@cd os && CARGO_TARGET_DIR=target cargo clean 
+	@cd user && CARGO_TARGET_DIR=target cargo clean
+	@cargo clean
 	@sudo rm -f $(FS_IMG)
 	@sudo rm -f $(FS_IMG_COPY)
 	@sudo rm -f $(DISK_IMG)

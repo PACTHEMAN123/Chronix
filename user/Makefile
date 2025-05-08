@@ -23,7 +23,7 @@ OBJDUMP := rust-objdump --arch-name=$(ARCH)
 OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
 
 elf: $(APPS)
-	@cargo build $(MODE_ARG)
+	CARGO_TARGET_DIR=target cargo build $(MODE_ARG)
 
 binary: elf
 	@$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
