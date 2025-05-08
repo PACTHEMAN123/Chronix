@@ -35,7 +35,8 @@ all: kernel-rv kernel-la disk-img
 
 PHONY_TARGET += setup
 setup:
-	git submodule update --init --recursive
+	rm -rf .cargo
+	cp -r cargo-config .cargo
 	chmod +x scripts/archive.sh
 	./scripts/archive.sh extract
 	
