@@ -1,25 +1,7 @@
-[submodule "vendor/lwext4_rust"]
-	path = vendor/lwext4_rust
-	url = https://github.com/elliott10/lwext4_rust.git
-[submodule "vendor/bitmap-allocator"]
-	path = vendor/bitmap-allocator
-	url = https://github.com/rcore-os/bitmap-allocator.git
 [submodule "vendor/testsuits-for-oskernel"]
 	path = vendor/testsuits-for-oskernel
 	url = https://github.com/oscomp/testsuits-for-oskernel.git
 	branch = pre-2025
-[submodule "vendor/rust-fatfs"]
-	path = vendor/rust-fatfs
-	url = https://github.com/rafalh/rust-fatfs
-[submodule "xmas-elf"]
-	path = xmas-elf
-	url = https://github.com/zlc-dev/xmas-elf
-[submodule "vendor/xmas-elf"]
-	path = vendor/xmas-elf
-	url = https://github.com/zlc-dev/xmas-elf
-[submodule "vendor/ext4fs"]
-	path = vendor/ext4fs
-	url = https://github.com/PACTHEMAN123/ext4fs.git
 [submodule "vendor/oskernel-testsuits-cooperation"]
 	path = vendor/oskernel-testsuits-cooperation
 	url = https://github.com/oscomp/oskernel-testsuits-cooperation.git
