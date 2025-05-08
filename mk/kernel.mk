@@ -42,7 +42,7 @@ kernel: dumpdtb
 	@cp -r os/cargo-config os/.cargo
 	@cp -r hal/cargo-config hal/.cargo
 ifeq ($(KERNEL_FEATURES), ) 
-	@cd os && CARGO_TARGET_DIR=target cargo build -v $(MODE_ARG)
+	@cd os && CARGO_TARGET_DIR=target cargo build $(MODE_ARG)
 else
 	@cd os && CARGO_TARGET_DIR=target cargo build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
