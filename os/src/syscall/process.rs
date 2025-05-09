@@ -262,7 +262,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
 /// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
     
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     log::debug!("[sys_waitpid]: TCB: {}, pid: {pid}, exitcode_ptr: {:x}, option: {option}", task.tid() ,exit_code_ptr);
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0

@@ -54,6 +54,7 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
 
 /// syscall: clock_gettime
 pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
     log::debug!("[sys_clock_gettime]: clock id {}", clock_id);
     let _sum_guard = SumGuard::new();
     if ts == 0 {
@@ -69,11 +70,11 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
             }
         }
         CLOCK_PROCESS_CPUTIME_ID => {
-            let cpu_time = current_task().unwrap().process_cpu_time();
+            let cpu_time = task.process_cpu_time();
             unsafe { ts_ptr.write(cpu_time.into()); }
         }
         CLOCK_THREAD_CPUTIME_ID => {
-            let (user_time, kernel_time) = current_task().unwrap().time_recorder().time_pair();
+            let (user_time, kernel_time) = task.time_recorder().time_pair();
             let cpu_time = user_time + kernel_time;
             unsafe { ts_ptr.write(cpu_time.into()); }
         }

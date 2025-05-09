@@ -61,7 +61,7 @@ LIBC_TEST_BIR := $(TEST_SUITE_DIR)/libc-test
 LIBC_TEST_DISK := $(LIBC_TEST_BIR)/disk
 libc-test:
 	$(call building, "building libc-test")
-	@make -C $(LIBC_TEST_BIR) PREFIX=riscv64-buildroot-linux-musl- clean disk
+	@make -C $(LIBC_TEST_BIR) PREFIX=$(TOOLCHAIN_PREFIX) clean disk
 	$(call success, "libc test build finished")
 
 IOZONE_DIR := $(TEST_SUITE_DIR)/iozone
@@ -73,7 +73,7 @@ iozone:
 LIBC_BENCH_DIR := $(TEST_SUITE_DIR)/libc-bench
 libc-bench:
 	$(call building, "building libc-bench")
-	@make -C $(LIBC_BENCH_DIR) CC="$(CC)" -j $(NPROC)
+	@make -C $(LIBC_BENCH_DIR) CC="$(TOOLCHAIN_PREFIX)gcc" -j $(NPROC)
 	@$(STRIP) $(LIBC_BENCH_DIR)/libc-bench
 
 UNIX_BENCH_DIR := $(TEST_SUITE_DIR)/UnixBench

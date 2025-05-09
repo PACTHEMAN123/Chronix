@@ -31,7 +31,7 @@ impl ConstantsHal for Constant {
     const KERNEL_VM_SIZE: usize = 0x2_0000_0000;
     const KERNEL_VM_TOP: usize = Self::KERNEL_ADDR_SPACE.end - 0x8000_0000 + 1;
     
-    const USER_STACK_SIZE: usize = 16 * 4096;
+    const USER_STACK_SIZE: usize = 4096 * 4096;
     
     const USER_STACK_TOP: usize = Self::USER_ADDR_SPACE.end - Self::PAGE_SIZE;
 
