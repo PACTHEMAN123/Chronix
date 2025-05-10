@@ -463,16 +463,21 @@ impl FutexManager {
 
     pub fn wake_bitset(&mut self, key: &FutexHashKey, n: u32, mask: u32) -> SysResult {
         if let Some(waiters) = self.futexs.get_mut(key) {
-            let n = core::cmp::min(n as usize, waiters.len());
-            for _ in 0..n {
-                let waiter = waiters.pop().unwrap();
-                if waiter.mask & mask == 0 {
-                    continue;
+            let mut count = 0;
+            let max_count = n as usize;
+
+            let mut i = 0;
+            while i < waiters.len() && count < max_count {
+                if (waiters[i].mask & mask) != 0 {
+                    let waiter = waiters.remove(i);
+                    waiter.wake();
+                    count += 1;
+                } else {
+                    i += 1;
                 }
-                // log::info!("[futex_wake] {:?} has been woken", waiter);
-                waiter.wake();
             }
-            Ok(n as isize)
+            
+            Ok(count as isize)
         } else {
             log::debug!("can not find key {key:?}");
             Err(SysError::EINVAL)

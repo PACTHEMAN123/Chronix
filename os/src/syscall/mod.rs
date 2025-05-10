@@ -98,6 +98,7 @@ const SYSCALL_SENDMSG: usize = 211;
 const SYSCALL_RECVMSG: usize = 212;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
+const SYSCALL_MREMAP: usize = 216;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
@@ -131,7 +132,7 @@ use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIE
 use hal::{addr::VirtAddr, println};
 use io::*;
 use misc::{sys_getrandom, sys_prlimit64, sys_sysinfo};
-use mm::{sys_mmap, sys_mprotect, sys_munmap};
+use mm::{sys_mmap, sys_mprotect, sys_mremap, sys_munmap};
 use net::*;
 pub use process::*;
 pub use time::*;
@@ -220,9 +221,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),
         SYSCALL_EXEC => sys_execve(args[0] , args[1], args[2]).await,
-        SYSCALL_BRK => sys_brk(hal::addr::VirtAddr(args[0])),
-        SYSCALL_MUNMAP => sys_munmap(VirtAddr(args[0]), args[1]),
-        SYSCALL_MMAP => sys_mmap(VirtAddr(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
+        SYSCALL_BRK => sys_brk(VirtAddr::from(args[0])),
+        SYSCALL_MUNMAP => sys_munmap(VirtAddr::from(args[0]), args[1]),
+        SYSCALL_MMAP => sys_mmap(VirtAddr::from(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
+        SYSCALL_MREMAP => sys_mremap(VirtAddr::from(args[0]), args[1], args[2], args[3] as i32, args[4]),
         SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
         SYSCALL_GETRANDOM => sys_getrandom(args[0], args[1], args[2]),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),

@@ -55,11 +55,18 @@ impl File for ShmFile {
     fn writable(&self) -> bool {
         true
     }
+    
     async fn read(&self, _buf: &mut [u8]) -> Result<usize, SysError> {
         panic!("cannot read sp file")
     }
     async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
         panic!("cannot write sp file")
+    }
+}
+
+impl ShmFile {
+    pub fn get_id(&self) -> usize {
+        self.id
     }
 }
 
@@ -99,7 +106,7 @@ impl ShmIdAllocator {
     ///Create an empty `TidAllocator`
     pub const fn new() -> Self {
         Self {
-            current: 0,
+            current: 1,
             recycled: Vec::new_in(SlabAllocator),
         }
     }
@@ -115,6 +122,9 @@ impl ShmIdAllocator {
     ///Recycle a id
     pub fn dealloc(&mut self, id: usize) {
         assert!(id < self.current);
+        if id == 0 {
+            return;
+        }
         assert!(
             !self.recycled.iter().any(|pid| *pid == id),
             "pid {} has been deallocated!",
@@ -122,4 +132,11 @@ impl ShmIdAllocator {
         );
         self.recycled.push(id);
     }
+}
+
+pub fn get_shm(id: usize) -> Option<Arc<ShmFile>> {
+    if id == 0 {
+        return None;
+    }
+    SHM_MANAGER.get(id)
 }

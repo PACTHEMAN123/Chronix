@@ -4,7 +4,6 @@ profile = "minimal"
 channel = "nightly-2025-01-18"
 components = ["rust-src", "llvm-tools", "rustfmt", "clippy"]
 targets = [
-    "loongarch64-unknown-none-softfloat",
     "loongarch64-unknown-none",
     "riscv64gc-unknown-none-elf"
 ]
