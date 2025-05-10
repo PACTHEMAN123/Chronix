@@ -8,27 +8,21 @@ include mk/user.mk
 include mk/tests.mk
 include mk/utils.mk
 
-build: $(KERNEL_BIN) #fs-img: should make fs-img first #env
-	$(call building, "cp $(FS_IMG) to $(FS_IMG_COPY)")
-	@cp $(FS_IMG) $(FS_IMG_COPY)
-
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
 	cargo install cargo-binutils
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
 
-run-inner: qemu-version-check build
-	$(QEMU) $(QEMU_DEV_ARGS) $(QEMU_RUN_ARGS)
-
-run: run-inner
+run: $(KERNEL_BIN)
+	$(call building, "cp $(DISK_IMG) to $(DISK_IMG_COPY)")
+	@cp $(DISK_IMG) $(DISK_IMG_COPY)
+	$(QEMU) $(QEMU_ARGS) $(QEMU_RUN_ARGS)
 
 clean:
 	@cd os && CARGO_TARGET_DIR=target cargo clean 
 	@cd user && CARGO_TARGET_DIR=target cargo clean
 	@cargo clean
-	@sudo rm -f $(FS_IMG)
-	@sudo rm -f $(FS_IMG_COPY)
 	@sudo rm -f $(DISK_IMG)
 	@sudo rm -f $(DISK_IMG_COPY)
 	@sudo rm -rf mnt

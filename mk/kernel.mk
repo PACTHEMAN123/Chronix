@@ -17,6 +17,24 @@ ifeq ($(NET_C),y)
 KERNEL_FEATURES += net
 endif
 
+# kernel target
+ifeq ($(ARCH), riscv64)
+KERNEL_TARGET := riscv64gc-unknown-none-elf
+else ifeq ($(ARCH), loongarch64)
+KERNEL_TARGET := loongarch64-unknown-none
+endif
+KERNEL_TARGET_ARG := --target $(KERNEL_TARGET)
+
+# kernel build mode
+# default using release to speed up
+KERNEL_MODE := release
+ifeq ($(KERNEL_MODE), debug)
+	KERNEL_MODE_ARG := 
+else
+	KERNEL_MODE_ARG := --release
+endif
+
+
 # kernel entry
 ifeq ($(ARCH), riscv64)
 KERNEL_ENTRY_PA := 0x80200000
@@ -24,7 +42,7 @@ else ifeq ($(ARCH), loongarch64)
 KERNEL_ENTRY_PA := 0x1c000000
 endif
 
-KERNEL_ELF := os/target/$(TARGET)/$(MODE)/os
+KERNEL_ELF := os/target/$(KERNEL_TARGET)/$(KERNEL_MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := $(KERNEL_ELF).asm
 
@@ -39,12 +57,12 @@ kernel: dumpdtb
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
 	@rm -rf os/.cargo
 	@rm -rf hal/.cargo
-	@cp -r os/cargo-config os/.cargo
-	@cp -r hal/cargo-config hal/.cargo
+	@cp -r os/cargo os/.cargo
+	@cp -r hal/cargo hal/.cargo
 ifeq ($(KERNEL_FEATURES), ) 
-	@cd os && CARGO_TARGET_DIR=target cargo build $(MODE_ARG)
+	@cd os && CARGO_TARGET_DIR=target cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG)
 else
-	@cd os && CARGO_TARGET_DIR=target cargo build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
+	@cd os && CARGO_TARGET_DIR=target cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
 	$(call success, "kernel $(KERNEL_ELF) finish building")

@@ -1,9 +1,6 @@
 [build]
 target = "riscv64gc-unknown-none-elf"
 
-[unstable]
-build-std = ["core", "alloc"]
-
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
     "-Clink-arg=-Tos/src/linker.ld", 
@@ -14,7 +11,7 @@ rustflags = [
 rustflags = [
     "-Clink-arg=-Tos/src/linker.ld",
     "-Cforce-frame-pointers=yes", 
-    "-Ctarget-feature=-lsx,-lasx"
+    "-Ctarget-feature=-lsx,-lasx",
 ]
 
 [net]
