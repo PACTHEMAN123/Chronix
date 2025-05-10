@@ -184,12 +184,11 @@ impl File for TtyFile {
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let char_dev = UART0.clone();
-        log::debug!("[tty file]: reading buf len: {}", buf.len());
         //let len = char_dev.read(buf).await;
         let mut c: usize;
         loop {
             c = console_getchar();
-            if c == 0 {
+            if c == 0 || c as u8 == 0xff {
                 suspend_current_and_run_next();
                 continue;
             } else {
@@ -198,6 +197,7 @@ impl File for TtyFile {
         }
         let ch = c as u8;
         let len = 1;
+        assert!(c < 256);
         unsafe {
             buf.as_mut_ptr().write_volatile(ch);
         }
