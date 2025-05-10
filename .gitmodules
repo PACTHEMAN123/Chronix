@@ -1,7 +1,0 @@
-[submodule "vendor/testsuits-for-oskernel"]
-	path = vendor/testsuits-for-oskernel
-	url = https://github.com/oscomp/testsuits-for-oskernel.git
-	branch = pre-2025
-[submodule "vendor/oskernel-testsuits-cooperation"]
-	path = vendor/oskernel-testsuits-cooperation
-	url = https://github.com/oscomp/oskernel-testsuits-cooperation.git
