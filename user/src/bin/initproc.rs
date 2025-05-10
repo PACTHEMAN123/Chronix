@@ -40,10 +40,12 @@ fn main() -> i32 {
                 // println!("in pid == -1");
                 return -1;
             }
+            /*
             println!(
                 "[initproc] Released a zombie process, pid={}, exit_code={}",
                 pid, exit_code,
             );
+            */
         }
     }
     0

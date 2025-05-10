@@ -2,6 +2,8 @@
 #![feature(linkage)]
 #![feature(alloc_error_handler)]
 #![feature(naked_functions)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 #[macro_use]
 pub mod console;

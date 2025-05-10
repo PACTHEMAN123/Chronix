@@ -6,7 +6,8 @@ rustflags = [
     "-Clink-args=-Tuser/src/linker.ld", "-Cforce-frame-pointers=yes"
 ]
 
-[target.loongarch64-unknown-none]
+[target.loongarch64-unknown-none-softfloat]
 rustflags = [
-    "-Clink-args=-Tuser/src/linker.ld", "-Cforce-frame-pointers=yes"
+    "-Clink-args=-Tuser/src/linker.ld", 
+    "-Cforce-frame-pointers=yes"
 ]

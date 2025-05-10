@@ -9,6 +9,6 @@ rustflags = [
 [target.loongarch64-unknown-none]
 rustflags = [
     "-Cforce-frame-pointers=yes",
-    "-Ctarget-feature=-lsx,-lasx"
+    "-Ctarget-feature=-lsx,-lasx",
 ]
 

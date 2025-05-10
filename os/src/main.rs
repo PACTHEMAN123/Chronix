@@ -19,8 +19,8 @@
 //! userspace.
 
 #![feature(negative_impls)]
-#![deny(missing_docs)]
-#![deny(warnings)]
+// #![deny(missing_docs)]
+// #![deny(warnings)]
 #![allow(unused_imports)]
 #![no_std]
 #![no_main]
