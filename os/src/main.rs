@@ -51,6 +51,8 @@ mod devices;
 mod drivers;
 pub mod fs;
 pub mod lang_items;
+/// ipc
+pub mod ipc;
 pub mod mm;
 //pub mod sbi;
 pub mod sync;

@@ -5,7 +5,7 @@ use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 use xmas_elf::{reader::Reader, ElfFile};
 
-use crate::{fs::{shmfs::file::ShmFile, vfs::File}, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
+use crate::{ipc::sysv, fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
 
 use super::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable};
 
@@ -46,7 +46,7 @@ pub enum UserVmAreaType {
 pub enum UserVmFile {
     None,
     File(Arc<dyn File>),
-    Shm(Arc<ShmFile>)
+    Shm(Arc<sysv::ShmObj>)
 }
 
 #[allow(missing_docs)]
@@ -72,7 +72,7 @@ impl UserVmFile {
         }
     }
 
-    pub fn unwrap_shm(self) -> Arc<ShmFile> {
+    pub fn unwrap_shm(self) -> Arc<sysv::ShmObj> {
         match self {
             Self::Shm(shm) => shm,
             _ => panic!("UserVmFile is not Shm")
@@ -90,6 +90,15 @@ impl From<Option<Arc<dyn File>>> for UserVmFile {
     }
 }
 
+impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
+    fn from(value: Option<Arc<sysv::ShmObj>>) -> Self {
+        match value {
+            None => Self::None,
+            Some(shm) => Self::Shm(shm)
+        }
+    }
+}
+
 #[allow(missing_docs, unused)]
 pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
@@ -103,6 +112,36 @@ pub struct UserVmArea {
     pub offset: usize,
     /// length of file
     pub len: usize,
+}
+
+#[allow(missing_docs, unused)]
+#[derive(Clone)]
+/// View of User VMA
+pub struct UserVmAreaView {
+    pub range_va: Range<VirtAddr>,
+    pub vma_type: UserVmAreaType,
+    pub map_perm: MapPerm,
+    /// for mmap usage
+    pub file: UserVmFile,
+    pub mmap_flags: MmapFlags,
+    /// offset in file
+    pub offset: usize,
+    /// length of file
+    pub len: usize,
+}
+
+impl From<&UserVmArea> for UserVmAreaView {
+    fn from(value: &UserVmArea) -> Self {
+        Self { 
+            range_va: value.range_va.clone(), 
+            vma_type: value.vma_type, 
+            map_perm: value.map_perm, 
+            file: value.file.clone(), 
+            mmap_flags: value.mmap_flags, 
+            offset: value.offset, 
+            len: value.len 
+        }
+    }
 }
 
 #[allow(missing_docs, unused)]
@@ -261,7 +300,7 @@ pub trait UserVmSpaceHal: Sized {
 
     fn check_free(&self, va: VirtAddr, len: usize) -> Result<(), ()>;
 
-    fn get_area_view(&self, va: VirtAddr) -> Option<UserVmArea>;
+    fn get_area_view(&self, va: VirtAddr) -> Option<UserVmAreaView>;
 
     fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea>;
 

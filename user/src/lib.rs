@@ -437,6 +437,42 @@ bitflags! {
     }
 }
 
-pub fn mmap(addr: usize, len: usize, prot: MmapProt, flags: MmapFlags, fd: usize, offset: usize) -> isize{
+bitflags! {
+    /// The flags bit-mask argument may be 0, or include the following flags
+    pub struct MremapFlags: i32 {
+        ///  By default, if there is not sufficient space to expand a mapping at its current location, then mremap()
+        ///  fails.   If  this flag is specified, then the kernel is permitted to relocate the mapping to a new vir‐
+        ///  tual address, if necessary.  If the mapping is relocated, then absolute pointers into the  old  mapping
+        ///  location become invalid (offsets relative to the starting address of the mapping should be employed).
+        const MAYMOVE    = 1 << 0;
+        /// This  flag  serves a similar purpose to the MAP_FIXED flag of mmap(2).  If this flag is specified, then
+        /// mremap() accepts a fifth argument, void *new_address, which specifies a page-aligned address  to  which
+        /// the  mapping  must  be  moved.   Any previous mapping at the address range specified by new_address and
+        /// new_size is unmapped.
+        /// 
+        /// If MREMAP_FIXED is specified, then MREMAP_MAYMOVE must also be specified.
+        const FIXED      = 1 << 1;
+        /// This flag, which must be used in conjunction with MREMAP_MAYMOVE, remaps a mapping to a new address but
+        /// does not unmap the mapping at old_address.
+        /// 
+        /// The MREMAP_DONTUNMAP flag can be used only with private anonymous  mappings  (see  the  description  of
+        /// MAP_PRIVATE and MAP_ANONYMOUS in mmap(2)).
+        /// 
+        /// After  completion,  any access to the range specified by old_address and old_size will result in a page
+        /// fault.  The page fault will be handled by a userfaultfd(2) handler if the address is in a range  previ‐
+        /// ously registered with userfaultfd(2).  Otherwise, the kernel allocates a zero-filled page to handle the
+        /// fault.
+        /// 
+        /// The  MREMAP_DONTUNMAP  flag  may  be used to atomically move a mapping while leaving the source mapped.
+        /// See NOTES for some possible applications of MREMAP_DONTUNMAP.
+        const DONTUNMAP  = 1 << 2;
+    }
+}
+
+pub fn mmap(addr: usize, len: usize, prot: MmapProt, flags: MmapFlags, fd: usize, offset: usize) -> isize {
     sys_mmap(addr, len, prot.bits, flags.bits, fd, offset)
+}
+
+pub fn mremap(old_addr: usize, old_size: usize, new_size: usize, flags: MremapFlags, new_addr:usize) -> isize {
+    sys_mremap(old_addr, old_size, new_size, flags.bits, new_addr)
 }

@@ -126,6 +126,8 @@ pub mod sche;
 pub mod sys_error;
 /// syscall concerning network
 pub mod net;
+/// ipc
+pub mod ipc;
 use fatfs::info;
 pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};

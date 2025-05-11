@@ -92,6 +92,19 @@ impl From<MmapProt> for MapPerm {
     }
 }
 
+/// ipc private
+pub const IPC_PRIVATE: i32 = 0;
+
+bitflags! {
+    /// resource get request flags
+    struct ShmFlags: i32 {
+        /// create if key is nonexistent
+        const IPC_CREAT = 00001000;
+        /// fail if key exists
+        const IPC_EXCL  = 00002000;
+    }
+}
+
 
 /// syscall mmap
 pub fn sys_mmap(
@@ -183,9 +196,14 @@ pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
 
 /// syscall
 pub fn sys_mremap(
-    old_addr: VirtAddr, old_size: usize, new_size: usize, 
+    old_addr: VirtAddr, mut old_size: usize, mut new_size: usize, 
     flags: i32, new_address: usize
 ) -> SysResult {
+    if old_addr.page_offset() != 0 {
+        return Err(SysError::EINVAL);
+    }
+    old_size = (old_size - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE);
+    new_size = (new_size - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE);
     let flags = MremapFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
     if (flags.contains(MremapFlags::FIXED) | flags.contains(MremapFlags::DONTUNMAP)) && !flags.contains(MremapFlags::MAYMOVE) {
         return Err(SysError::EINVAL);
@@ -195,6 +213,9 @@ pub fn sys_mremap(
     let vm_space = task.vm_space.clone();
     let mut vm = vm_space.lock();
     let old_area = vm.get_area_view(old_addr).ok_or(SysError::EINVAL)?;
+    if old_area.range_va.end.0 - old_addr.0 < old_size {
+        return Err(SysError::EINVAL);
+    }
     if old_area.vma_type != UserVmAreaType::Mmap {
         return Err(SysError::EINVAL);
     }
@@ -208,13 +229,13 @@ pub fn sys_mremap(
             let mut old_area = vm.unmap(old_addr, old_size)?;
             old_area.shrink(old_size - new_size);
             vm.push_area(old_area, None);
-            return Ok(0);
+            return Ok(old_size as isize);
         }
         if vm.check_free(old_addr + old_size, new_size-old_size).is_ok() {
             let mut old_area = vm.unmap(old_addr, old_size)?;
             old_area.extend(new_size - old_size);
             vm.push_area(old_area, None);
-            return Ok(0);
+            return Ok(old_size as isize);
         }
         if flags.is_empty() {
             return Err(SysError::ENOMEM);
@@ -242,11 +263,11 @@ pub fn sys_mremap(
             new_addr, new_size, old_area.map_perm, old_area.mmap_flags, None
         )?
     };
-
-    let mut old_area = vm.unmap(old_addr, old_size)?;
-    let new_area = vm.get_area_mut(new_addr).unwrap();
-    old_area.move_frames_to(new_area);
     
+    let mut new_area = vm.unmap(new_addr, new_size).unwrap();
+    let mut old_area = vm.unmap(old_addr, old_size)?;
+    old_area.move_frames_to(&mut new_area);
+    vm.push_area(new_area, None);
     if flags.contains(MremapFlags::DONTUNMAP) {
         vm.push_area(old_area, None);
     }

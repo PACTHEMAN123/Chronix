@@ -28,6 +28,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_MUNMAP: usize = 215;
+const SYSCALL_MREMAP: usize = 216;
 const SYSCALL_MMAP: usize = 222;
 
 #[cfg(target_arch="riscv64")]
@@ -207,4 +208,8 @@ pub fn sys_recvfrom(sockfd: i32, buf: *mut u8, len: usize, flags: i32, src_addr:
 
 pub fn sys_mmap(addr: usize, len: usize, prot: i32, flags: i32, fd: usize, offset: usize) -> isize {
     syscall(SYSCALL_MMAP, [addr, len, prot as _, flags as _, fd, offset])
+}
+
+pub fn sys_mremap(old_addr: usize, old_size: usize, new_size: usize, flags: i32, new_addr:usize) -> isize {
+    syscall(SYSCALL_MREMAP, [old_addr, old_size, new_size, flags as _, new_addr, 0])
 }
