@@ -2,7 +2,7 @@
 PHONY_TARGET := 
 
 PHONY_TARGET += all
-all: kernel-rv kernel-la disk-img
+all: disk-img kernel-rv kernel-la 
 
 PHONY_TARGET += setup
 setup:
