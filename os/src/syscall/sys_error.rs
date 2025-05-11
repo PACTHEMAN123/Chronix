@@ -105,6 +105,7 @@ pub enum SysError {
     /// The socket is nonblocking and the connection cannot be completed
     /// immediately.(connect.2)
     EINPROGRESS = 115,
+    EOWNERDIED = 130,
 }
 
 impl SysError {

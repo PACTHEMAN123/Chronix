@@ -3,6 +3,7 @@ use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32,
 use alloc::vec::Vec;
 use hal::{addr::{PhysAddr, VirtAddr}, println};
 use hashbrown::HashMap;
+use log::info;
 use smoltcp::time;
 
 use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
@@ -62,6 +63,7 @@ pub async fn sys_futex(
     
     match futex_op {
         FutexOp::Wait | FutexOp::WaitBitset => {
+            // info!("[sys_futex] wait at {:#x}", uaddr as *const _ as usize);
             let res = { 
                 uaddr.load(Ordering::Acquire)
             };
@@ -112,15 +114,18 @@ pub async fn sys_futex(
                 if rem.is_zero() {
                     futex_manager().remove_waiter(&key, task.tid());
                     task.set_running();
+                    log::info!("[sys_futex] Woken by timeout");
                     return Err(SysError::ETIMEOUT);
                 }
             }
+            
             if task.with_sig_manager(|sig| sig.bitmap.contains(wake_up_sigs)) {
                 log::info!("[sys_futex] Woken by signal");
                 futex_manager().remove_waiter(&key, task.tid());
                 task.set_running();
                 return Err(SysError::EINTR);
             }
+            // log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
             task.set_running();
             Ok(0)
         }
@@ -467,9 +472,11 @@ impl FutexManager {
             let max_count = n as usize;
 
             let mut i = 0;
-            while i < waiters.len() && count < max_count {
-                if (waiters[i].mask & mask) != 0 {
+            let len = waiters.len();
+            while i < len && count < max_count {
+                if (waiters[len - 1 - i].mask & mask) != 0 {
                     let waiter = waiters.remove(i);
+                    // log::info!("[futex_wake] {:?} has been woken", waiter);
                     waiter.wake();
                     count += 1;
                 } else {
@@ -514,8 +521,6 @@ impl FutexManager {
         Ok(n as isize)
     }
 }
-
-
 
 /// Per-lock list entry - embedded in user-space locks, somewhere close
 /// to the futex field. (Note: user-space uses a double-linked list to
@@ -576,15 +581,10 @@ pub fn sys_get_robust_list(
     } else {
         current_task().cloned().unwrap()
     };
-    if !task.is_leader() {
-        return Err(SysError::ESRCH);
+    unsafe {
+        head_ptr.write(task.robust.exclusive_access().0);
+        len_ptr.write(size_of::<RobustListHead>());
     }
-    task.with_robust(|r| {
-        unsafe {
-            head_ptr.write(r.0);
-            len_ptr.write(size_of::<RobustListHead>());
-        }
-    });
     Ok(0)
 }
 
@@ -595,8 +595,7 @@ pub fn sys_set_robust_list(head: *mut RobustListHead, len: usize) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let task = current_task().cloned().unwrap();
-    task.with_mut_robust(|r| {
-        r.0 = head;
-    });
+    info!("[sys_set_robust_list] set task {} robust to {:#x}", task.gettid(), head as usize);
+    task.robust.exclusive_access().0 = head;
     Ok(0)
 }
