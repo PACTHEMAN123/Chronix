@@ -14,7 +14,7 @@ endif
 
 # configs
 USER_APPS_DIR := ./user/src/bin
-USER_TARGET_DIR := ./user/target/$(USER_TARGET)/$(USER_MODE)
+USER_TARGET_DIR := ./target/$(USER_TARGET)/$(USER_MODE)
 USER_APPS := $(wildcard $(USER_APPS_DIR)/*.rs)
 USER_ELFS := $(patsubst $(USER_APPS_DIR)/%.rs, $(USER_TARGET_DIR)/%, $(USER_APPS))
 

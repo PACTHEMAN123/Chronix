@@ -42,13 +42,13 @@ else ifeq ($(ARCH), loongarch64)
 KERNEL_ENTRY_PA := 0x1c000000
 endif
 
-KERNEL_ELF := os/target/$(KERNEL_TARGET)/$(KERNEL_MODE)/os
+KERNEL_ELF := ./target/$(KERNEL_TARGET)/$(KERNEL_MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := $(KERNEL_ELF).asm
 
 # kernel in binary
-$(KERNEL_BIN): kernel
-	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
+kernel-bin: kernel
+	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
 # kernel in elf
 kernel: dumpdtb
@@ -60,9 +60,9 @@ kernel: dumpdtb
 	@cp -r os/cargo os/.cargo
 	@cp -r hal/cargo hal/.cargo
 ifeq ($(KERNEL_FEATURES), ) 
-	@cd os && CARGO_TARGET_DIR=target cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG)
+	@cd os && cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG)
 else
-	@cd os && CARGO_TARGET_DIR=target cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG) --features "$(KERNEL_FEATURES)"
+	@cd os && cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm os/src/linker.ld
 	$(call success, "kernel $(KERNEL_ELF) finish building")
@@ -81,4 +81,4 @@ disasm-vim: kernel
 fmt:
 	cd os ; cargo fmt;  cd ..
 
-.PHONY: kernel disasm disasm-vim fmt $(KERNEL_BIN)
+.PHONY: kernel disasm disasm-vim fmt kernel-bin

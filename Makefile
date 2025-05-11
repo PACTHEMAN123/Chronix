@@ -12,13 +12,13 @@ setup:
 
 PHONY_TARGET += kernel-rv
 kernel-rv: setup
-	make -f Makefile.sub os/target/riscv64gc-unknown-none-elf/release/os.bin ARCH=riscv64
-	cp os/target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
+	make -f Makefile.sub kernel-bin ARCH=riscv64
+	cp ./target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
 
 PHONY_TARGET += kernel-la
 kernel-la: setup
 	make -f Makefile.sub kernel ARCH=loongarch64
-	cp os/target/loongarch64-unknown-none/release/os ./kernel-la
+	cp ./target/loongarch64-unknown-none/release/os ./kernel-la
 
 PHONY_TARGET += disk-img
 disk-img: setup
@@ -33,6 +33,7 @@ PHONY_TARGET += run-la
 run-la: kernel-la
 	make -f Makefile.sub run ARCH=loongarch64
 
+# replace the GDB to yours
 PHONY_TARGET += debug-rv
 debug-rv: kernel-rv
 	make -f Makefile.sub debug ARCH=riscv64 GDB=gdb-multiarch
