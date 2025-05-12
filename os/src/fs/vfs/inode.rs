@@ -102,7 +102,7 @@ pub trait Inode {
         todo!()
     }
     /// resize the current inode
-    fn truncate(&self, _size: u64) -> Result<usize, i32> {
+    fn truncate(&self, _size: usize) -> Result<usize, SysError> {
         todo!()
     }
     /// get attributes of a file

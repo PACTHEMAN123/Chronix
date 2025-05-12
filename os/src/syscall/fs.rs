@@ -820,6 +820,15 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
     Ok(0)
 }
 
+/// syscall: ftruncate
+pub fn sys_ftruncate(fildes: usize, length: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|f| f.get_file(fildes))?;
+    log::info!("[sys_ftruncate] fd {} truncate size to {}", fildes, length);
+    file.inode().unwrap().truncate(length)?;
+    Ok(0)
+}
+
 
 /// at helper:
 /// since many "xxxat" type file system syscalls will use the same logic of getting dentry,

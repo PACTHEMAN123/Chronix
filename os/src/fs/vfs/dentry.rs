@@ -231,7 +231,7 @@ impl dyn Dentry {
             }
 
             let mode = current.inode().unwrap().inode_inner().mode;
-
+            // log::info!("[walk] mode {:?}", mode);
             if mode.contains(InodeMode::LINK) {
                 // follow to the next
                 let path =  current.inode().unwrap().readlink()?;
