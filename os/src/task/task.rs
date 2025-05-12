@@ -540,7 +540,7 @@ impl TaskControlBlock {
                 ).unwrap();
             let key = FutexHashKey::Shared { paddr };
             if futex_manager().wake(&key, 1).is_ok() {
-                info!("[handle_zombie] successfully wake: {:?}", key);
+                // info!("[handle_zombie] successfully wake: {:?}", key);
             }
         } else {
             let key = FutexHashKey::Private {
@@ -548,7 +548,7 @@ impl TaskControlBlock {
                 vaddr: addr.into()
             };
             if futex_manager().wake(&key, 1).is_ok() {
-                info!("[handle_zombie] successfully wake: {:?}", key);
+                // info!("[handle_zombie] successfully wake: {:?}", key);
             }
         }
     }
