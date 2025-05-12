@@ -8,7 +8,7 @@ use hal::instruction::{Instruction, InstructionHal};
 use xmas_elf::program::Flags;
 
 use crate::{
-    processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
+    processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
 };
 use super::{SysError, SysResult};
 /// get current time of day
@@ -78,12 +78,21 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
             let cpu_time = user_time + kernel_time;
             unsafe { ts_ptr.write(cpu_time.into()); }
         }
-        5 => {
-            log::warn!("[sys_clock_gettime] unsupported clockid{}", clock_id);
-            return Err(SysError::EINTR);
+        CLOCK_REALTIME_COARSE => {
+            let current = get_current_time_duration();
+            unsafe {
+                ts_ptr.write((CLOCK_DEVIATION[CLOCK_REALTIME] + current).into());
+            }
+        }
+        CLOCK_MONOTONIC_COARSE => {
+            let current = get_current_time_duration();
+            unsafe {
+                ts_ptr.write((CLOCK_DEVIATION[CLOCK_MONOTONIC] + current).into());
+            }
         }
         _ => {
-            panic!("unsupported clock id {}", clock_id);
+            log::warn!("[sys_clock_gettime] unsupported clockid {}", clock_id);
+            return Err(SysError::EINVAL);
         }
     }
     Ok(0)

@@ -25,5 +25,18 @@ pub const CLOCK_PROCESS_CPUTIME_ID: usize = 2;
 /// On Linux, this clock is not settable.
 pub const CLOCK_THREAD_CPUTIME_ID: usize = 3;
 
+/// Similar to CLOCK_MONOTONIC, but provides access to a raw hardware-based time 
+/// that is not subject to NTP adjustments 
+/// or the incremental adjustments performed by adjtime(3).
+pub const CLOCK_MONOTONIC_RAW: usize = 4;
+
+/// A faster but less precise version of CLOCK_REALTIME. 
+/// Use when you need very fast, but not fine-grained timestamps.
+pub const CLOCK_REALTIME_COARSE: usize = 5;
+
+/// A faster but less precise version of CLOCK_MONOTONIC. 
+/// Use when you need very fast, but not fine-grained timestamps.
+pub const CLOCK_MONOTONIC_COARSE: usize = 6;
+
 /// global clocks
 pub static mut CLOCK_DEVIATION: [Duration; SUPPORT_CLOCK_NUM] = [Duration::ZERO; SUPPORT_CLOCK_NUM];

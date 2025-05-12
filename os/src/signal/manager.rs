@@ -73,10 +73,19 @@ impl SigManager {
         }
         
     }
+
     /// check if there is any expected SigInfo in the pending_sigs
+    /// if found, return the first match
     pub fn check_pending(&mut self, expected: SigSet) -> Option<SigInfo> {
         let x = self.bitmap & expected;
         if x.is_empty() {
+            // no expected standard signal found
+            // check real-time signals
+            for (&signo, queue) in self.pending_rt_sigs.iter() {
+                if x.contain_sig(signo) {
+                    return queue.front().cloned()
+                }
+            }
             return None;
         }
         for i in 0..self.pending_sigs.len() {
@@ -87,10 +96,20 @@ impl SigManager {
         // log::warn!("[SigManager] check_pending failed, should not happen");
         None
     }
+
     /// bool flag to check if there is any pending signal expected
-    /// TODO: add check for real-time signal
+    /// if exist, return true
     pub fn check_pending_flag(&self, expected: SigSet) -> bool {
-        !(expected & self.bitmap).is_empty()
+        let x = self.bitmap & expected;
+        if x.is_empty() {
+            for (&signo, _) in self.pending_rt_sigs.iter() {
+                if x.contain_sig(signo) {
+                    return true
+                }
+            }
+            return false
+        }
+        true
     }
     /// signal manager set signal action
     pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
