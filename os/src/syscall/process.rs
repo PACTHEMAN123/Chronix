@@ -116,7 +116,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult {
 /// set_tid_address() always returns the caller's thread ID.
 /// set_tid_address() always succeeds.
 pub fn sys_set_tid_address(tid_ptr: usize) -> SysResult {
-    let _sum_guard = SumGuard::new();
+    info!("set tid address: {tid_ptr:#x}");
     let task = current_task().unwrap().clone();
     task.tid_address().clear_child_tid = Some(tid_ptr);
     Ok(task.tid() as isize)
@@ -158,14 +158,10 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     let _sum_guard = SumGuard::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
         unsafe {
-            (parent_tid.0 as *mut usize).write_volatile(new_tid);
+            (parent_tid.0 as *mut u32).write_volatile(new_tid as u32);
         }
     }
-    #[cfg(target_arch = "riscv64")]
     if flags.contains(CloneFlags::CHILD_SETTID) {
-        unsafe  {
-            (child_tid.0 as *mut usize).write_volatile(new_tid);
-        }
         new_task.tid_address().set_child_tid = Some(child_tid.0);
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {

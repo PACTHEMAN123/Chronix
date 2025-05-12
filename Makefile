@@ -38,6 +38,10 @@ PHONY_TARGET += debug-rv
 debug-rv: kernel-rv
 	make -f Makefile.sub debug ARCH=riscv64 GDB=gdb-multiarch
 
+PHONY_TARGET += debug-la
+debug-la: kernel-la
+	make -f Makefile.sub debug ARCH=loongarch64 GDB=loongarch64-linux-gnu-gdb
+
 PHONY_TARGET += clean
 clean:
 	make -f Makefile.sub clean ARCH=loongarch64
