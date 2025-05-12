@@ -647,14 +647,17 @@ impl TaskControlBlock {
 
     /// 
     pub fn handle_zombie(self: &Arc<Self>){
-        if let Some(addr) = self.tid_address_ref().clear_child_tid {
-            // log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
-            let _sum_guard = SumGuard::new();
-            unsafe {
-                &*(addr as *const AtomicU32)
-            }.store(0, Ordering::Release);
-            self.futex_wake(addr, false);
-            self.futex_wake(addr, true);
+        match self.tid_address_ref().clear_child_tid {
+            Some(addr) if addr != 0 && (addr & 3) == 0 => {
+                log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
+                let _sum_guard = SumGuard::new();
+                unsafe {
+                    &*(addr as *const AtomicU32)
+                }.store(0, Ordering::Release);
+                self.futex_wake(addr, false);
+                self.futex_wake(addr, true);
+            }
+            _ => {}
         }
         self.exit_robust_list();
     

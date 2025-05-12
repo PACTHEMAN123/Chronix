@@ -185,6 +185,7 @@ pub async fn sys_futex(
             Ok(n_woke)
         }
         FutexOp::WakeOp => {
+            info!("[sys_futex] wake op");
             let val2 = timeout.0 as u32;
             let op = (val3 >> 28) & 0xF;
             let cmp = (val3 >> 24) & 0xF;

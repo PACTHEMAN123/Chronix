@@ -70,6 +70,8 @@ endif
 
 # debug: using tmux
 debug: build
+	$(call building, "cp $(DISK_IMG) to $(DISK_IMG_COPY)")
+	@cp $(DISK_IMG) $(DISK_IMG_COPY)
 	@tmux new-session -d \
 		"$(QEMU) $(QEMU_ARGS) $(QEMU_RUN_ARGS) -s -S" && \
 		tmux split-window -h "$(GDB) -ex 'file $(KERNEL_ELF)' -ex 'set arch $(GDB_ARCH)' -ex 'target remote localhost:1234'" && \

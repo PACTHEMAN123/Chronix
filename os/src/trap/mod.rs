@@ -194,7 +194,6 @@ fn kernel_trap_handler() {
                         match res {
                             Ok(()) => {},
                             Err(()) => {
-                                // todo: don't panic, kill the task
                                 panic!(
                                     "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
                                 );
