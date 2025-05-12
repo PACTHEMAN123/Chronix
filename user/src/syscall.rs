@@ -114,16 +114,16 @@ pub fn sys_get_time() -> isize {
 }
 
 pub fn sys_getpid() -> isize {
-    syscall(SYSCALL_GETPID, [0, 0, 0,0,0,0])
+    syscall(SYSCALL_GETPID, [0, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_fork() -> isize {
-    syscall(SYSCALL_CLONE, [0, 0, 0,0,0,0])
+    syscall(SYSCALL_CLONE, [0, 0, 0, 0, 0, 0])
 }
 pub fn sys_clone(flags: usize, stack: usize, tls: usize) -> isize {
     syscall(
         SYSCALL_CLONE,
-        [flags, stack, tls,0,0,0], 
+        [flags, stack, tls, 0, 0, 0], 
     )
 }
 
