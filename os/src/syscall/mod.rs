@@ -64,6 +64,7 @@ const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_TKILL: usize = 130;
 const SYSCALL_TGKILL: usize = 131;
+const SYSCALL_RT_SIGSUSPEND: usize = 133;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_RT_SIGTIMEDWAIT: usize = 137;
@@ -202,6 +203,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_TKILL => sys_tkill(args[0] as isize, args[1] as i32),
         SYSCALL_TGKILL => sys_tgkill( args[0] as isize, args[1] as isize, args[2] as i32),
+        SYSCALL_RT_SIGSUSPEND => sys_rt_sigsuspend(args[0]).await,
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(args[0] as i32, args[1] as *const SigAction, args[2] as *mut SigAction),
         SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1] as *const u32, args[2] as *mut SigSet),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),

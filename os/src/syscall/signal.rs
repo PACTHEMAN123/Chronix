@@ -287,6 +287,55 @@ pub async fn sys_rt_sigtimedwait(
         return Err(SysError::EAGAIN);
     }
 }
+
+/// syscall: rt_sigsuspend
+/// temporarily replaces the signal mask of the calling thread with the mask
+/// given by mask and then suspends the thread until delivery of a signal
+/// whose action is to invoke a signal handler or to terminate a process
+///
+/// If the signal terminates the process, then sigsuspend() does not return.
+/// If the signal is caught, then sigsuspend() returns after the signal
+/// handler returns, and the signal mask is restored to the state before
+/// the call to sigsuspend().
+///
+/// It is not possible to block SIGKILL or SIGSTOP; specifying these signals
+/// in mask, has no effect on the thread's signal mask.
+/// sigsuspend() always returns -1, normally with the error EINTR.
+pub async fn sys_rt_sigsuspend(mask_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let mut mask = unsafe {
+        Instruction::set_sum();
+        *(mask_ptr as *const SigSet)
+    };
+    log::info!("[sys_rt_sigsuspend] task {} use mask {:?} suspend", task.tid(), mask);
+    mask.remove(SigSet::SIGSTOP | SigSet::SIGKILL);
+    // replace the signal mask using given mask
+    let mut oldmask = SigSet::empty();
+    task.with_mut_sig_manager(|sig_manager| {
+        oldmask = sig_manager.blocked_sigs;
+        sig_manager.blocked_sigs = mask
+    });
+    // TODOS: is the logic here correct?
+    let invoke_sigs = task.with_sig_manager(|s| s.bitmap);
+    task.with_mut_sig_manager(|sig_manager| {
+        if sig_manager.check_pending_flag(mask | invoke_sigs) {
+            Err(SysError::EINTR)
+        } else {
+            sig_manager.wake_sigs = mask | invoke_sigs;
+            Ok(())
+        }
+    })?;
+    task.set_interruptable();
+    suspend_now().await;
+    // restore mask
+    task.with_mut_sig_manager(|sig_manager| {
+        sig_manager.blocked_sigs = oldmask
+    });
+    task.set_running();
+    Err(SysError::EINTR)
+}
+
+
 /// tkill() is an obsolete predecessor to tgkill().  It allows only
 ///        the target thread ID to be specified, which may result in the
 ///        wrong thread being signaled if a thread terminates and its thread
