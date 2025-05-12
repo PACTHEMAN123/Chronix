@@ -16,7 +16,7 @@ use crate::processor::schedule::TaskLoadTracker;
 use crate::sync::mutex::spin_mutex::MutexGuard;
 use crate::sync::mutex::{MutexSupport, SpinNoIrq, SpinNoIrqLock};
 use crate::sync::UPSafeCell;
-use crate::syscall::futex::{futex_manager, FutexHashKey, RobustList, RobustListHead, FUTEX_OWNER_DIED, FUTEX_WAITERS};
+use crate::syscall::futex::{futex_manager, FutexHashKey, RobustList, RobustListHead, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
@@ -45,7 +45,7 @@ use virtio_drivers::PAGE_SIZE;
 use core::any::Any;
 use core::arch::global_asm;
 use core::ops::Deref;
-use core::ptr::null_mut;
+use core::ptr::{null, null_mut};
 use core::sync::atomic::AtomicU32;
 use core::time::Duration;
 use core::{
@@ -113,7 +113,7 @@ pub struct TaskControlBlock {
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
     /// Futexes used by the task.
-    pub robust: Shared<SendWrapper<*mut RobustListHead>>,
+    pub robust: UPSafeCell<SendWrapper<*mut RobustListHead>>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -177,8 +177,7 @@ impl TaskControlBlock {
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
         itimers: [ITimer;3],
-        elf: Option<Arc<dyn File>>,
-        robust: SendWrapper<*mut RobustListHead>
+        elf: Option<Arc<dyn File>>
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -340,7 +339,7 @@ impl TaskControlBlock {
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
-            robust: new_shared(SendWrapper::new(null_mut())),
+            robust: UPSafeCell::new(SendWrapper::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -508,7 +507,7 @@ impl TaskControlBlock {
             cwd,
             elf: self.elf.clone(),
             itimers,
-            robust: new_shared(SendWrapper::new(null_mut())),
+            robust: UPSafeCell::new(SendWrapper::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
             #[cfg(feature = "smp")]
@@ -530,58 +529,135 @@ impl TaskControlBlock {
         TASK_MANAGER.add_task(&task_control_block);
         task_control_block
     }
-    /// 
-    pub fn handle_zombie(self: &Arc<Self>){
 
-        fn wake(task: &Arc<TaskControlBlock>, addr: usize) {
+    fn futex_wake(self: &Arc<Self>, addr: usize, shared: bool) {
+        if shared {
             let paddr = 
                 translate_uva_checked(
-                    &mut task.vm_space.lock(), 
+                    &mut self.vm_space.lock(), 
                     VirtAddr::from(addr), 
                     PageFaultAccessType::WRITE
                 ).unwrap();
-            unsafe { paddr.get_ptr::<i32>().write(0); }
             let key = FutexHashKey::Shared { paddr };
-            let _ = futex_manager().wake(&key, 1);
+            if futex_manager().wake(&key, 1).is_ok() {
+                info!("[handle_zombie] successfully wake: {:?}", key);
+            }
+        } else {
             let key = FutexHashKey::Private {
-                mm: task.get_raw_vm_ptr(),
+                mm: self.get_raw_vm_ptr(),
                 vaddr: addr.into()
             };
-            let _ = futex_manager().wake(&key, 1);
-        }
-
-        if let Some(addr) = self.tid_address_ref().clear_child_tid {
-            // log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
-            wake(self, addr);
-        }
-        self.with_robust(|robust| {
-            if robust.0.is_null() {
-                return;
+            if futex_manager().wake(&key, 1).is_ok() {
+                info!("[handle_zombie] successfully wake: {:?}", key);
             }
-            let _sum_guard = SumGuard::new();
-            let robust_list_head = unsafe { &mut *robust.0 };
-            let mut cur = robust_list_head.list.next;
+        }
+    }
 
-            fn exit_robust_list(task: &Arc<TaskControlBlock>, robust_list: *mut RobustList, offset: usize) {
-                let addr = robust_list as usize + offset;
-                log::info!("[exit_robust_list] robust_list {:#x}, offset {:#x}, addr {:#x}", robust_list as usize, offset, addr);
-                let futex = addr as *const AtomicU32;
-                let futex = unsafe { & *futex };
-                let oldval = futex.fetch_or(FUTEX_OWNER_DIED, Ordering::AcqRel);
-                if oldval & FUTEX_WAITERS != 0 {
-                    wake(task, addr);
+    fn handle_futex_death(self: &Arc<Self>, addr: usize, pi: bool, pending_op: bool) -> Result<(), ()> {
+        
+        if addr % align_of::<AtomicU32>() != 0 {
+            log::warn!("[handle_futex_death] unaligned futex addr");
+            return Err(());
+        }
+
+        let futex = unsafe {
+            &*(addr as *const AtomicU32)
+        };
+
+        let mut old_val = futex.load(Ordering::Acquire);
+        let mut new_val;
+        let mut owner;
+        loop {
+            owner = old_val & FUTEX_TID_MASK;
+            if pending_op && !pi && owner == 0 {
+                info!("[handle_futex_death] pending_op: {addr:#x}");
+                self.futex_wake(addr, true);
+                return Ok(());
+            }
+            if owner as usize != self.gettid() {
+                return Ok(());
+            }
+            new_val = (old_val & FUTEX_WAITERS) | FUTEX_OWNER_DIED;
+            match futex.compare_exchange(old_val, new_val, Ordering::AcqRel, Ordering::Relaxed) {
+                Ok(_) => break,
+                Err(v) => old_val = v,
+            }
+        }
+        info!("kernel set futex {:#x} form {:#x} to {:#x}", addr, old_val, new_val);
+        if !pi & (old_val & FUTEX_WAITERS != 0) {
+            self.futex_wake(addr, true);
+        }
+        Ok(())
+    }
+
+    fn exit_robust_list(self: &Arc<Self>) {
+        let _sum_guard = SumGuard::new();
+        // head: 用户空间双重指针
+        fn fetch_robust_entry(head: *const RobustList) -> (*const RobustList, bool) {
+            let uentry = head as usize;
+            let ret = (
+                (uentry & !1) as *const _, 
+                uentry & 1 != 0
+            );
+            return ret;
+        }
+
+        if self.robust.exclusive_access().0.is_null() || 
+            !self.robust.exclusive_access().0.is_aligned() {
+            return;
+        }
+
+        let head = unsafe {
+            &*self.robust.exclusive_access().0
+        };
+        
+        let (mut entry, mut pi) = fetch_robust_entry(head.list.next as *const _);
+        let futex_offset = head.futex_offset;
+        let (pending, pip) = fetch_robust_entry(head.list_op_pending as *const _);
+        
+        let mut next_entry: *const RobustList;
+        let mut next_pi: bool;
+        let mut limit: usize = 2048;
+        while entry != &head.list {
+            (next_entry, next_pi) = unsafe { fetch_robust_entry((*entry).next as *const _) };
+            if entry != pending {
+                // info!("[exit_robust_list] entry: {:#x} futex: {:#x}", entry as usize, entry as usize + futex_offset);
+                if self.handle_futex_death(entry as usize + futex_offset, pi, false).is_err() {
+                    return;
                 }
             }
-
-            if !robust_list_head.list_op_pending.is_null() {
-                exit_robust_list(self, robust_list_head.list_op_pending, robust_list_head.futex_offset);
+            if next_entry.is_null() || !next_entry.is_aligned() {
+                return;
             }
-
-            while cur != &mut robust_list_head.list && !cur.is_null() {
-                exit_robust_list(self, cur, robust_list_head.futex_offset);
-                cur = unsafe { (*cur).next };
+            entry = next_entry;
+            pi = next_pi;
+            limit -= 1;
+            if limit == 0 {
+                break;
             }
-        });
+        }
+        if !pending.is_null() {
+            if self.handle_futex_death(pending as usize + futex_offset, pip, true).is_err() {
+                return;
+            }
+        }
+
+    }
+
+
+    /// 
+    pub fn handle_zombie(self: &Arc<Self>){
+        if let Some(addr) = self.tid_address_ref().clear_child_tid {
+            // log::info!("[handle_zombie] clear_child_tid: {:x}", addr);
+            let _sum_guard = SumGuard::new();
+            unsafe {
+                &*(addr as *const AtomicU32)
+            }.store(0, Ordering::Release);
+            self.futex_wake(addr, false);
+            self.futex_wake(addr, true);
+        }
+        self.exit_robust_list();
+    
         let mut thread_group = self.thread_group.lock();
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
         {

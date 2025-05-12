@@ -63,7 +63,7 @@ pub fn exit_current_and_run_next(exit_code: i32)  {
     }
    
     let tid = task.gettid();
-    // println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
+    println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
     if tid == INITPROC_PID {
         println!(
             "[kernel] Initproc process exit with exit_code {} ...",

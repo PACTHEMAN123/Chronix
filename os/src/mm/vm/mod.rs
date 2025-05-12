@@ -5,7 +5,7 @@ use bitflags::bitflags;
 use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 use xmas_elf::{reader::Reader, ElfFile};
 
-use crate::{fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
+use crate::{ipc::sysv, fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
 
 use super::{allocator::{FrameAllocator, SlabAllocator}, FrameTracker, PageTable};
 
@@ -39,23 +39,109 @@ pub enum UserVmAreaType {
     Stack,
     /// file mmap
     Mmap,
-    /// shared memory
-    Shm,
+}
+
+#[allow(missing_docs)]
+#[derive(Clone)]
+pub enum UserVmFile {
+    None,
+    File(Arc<dyn File>),
+    Shm(Arc<sysv::ShmObj>)
+}
+
+#[allow(missing_docs)]
+impl UserVmFile {
+    pub fn is_some(&self) -> bool {
+        match self {
+            Self::None => false,
+            _ => true
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        match self {
+            Self::None => true,
+            _ => false
+        }
+    }
+
+    pub fn unwrap_file(self) -> Arc<dyn File> {
+        match self {
+            Self::File(f) => f,
+            _ => panic!("UserVmFile is not File")
+        }
+    }
+
+    pub fn unwrap_shm(self) -> Arc<sysv::ShmObj> {
+        match self {
+            Self::Shm(shm) => shm,
+            _ => panic!("UserVmFile is not Shm")
+        }
+    }
+
+}
+
+impl From<Option<Arc<dyn File>>> for UserVmFile {
+    fn from(value: Option<Arc<dyn File>>) -> Self {
+        match value {
+            None => Self::None,
+            Some(file) => Self::File(file)
+        }
+    }
+}
+
+impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
+    fn from(value: Option<Arc<sysv::ShmObj>>) -> Self {
+        match value {
+            None => Self::None,
+            Some(shm) => Self::Shm(shm)
+        }
+    }
 }
 
 #[allow(missing_docs, unused)]
 pub struct UserVmArea {
-    range_va: Range<VirtAddr>,
+    pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
     pub map_perm: MapPerm,
-    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+    frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
-    pub file: Option<Arc<dyn File>>,
+    pub file: UserVmFile,
     pub mmap_flags: MmapFlags,
     /// offset in file
     pub offset: usize,
     /// length of file
-    pub len: usize
+    pub len: usize,
+}
+
+#[allow(missing_docs, unused)]
+#[derive(Clone)]
+/// View of User VMA
+pub struct UserVmAreaView {
+    pub range_va: Range<VirtAddr>,
+    pub vma_type: UserVmAreaType,
+    pub map_perm: MapPerm,
+    /// for mmap usage
+    pub file: UserVmFile,
+    pub mmap_flags: MmapFlags,
+    /// offset in file
+    pub offset: usize,
+    /// length of file
+    pub len: usize,
+}
+
+impl From<&UserVmArea> for UserVmAreaView {
+    fn from(value: &UserVmArea) -> Self {
+        Self { 
+            range_va: value.range_va.clone(), 
+            vma_type: value.vma_type, 
+            map_perm: value.map_perm, 
+            file: value.file.clone(), 
+            mmap_flags: value.mmap_flags, 
+            offset: value.offset, 
+            len: value.len 
+        }
+    }
 }
 
 #[allow(missing_docs, unused)]
@@ -70,7 +156,7 @@ impl UserVmArea {
             vma_type,
             map_perm,
             frames: BTreeMap::new(),
-            file: None,
+            file: UserVmFile::None,
             mmap_flags: MmapFlags::default(),
             offset: 0,
             len: 0
@@ -81,7 +167,7 @@ impl UserVmArea {
         range_va: Range<VirtAddr>,
         map_perm: MapPerm,
         flags: MmapFlags,
-        file: Option<Arc<dyn File>>,
+        file: UserVmFile,
         offset: usize,
         len: usize,
     ) -> Self {
@@ -212,9 +298,15 @@ pub trait UserVmSpaceHal: Sized {
 
     fn handle_page_fault(&mut self, va: VirtAddr, access_type: PageFaultAccessType) -> Result<(), ()>;
 
-    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> SysResult;
+    fn check_free(&self, va: VirtAddr, len: usize) -> Result<(), ()>;
 
-    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, is_share: bool) -> SysResult;
+    fn get_area_view(&self, va: VirtAddr) -> Option<UserVmAreaView>;
+
+    fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea>;
+
+    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
+
+    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, id: Option<usize>) -> Result<VirtAddr, SysError>;
 
     fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError>;
 

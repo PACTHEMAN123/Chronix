@@ -38,6 +38,7 @@ extern crate alloc;
 extern crate bitflags;
 
 extern crate hal;
+
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::*;
 use mm::{vm::KernVmSpaceHal, KVMSPACE};
@@ -51,6 +52,8 @@ mod devices;
 mod drivers;
 pub mod fs;
 pub mod lang_items;
+/// ipc
+pub mod ipc;
 pub mod mm;
 //pub mod sbi;
 pub mod sync;

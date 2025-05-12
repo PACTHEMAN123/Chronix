@@ -492,6 +492,7 @@ pub fn sys_setsid() -> SysResult {
 /// use of syscall(2).
 pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     // log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
+
     if size > PAGE_SIZE {
         return Err(SysError::E2BIG);
     }
@@ -515,7 +516,7 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     // log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
     sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
 }
-  
+
 //  * @flags:        Flags for the new process.
 //  *                All flags are valid except for CSIGNAL and
 //  *                CLONE_DETACHED.
