@@ -73,6 +73,7 @@ const SYSCALL_SETPGID: usize = 154;
 const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_SETSID: usize = 157;
 const SYSCALL_UNAME: usize = 160;
+const SYSCALL_GETRUSAGE: usize = 165;
 const SYSCALL_UMASK: usize = 166;
 const SYSCALL_GETTIMEOFDAY: usize = 169;
 const SYSCALL_GETPID: usize = 172;
@@ -134,7 +135,7 @@ pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};
 use hal::{addr::VirtAddr, println};
 use io::*;
-use misc::{sys_getrandom, sys_prlimit64, sys_sysinfo};
+use misc::*;
 use mm::{sys_mmap, sys_mprotect, sys_mremap, sys_munmap};
 use net::*;
 pub use process::*;
@@ -224,6 +225,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CLONE3 => sys_clone3(args[0], args[1]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),
+        SYSCALL_GETRUSAGE => sys_getrusage(args[0] as i32, args[1]),
         SYSCALL_EXEC => sys_execve(args[0] , args[1], args[2]).await,
         SYSCALL_BRK => sys_brk(VirtAddr::from(args[0])),
         SYSCALL_MUNMAP => sys_munmap(VirtAddr::from(args[0]), args[1]),

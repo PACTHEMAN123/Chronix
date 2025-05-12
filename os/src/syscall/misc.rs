@@ -6,7 +6,7 @@ use hal::instruction::{Instruction, InstructionHal};
 use strum::FromRepr;
 
 use crate::syscall::SysError;
-use crate::{fs::devfs::urandom::RNG, task::{current_task, manager::TASK_MANAGER}, timer::get_current_time};
+use crate::{fs::devfs::urandom::RNG, task::{current_task, manager::TASK_MANAGER}, timer::{get_current_time,ffi::TimeVal}};
 
 use super::SysResult;
 
@@ -201,5 +201,106 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             }
         }
     }
+    Ok(0)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+pub struct Rusage {
+    /// user CPU time used
+    pub ru_utime: TimeVal,
+    /// system CPU time used
+    pub ru_stime: TimeVal,
+    /// maximum resident set size
+    pub ru_maxrss: usize,
+    /// integral shared memory size
+    pub ru_ixrss: usize,
+    /// integral unshared data size
+    pub ru_idrss: usize,
+    /// integral unshared stack size
+    pub ru_isrss: usize,
+    /// page reclaims (soft page faults)
+    pub ru_minflt: usize,
+    /// page faults (hard page faults)
+    pub ru_majflt: usize,
+    /// swaps
+    pub ru_nswap: usize,
+    /// block input operations
+    pub ru_inblock: usize,
+    /// block output operations
+    pub ru_oublock: usize,
+    /// IPC messages sent
+    pub ru_msgsnd: usize,
+    /// IPC messages received
+    pub ru_msgrcv: usize,
+    /// signals received
+    pub ru_nsignals: usize,
+    /// voluntary context switches
+    pub ru_nvcsw: usize,
+    /// involuntary context switches
+    pub ru_nivcsw: usize,
+}
+
+/// getrusage - get resource usage
+/// getrusage() returns resource usage measures for who, which can be
+///    one of the following:
+///    RUSAGE_SELF
+///           Return resource usage statistics for the calling process,
+///           which is the sum of resources used by all threads in the
+///           process.
+
+///    RUSAGE_CHILDREN
+///           Return resource usage statistics for all children of the
+///           calling process that have terminated and been waited for.
+///           These statistics will include the resources used by
+///           grandchildren, and further removed descendants, if all of
+///           the intervening descendants waited on their terminated
+///           children.
+
+///    RUSAGE_THREAD (since Linux 2.6.26)
+///           Return resource usage statistics for the calling thread.
+///           The _GNU_SOURCE feature test macro must be defined (before
+///           including any header file) in order to obtain the
+///           definition of this constant from <sys/resource.h>.
+const RUSAGE_SELF: i32 = 0;
+const RUSAGE_CHILDREN: i32 = -1;
+const RUSAGE_THREAD: i32 = 1;
+
+/// syscall: getrusage
+pub fn sys_getrusage(who: i32, usage: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let mut res = Rusage::default();
+    match who {
+        RUSAGE_SELF => {
+            let (utime, stime) = task.time_recorder().time_pair();
+            res.ru_utime = utime.into();
+            res.ru_stime = stime.into();
+            unsafe {
+                let usage_ptr = usage as *mut Rusage;
+                usage_ptr.write(res);
+            }
+        }
+        RUSAGE_CHILDREN => {
+            let (c_utime, c_stime) = task.time_recorder().child_time_pair();
+            res.ru_utime = c_utime.into();
+            res.ru_stime = c_stime.into();
+            unsafe {
+                let usage_ptr = usage as *mut Rusage;
+                usage_ptr.write(res);
+            }
+        }
+        RUSAGE_THREAD => {
+            let (utime, stime) = task.time_recorder().time_pair();
+            res.ru_utime = utime.into();
+            res.ru_stime = stime.into();
+            unsafe {
+                let usage_ptr = usage as *mut Rusage;
+                usage_ptr.write(res);
+            }
+        }
+        _ => {
+            return Err(SysError::EINVAL);
+        }
+    } 
     Ok(0)
 }

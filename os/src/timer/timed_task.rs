@@ -46,7 +46,7 @@ impl <F: Future + Send + 'static> Future for TimedTaskFuture<F> {
         match ret {
             Poll::Pending => {
                 if get_current_time_duration() >= this.expire {
-                    log::info!("timed out");
+                    // log::info!("timed out");
                     Poll::Ready(TimedTaskOutput::TimedOut)
                 }
                 else {

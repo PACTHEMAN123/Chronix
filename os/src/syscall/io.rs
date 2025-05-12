@@ -271,7 +271,7 @@ pub async fn sys_pselect6(
             SelectOutput::Output1(output1) => match output1 {
                 TimedTaskOutput::OK(ret) => ret,
                 TimedTaskOutput::TimedOut => {
-                    log::info!("[sys_pselect]: timeout!");
+                    // log::info!("[sys_pselect]: timeout!");
                     readfds.as_mut().map(|fds|fds.clear());
                     writefds.as_mut().map(|fds|fds.clear());
                     exceptfds.as_mut().map(|fds|fds.clear());
