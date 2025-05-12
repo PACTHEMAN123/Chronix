@@ -21,7 +21,7 @@ const SYSCALL_LINKAT: usize = 37;
 const SYSCALL_UMOUNT2: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
 const SYSCALL_STATFS: usize = 43;
-// const SYSCALL_FTRUNCATE: usize = 46;
+const SYSCALL_FTRUNCATE: usize = 46;
 const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_FCHMODAT: usize = 53;
@@ -41,6 +41,7 @@ const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_FSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_SYNC: usize = 81;
+const SYSCALL_FSYNC: usize = 82;
 const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
@@ -157,6 +158,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_LINKAT => sys_linkat(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
         SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as usize),
         SYSCALL_STATFS => sys_statfs(args[0], args[1]),
+        SYSCALL_FTRUNCATE => sys_ftruncate(args[0], args[1]),
         SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
@@ -244,6 +246,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MPROTECE => sys_mprotect(args[0].into(), args[1], args[2] as _),
         SYSCALL_MADSIVE =>  sys_temp(),
         SYSCALL_SYNC => sys_temp(),
+        SYSCALL_FSYNC => sys_temp(),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)

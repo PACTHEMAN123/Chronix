@@ -19,6 +19,7 @@ use crate::{fs::vfs::{Inode, InodeInner}, sync::UPSafeCell};
 
 use super::disk::DiskCursor;
 use super::superblock::FatSuperBlock;
+use super::SysError;
 
 /// fit fat file into inode
 pub struct FatFileInode {
@@ -110,7 +111,7 @@ impl Inode for FatFileInode {
         Ok(buf.len())
     }
 
-    fn truncate(&self, size: u64) -> Result<usize, i32> {
+    fn truncate(&self, size: usize) -> Result<usize, SysError> {
         self.file
             .exclusive_access()
             .inner
@@ -419,34 +420,6 @@ impl Inode for FatDirInode {
     fn remove(&self, name: &str, _mode: InodeMode) -> Result<usize, i32> {
         let _ = self.dir.exclusive_access().inner.remove(name);
         Ok(0)
-    }
-
-    fn cache_read_at(self: Arc<Self>, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn cache_write_at(self: Arc<Self>, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn truncate(&self, _size: u64) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, super::SysError> {
-        panic!()
-    }
-
-    fn readlink(&self) -> Result<String, super::SysError> {
-        panic!()
     }
 }
 

@@ -1,5 +1,7 @@
+use strum::FromRepr;
+
 /// reference: linux/include/uapi/asm-generic/errno.h
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, FromRepr)]
 #[repr(i32)]
 pub enum SysError {
     /// Operation not permitted
@@ -111,6 +113,11 @@ impl SysError {
     /// get the error code as isize
     pub const fn code(self) -> isize {
         self as isize
+    }
+
+    /// get the error from i32
+    pub fn from_i32(e: i32) -> Self {
+        Self::from_repr(e).expect("unknown error")
     }
 }
 

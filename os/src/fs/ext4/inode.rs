@@ -299,17 +299,15 @@ impl Inode for Ext4Inode {
     }
 
     /// Truncate the inode to the given size
-    fn truncate(&self, size: u64) -> Result<usize, i32> {
-        info!("truncate file to size={}", size);
+    fn truncate(&self, size: usize) -> Result<usize, SysError> {
+        log::info!("truncate file to size {}", size);
         let file = self.file.exclusive_access();
         let path = file.get_path();
         let path = path.to_str().unwrap();
-        file.file_open(path, O_RDWR)?;
-
-        let t = file.file_truncate(size);
-
+        file.file_open(path, O_RDWR).expect("file open failed");
+        let t = file.file_truncate(size as _).map_err(|e| SysError::from_i32(e))?;
         let _ = file.file_close();
-        t
+        Ok(t)
     }
 
     /// Create a new inode and return the inode

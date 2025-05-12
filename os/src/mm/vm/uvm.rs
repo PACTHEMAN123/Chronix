@@ -397,7 +397,7 @@ impl UserVmSpace {
         if dentry.state() == DentryState::NEGATIVE {
             return Err(SysError::ENOENT);
         }
-        // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inner().mode);
+        // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inode_inner().mode);
         let dentry = dentry.follow()?;
         // log::info!("follow symlink to {}", dentry.path());
         interp_file = dentry.open(OpenFlags::O_RDWR).unwrap();
