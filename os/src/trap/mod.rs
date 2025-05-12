@@ -117,7 +117,6 @@ pub async fn user_trap_handler() -> bool {
             exit_current_and_run_next(-3);
         }
         TrapType::Timer => {
-            // println!("timer interp");
             crate::timer::timer::TIMER_MANAGER.check();
             #[cfg(feature = "smp")]
             crate::processor::processor::current_processor().update_load_avg();
@@ -204,7 +203,7 @@ fn kernel_trap_handler() {
             }
         }
         TrapType::Timer => {
-            //info!("interrupt: supervisor timer");
+            // info!("interrupt: supervisor timer");
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
         }

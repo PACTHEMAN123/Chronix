@@ -3,8 +3,8 @@
 use core::time::Duration;
 
 use alloc::{boxed::Box, fmt, sync::Arc};
+use fatfs::info;
 use hal::instruction::{Instruction, InstructionHal};
-use log::info;
 use xmas_elf::program::Flags;
 
 use crate::{

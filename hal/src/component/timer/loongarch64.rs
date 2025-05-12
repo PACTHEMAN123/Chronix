@@ -15,7 +15,12 @@ impl TimerHal for Timer {
         counter
     }
     fn set_timer(timer: usize) {
-        register::tcfg::set_init_val(timer);
+        let cur = Timer::read();
+        if cur > timer {
+            register::tcfg::set_init_val(4);
+        } else {
+            register::tcfg::set_init_val((timer - cur + 3) & !3);
+        }
         register::ticlr::clear_timer_interrupt();
         register::tcfg::set_en(true);
         register::tcfg::set_periodic(true);
