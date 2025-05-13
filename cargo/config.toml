@@ -1,3 +1,5 @@
 # set default build target
 [build]
 target = "riscv64gc-unknown-none-elf"
+[profile.release]
+debug = true

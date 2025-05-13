@@ -111,6 +111,18 @@ impl SigManager {
         }
         true
     }
+
+    /// return the signal sets that actions are defined by user
+    pub fn user_define_sets(&self) -> SigSet {
+        let mut ret = SigSet::empty();
+        for i in 0..self.sig_handler.len() {
+            if self.sig_handler[i].is_user {
+                ret.add_sig(i);
+            }
+        }
+        ret
+    }
+
     /// signal manager set signal action
     pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
         if signo == SIGSTOP || signo == SIGKILL {
