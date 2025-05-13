@@ -1,12 +1,13 @@
 use core::{alloc::GlobalAlloc, marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}, usize};
 
-use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, collections::btree_map::BTreeMap, format};
+use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, collections::btree_map::BTreeMap, format, string::ToString};
 use fatfs::info;
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, println, util::mutex::Mutex};
+use range_map::RangeMap;
 
 use crate::{mm::allocator::next_power_of_two, sync::mutex::{spin_mutex::SpinMutex, Spin, SpinNoIrqLock}};
 
-use super::FrameAllocator;
+use super::{FrameAllocator, HeapAllocator};
 
 
 static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator;
@@ -60,9 +61,9 @@ unsafe impl GlobalAlloc for SlabAllocator {
                 break;
             }
         }
-        SLAB_ALLOCATOR_INNER.info();
-        println!("slab block slab cache:");
-        SLAB_BLOCK_SLAB_CACHE.lock().info();
+        // SLAB_ALLOCATOR_INNER.info();
+        // println!("slab block slab cache:");
+        // SLAB_BLOCK_SLAB_CACHE.lock().info();
         return 0 as *mut u8;
     }
 
@@ -174,7 +175,11 @@ impl SlabAllocatorInner {
                 self.cache4096.lock().alloc()
             },
             4097..=8192 => {
-                self.cache8192.lock().alloc()
+                let ptr = self.cache8192.lock().alloc();
+                // if let Some(ptr) = ptr {
+                //     log::info!("alloc ptr: {:#x} layout: {:?}", ptr.as_ptr() as usize, layout);
+                // }
+                ptr
             },
             _ => None
         }
@@ -224,6 +229,7 @@ impl SlabAllocatorInner {
                 self.cache4096.lock().dealloc(ptr);
             },
             4097..=8192 => {
+                // log::info!("dealloc ptr: {:#x} layout: {:?}", ptr.as_ptr() as usize, layout);
                 self.cache8192.lock().dealloc(ptr);
             },
             _ => {}
@@ -299,7 +305,7 @@ impl<const S: usize> SlabBlock<S> {
 
     pub fn floor(mut addr: usize) -> PhysPageNum {
         addr &= !Constant::KERNEL_ADDR_SPACE.start;
-        addr &= !((Self::page_cnt() << Constant::PAGE_SIZE_BITS)-1);
+        addr &= !(Constant::PAGE_SIZE-1);
         PhysAddr(addr).floor()
     }
 
@@ -323,7 +329,7 @@ impl<const S: usize> LinkedNode for SlabBlock<S> {
 
 #[allow(unused, missing_docs)]
 pub struct SlabCache<const S: usize> {
-    blocks: BTreeMap<PhysPageNum, Box::<SlabBlock<S>, SlabBlockSlabAllocator>, FrameAllocator>,
+    blocks: RangeMap<PhysPageNum, Box::<SlabBlock<S>, SlabBlockSlabAllocator>, HeapAllocator>,
     empty_blk_list: LinkedStack<SlabBlock<S>>,
     free_blk_list: LinkedStack<SlabBlock<S>>,
     full_blk_list: LinkedStack<SlabBlock<S>>,
@@ -333,7 +339,7 @@ pub struct SlabCache<const S: usize> {
 impl<const S: usize> SlabCache<S> {
     pub const fn new() -> Self {
         Self {
-            blocks: BTreeMap::new_in(FrameAllocator),
+            blocks: RangeMap::new_in(HeapAllocator),
             empty_blk_list: LinkedStack::new(),
             free_blk_list: LinkedStack::new(),
             full_blk_list: LinkedStack::new(),
@@ -347,7 +353,7 @@ impl<const S: usize> SlabCache<S> {
             } else {
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
-                    super::log2(SlabBlock::<S>::page_cnt())
+                    0
                 )?;
                 let free_nodes_ptr = frames.start.start_addr().get_ptr::<FreeNode<S>>();
 
@@ -358,8 +364,8 @@ impl<const S: usize> SlabCache<S> {
                     head: free_nodes_ptr,
                 };
 
-                self.blocks.insert(frames.start, Box::new_in(blk, SlabBlockSlabAllocator));
-                let blk = self.blocks.get_mut(&frames.start).unwrap();
+                self.blocks.try_insert(frames.clone(), Box::new_in(blk, SlabBlockSlabAllocator)).unwrap();
+                let blk = self.blocks.get_mut(frames.start).unwrap();
                 let free_nodes = unsafe {
                     &mut *slice_from_raw_parts_mut(free_nodes_ptr, SlabBlock::<S>::cap())
                 };
@@ -395,7 +401,7 @@ impl<const S: usize> SlabCache<S> {
         let mut ptr: NonNull<FreeNode<S>> = ptr.cast();
         let addr = ptr.addr().get();
         let ppn = SlabBlock::<S>::floor(addr);
-        let blk = self.blocks.get_mut(&ppn)?;
+        let blk = self.blocks.get_mut(ppn).unwrap();
         let free_node = unsafe { ptr.as_mut() };
         free_node.next = blk.head;
         blk.head = free_node;
@@ -423,7 +429,34 @@ impl<const S: usize> SlabCache<S> {
             let next = blk.next;
             blk.dealloc();
             let ppn = SlabBlock::<S>::floor(blk.head as usize);
-            self.blocks.remove(&ppn).unwrap();
+            let (range, _) = self.blocks.get_key_value(ppn).unwrap();
+            self.blocks.force_remove_one(range);
+            blk_ptr = next;
+        };
+    }
+
+    pub fn info(&mut self) {
+        println!("SlabCache {:#x}", self as *const _ as usize);
+        println!("block cap: {},block page count: {}", SlabBlock::<S>::cap(), SlabBlock::<S>::page_cnt());
+        let mut blk_ptr = self.empty_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Empty Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.free_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Free Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.full_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Full Block {:?}", blk);
             blk_ptr = next;
         };
     }
@@ -629,7 +662,7 @@ impl<const S: usize> SmallSlabCache<S> {
             } else {
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
-                    super::log2(SlabBlock::<S>::page_cnt())
+                    0
                 )?;
                 let blk_ptr = frames.start.start_addr().get_ptr::<SmallSlabBlock<S>>();
                 let blk = unsafe { &mut *blk_ptr };

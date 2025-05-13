@@ -3,8 +3,10 @@
 #![no_std]
 #![no_main]
 #![feature(map_try_insert)]
+#![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 
-use alloc::collections::BTreeMap;
+use alloc::{alloc::{Allocator, Global}, collections::BTreeMap};
 use core::ops::{Add, Range};
 
 extern crate alloc;
@@ -21,11 +23,17 @@ struct Node<U, V> {
 ///
 /// Range is clipped or range is empty.
 #[derive(Clone)]
-pub struct RangeMap<U: Ord + Copy + Add<usize>, V>(BTreeMap<U, Node<U, V>>);
+pub struct RangeMap<U: Ord + Copy + Add<usize>, V, A: Allocator + Clone = Global>(BTreeMap<U, Node<U, V>, A>);
 
-impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
+impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V, Global> {
     pub const fn new() -> Self {
         Self(BTreeMap::new())
+    }
+}
+
+impl<U: Ord + Copy + Add<usize, Output = U>, V, A: Allocator + Clone> RangeMap<U, V, A> {
+    pub const fn new_in(alloc: A) -> Self {
+        Self(BTreeMap::new_in(alloc))
     }
 
     pub fn try_insert(&mut self, range: Range<U>, value: V) -> Result<&mut V, V> {

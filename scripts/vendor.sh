@@ -22,10 +22,11 @@ function vendor() {
 
     echo "[4/4] add default target to $CONFIG_FILE"
     cat >> "$CONFIG_FILE" <<EOF
-
 # set default build target
 [build]
 target = "riscv64gc-unknown-none-elf"
+[profile.release]
+debug = true
 EOF
 
     echo "✅ finish vendor"
@@ -40,6 +41,8 @@ function clean() {
 # set default build target
 [build]
 target = "riscv64gc-unknown-none-elf"
+[profile.release]
+debug = true
 EOF
     rm -rf .cargo
 

@@ -323,12 +323,12 @@ pub async fn sys_rt_sigsuspend(mask_ptr: usize) -> SysResult {
         sig_manager.blocked_sigs = mask
     });
     // TODOS: is the logic here correct?
-    let invoke_sigs = task.with_sig_manager(|s| s.bitmap);
+    let invoke_sigs = task.with_sig_manager(|s| s.user_define_sets());
     task.with_mut_sig_manager(|sig_manager| {
-        if sig_manager.check_pending_flag(mask | invoke_sigs) {
+        if sig_manager.check_pending_flag(!mask | invoke_sigs) {
             Err(SysError::EINTR)
         } else {
-            sig_manager.wake_sigs = mask | invoke_sigs;
+            sig_manager.wake_sigs = !mask | invoke_sigs;
             Ok(())
         }
     })?;
