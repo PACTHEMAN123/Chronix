@@ -6,15 +6,24 @@ use crate::sync::UPSafeCell;
 use alloc::alloc::Allocator;
 use alloc::vec::Vec;
 use bitmap_allocator::{BitAlloc, BitAlloc16M, BitAlloc4K};
-use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, RangePPNHal};
+use buddy_system_allocator::Heap;
+use hal::addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal};
 use hal::allocator::FrameAllocatorHal;
 use hal::constant::{Constant, ConstantsHal};
 use hal::println;
 use log::info;
+use core::alloc::Layout;
 use core::fmt::{self, Debug, Formatter};
 use core::ops::Range;
 use core::ptr::NonNull;
 use lazy_static::*;
+
+trait FrameAllocatorTrait {
+    const DEFAULT: Self;
+    fn init(&mut self, range_pa: Range<PhysAddr>);
+    fn alloc_contiguous(&mut self, size: usize, align_log2: usize) -> Option<Range<PhysPageNum>>;
+    fn dealloc_contiguous(&mut self, range_ppn: Range<PhysPageNum>);
+}
 
 /// Bitmap Frame Allocator, the supported maximum memory space is 64GiB
 struct BitMapFrameAllocator {
@@ -22,23 +31,74 @@ struct BitMapFrameAllocator {
     inner: bitmap_allocator::BitAlloc16M,
 }
 
-impl BitMapFrameAllocator {
-    const fn new() -> Self {
-        BitMapFrameAllocator {
-            range: PhysPageNum(0)..PhysPageNum(0),
-            inner: bitmap_allocator::BitAlloc16M::DEFAULT
-        }
-    }
+impl FrameAllocatorTrait for BitMapFrameAllocator {
+    const DEFAULT: Self = BitMapFrameAllocator {
+        range: PhysPageNum(0)..PhysPageNum(0),
+        inner: bitmap_allocator::BitAlloc16M::DEFAULT
+    };
 
     fn init(&mut self, range_pa: Range<PhysAddr>) {
         self.range = range_pa.start.ceil()..range_pa.end.floor();
         info!("[FrameAllocator] range: {:#x}..{:#x}", range_pa.start.0, range_pa.end.0);
         self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.ceil().0));
     }
+    
+    fn alloc_contiguous(&mut self, size: usize, align_log2: usize) -> Option<Range<PhysPageNum>> {
+        if align_log2 > 0 {
+            log::warn!("BitMapFrameAllocator cannot support aligned allocate");
+        }
+        let mut start = self.inner.alloc_contiguous(None, size, 0)?;
+        start += self.range.start.0;
+        let range_ppn = PhysPageNum(start)..PhysPageNum(start + size);
+        Some(range_ppn)
+    }
+    
+    fn dealloc_contiguous(&mut self, range_ppn: Range<PhysPageNum>) {
+        if range_ppn.clone().count() == 0 {
+            return;
+        }
+        let start = range_ppn.start.0 - self.range.start.0;
+        self.inner.dealloc_contiguous(start, range_ppn.count());
+    }
+    
 }
 
+/// Buddy Frame Allocator
+struct BuddyFrameAllocator {
+    inner: Heap,
+}
+
+impl FrameAllocatorTrait for BuddyFrameAllocator {
+    const DEFAULT: Self = Self {
+        inner: Heap::empty()
+    };
+
+    fn init(&mut self, range_pa: Range<PhysAddr>) {
+        info!("[FrameAllocator] range: {:#x}..{:#x}", range_pa.start.0, range_pa.end.0);
+        unsafe { self.inner.init(range_pa.start.get_ptr::<u8>() as usize, range_pa.end.get_ptr::<u8>() as usize - range_pa.start.get_ptr::<u8>() as usize) };
+    }
+    
+    fn alloc_contiguous(&mut self, size: usize, align_log2: usize) -> Option<Range<PhysPageNum>> {
+        let size = size << Constant::PAGE_SIZE_BITS;
+        let align_log2 = align_log2 + Constant::PAGE_SIZE_BITS;
+        self.inner.alloc(Layout::from_size_align(size, 1 << align_log2).unwrap()).ok().map(|p| {
+            let pa = PhysAddr::from(p.addr().get() & !Constant::KERNEL_ADDR_SPACE.start);
+            let ppn = pa.floor();
+            ppn..ppn+size
+        })
+    }
+    
+    fn dealloc_contiguous(&mut self, range_ppn: Range<PhysPageNum>) {
+        let ptr = NonNull::new(range_ppn.start.start_addr().get_ptr::<u8>()).unwrap();
+        let size = range_ppn.count() << Constant::PAGE_SIZE_BITS;
+        self.inner.dealloc(ptr, Layout::from_size_align(size, Constant::PAGE_SIZE).unwrap());
+    }
+}
+
+
 /// frame allocator
-static FRAME_ALLOCATOR: SpinNoIrqLock<BitMapFrameAllocator> = SpinNoIrqLock::new(BitMapFrameAllocator::new());
+static FRAME_ALLOCATOR: SpinNoIrqLock<BitMapFrameAllocator> = SpinNoIrqLock::new(BitMapFrameAllocator::DEFAULT);
+
 
 #[allow(missing_docs)]
 #[derive(Clone)]
@@ -53,19 +113,12 @@ impl FrameAllocatorHal for FrameAllocator {
             return None
         }
         let mut alloc_guard = FRAME_ALLOCATOR.lock();
-        let mut start = alloc_guard.inner.alloc_contiguous(None, cnt, align_log2)?;
-        start += alloc_guard.range.start.0;
-        let range_ppn = PhysPageNum(start)..PhysPageNum(start + cnt);
-        Some(range_ppn)
+        alloc_guard.alloc_contiguous(cnt, align_log2)
     }
 
     fn dealloc(&self, range_ppn: Range<PhysPageNum>) {
-        if range_ppn.clone().count() == 0 {
-            return;
-        }
         let mut alloc_guard = FRAME_ALLOCATOR.lock();
-        let start = range_ppn.start.0 - alloc_guard.range.start.0;
-        alloc_guard.inner.dealloc_contiguous(start, range_ppn.count());
+        alloc_guard.dealloc_contiguous(range_ppn)
     }
 }
 

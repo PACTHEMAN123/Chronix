@@ -20,6 +20,7 @@ use crate::syscall::futex::{futex_manager, FutexHashKey, RobustList, RobustListH
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
+use crate::task::current_task;
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
@@ -370,6 +371,7 @@ impl TaskControlBlock {
     /// 
     pub fn exec<T: Reader + ?Sized>(&self, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, argv: Vec<String>, envp: Vec<String>) ->
         Result<(), SysError> {
+        self.mm_release();
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (
             mut vm_space, 
@@ -530,7 +532,7 @@ impl TaskControlBlock {
         task_control_block
     }
 
-    fn futex_wake(self: &Arc<Self>, addr: usize, shared: bool) {
+    fn futex_wake(&self, addr: usize, shared: bool) {
         if shared {
             let paddr = 
                 translate_uva_checked(
@@ -553,7 +555,7 @@ impl TaskControlBlock {
         }
     }
 
-    fn handle_futex_death(self: &Arc<Self>, addr: usize, pi: bool, pending_op: bool) -> Result<(), ()> {
+    fn handle_futex_death(&self, addr: usize, pi: bool, pending_op: bool) -> Result<(), ()> {
         
         if addr % align_of::<AtomicU32>() != 0 {
             log::warn!("[handle_futex_death] unaligned futex addr");
@@ -590,7 +592,7 @@ impl TaskControlBlock {
         Ok(())
     }
 
-    fn exit_robust_list(self: &Arc<Self>) {
+    fn exit_robust_list(&self) {
         let _sum_guard = SumGuard::new();
         // head: 用户空间双重指针
         fn fetch_robust_entry(head: *const RobustList) -> (*const RobustList, bool) {
@@ -610,7 +612,7 @@ impl TaskControlBlock {
         let head = unsafe {
             &*self.robust.exclusive_access().0
         };
-        
+        self.robust.exclusive_access().0 = null_mut();
         let (mut entry, mut pi) = fetch_robust_entry(head.list.next as *const _);
         let futex_offset = head.futex_offset;
         let (pending, pip) = fetch_robust_entry(head.list_op_pending as *const _);
@@ -644,9 +646,7 @@ impl TaskControlBlock {
 
     }
 
-
-    /// 
-    pub fn handle_zombie(self: &Arc<Self>){
+    fn mm_release(&self) {
         match self.tid_address_ref().clear_child_tid {
             Some(addr) if addr != 0 && (addr & 3) == 0 => {
                 if Arc::strong_count(&self.vm_space) > 1 {
@@ -663,6 +663,11 @@ impl TaskControlBlock {
             _ => {}
         }
         self.exit_robust_list();
+    }
+
+    /// 
+    pub fn handle_zombie(self: &Arc<Self>){
+        self.mm_release();
     
         let mut thread_group = self.thread_group.lock();
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
@@ -716,7 +721,7 @@ impl TaskControlBlock {
         }
     }
 
-    pub fn get_raw_vm_ptr(self: &Arc<Self>) -> usize {
+    pub fn get_raw_vm_ptr(&self) -> usize {
         Arc::as_ptr(&self.vm_space) as usize
     }
 }

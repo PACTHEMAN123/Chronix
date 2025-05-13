@@ -236,8 +236,12 @@ impl UserVmSpaceHal for UserVmSpace {
     }
 
     fn handle_page_fault(&mut self, va: VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
-        let area = self.areas.get_mut(va.floor()).ok_or(())?;
-        area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
+        if let Some(area) = self.areas.get_mut(va.floor()) {
+            area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
+        } else {
+            log::warn!("[handle_page_fault] no matched vma");
+            Err(())
+        }
     }
     
     fn from_existed(uvm_space: &mut Self) -> Self {

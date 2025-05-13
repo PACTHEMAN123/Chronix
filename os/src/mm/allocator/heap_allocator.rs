@@ -1,16 +1,18 @@
 //! The global allocator
-const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB
+const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB kept for operating system
 use core::{alloc::{GlobalAlloc, Layout}, ptr::NonNull};
 
+use alloc::alloc::Allocator;
 use buddy_system_allocator::{Heap, LockedHeap};
 use hal::println;
 
 use crate::sync::mutex::SpinNoIrqLock;
 
-#[global_allocator]
 /// heap allocator instance
-static HEAP_ALLOCATOR: GlobalHeap = GlobalHeap::empty();
-//static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
+static HEAP_INSTANCE: SpinNoIrqLock<Heap> = SpinNoIrqLock::new(Heap::empty());
+
+#[allow(unused)]
+static HEAP_ALLOCATOR: HeapAllocator = HeapAllocator;
 
 #[alloc_error_handler]
 /// panic when heap allocation error occurs
@@ -18,46 +20,45 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
     panic!("Heap allocation error, layout = {:?}", layout);
 }
 
-struct GlobalHeap(SpinNoIrqLock<Heap>);
+/// Kernel Heap Allocator
+#[derive(Clone)]
+pub struct HeapAllocator;
 
-impl GlobalHeap {
-    const fn empty() -> Self {
-        Self(SpinNoIrqLock::new(Heap::empty()))
+unsafe impl Allocator for HeapAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, alloc::alloc::AllocError> {
+        HEAP_INSTANCE
+            .lock()
+            .alloc(layout)
+            .map(|ptr| NonNull::slice_from_raw_parts(ptr, layout.size()))
+            .map_err(|_| alloc::alloc::AllocError)
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        HEAP_INSTANCE.lock().dealloc(ptr, layout)
     }
 }
 
-unsafe impl GlobalAlloc for GlobalHeap {
+unsafe impl GlobalAlloc for HeapAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.0
+        HEAP_INSTANCE
             .lock()
             .alloc(layout).ok()
             .map_or(0 as *mut u8, |allocation| allocation.as_ptr())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.0.lock().dealloc(NonNull::new_unchecked(ptr), layout)
+        HEAP_INSTANCE.lock().dealloc(NonNull::new_unchecked(ptr), layout)
     }
 }
 
 /// heap space ([u8; KERNEL_HEAP_SIZE])
 static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
 
-/// initiate heap allocator
-/*
-pub fn init_heap() {
-    unsafe {
-        #[allow(static_mut_refs)]
-        HEAP_ALLOCATOR
-            .lock()
-            .init(HEAP_SPACE.as_ptr() as usize, KERNEL_HEAP_SIZE);
-    }
-}
-*/
 pub fn init_heap() {
     unsafe {
         #[allow(static_mut_refs)]
         let start = HEAP_SPACE.as_ptr() as usize;
-        HEAP_ALLOCATOR.0.lock().init(start, KERNEL_HEAP_SIZE);
+        HEAP_INSTANCE.lock().init(start, KERNEL_HEAP_SIZE);
         log::info!(
             "[kernel] heap start {:#x}, end {:#x}",
             start as usize,
