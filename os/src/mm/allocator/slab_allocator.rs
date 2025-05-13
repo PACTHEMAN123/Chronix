@@ -9,7 +9,7 @@ use crate::{mm::allocator::next_power_of_two, sync::mutex::{spin_mutex::SpinMute
 
 use super::{FrameAllocator, HeapAllocator};
 
-
+#[global_allocator]
 static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator;
 
 /// slab allocator
@@ -411,10 +411,6 @@ impl<const S: usize> SlabCache<S> {
             self.free_blk_list.push(blk);
         } else if blk.size == 1 {
             self.free_blk_list.remove(blk);
-            // blk.dealloc();
-            // let ppn = SlabBlock::<S>::floor(blk.head as usize);
-            // self.blocks.remove(&ppn).unwrap();
-            // return Some(());
             self.empty_blk_list.push(blk);
         }
         blk.size -= 1;
@@ -431,32 +427,6 @@ impl<const S: usize> SlabCache<S> {
             let ppn = SlabBlock::<S>::floor(blk.head as usize);
             let (range, _) = self.blocks.get_key_value(ppn).unwrap();
             self.blocks.force_remove_one(range);
-            blk_ptr = next;
-        };
-    }
-
-    pub fn info(&mut self) {
-        println!("SlabCache {:#x}", self as *const _ as usize);
-        println!("block cap: {},block page count: {}", SlabBlock::<S>::cap(), SlabBlock::<S>::page_cnt());
-        let mut blk_ptr = self.empty_blk_list.head;
-        while !blk_ptr.is_null() {
-            let blk = unsafe {&mut *blk_ptr};
-            let next = blk.next;
-            println!("Empty Block {:?}", blk);
-            blk_ptr = next;
-        };
-        blk_ptr = self.free_blk_list.head;
-        while !blk_ptr.is_null() {
-            let blk = unsafe {&mut *blk_ptr};
-            let next = blk.next;
-            println!("Free Block {:?}", blk);
-            blk_ptr = next;
-        };
-        blk_ptr = self.full_blk_list.head;
-        while !blk_ptr.is_null() {
-            let blk = unsafe {&mut *blk_ptr};
-            let next = blk.next;
-            println!("Full Block {:?}", blk);
             blk_ptr = next;
         };
     }

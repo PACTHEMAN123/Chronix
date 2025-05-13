@@ -8,7 +8,6 @@ use hal::println;
 
 use crate::sync::mutex::SpinNoIrqLock;
 
-#[global_allocator]
 /// heap allocator instance
 static HEAP_INSTANCE: SpinNoIrqLock<Heap> = SpinNoIrqLock::new(Heap::empty());
 
