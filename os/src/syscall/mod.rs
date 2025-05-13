@@ -106,6 +106,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECE: usize = 226;
+const SYSCALL_MSYNC: usize = 227;
 const SYSCALL_MADSIVE: usize = 233;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
@@ -255,6 +256,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MADSIVE =>  sys_temp(),
         SYSCALL_SYNC => sys_temp(),
         SYSCALL_FSYNC => sys_temp(),
+        SYSCALL_MSYNC => sys_temp(),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);
             Err(SysError::ENOSYS)

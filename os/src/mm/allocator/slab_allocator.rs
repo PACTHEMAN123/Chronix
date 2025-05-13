@@ -1,13 +1,14 @@
 use core::{alloc::GlobalAlloc, marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}, usize};
 
 use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, collections::btree_map::BTreeMap, format};
+use fatfs::info;
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, println, util::mutex::Mutex};
 
 use crate::{mm::allocator::next_power_of_two, sync::mutex::{spin_mutex::SpinMutex, Spin, SpinNoIrqLock}};
 
 use super::FrameAllocator;
 
-#[global_allocator]
+
 static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator;
 
 /// slab allocator
@@ -43,17 +44,30 @@ unsafe impl Allocator for SlabAllocator {
 
 unsafe impl GlobalAlloc for SlabAllocator {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let mut times = 2;
         loop {
             if let Ok(mut ptr) = Allocator::allocate(self, layout) {
-                break &mut ptr.as_mut()[0]
+                let ret = &mut ptr.as_mut()[0] as *mut u8;
+                // log::info!("[GlobalAlloc] alloc: ptr: {:#x} layout: {:?}", ret as usize, layout);
+                return ret;
             } else {
                 log::warn!("failed alloc layout: {:?}", layout);
                 SLAB_ALLOCATOR_INNER.shrink();
+                SLAB_BLOCK_SLAB_CACHE.lock().shrink();
+            }
+            times -= 1;
+            if times == 0 {
+                break;
             }
         }
+        SLAB_ALLOCATOR_INNER.info();
+        println!("slab block slab cache:");
+        SLAB_BLOCK_SLAB_CACHE.lock().info();
+        return 0 as *mut u8;
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        // log::info!("[GlobalAlloc] dealloc: ptr: {:#x} layout: {:?}", ptr as usize, layout);
         if let Some(ptr) = NonNull::new(ptr) {
             Allocator::deallocate(&self, ptr, layout);
         }
@@ -220,6 +234,35 @@ impl SlabAllocatorInner {
     pub fn dealloc<T: Sized>(&self, ptr: NonNull<T>) {
         self.dealloc_by_layout(ptr.cast(), core::alloc::Layout::new::<T>());
     }
+
+    pub fn info(&self) {
+        println!("cache8:");
+        self.cache8.lock().info();
+        println!("cache16:");
+        self.cache16.lock().info();
+        println!("cache32:");
+        self.cache32.lock().info();
+        println!("cache64:");
+        self.cache64.lock().info();
+        println!("cache96:");
+        self.cache96.lock().info();
+        println!("cache128:");
+        self.cache128.lock().info();
+        println!("cache192:");
+        self.cache192.lock().info();
+        println!("cache256:");
+        self.cache256.lock().info();
+        println!("cache512:");
+        self.cache512.lock().info();
+        println!("cache1024:");
+        self.cache1024.lock().info();
+        println!("cache2048:");
+        self.cache2048.lock().info();
+        println!("cache4096:");
+        self.cache4096.lock().info();
+        println!("cache8192:");
+        self.cache8192.lock().info();
+    }
 }
 
 #[allow(missing_docs)]
@@ -230,6 +273,7 @@ pub union FreeNode<const S: usize> {
 
 #[repr(C)]
 #[allow(missing_docs)]
+#[derive(Debug)]
 struct SlabBlock<const S: usize> {
     /// last block
     last: *mut SlabBlock<S>,
@@ -262,6 +306,7 @@ impl<const S: usize> SlabBlock<S> {
     fn dealloc(&mut self) {
         let start_ppn = Self::floor((self.head as usize).into());
         let end_ppn = start_ppn + Self::page_cnt();
+        log::info!("[SlabBlock::dealloc] {:#x} {:#x}", start_ppn.start_addr().0, end_ppn.start_addr().0);
         FrameAllocator.dealloc(start_ppn..end_ppn);
     }
 }
@@ -360,6 +405,10 @@ impl<const S: usize> SlabCache<S> {
             self.free_blk_list.push(blk);
         } else if blk.size == 1 {
             self.free_blk_list.remove(blk);
+            // blk.dealloc();
+            // let ppn = SlabBlock::<S>::floor(blk.head as usize);
+            // self.blocks.remove(&ppn).unwrap();
+            // return Some(());
             self.empty_blk_list.push(blk);
         }
         blk.size -= 1;
@@ -375,6 +424,32 @@ impl<const S: usize> SlabCache<S> {
             blk.dealloc();
             let ppn = SlabBlock::<S>::floor(blk.head as usize);
             self.blocks.remove(&ppn).unwrap();
+            blk_ptr = next;
+        };
+    }
+
+    pub fn info(&mut self) {
+        println!("SlabCache {:#x}", self as *const _ as usize);
+        println!("block cap: {},block page count: {}", SlabBlock::<S>::cap(), SlabBlock::<S>::page_cnt());
+        let mut blk_ptr = self.empty_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Empty Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.free_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Free Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.full_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Full Block {:?}", blk);
             blk_ptr = next;
         };
     }
@@ -474,6 +549,7 @@ unsafe impl Allocator for SlabBlockSlabAllocator {
 
 #[repr(C)]
 #[allow(missing_docs)]
+#[derive(Debug)]
 struct SmallSlabBlock<const S: usize> {
     /// last block
     last: *mut SmallSlabBlock<S>,
@@ -513,6 +589,7 @@ impl<const S: usize> SmallSlabBlock<S> {
     fn dealloc(&mut self) {
         let start_ppn = Self::floor(self as *mut _ as usize);
         let end_ppn = start_ppn + 1;
+        log::info!("[SmallSlabBlock::dealloc] {:#x} {:#x}", start_ppn.start_addr().0, end_ppn.start_addr().0);
         FrameAllocator.dealloc(start_ppn..end_ppn);
     }
 }
@@ -606,6 +683,8 @@ impl<const S: usize> SmallSlabCache<S> {
             self.free_blk_list.push(blk);
         } else if blk.size == 1 {
             self.free_blk_list.remove(blk);
+            // blk.dealloc();
+            // return Some(());
             self.empty_blk_list.push(blk);
         }
         blk.size -= 1;
@@ -619,6 +698,32 @@ impl<const S: usize> SmallSlabCache<S> {
             let blk = unsafe {&mut *blk_ptr};
             let next = blk.next;
             blk.dealloc();
+            blk_ptr = next;
+        };
+    }
+
+    pub fn info(&mut self) {
+        println!("SmallSlabCache {:#x}", self as *const _ as usize);
+        println!("block cap: {},block page count: {}", SmallSlabBlock::<S>::cap(), SmallSlabBlock::<S>::page_cnt());
+        let mut blk_ptr = self.empty_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Empty Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.free_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Free Block {:?}", blk);
+            blk_ptr = next;
+        };
+        blk_ptr = self.full_blk_list.head;
+        while !blk_ptr.is_null() {
+            let blk = unsafe {&mut *blk_ptr};
+            let next = blk.next;
+            println!("Full Block {:?}", blk);
             blk_ptr = next;
         };
     }

@@ -24,6 +24,13 @@ use crate::utils::suspend_now;
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
     log::debug!("[sys_kill]: sending signo: {} to pid: {}", signo, pid);
+    if signo == 0 {
+        // If sig is 0, then no signal is sent
+        return Ok(0);
+    }
+    else if signo < 0 || signo as usize >= SIGRTMAX {
+        return Err(SysError::EINVAL);
+    }
     let task = current_task().unwrap().clone();
     let pgid = task.pgid();
     match pid {

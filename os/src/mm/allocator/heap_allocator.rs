@@ -1,5 +1,5 @@
 //! The global allocator
-const KERNEL_HEAP_SIZE: usize = 0x0; // because we don't use it
+const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB
 use core::{alloc::{GlobalAlloc, Layout}, ptr::NonNull};
 
 use buddy_system_allocator::{Heap, LockedHeap};
@@ -7,6 +7,7 @@ use hal::println;
 
 use crate::sync::mutex::SpinNoIrqLock;
 
+#[global_allocator]
 /// heap allocator instance
 static HEAP_ALLOCATOR: GlobalHeap = GlobalHeap::empty();
 //static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
@@ -29,8 +30,7 @@ unsafe impl GlobalAlloc for GlobalHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         self.0
             .lock()
-            .alloc(layout)
-            .ok()
+            .alloc(layout).ok()
             .map_or(0 as *mut u8, |allocation| allocation.as_ptr())
     }
 
