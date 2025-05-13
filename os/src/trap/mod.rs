@@ -194,7 +194,8 @@ fn kernel_trap_handler() {
                             Ok(()) => {},
                             Err(()) => {
                                 panic!(
-                                    "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
+                                    "[kernel_trap_handler] cannot handle page fault, task {}, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
+                                    task.tid()
                                 );
                             }
                         }

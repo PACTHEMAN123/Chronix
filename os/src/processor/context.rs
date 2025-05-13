@@ -31,10 +31,8 @@ impl EnvContext{
     }
     /// increase sum flag
     pub fn sum_inc(&mut self) {
-        if self.sum_flag == 0 {
-            unsafe {
-                Instruction::set_sum();
-            }
+        unsafe {
+            Instruction::set_sum();
         }
         self.sum_flag += 1;
     }

@@ -116,8 +116,8 @@ pub fn sys_exit(exit_code: i32) -> SysResult {
 /// set_tid_address() always returns the caller's thread ID.
 /// set_tid_address() always succeeds.
 pub fn sys_set_tid_address(tid_ptr: usize) -> SysResult {
-    info!("set tid address: {tid_ptr:#x}");
     let task = current_task().unwrap().clone();
+    info!("set task {} tid address: {tid_ptr:#x}", task.tid());
     task.tid_address().clear_child_tid = Some(tid_ptr);
     Ok(task.tid() as isize)
 }
