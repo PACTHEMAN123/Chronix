@@ -41,10 +41,12 @@ disk-img: user
 ifeq ($(ARCH), riscv64)
 	@sudo ln -s /glibc/lib/ld-linux-riscv64-lp64d.so.1 mnt/lib/ld-linux-riscv64-lp64d.so.1
 	@sudo ln -s /glibc/lib/libc.so mnt/lib/libc.so.6
+	@sudo ln -s /glibc/lib/libm.so mnt/lib/libm.so.6
 	@sudo ln -s /musl/lib/libc.so mnt/lib/ld-musl-riscv64-sf.so.1
 else ifeq ($(ARCH), loongarch64)
 	@sudo ln -s /glibc/lib/ld-linux-loongarch-lp64d.so.1 mnt/lib64/ld-linux-loongarch-lp64d.so.1
 	@sudo ln -s /glibc/lib/libc.so.6 mnt/lib64/libc.so.6
+	@sudo ln -s /glibc/lib/libm.so mnt/lib64/libm.so.6
 	@sudo ln -s /musl/lib/libc.so mnt/lib/ld-musl-loongarch64-lp64d.so.1
 	@sudo ln -s /musl/lib/libc.so mnt/lib64/ld-musl-loongarch-lp64d.so.1
 endif
