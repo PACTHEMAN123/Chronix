@@ -1,7 +1,7 @@
 use core::{ops::Range, ptr::slice_from_raw_parts};
 
 use alloc::{sync::Arc, vec::Vec};
-use hal::{addr::{VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapPerm, println};
+use hal::{addr::{VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapFlags, println};
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 

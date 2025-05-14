@@ -1,7 +1,7 @@
 //! memory related syscall
 #![allow(missing_docs)]
 
-use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
+use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapFlags, println};
 use log::info;
 
 use crate::{config::PAGE_SIZE, mm::vm::{UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task};
@@ -76,7 +76,7 @@ bitflags! {
     }
 }
 
-impl From<MmapProt> for MapPerm {
+impl From<MmapProt> for MapFlags {
     fn from(prot: MmapProt) -> Self {
         let mut ret = Self::U;
         if prot.contains(MmapProt::PROT_READ) {
@@ -103,7 +103,7 @@ pub fn sys_mmap(
 ) -> SysResult {
     let flags = MmapFlags::from_bits_truncate(flags);
     let prot = MmapProt::from_bits_truncate(prot);
-    let perm = MapPerm::from(prot);
+    let perm = MapFlags::from(prot);
     let task = current_task().unwrap().clone();
 
     if length == 0 {
@@ -169,12 +169,12 @@ pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let prot = MmapProt::from_bits_truncate(prot);
-    let perm = MapPerm::from(prot);
+    let perm = MapFlags::from(prot);
     // log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
     let task = current_task().unwrap().clone();
     task.with_mut_vm_space(|vm| -> SysResult {
         let mut vma = vm.unmap(addr, len)?;
-        vma.map_perm = perm;
+        vma.map_flags = perm;
         vm.push_area(vma, None);
         Ok(0)
     })

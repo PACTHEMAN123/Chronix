@@ -5,7 +5,7 @@ use bitflags::bitflags;
 
 use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
-use super::{MapPerm, PageTableEntryHal, PageTableHal};
+use super::{MapFlags, PageTableEntryHal, PageTableHal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PageLevel {
@@ -103,7 +103,7 @@ impl Iterator for VpnPageRangeIter {
 
 bitflags! {
     /// page table entry flags
-    pub struct PTEFlags: u16 {
+    pub(crate) struct PTEFlags: u16 {
         /// Valid
         const V = 1 << 0;
         /// Readable
@@ -114,7 +114,7 @@ bitflags! {
         const X = 1 << 3;
         /// User-mode accessible
         const U = 1 << 4;
-        #[allow(missing_docs)]
+        /// 
         const G = 1 << 5;
         /// Accessed
         const A = 1 << 6;
@@ -136,102 +136,101 @@ pub struct PageTableEntry {
 
 #[allow(missing_docs)]
 impl PageTableEntry {
+    #[allow(unused)]
+    const RESERVE_MASK: usize = 0xFFC0_0000_0000_0000;
+    const PPN_MASK: usize = 0x003F_FFFF_FFFF_FC00;
+    const FLAGS_MASK: usize = 0x0000_0000_0000_03FF;
 
-    pub fn empty() -> Self {
-        PageTableEntry { bits: 0 }
-    }
-    pub fn ppn(&self) -> PhysPageNum {
-        PhysPageNum(self.bits >> 10 & ((1usize << Constant::PPN_WIDTH) - 1))
-    }
-    pub fn flags(&self) -> PTEFlags {
+    pub(crate) fn pteflags(&self) -> PTEFlags {
         PTEFlags::from_bits((self.bits & ((1usize << 10) - 1)) as u16).unwrap()
-    }
-    pub fn is_valid(&self) -> bool {
-        (self.flags() & PTEFlags::V) != PTEFlags::empty()
-    }
-    pub fn readable(&self) -> bool {
-        (self.flags() & PTEFlags::R) != PTEFlags::empty()
-    }
-    pub fn writable(&self) -> bool {
-        (self.flags() & PTEFlags::W) != PTEFlags::empty()
-    }
-    pub fn executable(&self) -> bool {
-        (self.flags() & PTEFlags::X) != PTEFlags::empty()
-    }
-    /// pte.is_leaf() == true, meaning this PTE points to the physical page, not to the next level of PTE.
-    pub fn is_leaf(&self) -> bool {
-        (self.flags() & PTEFlags::V) != PTEFlags::empty() && 
-        (
-            (self.flags() & PTEFlags::R) != PTEFlags::empty() ||
-            (self.flags() & PTEFlags::W) != PTEFlags::empty() ||
-            (self.flags() & PTEFlags::X) != PTEFlags::empty()
-        )
-    }
-    pub fn set_flags(&mut self, flags: PTEFlags) {
-        self.bits = ((self.bits >> 10) << 10) | flags.bits() as usize;
     }
 }
 
-impl From<MapPerm> for PTEFlags {
-    fn from(value: MapPerm) -> Self {
+impl From<MapFlags> for PTEFlags {
+    fn from(value: MapFlags) -> Self {
         let mut ret = Self::empty();
-        if value.contains(MapPerm::U) {
+        if value.contains(MapFlags::V) {
+            ret.insert(PTEFlags::V);
+        }
+        if value.contains(MapFlags::U) {
             ret.insert(PTEFlags::U);
         }
-        if value.contains(MapPerm::R) {
+        if value.contains(MapFlags::R) {
             ret.insert(PTEFlags::R);
         }
-        if value.contains(MapPerm::W) {
+        if value.contains(MapFlags::W) {
             ret.insert(PTEFlags::W);
         }
-        if value.contains(MapPerm::X) {
+        if value.contains(MapFlags::X) {
             ret.insert(PTEFlags::X);
         }
-        if value.contains(MapPerm::C) {
+        if value.contains(MapFlags::C) {
             ret.insert(PTEFlags::C);
+        }
+        if value.contains(MapFlags::D) {
+            ret.insert(PTEFlags::D);
         }
         ret
     }
 }
 
 impl PageTableEntryHal for PageTableEntry {
-    fn new(ppn: PhysPageNum, map_perm: super::MapPerm, valid: bool) -> Self {
-        let mut pte: PTEFlags = map_perm.into();
-        if valid {
-            pte.insert(PTEFlags::V);
-        }
+    fn new(ppn: PhysPageNum, map_flags: super::MapFlags) -> Self {
+        let pte: PTEFlags = map_flags.into();
         Self {
-            bits: ppn.0 << 10 | pte.bits as usize
+            bits: (ppn.0 << 10) | pte.bits as usize
         }
-    }
-
-    fn set_valid(&mut self) {
-        self.bits |= PTEFlags::V.bits as usize;
-    }
-
-    fn is_valid(&self) -> bool {
-        self.bits & PTEFlags::V.bits as usize != 0
     }
     
-    fn map_perm(&self) -> super::MapPerm {
-        let pte = self.flags();
-        let mut ret = MapPerm::empty();
+    fn flags(&self) -> super::MapFlags {
+        let pte = self.pteflags();
+        let mut ret = MapFlags::empty();
+        if pte.contains(PTEFlags::V) {
+            ret.insert(MapFlags::V);
+        }
         if pte.contains(PTEFlags::U) {
-            ret.insert(MapPerm::U);
+            ret.insert(MapFlags::U);
         }
         if pte.contains(PTEFlags::R) {
-            ret.insert(MapPerm::R);
+            ret.insert(MapFlags::R);
         }
         if pte.contains(PTEFlags::W) {
-            ret.insert(MapPerm::W);
+            ret.insert(MapFlags::W);
         }
         if pte.contains(PTEFlags::X) {
-            ret.insert(MapPerm::X);
+            ret.insert(MapFlags::X);
         }
         if pte.contains(PTEFlags::C) {
-            ret.insert(MapPerm::C);
+            ret.insert(MapFlags::C);
+        }
+        if pte.contains(PTEFlags::D) {
+            ret.insert(MapFlags::D);
         }
         ret
+    }
+    
+    fn set_flags(&mut self, map_flags: MapFlags) {
+        let pte: PTEFlags = map_flags.into();
+        self.bits &= !Self::FLAGS_MASK;
+        self.bits |= pte.bits as usize & Self::FLAGS_MASK;
+    }
+    
+    fn ppn(&self) -> PhysPageNum {
+        PhysPageNum(self.bits >> 10 & ((1usize << Constant::PPN_WIDTH) - 1))
+    }
+    
+    fn set_ppn(&mut self, ppn: PhysPageNum) {
+        self.bits &= !Self::PPN_MASK;
+        self.bits |= (ppn.0 << 10) & Self::PPN_MASK;
+    }
+
+    fn is_leaf(&self) -> bool {
+        (self.pteflags() & PTEFlags::V) != PTEFlags::empty() && 
+        (
+            (self.pteflags() & PTEFlags::R) != PTEFlags::empty() ||
+            (self.pteflags() & PTEFlags::W) != PTEFlags::empty() ||
+            (self.pteflags() & PTEFlags::X) != PTEFlags::empty()
+        )
     }
 }
 
@@ -258,7 +257,7 @@ impl<A: FrameAllocatorHal> PageTable<A> {
             if !pte.is_valid() {
                 let frame = self.alloc.alloc(1).unwrap();
                 frame.get_slice_mut::<u8>().fill(0);
-                *pte = PageTableEntry::new(frame.start, MapPerm::empty(), true);
+                *pte = PageTableEntry::new(frame.start, MapFlags::V);
                 self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
             }
             ppn = pte.ppn();
@@ -308,26 +307,26 @@ impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
         None
     }
 
-    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapPerm, level: PageLevel) -> Option<&mut PageTableEntry>{
+    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapFlags, level: PageLevel) -> Result<&mut PageTableEntry, ()>{
         if let Some(pte) = self.find_pte_create(vpn, level) {
-            *pte = PageTableEntry::new(ppn, perm, true);
-            Some(pte)
+            *pte = PageTableEntry::new(ppn, perm | MapFlags::V);
+            Ok(pte)
         } else {
             log::warn!("vpn {} has been mapped", vpn.0);
-            None
+            Err(())
         }
     }
 
-    fn unmap(&mut self, vpn: VirtPageNum) -> Option<PageTableEntry> {
+    fn unmap(&mut self, vpn: VirtPageNum) -> Result<PageTableEntry, ()> {
         match self.find_pte(vpn) {
             Some((pte, _)) => {
                 let ret = *pte;
-                *pte = PageTableEntry::new(PhysPageNum(0), MapPerm::empty(), false);
-                Some(ret)
+                pte.bits = 0;
+                Ok(ret)
             },
             None => {
                 log::warn!("vpn {} is not mapped", vpn.0);
-                None
+                Err(())
             }
         }
     }

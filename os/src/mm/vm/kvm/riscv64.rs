@@ -1,7 +1,7 @@
 use core::ops::Range;
 
 use alloc::sync::Arc;
-use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}};
+use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}};
 use range_map::RangeMap;
 
 use crate::{fs::vfs::File, mm::{allocator::FrameAllocator, vm::KernVmAreaType, PageTable}};
@@ -26,7 +26,7 @@ impl KernVmSpace {
         range_ppn.get_slice_mut::<u8>().fill(0);
         let ppn = range_ppn.start;
         for (i, pte_i) in (VM_START..VM_START+HUGE_PAGES).enumerate() {
-            ptes[pte_i] = PageTableEntry::new(ppn+i, MapPerm::empty(), true);
+            ptes[pte_i] = PageTableEntry::new(ppn+i, MapFlags::V);
         }
     }
 }
@@ -67,7 +67,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (stext as usize).into()..(etext as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::X,
+                MapFlags::R | MapFlags::X,
             ),
             None
         );
@@ -75,7 +75,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (srodata as usize).into()..(erodata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R,
+                MapFlags::R,
             ),
             None
         );
@@ -83,7 +83,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (sdata as usize).into()..(edata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W,
+                MapFlags::R | MapFlags::W,
             ),
             None
         );
@@ -91,7 +91,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (sdata as usize).into()..(edata as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W,
+                MapFlags::R | MapFlags::W,
             ),
             None
         );
@@ -99,7 +99,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (sbss_with_stack as usize).into()..(ebss as usize).into(), 
                 KernVmAreaType::Data, 
-                MapPerm::R | MapPerm::W, 
+                MapFlags::R | MapFlags::W, 
             ),
             None
         );
@@ -107,7 +107,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 Constant::KERNEL_STACK_BOTTOM.into()..Constant::KERNEL_STACK_TOP.into(), 
                 KernVmAreaType::KernelStack, 
-                MapPerm::R | MapPerm::W,
+                MapFlags::R | MapFlags::W,
             ),
             None
         );
@@ -115,7 +115,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 Constant::SIGRET_TRAMPOLINE_BOTTOM.into()..Constant::SIGRET_TRAMPOLINE_TOP.into(), 
                 KernVmAreaType::SigretTrampoline, 
-                MapPerm::R | MapPerm::X | MapPerm::U,
+                MapFlags::R | MapFlags::X | MapFlags::U,
             ),
             None
         );
@@ -123,7 +123,7 @@ impl KernVmSpaceHal for KernVmSpace {
         ret.push_area(KernVmArea::new(
                 (ekernel as usize).into()..(Constant::MEMORY_END + Constant::KERNEL_ADDR_SPACE.start).into(), 
                 KernVmAreaType::PhysMem, 
-                MapPerm::R | MapPerm::W,
+                MapFlags::R | MapFlags::W,
             ),
             None
         );
@@ -133,7 +133,7 @@ impl KernVmSpaceHal for KernVmSpace {
                 KernVmArea::new(
                     ((*pair).0 + Constant::KERNEL_ADDR_SPACE.start).into()..((*pair).0 + Constant::KERNEL_ADDR_SPACE.start + (*pair).1).into(),
                     KernVmAreaType::MemMappedReg, 
-                    MapPerm::R | MapPerm::W,
+                    MapFlags::R | MapFlags::W,
                 ),
                 None
             );
@@ -179,7 +179,7 @@ impl KernVmSpaceHal for KernVmSpace {
             len / Constant::PAGE_SIZE
         ).ok_or(())?;
         let range_va = range_vpn.start.start_addr()..range_vpn.end.start_addr();
-        let mut vma = KernVmArea::new(range_va.clone(), KernVmAreaType::Mmap, MapPerm::R);
+        let mut vma = KernVmArea::new(range_va.clone(), KernVmAreaType::Mmap, MapFlags::R);
         vma.file = Some(file.clone());
         self.push_area(vma, None);
         
@@ -205,7 +205,7 @@ impl KernVmSpaceHal for KernVmSpace {
                 let vpn = va.floor();
                 let offset = (vpn.0 - area.range_vpn().start.0) * Constant::PAGE_SIZE;
                 let page = inode.read_page_at(offset).ok_or(())?;
-                self.page_table.map(vpn, page.ppn(), MapPerm::R, PageLevel::Small);
+                let _ = self.page_table.map(vpn, page.ppn(), MapFlags::R, PageLevel::Small);
                 area.frames.insert(vpn, page.frame());
                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                 Ok(())
@@ -259,7 +259,7 @@ impl KernVmArea {
         .for_each(|(vpn, level)| {
             let ppn = PhysPageNum(start_ppn.0);
             start_ppn += level.page_count();
-            page_table.map(vpn, ppn, self.map_perm, level);
+            let _ = page_table.map(vpn, ppn, self.map_perm, level);
         });
     }
 
@@ -295,7 +295,7 @@ impl KernVmArea {
             },
             KernVmAreaType::VirtMemory => {
                 for (&vpn, frame) in self.frames.iter() {
-                    page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
+                    let _ = page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small);
                 }
             },
             KernVmAreaType::Mmap => {}
@@ -304,7 +304,7 @@ impl KernVmArea {
 
     fn unmap(&mut self, page_table: &mut PageTable) {
         for &vpn in self.frames.keys() {
-            page_table.unmap(vpn);
+            let _ = page_table.unmap(vpn);
             unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
         }
     }

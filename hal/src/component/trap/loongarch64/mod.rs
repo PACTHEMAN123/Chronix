@@ -1,9 +1,9 @@
 use core::fmt::Debug;
 
-use log::warn;
-use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}, euen::set_fpe};
+use log::{info, warn};
+use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
 
-use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}, pagetable::{PTEFlags, PageTable, PageTableHal}, println};
+use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}, pagetable::{MapFlags, PTEFlags, PageTable, PageTableEntryHal, PageTableHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
@@ -343,10 +343,10 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     let token = register::pgdl::read().base();
     let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
     let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
-    if !pte.flags().contains(PTEFlags::W) {
+    if !pte.flags().contains(MapFlags::W) {
         return TrapType::StorePageFault(badv);
     }
-    pte.set_flags(pte.flags() | PTEFlags::D);
+    pte.set_flags(pte.flags() | MapFlags::D);
     unsafe {
         core::arch::asm!("tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
     }
