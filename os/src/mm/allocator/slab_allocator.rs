@@ -1,4 +1,4 @@
-use core::{alloc::GlobalAlloc, marker::PhantomPinned, mem, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}, usize};
+use core::{alloc::GlobalAlloc, marker::PhantomPinned, mem, pin::Pin, ptr::{null_mut, slice_from_raw_parts_mut, NonNull}, usize};
 
 use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, collections::btree_map::BTreeMap, format, string::ToString};
 use fatfs::info;
@@ -278,8 +278,8 @@ pub union FreeNode<const S: usize> {
 }
 
 #[repr(C)]
-#[allow(missing_docs)]
 #[derive(Debug)]
+/// slab block for big object
 struct SlabBlock<const S: usize> {
     /// last block
     last: *mut SlabBlock<S>,
@@ -306,7 +306,8 @@ impl<const S: usize> SlabBlock<S> {
     pub fn floor(mut addr: usize) -> PhysPageNum {
         addr &= !Constant::KERNEL_ADDR_SPACE.start;
         addr &= !(Constant::PAGE_SIZE-1);
-        PhysAddr(addr).floor()
+        addr >>= Constant::PAGE_SIZE_BITS;
+        PhysPageNum(addr)
     }
 
     fn dealloc(&mut self) {
@@ -327,9 +328,10 @@ impl<const S: usize> LinkedNode for SlabBlock<S> {
     }
 }
 
-#[allow(unused, missing_docs)]
+
+/// slab cache for big object
 pub struct SlabCache<const S: usize> {
-    blocks: RangeMap<PhysPageNum, Box::<SlabBlock<S>, SlabBlockSlabAllocator>, HeapAllocator>,
+    blocks: RangeMap<PhysPageNum, Box<SlabBlock<S>, SlabBlockSlabAllocator>, HeapAllocator>,
     empty_blk_list: LinkedStack<SlabBlock<S>>,
     free_blk_list: LinkedStack<SlabBlock<S>>,
     full_blk_list: LinkedStack<SlabBlock<S>>,
@@ -357,14 +359,17 @@ impl<const S: usize> SlabCache<S> {
                 )?;
                 let free_nodes_ptr = frames.start.start_addr().get_ptr::<FreeNode<S>>();
 
-                let blk = SlabBlock::<S> {
-                    last: null_mut(),
-                    next: null_mut(),
-                    size: 0,
-                    head: free_nodes_ptr,
-                };
+                let blk = Box::new_in(
+                    SlabBlock::<S> {
+                        last: null_mut(),
+                        next: null_mut(),
+                        size: 0,
+                        head: free_nodes_ptr
+                    }, 
+                    SlabBlockSlabAllocator
+                );
 
-                self.blocks.try_insert(frames.clone(), Box::new_in(blk, SlabBlockSlabAllocator)).unwrap();
+                self.blocks.try_insert(frames.clone(), blk).unwrap();
                 let blk = self.blocks.get_mut(frames.start).unwrap();
                 let free_nodes = unsafe {
                     &mut *slice_from_raw_parts_mut(free_nodes_ptr, SlabBlock::<S>::cap())
@@ -551,9 +556,11 @@ unsafe impl Allocator for SlabBlockSlabAllocator {
 }
 
 #[repr(C)]
-#[allow(missing_docs)]
 #[derive(Debug)]
+/// slab block for small object
 struct SmallSlabBlock<const S: usize> {
+    /// owner
+    owner: *const SmallSlabCache<S>,
     /// last block
     last: *mut SmallSlabBlock<S>,
     /// next block
@@ -607,11 +614,12 @@ impl<const S: usize> LinkedNode for SmallSlabBlock<S> {
     }
 }
 
-#[allow(unused, missing_docs)]
+/// slab cache for small object
 pub struct SmallSlabCache<const S: usize> {
     empty_blk_list: LinkedStack<SmallSlabBlock<S>>,
     free_blk_list: LinkedStack<SmallSlabBlock<S>>,
     full_blk_list: LinkedStack<SmallSlabBlock<S>>,
+    _pinned_marker: PhantomPinned,
 }
 
 
@@ -622,6 +630,7 @@ impl<const S: usize> SmallSlabCache<S> {
             empty_blk_list: LinkedStack::new(),
             free_blk_list: LinkedStack::new(),
             full_blk_list: LinkedStack::new(),
+            _pinned_marker: PhantomPinned
         }
     }
 
@@ -636,6 +645,7 @@ impl<const S: usize> SmallSlabCache<S> {
                 )?;
                 let blk_ptr = frames.start.start_addr().get_ptr::<SmallSlabBlock<S>>();
                 let blk = unsafe { &mut *blk_ptr };
+                blk.owner = self;
                 blk.size = 0;
                 let free_nodes_ptr = unsafe {
                     blk.free_nodes_ptr()
@@ -676,7 +686,9 @@ impl<const S: usize> SmallSlabCache<S> {
         let addr = ptr.addr().get();
         let ppn = SlabBlock::<S>::floor(addr);
         let blk = ppn.start_addr().get_mut::<SmallSlabBlock<S>>();
-        
+        if blk.owner != self {
+            panic!("block {:?} is not belong to this cache {:#x}", blk, self as *const _ as usize);
+        }
         let free_node = unsafe { ptr.as_mut() };
         free_node.next = blk.head;
         blk.head = free_node;
@@ -686,8 +698,6 @@ impl<const S: usize> SmallSlabCache<S> {
             self.free_blk_list.push(blk);
         } else if blk.size == 1 {
             self.free_blk_list.remove(blk);
-            // blk.dealloc();
-            // return Some(());
             self.empty_blk_list.push(blk);
         }
         blk.size -= 1;

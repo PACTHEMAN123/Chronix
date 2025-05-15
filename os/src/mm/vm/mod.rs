@@ -2,7 +2,7 @@ use core::ops::Range;
 use alloc::{alloc::Global, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
-use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
+use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapFlags, PageTableHal}, util::smart_point::StrongArc};
 use xmas_elf::{reader::Reader, ElfFile};
 
 use crate::{ipc::sysv, fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
@@ -103,7 +103,7 @@ impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
 pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
-    pub map_perm: MapPerm,
+    pub map_flags: MapFlags,
     frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
     pub file: UserVmFile,
@@ -120,7 +120,7 @@ pub struct UserVmArea {
 pub struct UserVmAreaView {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
-    pub map_perm: MapPerm,
+    pub map_perm: MapFlags,
     /// for mmap usage
     pub file: UserVmFile,
     pub mmap_flags: MmapFlags,
@@ -135,7 +135,7 @@ impl From<&UserVmArea> for UserVmAreaView {
         Self { 
             range_va: value.range_va.clone(), 
             vma_type: value.vma_type, 
-            map_perm: value.map_perm, 
+            map_perm: value.map_flags, 
             file: value.file.clone(), 
             mmap_flags: value.mmap_flags, 
             offset: value.offset, 
@@ -149,12 +149,12 @@ impl UserVmArea {
     fn new(
         range_va: Range<VirtAddr>, 
         vma_type: UserVmAreaType, 
-        map_perm: MapPerm,
+        map_perm: MapFlags,
     ) -> Self {
         Self {
             range_va,
             vma_type,
-            map_perm,
+            map_flags: map_perm | MapFlags::V,
             frames: BTreeMap::new(),
             file: UserVmFile::None,
             mmap_flags: MmapFlags::default(),
@@ -165,7 +165,7 @@ impl UserVmArea {
 
     fn new_mmap(
         range_va: Range<VirtAddr>,
-        map_perm: MapPerm,
+        map_perm: MapFlags,
         flags: MmapFlags,
         file: UserVmFile,
         offset: usize,
@@ -174,7 +174,7 @@ impl UserVmArea {
         Self {
             range_va,
             vma_type: UserVmAreaType::Mmap,
-            map_perm,
+            map_flags: map_perm | MapFlags::V,
             frames: BTreeMap::new(),
             file,
             mmap_flags: flags,
@@ -188,7 +188,7 @@ impl UserVmArea {
 pub struct KernVmArea {
     range_va: Range<VirtAddr>,
     pub vma_type: KernVmAreaType,
-    pub map_perm: MapPerm,
+    pub map_perm: MapFlags,
     pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
     pub file: Option<Arc<dyn File>>,
@@ -199,12 +199,12 @@ impl KernVmArea {
     pub fn new(
         range_va: Range<VirtAddr>, 
         vma_type: KernVmAreaType, 
-        map_perm: MapPerm
+        map_perm: MapFlags
     ) -> Self {
         Self {
             range_va,
             vma_type,
-            map_perm,
+            map_perm: map_perm | MapFlags::V,
             frames: BTreeMap::new(),
             file: None,
         }
@@ -225,11 +225,11 @@ bitflags! {
 
 #[allow(missing_docs, unused)]
 impl PageFaultAccessType {
-    pub fn can_access(self, flag: MapPerm) -> bool {
-        if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) && !flag.contains(MapPerm::C) {
+    pub fn can_access(self, flag: MapFlags) -> bool {
+        if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) && !flag.contains(MapFlags::C) {
             return false;
         }
-        if self.contains(Self::EXECUTE) && !flag.contains(MapPerm::X) {
+        if self.contains(Self::EXECUTE) && !flag.contains(MapFlags::X) {
             return false;
         }
         true
@@ -304,9 +304,9 @@ pub trait UserVmSpaceHal: Sized {
 
     fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea>;
 
-    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
+    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapFlags, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
 
-    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, id: Option<usize>) -> Result<VirtAddr, SysError>;
+    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapFlags, flags: MmapFlags, id: Option<usize>) -> Result<VirtAddr, SysError>;
 
     fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError>;
 

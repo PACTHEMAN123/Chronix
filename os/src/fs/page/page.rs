@@ -3,7 +3,7 @@
 use core::{cmp, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 
 use alloc::{alloc::Global, sync::{Arc, Weak}};
-use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::FrameAllocatorHal, constant::{Constant, ConstantsHal}, util::smart_point::StrongArc};
+use hal::{addr::{PhysPageNum, RangePPNHal}, allocator::{FrameAllocatorHal, FrameAllocatorTrackerExt}, constant::{Constant, ConstantsHal}, util::smart_point::StrongArc};
 
 use crate::{fs::vfs::Inode, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker}, sync::mutex::SpinNoIrqLock};
 

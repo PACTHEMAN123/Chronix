@@ -3,7 +3,7 @@
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use hal::constant::{Constant, ConstantsHal};
-use hal::pagetable::MapPerm;
+use hal::pagetable::MapFlags;
 use virtio_drivers::device::blk::VirtIOBlk;
 use virtio_drivers::transport;
 use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
@@ -74,7 +74,7 @@ impl VirtIOMMIOBlock {
             KernVmArea::new(
                 vaddr.into()..(vaddr + size).into(), 
                 KernVmAreaType::MemMappedReg, 
-                MapPerm::R | MapPerm::W,
+                MapFlags::R | MapFlags::W,
             ), 
             None
         );
