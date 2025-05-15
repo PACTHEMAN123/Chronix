@@ -3,7 +3,7 @@ use core::ops::Range;
 use alloc::vec::Vec;
 use loongArch64::register;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::FrameAllocatorHal, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{FrameAllocatorHal, FrameAllocatorTrackerExt, DynamicFrameAllocator}, common::FrameTracker, constant::{Constant, ConstantsHal}, println};
 
 use super::{MapFlags, PageTableEntryHal, PageTableHal};
 
@@ -251,14 +251,14 @@ impl PageTableEntryHal for PageTableEntry {
 }
 
 /// page table structure
-pub struct PageTable<A: FrameAllocatorHal> {
+pub struct PageTable<A: FrameAllocatorHal + Clone = DynamicFrameAllocator> {
     /// root ppn
     pub root_ppn: PhysPageNum,
     frames: Vec<FrameTracker<A>>,
     alloc: A,
 }
 
-impl<A: FrameAllocatorHal> PageTable<A> {
+impl<A: FrameAllocatorHal + Clone> PageTable<A> {
     fn find_pte_create(&mut self, vpn: VirtPageNum, level: PageLevel) -> Option<&mut PageTableEntry> {
         assert!(level.lowest());
         let idxs = vpn.indexes();
@@ -285,7 +285,7 @@ impl<A: FrameAllocatorHal> PageTable<A> {
     }
 }
 
-impl<A: FrameAllocatorHal> PageTableHal<PageTableEntry, A> for PageTable<A> {
+impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable<A> {
     fn from_token(token: usize, alloc: A) -> Self {
         Self { 
             root_ppn: PhysPageNum(token >> Constant::PAGE_SIZE_BITS), 

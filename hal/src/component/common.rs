@@ -1,10 +1,10 @@
 use core::ops::Range;
 
-use crate::{allocator::FrameAllocatorHal, println};
+use crate::allocator::{DynamicFrameAllocator, FrameAllocatorHal};
 
 use super::addr::PhysPageNum;
 
-pub struct FrameTracker<A: FrameAllocatorHal> {
+pub struct FrameTracker<A: FrameAllocatorHal = DynamicFrameAllocator> {
     pub range_ppn: Range<PhysPageNum>,
     alloc: A
 }

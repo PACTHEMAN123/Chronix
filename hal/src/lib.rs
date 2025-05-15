@@ -4,6 +4,7 @@
 #![feature(step_trait)]
 #![feature(new_range_api)]
 #![feature(naked_functions)]
+#![feature(sync_unsafe_cell)]
 #![feature(allocator_api)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
