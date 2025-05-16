@@ -255,7 +255,11 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
     let path = user_path_to_string(path).unwrap();
     info!("try to switch to path {}", path);
     let old_dentry = task.cwd();
-    let new_dentry = old_dentry.find(&path)?.ok_or(SysError::ENOENT)?;
+    let new_dentry = if path.starts_with("/") {
+        global_find_dentry(&path)?
+    } else {
+        old_dentry.find(&path)?.ok_or(SysError::ENOENT)?
+    };
     if new_dentry.state() == DentryState::NEGATIVE {
         info!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);

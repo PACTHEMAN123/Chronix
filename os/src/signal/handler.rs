@@ -50,6 +50,7 @@ pub fn core_sig_handler(signo: usize) {
     info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.pid(), signo);
     task.with_thread_group(|tg| {
         for t in tg.iter() {
+            // info!("[core_sig_handler]: set task {} to zombie", t.tid());
             t.set_zombie();
         }
     })
