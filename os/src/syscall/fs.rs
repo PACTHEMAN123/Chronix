@@ -161,7 +161,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        log::debug!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+        log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -251,14 +251,17 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
 /// On success, zero is returned.  On error, -1 is returned, and errno
 /// is set to indicate the error.
 pub fn sys_chdir(path: *const u8) -> SysResult {
+    let task = current_task().unwrap().clone();
     let path = user_path_to_string(path).unwrap();
-    let dentry = global_find_dentry(&path)?;
-    if dentry.state() == DentryState::NEGATIVE {
+    info!("try to switch to path {}", path);
+    let old_dentry = task.cwd();
+    let new_dentry = old_dentry.find(&path)?.ok_or(SysError::ENOENT)?;
+    if new_dentry.state() == DentryState::NEGATIVE {
         info!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);
     } else {
         let task = current_task().unwrap().clone();
-        task.set_cwd(dentry);
+        task.set_cwd(new_dentry);
         return Ok(0);
     }
 }
