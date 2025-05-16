@@ -13,6 +13,10 @@ use core::ops::Deref;
 /// virtual memory
 pub mod vm;
 
+mod user;
+
+pub use user::*;
+
 use hal::println;
 use vm::KernVmSpaceHal;
 

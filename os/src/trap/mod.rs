@@ -185,23 +185,21 @@ fn kernel_trap_handler() {
                 _ => unreachable!(),
             };
 
-            if KVMSPACE.lock().handle_page_fault(VirtAddr::from(stval), access_type).is_err() {
-                match current_task() {
-                    None => {},
-                    Some(task) => {
-                        let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
-                        match res {
-                            Ok(()) => {},
-                            Err(()) => {
-                                panic!(
-                                    "[kernel_trap_handler] cannot handle page fault, task {}, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
-                                    task.tid()
-                                );
-                            }
+            match current_task() {
+                None => {},
+                Some(task) => {
+                    let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
+                    match res {
+                        Ok(()) => {},
+                        Err(()) => {
+                            panic!(
+                                "[kernel_trap_handler] cannot handle page fault, task {}, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}",
+                                task.tid()
+                            );
                         }
                     }
-                };
-            }
+                }
+            };
         }
         TrapType::Timer => {
             // info!("interrupt: supervisor timer");

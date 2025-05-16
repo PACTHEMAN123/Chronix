@@ -2,6 +2,7 @@ use core::ops::{Deref, Range};
 
 use alloc::{collections::btree_map::BTreeMap, format, string::{String, ToString}, sync::Arc, vec::Vec};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{FrameAllocatorHal, FrameAllocatorTrackerExt}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapFlags, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
+use log::info;
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
@@ -239,7 +240,7 @@ impl UserVmSpaceHal for UserVmSpace {
         if let Some(area) = self.areas.get_mut(va.floor()) {
             area.handle_page_fault(&mut self.page_table, va.floor(), access_type)
         } else {
-            log::warn!("[handle_page_fault] no matched vma");
+            log::debug!("[handle_page_fault] no matched vma");
             Err(())
         }
     }
@@ -351,6 +352,10 @@ impl UserVmSpaceHal for UserVmSpace {
 
     fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea> {
         self.areas.get_mut(va.floor())
+    }
+
+    fn get_area_ref(&self, va: VirtAddr) -> Option<&UserVmArea> {
+        self.areas.get(va.floor())
     }
 }
 
@@ -537,7 +542,7 @@ impl UserVmArea {
         self.frames.clear();
     }
 
-    fn handle_page_fault(&mut self, 
+    pub fn handle_page_fault(&mut self, 
         page_table: &mut PageTable, 
         vpn: VirtPageNum,
         access_type: PageFaultAccessType

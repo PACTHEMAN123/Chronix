@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use log::info;
 use smoltcp::time;
 
-use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
+use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrWriter}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
 
 use super::{SysError, SysResult};
 
@@ -530,15 +530,15 @@ impl FutexManager {
 /// 
 /// NOTE: this structure is part of the syscall ABI, and must not be
 /// changed.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[repr(C)]
 pub struct RobustList {
     ///
-	pub next: *mut RobustList
+	pub next: UserPtrWriter<RobustList>
 }
 
 /// Robust List Head
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 #[repr(C)]
 pub struct RobustListHead {
     /// The head of the list. Points back to itself if empty:
@@ -556,7 +556,7 @@ pub struct RobustListHead {
 	/// always have full knowledge of all locks that the thread
 	/// _might_ have taken. We check the owner TID in any case,
 	/// so only truly owned locks will be handled.
-    pub list_op_pending: *mut RobustList,
+    pub list_op_pending: UserPtrWriter<RobustList>,
 }
 
 /// Are there any waiters for this robust futex:
@@ -583,7 +583,7 @@ pub fn sys_get_robust_list(
         current_task().cloned().unwrap()
     };
     unsafe {
-        head_ptr.write(task.robust.exclusive_access().0);
+        head_ptr.write(task.robust.exclusive_access().to_raw_ptr_unchecked());
         len_ptr.write(size_of::<RobustListHead>());
     }
     Ok(0)
@@ -598,6 +598,6 @@ pub fn sys_set_robust_list(head: *mut RobustListHead, len: usize) -> SysResult {
     let task = current_task().cloned().unwrap();
     // task.vm_space.lock().get_area_mut(VirtAddr::from(head as usize)).ok_or(SysError::EINVAL)?;
     info!("[sys_set_robust_list] set task {} robust to {:#x}", task.tid(), head as usize);
-    task.robust.exclusive_access().0 = head;
+    task.robust.exclusive_access().reset(head);
     Ok(0)
 }

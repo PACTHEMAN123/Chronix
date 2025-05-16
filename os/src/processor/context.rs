@@ -48,6 +48,7 @@ impl EnvContext{
 }
 
 /// RAII to guard sum flag
+#[repr(C)]
 pub struct SumGuard {}
 
 impl SumGuard{
@@ -62,5 +63,11 @@ impl SumGuard{
 impl Drop for SumGuard {
     fn drop(&mut self) {
         current_processor().env_mut().sum_dec();
+    }
+}
+
+impl Clone for SumGuard {
+    fn clone(&self) -> Self {
+        Self::new()
     }
 }

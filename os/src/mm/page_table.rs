@@ -72,7 +72,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
 /// translate user va by user_vm_space
 pub fn translate_uva_checked(user_vm_space: &mut UserVmSpace, va: VirtAddr, access_type: PageFaultAccessType) -> Option<PhysAddr> {
     match user_vm_space.get_page_table().find_pte(va.floor()) {
-        Some((pte, _)) if access_type.can_access(pte.flags()) => {
+        Some((pte, _)) if access_type.can_access_directly(pte.flags()) => {
             Some(pte.ppn().start_addr() + va.page_offset())
         }
         _ => {
