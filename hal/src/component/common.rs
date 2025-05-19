@@ -4,6 +4,7 @@ use crate::allocator::{DynamicFrameAllocator, FrameAllocatorHal};
 
 use super::addr::PhysPageNum;
 
+#[derive(Debug)]
 pub struct FrameTracker<A: FrameAllocatorHal = DynamicFrameAllocator> {
     pub range_ppn: Range<PhysPageNum>,
     alloc: A

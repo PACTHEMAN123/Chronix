@@ -5,20 +5,16 @@ use bitflags::bitflags;
 
 bitflags! {
     pub struct MapFlags: u8 {
-        /// Valid
-        const V = 1 << 0;
         /// Readable
-        const R = 1 << 1;
+        const R = 1 << 0;
         /// Writable
-        const W = 1 << 2;
+        const W = 1 << 1;
         /// Executable
-        const X = 1 << 3;
+        const X = 1 << 2;
         /// User-mode accessible
-        const U = 1 << 4;
+        const U = 1 << 3;
         /// Copy On Write
-        const C = 1 << 5;
-        /// Dirty
-        const D = 1 << 6;
+        const C = 1 << 4;
     }
 }
 
@@ -33,17 +29,9 @@ pub trait PageTableEntryHal {
 
     fn set_ppn(&mut self, ppn: PhysPageNum);
 
-    fn is_valid(&self) -> bool {
-        self.flags().contains(MapFlags::V)
-    }
+    fn is_valid(&self) -> bool;
     
-    fn set_valid(&mut self, val: bool) {
-        if val {
-            self.set_flags(self.flags() | MapFlags::V);
-        } else {
-            self.set_flags(self.flags() & !MapFlags::V);
-        }
-    }
+    fn set_valid(&mut self, val: bool);
 
     fn is_user(&self) -> bool {
         self.flags().contains(MapFlags::U)
@@ -105,17 +93,9 @@ pub trait PageTableEntryHal {
         }
     }
 
-    fn is_dirty(&self) -> bool {
-        self.flags().contains(MapFlags::D)
-    }
+    fn is_dirty(&self) -> bool;
 
-    fn set_dirty(&mut self, val: bool) {
-        if val {
-            self.set_flags(self.flags() | MapFlags::D);
-        } else {
-            self.set_flags(self.flags() & !MapFlags::D);
-        }
-    }
+    fn set_dirty(&mut self, val: bool);
     
     fn is_leaf(&self) -> bool;
 }

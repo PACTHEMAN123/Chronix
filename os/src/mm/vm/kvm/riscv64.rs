@@ -26,7 +26,8 @@ impl KernVmSpace {
         range_ppn.get_slice_mut::<u8>().fill(0);
         let ppn = range_ppn.start;
         for (i, pte_i) in (VM_START..VM_START+HUGE_PAGES).enumerate() {
-            ptes[pte_i] = PageTableEntry::new(ppn+i, MapFlags::V);
+            ptes[pte_i] = PageTableEntry::new(ppn+i, MapFlags::empty());
+            ptes[pte_i].set_valid(true);
         }
     }
 }

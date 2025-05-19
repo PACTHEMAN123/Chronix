@@ -1,4 +1,4 @@
-use core::ops::Range;
+use core::{fmt::Debug, ops::Range};
 use alloc::{alloc::Global, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
@@ -47,6 +47,26 @@ pub enum UserVmFile {
     None,
     File(Arc<dyn File>),
     Shm(Arc<sysv::ShmObj>)
+}
+
+impl PartialEq for UserVmFile {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::File(l0), Self::File(r0)) => l0.as_ref() as *const _ == r0.as_ref(),
+            (Self::Shm(l0), Self::Shm(r0)) => l0.get_id() == r0.get_id(),
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Debug for UserVmFile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::None => write!(f, "None"),
+            Self::File(arg0) => f.debug_tuple("File").field(&(arg0.as_ref() as *const _)).finish(),
+            Self::Shm(arg0) => f.debug_tuple("Shm").field(&arg0.get_id()).finish(),
+        }
+    }
 }
 
 #[allow(missing_docs)]
@@ -100,6 +120,7 @@ impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
 }
 
 #[allow(missing_docs, unused)]
+#[derive(Debug)]
 pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
@@ -154,7 +175,7 @@ impl UserVmArea {
         Self {
             range_va,
             vma_type,
-            map_flags: map_perm | MapFlags::V,
+            map_flags: map_perm,
             frames: BTreeMap::new(),
             file: UserVmFile::None,
             mmap_flags: MmapFlags::default(),
@@ -174,7 +195,7 @@ impl UserVmArea {
         Self {
             range_va,
             vma_type: UserVmAreaType::Mmap,
-            map_flags: map_perm | MapFlags::V,
+            map_flags: map_perm,
             frames: BTreeMap::new(),
             file,
             mmap_flags: flags,
@@ -204,7 +225,7 @@ impl KernVmArea {
         Self {
             range_va,
             vma_type,
-            map_perm: map_perm | MapFlags::V,
+            map_perm: map_perm,
             frames: BTreeMap::new(),
             file: None,
         }

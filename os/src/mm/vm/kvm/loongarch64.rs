@@ -96,7 +96,7 @@ impl KernVmSpaceHal for KernVmSpace {
                 let vpn = va.floor();
                 let offset = (vpn.0 - area.range_vpn().start.0) * Constant::PAGE_SIZE;
                 let page = inode.read_page_at(offset).ok_or(())?;
-                let _ = self.page_table.map(vpn, page.ppn(), MapFlags::R | MapFlags::V, PageLevel::Small);
+                let _ = self.page_table.map(vpn, page.ppn(), MapFlags::R, PageLevel::Small);
                 area.frames.insert(vpn, page.frame());
                 unsafe { Instruction::tlb_flush_addr(vpn.start_addr().0); }
                 Ok(())
@@ -153,14 +153,16 @@ impl KernVmArea {
                 for (vpn, ppn) in self.range_vpn().zip(sigret_trampoline_ppn..sigret_trampoline_ppn+1) {
                     let pte = page_table.map(vpn, ppn, self.map_perm, PageLevel::Small)
                         .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                    pte.set_flags(pte.flags() | MapFlags::D);
+                    pte.set_dirty(true);
+                    pte.set_valid(true);
                 }
             }
             KernVmAreaType::VirtMemory => {
                 for (&vpn, frame) in self.frames.iter() {
                     let pte = page_table.map(vpn, frame.range_ppn.start, self.map_perm, PageLevel::Small)
                         .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
-                    pte.set_flags(pte.flags() | MapFlags::D);
+                    pte.set_dirty(true);
+                    pte.set_valid(true);
                 }
             }
             KernVmAreaType::Mmap => {}

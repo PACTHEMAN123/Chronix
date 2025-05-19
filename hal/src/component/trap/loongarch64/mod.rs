@@ -346,7 +346,7 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     if !pte.flags().contains(MapFlags::W) {
         return TrapType::StorePageFault(badv);
     }
-    pte.set_flags(pte.flags() | MapFlags::D);
+    pte.set_dirty(true);
     unsafe {
         core::arch::asm!("tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
     }

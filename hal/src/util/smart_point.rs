@@ -1,6 +1,6 @@
 use core::{alloc::Layout, ops::{Deref, DerefMut}, ptr::{self, NonNull}, sync::atomic::{AtomicUsize, Ordering}};
 
-use alloc::alloc::{handle_alloc_error, Allocator, Global};
+use alloc::{alloc::{handle_alloc_error, Allocator, Global}, rc};
 
 struct StrongArcPayload<T> {
     data: T,
@@ -45,8 +45,48 @@ impl<T> StrongArc<T, Global> {
 #[allow(unused, missing_docs)]
 impl<T, A: Allocator + Clone> StrongArc<T, A> {
     pub fn new_in(data: T, alloc: A) -> Self {
+        let mut ret = Self {
+            payload: NonNull::dangling(),
+            alloc,
+        };
+        ret.alloc_payload(data);
+        ret
+    }
+
+    pub fn get_owners(&self) -> usize {
+        unsafe {
+            self.payload.as_ref().get_rc()
+        }
+    }
+
+    pub fn emplace(&mut self, val: T) {
+        let rc_ref = unsafe { &self.payload.as_ref().rc };
+        let mut oval = rc_ref.load(Ordering::Acquire);
+        loop {
+            if oval == 1 {
+                unsafe { 
+                    self.payload.as_mut().data = val 
+                };
+                break;
+            } else {
+                match rc_ref.compare_exchange(
+                    oval, oval-1,
+                    Ordering::AcqRel, Ordering::Relaxed
+                ) {
+                    Ok(_) => {
+                        core::sync::atomic::fence(Ordering::Release);
+                        self.alloc_payload(val);
+                        break;
+                    }
+                    Err(v) => oval = v
+                }
+            }
+        }
+    }
+
+    fn alloc_payload(&mut self, data: T) {
         let layout = Layout::new::<StrongArcPayload<T>>();
-        match alloc.allocate(layout) {
+        match self.alloc.allocate(layout) {
             Ok(p) => {
                 let mut payload: NonNull<StrongArcPayload<T>> = p.cast();
                 unsafe {
@@ -55,18 +95,9 @@ impl<T, A: Allocator + Clone> StrongArc<T, A> {
                         rc: AtomicUsize::new(1)
                     });
                 }
-                Self {
-                    payload,
-                    alloc,
-                }
+                self.payload = payload;
             },
             Err(_) => handle_alloc_error(layout)
-        }
-    }
-
-    pub fn get_owners(&self) -> usize {
-        unsafe {
-            self.payload.as_ref().get_rc()
         }
     }
 }

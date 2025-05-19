@@ -157,11 +157,16 @@ pub struct PageTableEntry {
 
 #[allow(missing_docs)]
 impl PageTableEntry {
-    const FLAGS_MASK: usize = 0xE000_0000_0000_0FFF;
+    const FLAGS_MASK: usize = {
+        PTEFlags::PLV_L.bits | PTEFlags::PLV_H.bits |
+        PTEFlags::W.bits     | PTEFlags::C.bits     |
+        PTEFlags::NX.bits    | PTEFlags::NR.bits
+    };
+    const PTE_FLAGS_MASK: usize = 0xE000_0000_0000_0FFF;
     const PPN_MASK: usize = 0x1FFF_FFFF_FFFF_F000;
 
     pub(crate) fn pteflags(&self) -> PTEFlags {
-        PTEFlags::from_bits(self.bits & Self::FLAGS_MASK).unwrap()
+        PTEFlags::from_bits(self.bits & Self::PTE_FLAGS_MASK).unwrap()
     }
 
 }
@@ -169,9 +174,6 @@ impl PageTableEntry {
 impl From<MapFlags> for PTEFlags {
     fn from(value: MapFlags) -> Self {
         let mut ret = Self::empty();
-        if value.contains(MapFlags::V) {
-            ret.insert(PTEFlags::V);
-        }
         if value.contains(MapFlags::U) {
             ret.insert(PTEFlags::PLV_L | PTEFlags::PLV_H);
         }
@@ -186,9 +188,6 @@ impl From<MapFlags> for PTEFlags {
         }
         if value.contains(MapFlags::C) {
             ret.insert(PTEFlags::C);
-        }
-        if value.contains(MapFlags::D) {
-            ret.insert(PTEFlags::D);
         }
         ret
     }
@@ -205,9 +204,6 @@ impl PageTableEntryHal for PageTableEntry {
     fn flags(&self) -> super::MapFlags {
         let pte = self.pteflags();
         let mut ret = MapFlags::empty();
-        if pte.contains(PTEFlags::V) {
-            ret.insert(MapFlags::V);
-        }
         if pte.contains(PTEFlags::PLV_H) & 
             pte.contains(PTEFlags::PLV_L) {
             ret.insert(MapFlags::U);
@@ -223,9 +219,6 @@ impl PageTableEntryHal for PageTableEntry {
         }
         if pte.contains(PTEFlags::C) {
             ret.insert(MapFlags::C);
-        }
-        if pte.contains(PTEFlags::D) {
-            ret.insert(MapFlags::D);
         }
         ret
     }
@@ -243,6 +236,30 @@ impl PageTableEntryHal for PageTableEntry {
     fn set_ppn(&mut self, ppn: PhysPageNum) {
         self.bits &= !Self::PPN_MASK;
         self.bits |= (ppn.0 << 12) & Self::PPN_MASK;
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.pteflags().contains(PTEFlags::D)
+    }
+    
+    fn set_dirty(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::D.bits as usize;
+        } else {
+            self.bits &= !PTEFlags::D.bits as usize;
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        self.pteflags().contains(PTEFlags::V)
+    }
+    
+    fn set_valid(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::V.bits as usize
+        } else {
+            self.bits &= !PTEFlags::V.bits as usize
+        }
     }
     
     fn is_leaf(&self) -> bool {
@@ -348,7 +365,8 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
 
     fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapFlags, level: PageLevel) -> Result<&mut PageTableEntry, ()>{
         if let Some(pte) = self.find_pte_create(vpn, level) {
-            *pte = PageTableEntry::new(ppn, perm | MapFlags::V);
+            *pte = PageTableEntry::new(ppn, perm);
+            pte.set_valid(true);
             pte.bits |= PTEFlags::MAT_L.bits; // Coherent Cached
             Ok(pte)
         } else {

@@ -139,19 +139,21 @@ impl PageTableEntry {
     #[allow(unused)]
     const RESERVE_MASK: usize = 0xFFC0_0000_0000_0000;
     const PPN_MASK: usize = 0x003F_FFFF_FFFF_FC00;
-    const FLAGS_MASK: usize = 0x0000_0000_0000_03FF;
+    const PTE_FLAGS_MASK: usize = 0x0000_0000_0000_03FF;
+    const FLAGS_MASK: usize = {
+        PTEFlags::U.bits | PTEFlags::R.bits |
+        PTEFlags::W.bits | PTEFlags::X.bits |
+        PTEFlags::C.bits
+    } as usize;
 
     pub(crate) fn pteflags(&self) -> PTEFlags {
-        PTEFlags::from_bits((self.bits & ((1usize << 10) - 1)) as u16).unwrap()
+        PTEFlags::from_bits((self.bits & Self::PTE_FLAGS_MASK) as u16).unwrap()
     }
 }
 
 impl From<MapFlags> for PTEFlags {
     fn from(value: MapFlags) -> Self {
         let mut ret = Self::empty();
-        if value.contains(MapFlags::V) {
-            ret.insert(PTEFlags::V);
-        }
         if value.contains(MapFlags::U) {
             ret.insert(PTEFlags::U);
         }
@@ -166,9 +168,6 @@ impl From<MapFlags> for PTEFlags {
         }
         if value.contains(MapFlags::C) {
             ret.insert(PTEFlags::C);
-        }
-        if value.contains(MapFlags::D) {
-            ret.insert(PTEFlags::D);
         }
         ret
     }
@@ -185,9 +184,6 @@ impl PageTableEntryHal for PageTableEntry {
     fn flags(&self) -> super::MapFlags {
         let pte = self.pteflags();
         let mut ret = MapFlags::empty();
-        if pte.contains(PTEFlags::V) {
-            ret.insert(MapFlags::V);
-        }
         if pte.contains(PTEFlags::U) {
             ret.insert(MapFlags::U);
         }
@@ -202,9 +198,6 @@ impl PageTableEntryHal for PageTableEntry {
         }
         if pte.contains(PTEFlags::C) {
             ret.insert(MapFlags::C);
-        }
-        if pte.contains(PTEFlags::D) {
-            ret.insert(MapFlags::D);
         }
         ret
     }
@@ -232,6 +225,30 @@ impl PageTableEntryHal for PageTableEntry {
             (self.pteflags() & PTEFlags::X) != PTEFlags::empty()
         )
     }
+    
+    fn is_dirty(&self) -> bool {
+        self.pteflags().contains(PTEFlags::D)
+    }
+    
+    fn set_dirty(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::D.bits as usize;
+        } else {
+            self.bits &= !PTEFlags::D.bits as usize;
+        }
+    }
+    
+    fn is_valid(&self) -> bool {
+        self.pteflags().contains(PTEFlags::V)
+    }
+    
+    fn set_valid(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::V.bits as usize
+        } else {
+            self.bits &= !PTEFlags::V.bits as usize
+        }
+    }
 }
 
 /// page table structure
@@ -257,7 +274,8 @@ impl<A: FrameAllocatorHal + Clone> PageTable<A> {
             if !pte.is_valid() {
                 let frame = self.alloc.alloc(1).unwrap();
                 frame.get_slice_mut::<u8>().fill(0);
-                *pte = PageTableEntry::new(frame.start, MapFlags::V);
+                *pte = PageTableEntry::new(frame.start, MapFlags::empty());
+                pte.set_valid(true);
                 self.frames.push(FrameTracker::new_in(frame, self.alloc.clone()));
             }
             ppn = pte.ppn();
@@ -309,7 +327,8 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
 
     fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: super::MapFlags, level: PageLevel) -> Result<&mut PageTableEntry, ()>{
         if let Some(pte) = self.find_pte_create(vpn, level) {
-            *pte = PageTableEntry::new(ppn, perm | MapFlags::V);
+            *pte = PageTableEntry::new(ppn, perm);
+            pte.set_valid(true);
             Ok(pte)
         } else {
             log::warn!("vpn {} has been mapped", vpn.0);
