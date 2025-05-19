@@ -220,6 +220,8 @@ bitflags! {
         const WRITE = 1 << 1;
         /// Execute
         const EXECUTE = 1 << 2;
+        /// Read-Write
+        const READ_WRITE = Self::READ.bits | Self::WRITE.bits;
     }
 }
 
@@ -227,6 +229,15 @@ bitflags! {
 impl PageFaultAccessType {
     pub fn can_access(self, flag: MapFlags) -> bool {
         if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) && !flag.contains(MapFlags::C) {
+            return false;
+        }
+        if self.contains(Self::EXECUTE) && !flag.contains(MapFlags::X) {
+            return false;
+        }
+        true
+    }
+    pub fn can_access_directly(self, flag: MapFlags) -> bool {
+        if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) {
             return false;
         }
         if self.contains(Self::EXECUTE) && !flag.contains(MapFlags::X) {
@@ -303,6 +314,8 @@ pub trait UserVmSpaceHal: Sized {
     fn get_area_view(&self, va: VirtAddr) -> Option<UserVmAreaView>;
 
     fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea>;
+
+    fn get_area_ref(&self, va: VirtAddr) -> Option<&UserVmArea>;
 
     fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapFlags, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
 

@@ -242,6 +242,8 @@ pub fn sys_rt_sigreturn() -> SysResult {
 /// - `timeout`: specifies the interval for which the thread is suspended
 ///   waiting for a signal.
 /// On success, sigtimedwait() returns a signal number
+/// 
+/// TODOS: the implements seems not accurate
 pub async fn sys_rt_sigtimedwait(
     set_ptr: usize,
     info_ptr: usize,
@@ -266,12 +268,14 @@ pub async fn sys_rt_sigtimedwait(
     }
     task.set_interruptable();
     if timeout_ptr == 0 {
+        // log::warn!("[sys_rt_sigtimedwait] task {} start to suspend", task.tid());
         suspend_now().await;
-    }else {
+    } else {
         let timeout = unsafe {
             let _sum_guard = SumGuard::new();
             *(timeout_ptr as *const TimeSpec)
         };
+        log::warn!("[sys_rt_sigtimedwait] task {} set timeout {:?}",task.tid(), timeout);
         if !timeout.is_valid() {
             return  Err(SysError::EINVAL);
         }
@@ -290,7 +294,7 @@ pub async fn sys_rt_sigtimedwait(
         }
         return  Ok(si.si_signo as isize);
     }else {
-        log::warn!("[sys_rt_sigtimedwait] info_ptr is null, woken by timeout");
+        log::warn!("[sys_rt_sigtimedwait] info_ptr is null, task {} woken by timeout", task.tid());
         return Err(SysError::EAGAIN);
     }
 }

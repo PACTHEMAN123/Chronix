@@ -12,7 +12,7 @@ extern crate user_lib;
 #[no_mangle]
 pub fn main(_args: &[&str]) -> i32 {
     let ptr = mmap(
-        0, 1024, 
+        0, 4096, 
         MmapProt::PROT_READ | MmapProt::PROT_WRITE, 
         MmapFlags::MAP_ANONYMOUS | MmapFlags::MAP_PRIVATE, 
         0, 0
@@ -28,7 +28,7 @@ pub fn main(_args: &[&str]) -> i32 {
     }
 
     let ret = mremap(
-        ptr as usize, 1024,
+        ptr as usize, 4096,
         8192, MremapFlags::MAYMOVE | MremapFlags::DONTUNMAP,
         0
     );

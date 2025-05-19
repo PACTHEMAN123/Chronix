@@ -148,10 +148,33 @@ impl dyn Dentry {
     pub fn find(self: &Arc<Self>, path: &str) -> Result<Option<Arc<dyn Dentry>>, SysError> {
         // the path should be relative!
         let path = path.trim_start_matches("/");
+        let mut current = self.clone();
+        if path.is_empty() {
+            return Ok(Some(current))
+        }
+        log::info!("path {}", path);
+        let normalize_path = {
+            let mut compoents = Vec::new();
+            for compoent in path.split("/") {
+                match compoent {
+                    "" | "." => continue,
+                    ".." => {
+                        current = current.parent().ok_or(SysError::ENOENT)?;
+                    }
+                    name => {
+                        compoents.push(name);
+                    }
+                }
+            }
+
+            compoents.join("/")
+        };
+        log::info!("normalize path: {}", normalize_path);
+
         // dcache lock must be release before calling other dentry trait
         {
             let cache = DCACHE.lock();
-            let abs_path = self.path() + path;
+            let abs_path = current.path() + &normalize_path;
             //info!("[DCACHE] try to get {}", abs_path);
             if let Some(dentry) = cache.get(&abs_path) {
                 //info!("[DCACHE] hit one: {:?}", dentry.name());
@@ -163,7 +186,7 @@ impl dyn Dentry {
             }
         }
         //info!("[DCACHE] miss one: {:?}, start to search from {}", path, self.path());
-        let dentry = self.clone().walk(path)?;
+        let dentry = current.clone().walk(path)?;
         if dentry.state() == DentryState::NEGATIVE {
             //info!("[DENTRY] invalid path!");
             Ok(None)
