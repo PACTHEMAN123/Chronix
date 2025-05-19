@@ -140,7 +140,7 @@ impl Device for Serial {
         self.with_mut_inner(|inner| {
             while uart.poll_in() {
                 let byte = uart.getc();
-                log::info!(
+                log::trace!(
                     "Serial interrupt handler got byte: {}, ascii: {byte}",
                     core::str::from_utf8(&[byte]).unwrap()
                 );

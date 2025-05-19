@@ -5,6 +5,7 @@ pub enum TrapType {
     Breakpoint,
     Syscall,
     Timer,
+    ExternalInterrupt,
     StorePageFault(usize),
     LoadPageFault(usize),
     InstructionPageFault(usize),

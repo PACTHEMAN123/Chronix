@@ -340,6 +340,7 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::InstructionPageFault) => TrapType::InstructionPageFault(stval),
         Trap::Exception(Exception::IllegalInstruction) => TrapType::IllegalInstruction(stval),
         Trap::Interrupt(Interrupt::SupervisorTimer) => TrapType::Timer,
+        Trap::Interrupt(Interrupt::SupervisorExternal) => TrapType::ExternalInterrupt,
         _ => {
             info!("scause: {:?}, stval: {:x} sepc: {:x}", scause.cause(), stval, sepc::read());
             TrapType::Other

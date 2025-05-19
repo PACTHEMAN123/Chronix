@@ -13,6 +13,7 @@
 //! to [`syscall()`].
 
 use alloc::sync::Arc;
+use downcast_rs::Downcast;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
@@ -123,6 +124,10 @@ pub async fn user_trap_handler() -> bool {
             set_next_trigger();
             yield_now().await;
         }
+        TrapType::ExternalInterrupt => {
+            let manager = crate::devices::DEVICE_MANAGER.lock();
+            manager.handle_irq();
+        }
         TrapType::Processed => {}
         _ => {
             panic!(
@@ -205,6 +210,10 @@ fn kernel_trap_handler() {
             // info!("interrupt: supervisor timer");
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
+        }
+        TrapType::ExternalInterrupt => {
+            let manager = crate::devices::DEVICE_MANAGER.lock();
+            manager.handle_irq();
         }
         TrapType::Processed => {}
         _ => {

@@ -19,6 +19,7 @@ async-trait.workspace = true
 hashbrown.workspace = true
 strum.workspace = true
 rand.workspace = true
+plic.workspace = true
 downcast-rs.workspace = true
 bitmap-allocator.workspace = true
 fdt.workspace = true

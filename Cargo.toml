@@ -27,6 +27,7 @@ rand = { version = "0.9.0-beta.3", default-features = false, features = ["small_
 downcast-rs = { version = "2.0.1", default-features = false, features = ["sync"]}
 sbi-rt = { version = "0.0.2", features = ["legacy"] }
 riscv = "0.11.0"
+plic = "0.0.3"
 
 # crates on github
 bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", branch = "main" }

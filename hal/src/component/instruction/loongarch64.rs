@@ -102,4 +102,8 @@ impl InstructionHal for Instruction {
             }
         }
     }
+
+    unsafe fn enable_external_interrupt() {
+        todo!()
+    }
 }

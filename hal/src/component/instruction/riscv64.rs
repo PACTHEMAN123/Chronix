@@ -28,7 +28,9 @@ impl InstructionHal for Instruction {
     unsafe fn enable_timer_interrupt() {
         register::sie::set_stimer();
     }
-
+    unsafe fn enable_external_interrupt() {
+        register::sie::set_sext();
+    } 
     unsafe fn clear_sum() {
         register::sstatus::clear_sum();
     }
