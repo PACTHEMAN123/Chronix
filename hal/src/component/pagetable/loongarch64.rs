@@ -159,8 +159,8 @@ pub struct PageTableEntry {
 impl PageTableEntry {
     const FLAGS_MASK: usize = {
         PTEFlags::PLV_L.bits | PTEFlags::PLV_H.bits |
-        PTEFlags::W.bits     | PTEFlags::C.bits     |
-        PTEFlags::NX.bits    | PTEFlags::NR.bits
+        PTEFlags::W.bits     | PTEFlags::NX.bits    |
+        PTEFlags::NR.bits
     };
     const PTE_FLAGS_MASK: usize = 0xE000_0000_0000_0FFF;
     const PPN_MASK: usize = 0x1FFF_FFFF_FFFF_F000;
@@ -185,9 +185,6 @@ impl From<MapFlags> for PTEFlags {
         }
         if !value.contains(MapFlags::X) {
             ret.insert(PTEFlags::NX);
-        }
-        if value.contains(MapFlags::C) {
-            ret.insert(PTEFlags::C);
         }
         ret
     }
@@ -216,9 +213,6 @@ impl PageTableEntryHal for PageTableEntry {
         }
         if !pte.contains(PTEFlags::NX) {
             ret.insert(MapFlags::X);
-        }
-        if pte.contains(PTEFlags::C) {
-            ret.insert(MapFlags::C);
         }
         ret
     }
@@ -259,6 +253,18 @@ impl PageTableEntryHal for PageTableEntry {
             self.bits |= PTEFlags::V.bits as usize
         } else {
             self.bits &= !PTEFlags::V.bits as usize
+        }
+    }
+
+    fn is_cow(&self) -> bool {
+        self.pteflags().contains(PTEFlags::C)
+    }
+    
+    fn set_cow(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::C.bits as usize
+        } else {
+            self.bits &= !(PTEFlags::C.bits as usize)
         }
     }
     

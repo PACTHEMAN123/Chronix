@@ -142,8 +142,7 @@ impl PageTableEntry {
     const PTE_FLAGS_MASK: usize = 0x0000_0000_0000_03FF;
     const FLAGS_MASK: usize = {
         PTEFlags::U.bits | PTEFlags::R.bits |
-        PTEFlags::W.bits | PTEFlags::X.bits |
-        PTEFlags::C.bits
+        PTEFlags::W.bits | PTEFlags::X.bits
     } as usize;
 
     pub(crate) fn pteflags(&self) -> PTEFlags {
@@ -165,9 +164,6 @@ impl From<MapFlags> for PTEFlags {
         }
         if value.contains(MapFlags::X) {
             ret.insert(PTEFlags::X);
-        }
-        if value.contains(MapFlags::C) {
-            ret.insert(PTEFlags::C);
         }
         ret
     }
@@ -196,9 +192,6 @@ impl PageTableEntryHal for PageTableEntry {
         if pte.contains(PTEFlags::X) {
             ret.insert(MapFlags::X);
         }
-        if pte.contains(PTEFlags::C) {
-            ret.insert(MapFlags::C);
-        }
         ret
     }
     
@@ -209,7 +202,7 @@ impl PageTableEntryHal for PageTableEntry {
     }
     
     fn ppn(&self) -> PhysPageNum {
-        PhysPageNum(self.bits >> 10 & ((1usize << Constant::PPN_WIDTH) - 1))
+        PhysPageNum((self.bits >> 10) & ((1usize << Constant::PPN_WIDTH) - 1))
     }
     
     fn set_ppn(&mut self, ppn: PhysPageNum) {
@@ -218,11 +211,11 @@ impl PageTableEntryHal for PageTableEntry {
     }
 
     fn is_leaf(&self) -> bool {
-        (self.pteflags() & PTEFlags::V) != PTEFlags::empty() && 
+        self.pteflags().contains(PTEFlags::V) && 
         (
-            (self.pteflags() & PTEFlags::R) != PTEFlags::empty() ||
-            (self.pteflags() & PTEFlags::W) != PTEFlags::empty() ||
-            (self.pteflags() & PTEFlags::X) != PTEFlags::empty()
+            self.pteflags().contains(PTEFlags::R) ||
+            self.pteflags().contains(PTEFlags::W) ||
+            self.pteflags().contains(PTEFlags::X)
         )
     }
     
@@ -234,7 +227,7 @@ impl PageTableEntryHal for PageTableEntry {
         if val {
             self.bits |= PTEFlags::D.bits as usize;
         } else {
-            self.bits &= !PTEFlags::D.bits as usize;
+            self.bits &= !(PTEFlags::D.bits as usize);
         }
     }
     
@@ -246,7 +239,19 @@ impl PageTableEntryHal for PageTableEntry {
         if val {
             self.bits |= PTEFlags::V.bits as usize
         } else {
-            self.bits &= !PTEFlags::V.bits as usize
+            self.bits &= !(PTEFlags::V.bits as usize)
+        }
+    }
+    
+    fn is_cow(&self) -> bool {
+        self.pteflags().contains(PTEFlags::C)
+    }
+    
+    fn set_cow(&mut self, val: bool) {
+        if val {
+            self.bits |= PTEFlags::C.bits as usize
+        } else {
+            self.bits &= !(PTEFlags::C.bits as usize)
         }
     }
 }

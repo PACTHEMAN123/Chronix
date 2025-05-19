@@ -13,8 +13,6 @@ bitflags! {
         const X = 1 << 2;
         /// User-mode accessible
         const U = 1 << 3;
-        /// Copy On Write
-        const C = 1 << 4;
     }
 }
 
@@ -81,17 +79,9 @@ pub trait PageTableEntryHal {
         }
     }
 
-    fn is_cow(&self) -> bool {
-        self.flags().contains(MapFlags::C)
-    }
+    fn is_cow(&self) -> bool;
 
-    fn set_cow(&mut self, val: bool) {
-        if val {
-            self.set_flags(self.flags() | MapFlags::C);
-        } else {
-            self.set_flags(self.flags() & !MapFlags::C);
-        }
-    }
+    fn set_cow(&mut self, val: bool);
 
     fn is_dirty(&self) -> bool;
 

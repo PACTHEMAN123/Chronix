@@ -249,15 +249,6 @@ bitflags! {
 #[allow(missing_docs, unused)]
 impl PageFaultAccessType {
     pub fn can_access(self, flag: MapFlags) -> bool {
-        if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) && !flag.contains(MapFlags::C) {
-            return false;
-        }
-        if self.contains(Self::EXECUTE) && !flag.contains(MapFlags::X) {
-            return false;
-        }
-        true
-    }
-    pub fn can_access_directly(self, flag: MapFlags) -> bool {
         if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) {
             return false;
         }
@@ -329,6 +320,10 @@ pub trait UserVmSpaceHal: Sized {
     fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr;
 
     fn handle_page_fault(&mut self, va: VirtAddr, access_type: PageFaultAccessType) -> Result<(), ()>;
+
+    fn access_no_fault(&mut self, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> bool;
+
+    fn ensure_access(&mut self, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> Result<(), ()>;
 
     fn check_free(&self, va: VirtAddr, len: usize) -> Result<(), ()>;
 
