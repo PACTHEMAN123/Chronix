@@ -191,14 +191,15 @@ impl UserVmSpaceHal for UserVmSpace {
                 let mut pre = self.areas.force_remove_one(pre.range_vpn());
                 core::mem::swap(&mut pre, &mut area);
                 area.push_back_unchecked(pre);
-            } 
+            }
         }
         match self.areas.try_insert(area.range_vpn(), area) {
             Ok(area) => {
                 if let Some(data) = data{
                     area.copy_data(&mut self.page_table, data, pg_offset);
-                } 
+                }
                 area.map(&mut self.page_table);
+                println!("[push_area] {:?}", area.to_view());
                 area
             },
             Err(_) => panic!("[push_area] fail")
@@ -485,20 +486,13 @@ impl UserVmArea {
     }
 
     fn split_off(&mut self, p: VirtPageNum) -> Self {
-        let new_offset ;
-        let new_len;
-        if self.file.is_some() {
-            new_offset = self.offset + (p.0 - self.range_vpn().start.0) * Constant::PAGE_SIZE;
-            new_len = if new_offset - self.offset > self.len {
-                0
-            } else {
-                self.len - (new_offset - self.offset)
-            };
-            self.len -= new_len;
+        let new_offset = self.offset + (p.0 - self.range_vpn().start.0) * Constant::PAGE_SIZE;
+        let new_len = if new_offset - self.offset > self.len {
+            0
         } else {
-            new_offset = 0;
-            new_len = 0;
-        }
+            self.len - (new_offset - self.offset)
+        };
+        self.len -= new_len;
 
         let ret = Self {
             range_va: p.start_addr()..self.range_va.end,
@@ -529,6 +523,7 @@ impl UserVmArea {
                 .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
             if frame.get_owners() > 1 && !self.map_flags.contains(MapFlags::SHARED) {
                 pte.set_writable(false);
+                pte.set_dirty(false);
             }
         }
     }

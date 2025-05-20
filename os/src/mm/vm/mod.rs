@@ -166,7 +166,7 @@ pub struct UserVmArea {
 }
 
 #[allow(missing_docs, unused)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 /// View of User VMA
 pub struct UserVmAreaView {
     pub range_va: Range<VirtAddr>,

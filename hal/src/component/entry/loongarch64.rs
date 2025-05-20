@@ -85,10 +85,19 @@ core::arch::global_asm!(
         csrwr   $t0, LA_CSR_TLBRSAVE
         csrrd   $t0, LA_CSR_PGD
         lddir   $t0, $t0, 3
+        beqz    $t0, _break
         lddir   $t0, $t0, 2
+        beqz    $t0, _break
         lddir   $t0, $t0, 1
+        beqz    $t0, _break
         ldpte   $t0, 0
         ldpte   $t0, 1
+        tlbfill
+        csrrd   $t0, LA_CSR_TLBRSAVE
+        ertn
+    _break:
+        csrwr   $zero, LA_CSR_TLBRELO0
+        csrwr   $zero, LA_CSR_TLBRELO1
         tlbfill
         csrrd   $t0, LA_CSR_TLBRSAVE
         ertn

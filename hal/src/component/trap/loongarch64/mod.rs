@@ -352,8 +352,11 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     }
     let tlbidx = register::tlbidx::read(); //获取TLB项索引
     assert_eq!(tlbidx.ne(), false);
-    register::tlbelo0::set_dirty(true);
-    register::tlbelo1::set_dirty(true);
+    if badv & 1 == 0 {
+        register::tlbelo0::set_dirty(true);
+    } else {
+        register::tlbelo1::set_dirty(true);
+    }
 
     unsafe {
         core::arch::asm!("tlbwr"); //重新将tlbelo写入tlb
@@ -381,7 +384,14 @@ fn get_trap_type() -> TrapType {
             TrapType::Processed
         },
         _ => {
-            warn!(
+            println!("{:#x}", loongArch64::register::pgdl::read().base());
+            let pgt = PageTable::from_token(
+                loongArch64::register::pgdl::read().base(), FakeFrameAllocator
+            );
+            if let Some((pte, _)) = pgt.find_pte(VirtAddr::from(badv).floor()) {
+                println!("{}", pte.bits);
+            }
+            warn!( 
                 "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
                 estat.cause(), 
                 badv, 

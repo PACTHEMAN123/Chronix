@@ -44,7 +44,7 @@ hal::define_user_trap_handler!(user_trap_handler);
 /// return true if it is syscall and has been interrupted
 pub async fn user_trap_handler() -> bool {
     set_kernel_trap_entry();
-    let trap_type = TrapType::get();
+    let (trap_type, epc) = TrapType::get_debug();
     unsafe { Instruction::enable_interrupt() };
     match trap_type {
         TrapType::Breakpoint => {
@@ -105,7 +105,7 @@ pub async fn user_trap_handler() -> bool {
                         Ok(()) => {}
                         Err(()) => {
                             log::warn!(
-                                "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?}",
+                                "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?} epc: {epc:#x}",
                             );
                             exit_current_and_run_next(-2);
                         }
