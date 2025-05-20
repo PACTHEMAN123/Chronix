@@ -1,10 +1,10 @@
 //! memory related syscall
 #![allow(missing_docs)]
 
-use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapFlags, println};
+use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::vm::{UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task};
+use crate::{config::PAGE_SIZE, mm::vm::{MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task};
 
 use super::{SysError, SysResult};
 
@@ -76,7 +76,7 @@ bitflags! {
     }
 }
 
-impl From<MmapProt> for MapFlags {
+impl From<MmapProt> for MapPerm {
     fn from(prot: MmapProt) -> Self {
         let mut ret = Self::U;
         if prot.contains(MmapProt::PROT_READ) {
@@ -103,7 +103,7 @@ pub fn sys_mmap(
 ) -> SysResult {
     let flags = MmapFlags::from_bits_truncate(flags);
     let prot = MmapProt::from_bits_truncate(prot);
-    let perm = MapFlags::from(prot);
+    let perm = MapPerm::from(prot);
     let task = current_task().unwrap().clone();
 
     if length == 0 {
@@ -122,7 +122,7 @@ pub fn sys_mmap(
         MmapFlags::MAP_SHARED => {
             if flags.contains(MmapFlags::MAP_ANONYMOUS) {
                 let start_va = task.with_mut_vm_space(|m| {
-                    m.alloc_anon_area(addr, length, perm, flags, Some(0))
+                    m.alloc_anon_area(addr, length, perm, flags, 0, task.pid())
                 })?;
                 Ok(start_va.0 as _)
             } else {
@@ -136,7 +136,7 @@ pub fn sys_mmap(
         MmapFlags::MAP_PRIVATE => {
             if flags.contains(MmapFlags::MAP_ANONYMOUS) {
                 let start_va = task.with_mut_vm_space(|m| {
-                    m.alloc_anon_area(addr, length, perm, flags, None)
+                    m.alloc_anon_area(addr, length, perm, flags, 0, 0)
                 })?;
                 // log::info!("[sys_mmap] private anonymous: {:#x}", start_va);
                 Ok(start_va.0 as _)
@@ -169,12 +169,12 @@ pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let prot = MmapProt::from_bits_truncate(prot);
-    let perm = MapFlags::from(prot);
+    let perm = MapPerm::from(prot);
     // log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
     let task = current_task().unwrap().clone();
     task.with_mut_vm_space(|vm| -> SysResult {
         let mut vma = vm.unmap(addr, len)?;
-        vma.map_flags = perm;
+        vma.map_perm = perm;
         vm.push_area(vma, None);
         Ok(0)
     })
@@ -206,7 +206,7 @@ pub fn sys_mremap(
         return Err(SysError::EINVAL);
     }
 
-    if flags.contains(MremapFlags::DONTUNMAP) && !old_area.mmap_flags.contains(MmapFlags::MAP_PRIVATE | MmapFlags::MAP_ANONYMOUS) {
+    if flags.contains(MremapFlags::DONTUNMAP) && !old_area.get_mmap_flags().contains(MmapFlags::MAP_PRIVATE | MmapFlags::MAP_ANONYMOUS) {
         return Err(SysError::EINVAL);
     }
 
@@ -238,15 +238,16 @@ pub fn sys_mremap(
 
     new_addr = if let UserVmFile::File(file) = old_area.file.clone() {
         vm.alloc_mmap_area(
-            new_addr, new_size, old_area.map_perm, old_area.mmap_flags, file, 0
+            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), file, 0
         )?
     } else if let UserVmFile::Shm(shm) = old_area.file.clone() {
         vm.alloc_anon_area(
-            new_addr, new_size, old_area.map_perm, old_area.mmap_flags, Some(shm.get_id())
+            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), shm.get_id(), task.pid()
         )?
     } else {
+        assert!(!old_area.map_flags.contains(MapFlags::SHARED));
         vm.alloc_anon_area(
-            new_addr, new_size, old_area.map_perm, old_area.mmap_flags, None
+            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), 0, 0
         )?
     };
     

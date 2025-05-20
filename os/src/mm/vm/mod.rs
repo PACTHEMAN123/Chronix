@@ -2,7 +2,7 @@ use core::{fmt::Debug, ops::Range};
 use alloc::{alloc::Global, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 
 use bitflags::bitflags;
-use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapFlags, PageTableHal}, util::smart_point::StrongArc};
+use hal::{addr::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageTableHal}, util::smart_point::StrongArc};
 use xmas_elf::{reader::Reader, ElfFile};
 
 use crate::{ipc::sysv, fs::vfs::File, sync::mutex::{spin_mutex::SpinMutex, MutexSupport}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::AuxHeader};
@@ -39,6 +39,22 @@ pub enum UserVmAreaType {
     Stack,
     /// file mmap
     Mmap,
+}
+
+bitflags! {
+    pub struct MapFlags: u8 {
+        const SHARED = 1 << 0;
+    }
+}
+
+impl From<MmapFlags> for MapFlags {
+    fn from(value: MmapFlags) -> Self {
+        let mut ret = MapFlags::empty();
+        if value.contains(MmapFlags::MAP_SHARED) || value.contains(MmapFlags::MAP_SHARED_VALIDATE) {
+            ret.insert(MapFlags::SHARED);
+        }
+        ret
+    }
 }
 
 #[allow(missing_docs)]
@@ -85,6 +101,20 @@ impl UserVmFile {
         }
     }
 
+    pub fn is_file(&self) -> bool {
+        match self {
+            Self::File(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn is_shm(&self) -> bool {
+        match self {
+            Self::Shm(_) => true,
+            _ => false
+        }
+    }
+
     pub fn unwrap_file(self) -> Arc<dyn File> {
         match self {
             Self::File(f) => f,
@@ -124,11 +154,11 @@ impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
 pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
-    pub map_flags: MapFlags,
+    pub map_perm: MapPerm,
     frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
     pub file: UserVmFile,
-    pub mmap_flags: MmapFlags,
+    pub map_flags: MapFlags,
     /// offset in file
     pub offset: usize,
     /// length of file
@@ -141,10 +171,10 @@ pub struct UserVmArea {
 pub struct UserVmAreaView {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
-    pub map_perm: MapFlags,
+    pub map_perm: MapPerm,
     /// for mmap usage
     pub file: UserVmFile,
-    pub mmap_flags: MmapFlags,
+    pub map_flags: MapFlags,
     /// offset in file
     pub offset: usize,
     /// length of file
@@ -156,12 +186,27 @@ impl From<&UserVmArea> for UserVmAreaView {
         Self { 
             range_va: value.range_va.clone(), 
             vma_type: value.vma_type, 
-            map_perm: value.map_flags, 
+            map_perm: value.map_perm, 
             file: value.file.clone(), 
-            mmap_flags: value.mmap_flags, 
+            map_flags: value.map_flags, 
             offset: value.offset, 
             len: value.len 
         }
+    }
+}
+
+impl UserVmAreaView {
+    pub fn get_mmap_flags(&self) -> MmapFlags {
+        let mut ret = MmapFlags::empty();
+        if self.map_flags.contains(MapFlags::SHARED) {
+            ret.insert(MmapFlags::MAP_SHARED);
+        } else {
+            ret.insert(MmapFlags::MAP_PRIVATE);
+        }
+        if !self.file.is_file() {
+            ret.insert(MmapFlags::MAP_ANONYMOUS);
+        }
+        ret
     }
 }
 
@@ -170,15 +215,15 @@ impl UserVmArea {
     fn new(
         range_va: Range<VirtAddr>, 
         vma_type: UserVmAreaType, 
-        map_perm: MapFlags,
+        map_perm: MapPerm,
     ) -> Self {
         Self {
             range_va,
             vma_type,
-            map_flags: map_perm,
+            map_perm,
             frames: BTreeMap::new(),
             file: UserVmFile::None,
-            mmap_flags: MmapFlags::default(),
+            map_flags: MapFlags::empty(),
             offset: 0,
             len: 0
         }
@@ -186,7 +231,7 @@ impl UserVmArea {
 
     fn new_mmap(
         range_va: Range<VirtAddr>,
-        map_perm: MapFlags,
+        map_perm: MapPerm,
         flags: MmapFlags,
         file: UserVmFile,
         offset: usize,
@@ -195,12 +240,24 @@ impl UserVmArea {
         Self {
             range_va,
             vma_type: UserVmAreaType::Mmap,
-            map_flags: map_perm,
+            map_perm,
             frames: BTreeMap::new(),
             file,
-            mmap_flags: flags,
+            map_flags: flags.into(),
             offset,
             len
+        }
+    }
+
+    fn to_view(&self) -> UserVmAreaView {
+        UserVmAreaView {
+            range_va: self.range_va.clone(),
+            vma_type: self.vma_type,
+            map_perm: self.map_perm,
+            file: self.file.clone(),
+            map_flags: self.map_flags,
+            offset: self.offset,
+            len: self.len,
         }
     }
 }
@@ -209,7 +266,7 @@ impl UserVmArea {
 pub struct KernVmArea {
     range_va: Range<VirtAddr>,
     pub vma_type: KernVmAreaType,
-    pub map_perm: MapFlags,
+    pub map_perm: MapPerm,
     pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
     /// for mmap usage
     pub file: Option<Arc<dyn File>>,
@@ -220,7 +277,7 @@ impl KernVmArea {
     pub fn new(
         range_va: Range<VirtAddr>, 
         vma_type: KernVmAreaType, 
-        map_perm: MapFlags
+        map_perm: MapPerm
     ) -> Self {
         Self {
             range_va,
@@ -248,11 +305,11 @@ bitflags! {
 
 #[allow(missing_docs, unused)]
 impl PageFaultAccessType {
-    pub fn can_access(self, flag: MapFlags) -> bool {
-        if self.contains(Self::WRITE) && !flag.contains(MapFlags::W) {
+    pub fn can_access(self, flag: MapPerm) -> bool {
+        if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
             return false;
         }
-        if self.contains(Self::EXECUTE) && !flag.contains(MapFlags::X) {
+        if self.contains(Self::EXECUTE) && !flag.contains(MapPerm::X) {
             return false;
         }
         true
@@ -333,9 +390,9 @@ pub trait UserVmSpaceHal: Sized {
 
     fn get_area_ref(&self, va: VirtAddr) -> Option<&UserVmArea>;
 
-    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapFlags, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
+    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError>;
 
-    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapFlags, flags: MmapFlags, id: Option<usize>) -> Result<VirtAddr, SysError>;
+    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, shm_id: usize, pid: usize) -> Result<VirtAddr, SysError>;
 
     fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError>;
 

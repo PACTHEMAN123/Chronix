@@ -1,7 +1,7 @@
 use core::{fmt::Debug, marker::PhantomData, ops::{Add, Deref, Sub}, ptr::null_mut};
 
 use alloc::sync::Arc;
-use hal::{addr::{VirtAddr, VirtAddrHal}, pagetable::MapFlags};
+use hal::{addr::{VirtAddr, VirtAddrHal}, pagetable::MapPerm};
 
 use crate::processor::context::SumGuard;
 

@@ -4,7 +4,7 @@ use crate::addr::{PhysPageNum, VirtPageNum, PhysAddr, VirtAddr};
 use bitflags::bitflags;
 
 bitflags! {
-    pub struct MapFlags: u8 {
+    pub struct MapPerm: u8 {
         /// Readable
         const R = 1 << 0;
         /// Writable
@@ -17,11 +17,11 @@ bitflags! {
 }
 
 pub trait PageTableEntryHal {
-    fn new(ppn: PhysPageNum, map_flags: MapFlags) -> Self;
+    fn new(ppn: PhysPageNum, map_flags: MapPerm) -> Self;
 
-    fn flags(&self) -> MapFlags;
+    fn flags(&self) -> MapPerm;
 
-    fn set_flags(&mut self, map_flags: MapFlags);
+    fn set_flags(&mut self, map_flags: MapPerm);
 
     fn ppn(&self) -> PhysPageNum;
 
@@ -32,50 +32,50 @@ pub trait PageTableEntryHal {
     fn set_valid(&mut self, val: bool);
 
     fn is_user(&self) -> bool {
-        self.flags().contains(MapFlags::U)
+        self.flags().contains(MapPerm::U)
     }
 
     fn set_user(&mut self, val: bool) {
         if val {
-            self.set_flags(self.flags() | MapFlags::U);
+            self.set_flags(self.flags() | MapPerm::U);
         } else {
-            self.set_flags(self.flags() & !MapFlags::U);
+            self.set_flags(self.flags() & !MapPerm::U);
         }
     }
 
     fn is_readable(&self) -> bool {
-        self.flags().contains(MapFlags::R)
+        self.flags().contains(MapPerm::R)
     }
 
     fn set_readable(&mut self, val: bool) {
         if val {
-            self.set_flags(self.flags() | MapFlags::R);
+            self.set_flags(self.flags() | MapPerm::R);
         } else {
-            self.set_flags(self.flags() & !MapFlags::R);
+            self.set_flags(self.flags() & !MapPerm::R);
         }
     }
 
     fn is_writable(&self) -> bool {
-        self.flags().contains(MapFlags::W)
+        self.flags().contains(MapPerm::W)
     }
 
     fn set_writable(&mut self, val: bool) {
         if val {
-            self.set_flags(self.flags() | MapFlags::W);
+            self.set_flags(self.flags() | MapPerm::W);
         } else {
-            self.set_flags(self.flags() & !MapFlags::W);
+            self.set_flags(self.flags() & !MapPerm::W);
         }
     }
 
     fn is_executable(&self) -> bool {
-        self.flags().contains(MapFlags::X)
+        self.flags().contains(MapPerm::X)
     }
 
     fn set_executable(&mut self, val: bool) {
         if val {
-            self.set_flags(self.flags() | MapFlags::X);
+            self.set_flags(self.flags() | MapPerm::X);
         } else {
-            self.set_flags(self.flags() & !MapFlags::X);
+            self.set_flags(self.flags() & !MapPerm::X);
         }
     }
 
@@ -97,7 +97,7 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>;
     fn new_in(asid: usize, alloc: A) -> Self;
     fn find_pte(&self, vpn: VirtPageNum) -> Option<(&mut PTE, usize)>;
-    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapFlags, level: PageLevel) -> Result<&mut PTE, ()>;
+    fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapPerm, level: PageLevel) -> Result<&mut PTE, ()>;
     fn unmap(&mut self, vpn: VirtPageNum) -> Result<PTE, ()>;
     unsafe fn enable_high(&self);
     unsafe fn enable_low(&self);

@@ -2,7 +2,7 @@
 
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use fdt::Fdt;
-use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapFlags};
+use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapPerm};
 
 use crate::{drivers::serial::UART0, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE}, processor::processor::PROCESSORS};
 
@@ -89,7 +89,7 @@ impl DeviceManager {
                 KernVmArea::new(
                     vaddr_start.into()..(vaddr_start + size).into(),
                     KernVmAreaType::MemMappedReg, 
-                    MapFlags::R | MapFlags::W,
+                    MapPerm::R | MapPerm::W,
                 ),
                 None
             );
@@ -104,7 +104,7 @@ impl DeviceManager {
                 KernVmArea::new(
                     vaddr_start.into()..(vaddr_start + size).into(),
                     KernVmAreaType::MemMappedReg, 
-                    MapFlags::R | MapFlags::W,
+                    MapPerm::R | MapPerm::W,
                 ),
                 None
             );
