@@ -158,7 +158,7 @@ impl ThreadGroup {
 
 impl Drop for TaskControlBlock {
     fn drop(&mut self) {
-        // info!("Dropping TCB {}", self.tid.0);
+        info!("Dropping TCB {}", self.tid.0);
     }
 }
 
@@ -642,7 +642,7 @@ impl TaskControlBlock {
         match self.tid_address_ref().clear_child_tid {
             Some(addr) if addr != 0 && (addr & 3) == 0 => {
                 if Arc::strong_count(&self.vm_space) > 1 {
-                    log::info!("[handle_zombie] clear_child_tid: {:#x}", addr);
+                    log::debug!("[handle_zombie] task {} clear_child_tid: {:#x}", self.tid(), addr);
                     let _sum_guard = SumGuard::new();
                     unsafe {
                         &*(addr as *const AtomicU32)
@@ -659,28 +659,39 @@ impl TaskControlBlock {
 
     /// 
     pub fn handle_zombie(self: &Arc<Self>){
+        log::info!("[handle_zombie] task {} start to handle itself", self.tid());
         self.mm_release();
     
         let mut thread_group = self.thread_group.lock();
+
         if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
         {
+            log::debug!("[handle_zombie] task {} return, {} remain in thread group", self.tid(), thread_group.len());
             if !self.is_leader() {
                 // for thread, just remove itself from thread_group and task_manager
                 thread_group.remove(self);
                 TASK_MANAGER.remove_task(self.tid());
+            } else {
+                // in receive_signal_at_process_level
+                // a zombie leader might cause other threads failed to get signals
+                self.with_mut_sig_manager(|s| s.blocked_sigs = SigSet::all());
             }
             return;
         }
+
         if self.is_leader() {
+            assert!(thread_group.len() == 1);
             //info!("therad_group len be {}", thread_group.len());
-        }
-        else {
+        } else {
+            assert!(thread_group.len() == 2);
             thread_group.remove(self);
             TASK_MANAGER.remove_task(self.tid());
         }
+
         self.with_mut_children(|children|{
             if children.len() == 0 {
-                //info!("task {} has no children, should exit", self.tid.0);
+                self.notify_parent();
+                // info!("task {} has no children, should exit", self.tid.0);
                 return;
             }
             let initproc = &INITPROC;
@@ -695,22 +706,17 @@ impl TaskControlBlock {
             initproc.children.lock().extend(children.clone()); 
             children.clear();      
         });
+
         // leader will be removed by parent calling sys_waitpid
-        if let Some(parent) = self.parent() {
-            if let Some(parent) = parent.upgrade() {
-                parent.recv_sigs_process_level(
-                    SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
-                );
-            }else {
-                log::error!("no parent !");
-            }
-        }
         self.with_mut_fd_table(|table|table.fd_table.clear());
         if self.is_leader() {
             self.set_zombie();
         }else {
             self.get_leader().set_zombie();
         }
+        
+        drop(thread_group);
+        self.notify_parent();
     }
 
     pub fn get_raw_vm_ptr(&self) -> usize {

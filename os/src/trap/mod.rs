@@ -138,7 +138,7 @@ pub async fn user_trap_handler() -> bool {
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return(task: &Arc<TaskControlBlock>, is_intr: bool) {
+pub fn trap_return(task: &Arc<TaskControlBlock>, _is_intr: bool) {
     unsafe {
         Instruction::disable_interrupt();  
     }
@@ -149,7 +149,7 @@ pub fn trap_return(task: &Arc<TaskControlBlock>, is_intr: bool) {
     let trap_cx = task.get_trap_cx();
 
     // handler the signal before return
-    task.check_and_handle(is_intr);
+    // task.check_and_handle(is_intr);
 
     // restore float pointer and set status
     trap_cx.fx_restore();

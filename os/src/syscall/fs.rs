@@ -261,8 +261,11 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
         old_dentry.find(&path)?.ok_or(SysError::ENOENT)?
     };
     if new_dentry.state() == DentryState::NEGATIVE {
-        info!("[sys_chdir]: dentry not found");
+        log::warn!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);
+    } else if !new_dentry.inode().unwrap().inode_inner().mode.contains(InodeMode::DIR) {
+        log::warn!("[sys_chdir]: path is not dir");
+        return Err(SysError::ENOTDIR);
     } else {
         let task = current_task().unwrap().clone();
         task.set_cwd(new_dentry);

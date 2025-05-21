@@ -75,14 +75,14 @@ impl SigManager {
     }
 
     /// check if there is any expected SigInfo in the pending_sigs
-    /// if found, return the first match
+    /// if found, return the first match (peek)
     pub fn check_pending(&mut self, expected: SigSet) -> Option<SigInfo> {
         let x = self.bitmap & expected;
         if x.is_empty() {
             // no expected standard signal found
             // check real-time signals
             for (&signo, queue) in self.pending_rt_sigs.iter() {
-                if x.contain_sig(signo) {
+                if expected.contain_sig(signo) && !queue.is_empty() {
                     return queue.front().cloned()
                 }
             }
@@ -93,7 +93,7 @@ impl SigManager {
                 return Some(self.pending_sigs[i]);
             }
         }
-        // log::warn!("[SigManager] check_pending failed, should not happen");
+        log::warn!("[SigManager] check_pending failed, should not happen");
         None
     }
 
@@ -102,8 +102,8 @@ impl SigManager {
     pub fn check_pending_flag(&self, expected: SigSet) -> bool {
         let x = self.bitmap & expected;
         if x.is_empty() {
-            for (&signo, _) in self.pending_rt_sigs.iter() {
-                if x.contain_sig(signo) {
+            for (&signo, queue) in self.pending_rt_sigs.iter() {
+                if expected.contain_sig(signo) && !queue.is_empty() {
                     return true
                 }
             }
@@ -133,6 +133,7 @@ impl SigManager {
             self.sig_handler[signo] = sigaction;
         }
     }
+
     /// dequeue a pending signal to handle
     /// called by `check_and_handle`
     pub fn dequeue_one(&mut self) -> Option<SigInfo> {
@@ -162,29 +163,37 @@ impl SigManager {
                 continue;
             }
             if let Some(sig) = queue.pop_front() {
-                log::info!("[SigManager] dequeue real-time signal {:?}", sig);
+                log::info!("[SigManager] dequeue real-time signal {:?}, current queue len {}", sig, queue.len());
                 return Some(sig);
             }
         }
         log::debug!("[SigManager] no signals to be handled");
         None
     }
-    /// dequeue a specific signal 
-    pub fn dequeue_expected(&mut self, expected: SigSet) -> Option<SigInfo> {
-        let sig_set = self.bitmap & expected;
-        if sig_set.is_empty() {
+
+    /// dequeue a signal in the expected sigset
+    pub fn dequeue_expected_one(&mut self, expected: SigSet) -> Option<SigInfo> {
+        let x = self.bitmap & expected;
+        if x.is_empty() {
+            for (&signo, queue) in self.pending_rt_sigs.iter_mut() {
+                if expected.contain_sig(signo) && !queue.is_empty() {
+                    return queue.pop_front()
+                }
+            }
+            log::warn!("[SigManager] no expected signals");
             return None;
         }
         for i in 0..self.pending_sigs.len() {
-            let sig = self.pending_sigs[i].si_signo;
-            if sig_set.contain_sig(sig) {
-                self.bitmap.remove_sig(sig);
+            let sig = self.pending_sigs[i];
+            if x.contain_sig(sig.si_signo) {
+                self.bitmap.remove_sig(sig.si_signo);
                 return self.pending_sigs.remove(i);
             }
         }
         log::warn!("[SigManager] dequeue_expected failed, should not happen");
         None
     }
+    
     /// reset the signal manager
     /// see https://man7.org/linux/man-pages/man7/signal.7.html
     pub fn reset_on_exec(&mut self) {

@@ -45,6 +45,7 @@ pub async fn sys_futex(
     let futex_op = FutexOp::from(futex_op);
     let task = current_task().unwrap().clone();
     
+    log::debug!("[sys_futex] task {}, futexop {:?}", task.tid(), futex_op);
     let key = if is_private {
         FutexHashKey::Private {
             mm: task.get_raw_vm_ptr(),
@@ -89,10 +90,11 @@ pub async fn sys_futex(
                 } 
             );
             task.set_interruptable();
-            let wake_up_sigs = task.with_mut_sig_manager(|sig| {
-                sig.wake_sigs = SigSet::from_bits_truncate(!sig.bitmap.bits() | SIGSTOP | SIGKILL); 
-                !sig.bitmap
+            let wake_up_sigs = task.with_sig_manager(|s| {
+                !s.blocked_sigs
             });
+            task.set_wake_up_sigs(wake_up_sigs);
+
             if timeout.0.is_null() {
                 suspend_now().await;
             } else {
@@ -119,10 +121,9 @@ pub async fn sys_futex(
                 }
             }
             
-            if task.with_sig_manager(|sig| sig.bitmap.contains(wake_up_sigs)) {
+            if task.with_sig_manager(|s| s.check_pending_flag(wake_up_sigs)) {
                 log::info!("[sys_futex] Woken by signal");
                 futex_manager().remove_waiter(&key, task.tid());
-                task.set_running();
                 return Err(SysError::EINTR);
             }
             // log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
@@ -457,7 +458,7 @@ impl FutexManager {
             let n = core::cmp::min(n as usize, waiters.len());
             for _ in 0..n {
                 let waiter = waiters.pop().unwrap();
-                // log::info!("[futex_wake] {:?} has been woken", waiter);
+                log::debug!("[futex_wake] task {} has been woken", waiter.tid);
                 waiter.wake();
             }
             Ok(n as isize)

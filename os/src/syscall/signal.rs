@@ -23,7 +23,6 @@ use crate::utils::suspend_now;
 
 /// syscall: kill
 pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
-    log::debug!("[sys_kill]: sending signo: {} to pid: {}", signo, pid);
     if signo == 0 {
         // If sig is 0, then no signal is sent
         return Ok(0);
@@ -32,6 +31,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let task = current_task().unwrap().clone();
+    log::info!("[sys_kill]: task {} sending signo: {} to pid: {}", task.tid(), signo, pid);
     let pgid = task.pgid();
     match pid {
         0 => {
@@ -283,17 +283,17 @@ pub async fn sys_rt_sigtimedwait(
     }
     task.set_running();
     let si = task.with_mut_sig_manager(|sig_manager| {
-        sig_manager.dequeue_expected(set)
+        sig_manager.dequeue_expected_one(set)
     });
     if let Some(si) = si {
-        log::warn!("[sys_rt_sigtimedwait] woken by {:#?}",si);
+        log::warn!("[sys_rt_sigtimedwait] task {} woken by {:#?}", task.tid(), si);
         if info_ptr != 0 {
             unsafe {
                 (info_ptr as *mut SigInfo).write(si);
             }
         }
         return  Ok(si.si_signo as isize);
-    }else {
+    } else {
         log::warn!("[sys_rt_sigtimedwait] info_ptr is null, task {} woken by timeout", task.tid());
         return Err(SysError::EAGAIN);
     }
@@ -372,7 +372,7 @@ pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
 ///        send a signal only to a process (i.e., thread group) as a whole,
 ///        and the signal will be delivered to an arbitrary thread within
 ///        that process.)
-pub fn sys_tgkill (tgid: isize, tid: isize, signo: i32) -> SysResult {
+pub fn sys_tgkill(tgid: isize, tid: isize, signo: i32) -> SysResult {
     if (signo < 0) || signo as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }

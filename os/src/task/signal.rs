@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigInfo, SigSet, SIGKILL, SIGSTOP}, task::INITPROC_PID};
+use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID};
 
 use super::task::TaskControlBlock;
 
@@ -37,12 +37,15 @@ impl TaskControlBlock {
     }
     /// receive function at TCB level
     /// as we may need to wake up a task when wake up signal come
-    pub fn recv_sigs(&self, signo: SigInfo) {
-        //info!("[TCB]: tid {} recv signo {}", self.gettid(), signo);
+    pub fn recv_sigs(&self, sig: SigInfo) {
+        log::info!("[TCB]: tid {} recv signo {:?}", self.gettid(), sig);
         self.with_mut_sig_manager(|manager| {
-            manager.receive(signo);
-            if manager.wake_sigs.contain_sig(signo.si_signo) && self.is_interruptable() {
+            manager.receive(sig);
+            if manager.wake_sigs.contain_sig(sig.si_signo) && self.is_interruptable() {
                 //info!("[TCB]: tid {} has been wake up", self.gettid());
+                self.wake();
+            } else if manager.wake_sigs.contain_sig(sig.si_signo) && self.is_zombie() {
+                log::info!("[TCB]: wake up tid {} to finish its handle zombie", self.gettid());
                 self.wake();
             }
         });
@@ -67,6 +70,24 @@ impl TaskControlBlock {
             }
         })
     }
+
+    /// child process notify parent
+    /// send SIGCHLD signal to parent
+    /// Let a parent know about the death of a child.
+    /// TODOS: should closer to linux design; si_code;
+    pub fn notify_parent(self: &Arc<Self>) {
+        if let Some(parent) = self.parent() {
+            if let Some(parent) = parent.upgrade() {
+                log::debug!("[TCB] task {} notify parent", self.gettid());
+                parent.recv_sigs_process_level(
+                    SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
+                );
+            }else {
+                log::error!("no parent !");
+            }
+        }
+    }
+    
     /// signal manager should check the signal queue
     /// before a task return form kernel to user
     /// and make correspond handle action

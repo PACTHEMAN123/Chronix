@@ -95,8 +95,15 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
             _ => {}
         }
 
-        // return to user space
+        // return to user space and return back from user space
         trap_return(&task, is_interrupted);
+
+        // task status might be change by other task
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {}
+        }
 
         // back from user space
         is_interrupted = user_trap_handler().await;
@@ -112,6 +119,8 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
             TaskStatus::Stopped => suspend_now().await,
             _ => {}
         }
+
+        task.check_and_handle(is_interrupted);
     }
     // when the task is zombie, we should switch to the next task
     //info!("now exit run_tasks");

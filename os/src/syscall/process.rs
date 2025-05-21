@@ -162,7 +162,15 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
         }
     }
     if flags.contains(CloneFlags::CHILD_SETTID) {
+        // If a thread is started using clone(2) with the
+        // CLONE_CHILD_SETTID flag, set_child_tid is set to the value
+        // passed in the ctid argument of that system call.
         new_task.tid_address().set_child_tid = Some(child_tid.0);
+        // When set_child_tid is set, the very first thing the new
+        // thread does is to write its thread ID at this address.
+        unsafe {
+            (child_tid.0 as *mut u32).write_volatile(new_tid as u32);
+        }
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {
         new_task.tid_address().clear_child_tid = Some(child_tid.0);
@@ -259,7 +267,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
     
     let task = current_task().unwrap().clone();
-    log::debug!("[sys_waitpid]: TCB: {}, pid: {pid}, exitcode_ptr: {:x}, option: {option}", task.tid() ,exit_code_ptr);
+    log::warn!("[sys_waitpid]: TCB: {}, pid: {pid}, exitcode_ptr: {:x}, option: {option}", task.tid() ,exit_code_ptr);
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0
     // get the all target zombie process
@@ -327,10 +335,12 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
             // todo: missing check if getting the expect signal
             // now check the child one more time
             let si = task.with_mut_sig_manager(|sig_manager|{
+                log::warn!("replace check to dequeue");
                 sig_manager.check_pending(SigSet::SIGCHLD)
+                //sig_manager.dequeue_expected(SigSet::SIGCHLD)
             });
             if let Some(si) = si {
-                log::info!("[sys_waitpid] get signal: {}", si.si_signo);
+                log::debug!("[sys_waitpid] task {} get signal: {}", task.gettid(), si.si_signo);
                 let children = task.children();
                 let child = match pid {
                     -1 => {
@@ -362,6 +372,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     );
                 }
             }else {
+                log::warn!("[sys_waitpid] wake up by no signal");
                 return Err(SysError::EINTR);
             }
         };

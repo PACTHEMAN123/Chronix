@@ -19,7 +19,7 @@ pub const SIG_IGN: usize = 1;
 /// terminate the process.
 pub fn term_sig_handler(signo: usize) {
     let task = current_task().unwrap().clone();
-    info!("[term_sig_handler]: task {} recv sig {}, terminated", task.pid(), signo);
+    info!("[term_sig_handler]: task {} recv sig {}, terminated", task.gettid(), signo);
 
     // exit all the members of a thread group (process)
     task.with_thread_group(|tg| {
@@ -36,7 +36,7 @@ pub fn term_sig_handler(signo: usize) {
 /// ignore the signal
 pub fn ign_sig_handler(signo: usize) {
     let task = current_task().unwrap().clone();
-    info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.pid(), signo);
+    info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.gettid(), signo);
     // do nothing
 }
 
@@ -47,10 +47,10 @@ pub fn ign_sig_handler(signo: usize) {
 /// of the process's memory at the time of termination. 
 pub fn core_sig_handler(signo: usize) {
     let task = current_task().unwrap().clone();
-    info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.pid(), signo);
+    info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.gettid(), signo);
     task.with_thread_group(|tg| {
         for t in tg.iter() {
-            // info!("[core_sig_handler]: set task {} to zombie", t.tid());
+            info!("[core_sig_handler]: set task {} to zombie", t.tid());
             t.set_zombie();
         }
     })
@@ -61,7 +61,7 @@ pub fn core_sig_handler(signo: usize) {
 /// stop the process.
 pub fn stop_sig_handler(signo: usize) {
     let task = current_task().unwrap().clone();
-    info!("[stop_sig_handler]: task {} recv sig {}, stop", task.pid(), signo);
+    info!("[stop_sig_handler]: task {} recv sig {}, stop", task.gettid(), signo);
 
     task.with_thread_group(|tg| {
         for t in tg.iter() {
@@ -77,7 +77,7 @@ pub fn stop_sig_handler(signo: usize) {
 /// continue the process if it is currently stopped.
 pub fn cont_sig_handler(signo: usize) {
     let task = current_task().unwrap().clone();
-    info!("[cont_sig_handler]: task {} recv sig {}, continue", task.pid(), signo);
+    info!("[cont_sig_handler]: task {} recv sig {}, continue", task.gettid(), signo);
 
     task.with_thread_group(|tg| {
         for t in tg.iter() {
