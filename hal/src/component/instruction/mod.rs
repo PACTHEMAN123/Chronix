@@ -5,6 +5,7 @@ pub trait InstructionHal {
     unsafe fn disable_interrupt();
     unsafe fn is_interrupt_enabled() -> bool;
     unsafe fn enable_timer_interrupt();
+    unsafe fn enable_external_interrupt();
     unsafe fn clear_sum();
     unsafe fn set_sum();
     fn shutdown(failure: bool) -> !;

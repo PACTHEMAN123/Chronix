@@ -3,6 +3,7 @@
 pub mod net;
 pub mod serial;
 pub mod block;
+pub mod plic;
 pub mod manager;
 use core::{any::Any, arch::global_asm};
 use alloc::{boxed::Box, string::String, sync::Arc};
@@ -243,4 +244,7 @@ pub fn init() {
 
     // init devices
     DEVICE_MANAGER.lock().init_devices();
+
+    // DEVICE_MANAGER.lock().enable_irq();
+    // log::info!("External interrupts enabled");
 }

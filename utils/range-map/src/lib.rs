@@ -198,13 +198,13 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V, A: Allocator + Clone> RangeMap<U
     /// # Panic
     ///
     /// The segment pointed by `start` must exist.
-    pub fn extend_back(&mut self, range: Range<U>) -> Result<(), ()> {
+    pub fn extend_back(&mut self, range: Range<U>) -> Result<&mut V, ()> {
         let node = self.0.get(&range.start).unwrap();
         self.is_range_free(node.end..range.end)?;
 
         let node = self.0.get_mut(&range.start).unwrap();
         node.end = range.end;
-        Ok(())
+        Ok(&mut node.value)
     }
 
     /// Reduce a segment backwards. Return the range reduced when success, or

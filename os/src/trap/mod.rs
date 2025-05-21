@@ -13,6 +13,7 @@
 //! to [`syscall()`].
 
 use alloc::sync::Arc;
+use downcast_rs::Downcast;
 use hal::constant::{Constant, ConstantsHal};
 use hal::instruction::{self, Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
@@ -77,7 +78,8 @@ pub async fn user_trap_handler() -> bool {
             cx.save_to(0, cx.ret_nth(0));
             cx.set_ret_nth(0, result as usize);
             // report that the syscall is interrupt
-            if result == SysError::EINTR as isize {
+            if result == -(SysError::EINTR as isize) {
+                log::warn!("[user_trap_handler] task {} syscall is interrupted",cx.syscall_id());
                 return true;
             }
         }
@@ -122,6 +124,10 @@ pub async fn user_trap_handler() -> bool {
             crate::processor::processor::current_processor().update_load_avg();
             set_next_trigger();
             yield_now().await;
+        }
+        TrapType::ExternalInterrupt => {
+            let manager = crate::devices::DEVICE_MANAGER.lock();
+            manager.handle_irq();
         }
         TrapType::Processed => {}
         _ => {
@@ -205,6 +211,10 @@ fn kernel_trap_handler() {
             // info!("interrupt: supervisor timer");
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
+        }
+        TrapType::ExternalInterrupt => {
+            let manager = crate::devices::DEVICE_MANAGER.lock();
+            manager.handle_irq();
         }
         TrapType::Processed => {}
         _ => {

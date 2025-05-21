@@ -114,7 +114,7 @@ pub struct VirtPageNum(pub usize);
 
 impl alloc::fmt::Debug for VirtPageNum {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "VirtAddr: {:#x}", self.0)
+        write!(f, "VirtPageNum: {:#x}", self.0)
     }
 }
 
