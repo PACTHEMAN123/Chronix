@@ -84,6 +84,10 @@ const SYSCALL_GETEUID: usize = 175;
 const SYSCALL_GETEGID: usize = 177;
 const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SYSINFO: usize = 179;
+const SYSCALL_SHMGET: usize = 194;
+const SYSCALL_SHMCTL: usize = 195;
+const SYSCALL_SHMAT: usize = 196;
+const SYSCALL_SHMDT: usize = 197;
 const SYSCALL_SOCKET: usize = 198;
 const SYSCALL_SOCKETPAIR: usize = 199;
 const SYSCALL_BIND: usize = 200;
@@ -138,6 +142,7 @@ pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};
 use hal::{addr::VirtAddr, println};
 use io::*;
+use ipc::sysv::{sys_shmat, sys_shmctl, sys_shmdt, sys_shmget};
 use misc::*;
 use mm::{sys_mmap, sys_mprotect, sys_mremap, sys_munmap};
 use net::*;
@@ -146,7 +151,7 @@ pub use time::*;
 pub use signal::*;
 pub use sche::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}, utils::SendWrapper};
+use crate::{fs::RenameFlags, mm::UserPtr, signal::{SigAction, SigSet}, timer::ffi::{TimeVal, Tms}, utils::SendWrapper};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -223,6 +228,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETTID => sys_gettid(),
         SYSCALL_SETSID => sys_setsid(),
         SYSCALL_SYSINFO => sys_sysinfo(args[0]),
+        SYSCALL_SHMGET => sys_shmget(args[0] as _, args[1] as _, args[2] as _),
+        SYSCALL_SHMCTL => sys_shmctl(args[0] as _, args[1] as _, UserPtr::new(args[2] as *mut _)),
+        SYSCALL_SHMAT => sys_shmat(args[0] as _, VirtAddr::from(args[1]), args[2] as _),
+        SYSCALL_SHMDT => sys_shmdt(VirtAddr::from(args[0])),
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
         SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into(), args[3].into(), args[4].into()),

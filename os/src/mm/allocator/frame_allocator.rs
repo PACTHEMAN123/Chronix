@@ -101,7 +101,7 @@ static FRAME_ALLOCATOR: SpinNoIrqLock<BitMapFrameAllocator> = SpinNoIrqLock::new
 
 
 #[allow(missing_docs)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FrameAllocator;
 
 pub type FrameTracker = hal::common::FrameTracker<FrameAllocator>;

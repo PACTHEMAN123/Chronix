@@ -1,7 +1,7 @@
 use core::{fmt::Debug, marker::PhantomData, ops::{Add, Deref, Sub}, ptr::null_mut};
 
 use alloc::sync::Arc;
-use hal::{addr::{VirtAddr, VirtAddrHal}, pagetable::MapFlags};
+use hal::{addr::{VirtAddr, VirtAddrHal}, pagetable::MapPerm};
 
 use crate::processor::context::SumGuard;
 
@@ -184,9 +184,7 @@ impl<T, P: UserPtrRead> UserPtr<T, P> {
 
     pub fn to_ref<'a>(&'a self, vm: &mut UserVmSpace) -> Option<&'a T> {
         let va = VirtAddr(self.ptr as usize);
-        if user_access_ok(va, vm, PageFaultAccessType::READ).is_err() {
-            vm.handle_page_fault(va, PageFaultAccessType::READ).ok()?
-        }
+        vm.ensure_access(va, size_of::<T>(), PageFaultAccessType::READ).ok()?;
         Some(unsafe { &*self.ptr })
     }
 }
@@ -194,21 +192,9 @@ impl<T, P: UserPtrRead> UserPtr<T, P> {
 impl<T, P: UserPtrWrite> UserPtr<T, P> {
     pub fn to_mut<'a>(&'a self, vm: &mut UserVmSpace) -> Option<&'a mut T> {
         let va = VirtAddr(self.ptr as usize);
-        if user_access_ok(va, vm, PageFaultAccessType::READ_WRITE).is_err() {
-            vm.handle_page_fault(va, PageFaultAccessType::READ_WRITE).ok()?
-        }
+        vm.ensure_access(va, size_of::<T>(), PageFaultAccessType::WRITE).ok()?;
         Some(unsafe { &mut *self.ptr })
     }
-}
-
-pub fn user_access_ok(user_va: VirtAddr, vm: &mut UserVmSpace, access_type: PageFaultAccessType) -> Result<(), ()> {
-    vm.get_area_mut(user_va).and_then(|vma| {
-        if access_type.can_access_directly(vma.map_flags) {
-            Some(())
-        } else {
-            None
-        }
-    }).ok_or(())
 }
 
 unsafe impl<T, P: UserPtrSend> Send for UserPtr<T, P> {}

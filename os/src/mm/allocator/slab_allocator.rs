@@ -17,7 +17,7 @@ static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator;
 pub static SLAB_ALLOCATOR_INNER: SlabAllocatorInner = SlabAllocatorInner::new();
 
 /// Slab Allocator
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SlabAllocator;
 
 
