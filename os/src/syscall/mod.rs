@@ -234,7 +234,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SHMDT => sys_shmdt(VirtAddr::from(args[0])),
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
         SYSCALL_GETPGID => sys_getpgid(args[0]),
-        SYSCALL_CLONE => sys_clone(args[0], args[1].into(), args[2].into(), args[3].into(), args[4].into()),
+        SYSCALL_CLONE => sys_clone(args[0] as u64, args[1].into(), args[2].into(), args[3].into(), args[4].into()),
         SYSCALL_CLONE3 => sys_clone3(args[0], args[1]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),

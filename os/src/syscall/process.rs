@@ -141,14 +141,15 @@ pub fn sys_fork() -> isize {
 }
 
 /// clone a new process/thread/ using clone flags
-pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
+#[cfg(target_arch="riscv64")]
+pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
     // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
-    let flags = CloneFlags::from_bits(flags as u64 & !0xff).unwrap();
+    let flags = CloneFlags::from_bits(flags & !0xff).unwrap();
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
     new_task.get_trap_cx().set_ret_nth(0, 0);
     let new_tid = new_task.tid();
-
+    task.get_trap_cx().set_ret_nth(0, new_tid);
     // set new stack
     if stack.0 != 0 {
         *new_task.get_trap_cx().sp() = stack.0;
@@ -183,6 +184,41 @@ pub fn sys_clone(flags: usize, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtA
     Ok(new_tid as isize)
 }
 
+/// clone a new process/thread/ using clone flags
+#[cfg(target_arch="loongarch64")]
+pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: VirtAddr, tls: VirtAddr) -> SysResult {
+    // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
+    let flags = CloneFlags::from_bits(flags & !0xff).unwrap();
+    let task = current_task().unwrap();
+    let new_task = task.fork(flags);
+    new_task.get_trap_cx().set_ret_nth(0, 0);
+    let new_tid = new_task.tid();
+    task.get_trap_cx().set_ret_nth(0, new_tid);
+    // set new stack
+    if stack.0 != 0 {
+        *new_task.get_trap_cx().sp() = stack.0;
+    }
+
+    // set parent tid and child tid
+    let _sum_guard = SumGuard::new();
+    if flags.contains(CloneFlags::PARENT_SETTID) {
+        unsafe {
+            (parent_tid.0 as *mut u32).write_volatile(new_tid as u32);
+        }
+    }
+    if flags.contains(CloneFlags::CHILD_SETTID) {
+        new_task.tid_address().set_child_tid = Some(child_tid.0);
+    }
+    if flags.contains(CloneFlags::CHILD_CLEARTID) {
+        new_task.tid_address().clear_child_tid = Some(child_tid.0);
+    }
+    // todo: more flags...
+    if flags.contains(CloneFlags::SETTLS) {
+        *new_task.get_trap_cx().tp() = tls.0;
+    }
+    spawn_user_task(new_task);
+    Ok(new_tid as isize)
+}
 
 /// execve() executes the program referred to by pathname.  This
 /// causes the program that is currently being run by the calling
@@ -521,7 +557,14 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     let child_tid = VirtAddr::from(cl_args.child_tid);
     // log::info!("[sys_clone3]: child_tid: {:x}", child_tid.0);
     // log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
-    sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
+    #[cfg(target_arch="riscv64")]
+    {
+        sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
+    } 
+    #[cfg(target_arch="loongarch64")] 
+    {
+        sys_clone(flags, stack + cl_args.stack_size, parent_tid, child_tid, tls)
+    }
 }
 
 //  * @flags:        Flags for the new process.
@@ -567,17 +610,21 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 struct CloneArgs {
-    pub flags: usize,
+    pub flags: u64,
     pub pidfd: usize,
     pub child_tid: usize,
     pub parent_tid: usize,
-    pub exit_signal: usize,
+    pub exit_signal: i32,
+    pub _pad: i32,
     pub stack: usize,
     pub stack_size: usize,
     pub tls: usize,
     pub set_tid: usize,
     pub set_tid_size: usize,
-    pub cgroup: usize,
+    pub cgroup: i32,
+    pub idle: i32,
+    pub func: usize,
+    pub func_arg: usize,
 }
 
 const  CLONE_ARGS_SIZE_VER0: usize = 64;

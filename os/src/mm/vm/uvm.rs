@@ -199,7 +199,7 @@ impl UserVmSpaceHal for UserVmSpace {
                     area.copy_data(&mut self.page_table, data, pg_offset);
                 }
                 area.map(&mut self.page_table);
-                println!("[push_area] {:?}", area.to_view());
+                // log::info!("[push_area] {:?}", area.to_view());
                 area
             },
             Err(_) => panic!("[push_area] fail")
@@ -761,7 +761,7 @@ impl PageFaultProcessor {
     ) -> Result<(), ()> {
         if access_type.contains(PageFaultAccessType::WRITE) {
             let frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
-            frame.range_ppn.get_slice_mut::<u8>().fill(0);
+            frame.range_ppn.get_slice_mut::<usize>().fill(0);
             let pte = page_table
                     .map(vpn, frame.range_ppn.start, perm, PageLevel::Small)
                     .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
