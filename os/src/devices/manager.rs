@@ -3,10 +3,11 @@
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use fdt::Fdt;
 use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapPerm};
+use virtio_drivers::transport::Transport;
 
-use crate::{drivers::serial::UART0, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE}, processor::processor::PROCESSORS};
 
-use super::{block::{scan_mmio_blk_device, scan_pci_blk_device}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
+use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
 type IrqNo = usize;
 
@@ -19,6 +20,10 @@ pub struct DeviceManager {
     /// Optional PLIC (Platform-Level Interrupt Controller) to manage external
     /// interrupts.
     pub plic: Option<PLIC>,
+    /// Optional PCI
+    pub pci: Option<PciManager>,
+    /// Optional MMIO
+    pub mmio: Option<MmioManager>,
     /// mapping from device id to device instance
     pub devices: BTreeMap<DevId, Arc<dyn Device>>,
     /// mapping from irq no to device instance
@@ -30,6 +35,8 @@ impl DeviceManager {
     pub fn new() -> Self {
         Self {
             plic: None,
+            pci: None,
+            mmio: None,
             devices: BTreeMap::new(),
             irq_map: BTreeMap::new(),
         }
@@ -40,6 +47,14 @@ impl DeviceManager {
         self.plic.as_ref().unwrap()
     }
 
+    fn pci(&self) -> &PciManager {
+        self.pci.as_ref().unwrap()
+    }
+
+    fn mmio(&self) -> &MmioManager {
+        self.mmio.as_ref().unwrap()
+    }
+
     /// Device Init Stage1: scan the whole device tree and create instances
     /// map DevId to device, map IrqNo to device
     pub fn map_devices(&mut self, device_tree: &Fdt) {
@@ -48,22 +63,46 @@ impl DeviceManager {
         self.devices.insert(serial.dev_id(), serial.clone());
         self.irq_map.insert(serial.irq_no().unwrap(), serial.clone());
         
-        // map block device
-        // now not support for blk interrupt
-        #[cfg(target_arch="loongarch64")]
-        {
-            let virtio_pci_blk = scan_pci_blk_device(device_tree);
-            if let Some(blk) = virtio_pci_blk {
-                self.devices.insert(blk.dev_id(), blk.clone());
-            };
+        if let Some(mut pci) = PciManager::scan_pcie_root(device_tree) {
+            for mut device in pci.enumerate_devices() {
+                // pci bus has an advantage: no need to map or allocate 
+                // memory to recognize the device type.
+                let dev_class: PciDeviceClass = device.func_info.class.into();
+
+                let dev = match dev_class {
+                    PciDeviceClass::MassStorageContorller => {
+                        pci.init_device(&mut device).unwrap();
+                        Arc::new(VirtIOPCIBlock::new(device))
+                    }
+                    _ => continue
+                };
+
+                if let Some(irq_no) = dev.irq_no() {
+                    self.irq_map.insert(irq_no, dev.clone());
+                }
+                self.devices.insert(dev.dev_id(), dev);
+            }
+            self.pci = Some(pci);
         }
-        
 
-        let virtio_mmio_blk = scan_mmio_blk_device(device_tree);
-        if let Some(blk) = virtio_mmio_blk {
-            self.devices.insert(blk.dev_id(), blk.clone());
-        };
+        let mmio = MmioManager::scan_mmio_root(device_tree);
+        for deivce in mmio.enumerate_devices() {
+            if let Ok(mmio_transport) = deivce.transport() {
 
+                let dev = match mmio_transport.device_type() {
+                    virtio_drivers::transport::DeviceType::Block => {
+                        Arc::new(VirtIOMMIOBlock::new(deivce.clone(), mmio_transport))
+                    }
+                    _ => continue
+                };
+
+                if let Some(irq_no) = dev.irq_no() {
+                    self.irq_map.insert(irq_no, dev.clone());
+                }
+                self.devices.insert(dev.dev_id(), dev);
+            }
+        }
+        self.mmio = Some(mmio);
 
         let plic = scan_plic_device(device_tree);
         if let Some(plic) = plic {
@@ -78,21 +117,23 @@ impl DeviceManager {
     /// 2. extract device tree and get all the devices
     pub fn map_mmio_area(&self) {
         for (_, dev) in &self.devices {
-            let paddr_start = dev.mmio_base();
-            let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
-            let size = dev.mmio_size();
-            if dev.meta().need_mapping == false {
-                continue;
+            for range in dev.mmio_ranges() {
+                let paddr_start = range.start;
+                let size = range.end - range.start;
+                let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
+                if dev.meta().need_mapping == false {
+                    continue;
+                }
+                log::info!("[Device Manager]: mapping {}, from phys addr {:#x} to virt addr {:#x}, size {:#x}", dev.name(), paddr_start, vaddr_start, size);
+                KVMSPACE.lock().push_area(
+                    KernVmArea::new(
+                        vaddr_start.into()..(vaddr_start + size).into(),
+                        KernVmAreaType::MemMappedReg, 
+                        MapPerm::R | MapPerm::W,
+                    ),
+                    None
+                );
             }
-            log::info!("[Device Manager]: mapping {}, from phys addr {:#x} to virt addr {:#x}, size {:#x}", dev.name(), paddr_start, vaddr_start, size);
-            KVMSPACE.lock().push_area(
-                KernVmArea::new(
-                    vaddr_start.into()..(vaddr_start + size).into(),
-                    KernVmAreaType::MemMappedReg, 
-                    MapPerm::R | MapPerm::W,
-                ),
-                None
-            );
         }
         // map plic
         if let Some(plic) = &self.plic {

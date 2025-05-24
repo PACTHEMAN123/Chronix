@@ -50,8 +50,9 @@ impl KernVmSpaceHal for KernVmSpace {
     }
     
     fn push_area(&mut self, area: KernVmArea, _data: Option<&[u8]>) {
-        area.map(&mut self.page_table);
-        let _ = self.areas.try_insert(area.range_vpn(), area);
+        if area.map(&mut self.page_table).is_ok() {
+            let _ = self.areas.try_insert(area.range_vpn(), area);
+        }
     }
 
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>{
@@ -136,7 +137,7 @@ impl KernVmArea {
         });
     }
 
-    fn map(&self, page_table: &mut PageTable) {
+    fn map(&self, page_table: &mut PageTable) -> Result<(), ()>{
         unsafe extern "C" {
             fn sigreturn_trampoline();
         }
@@ -146,6 +147,7 @@ impl KernVmArea {
             KernVmAreaType::PhysMem |
             KernVmAreaType::MemMappedReg |
             KernVmAreaType::KernelStack => {
+                Err(())
             },
             KernVmAreaType::SigretTrampoline => {
                 let sigret_trampoline_ppn = 
@@ -156,6 +158,7 @@ impl KernVmArea {
                     pte.set_dirty(true);
                     pte.set_valid(true);
                 }
+                Ok(())
             }
             KernVmAreaType::VirtMemory => {
                 for (&vpn, frame) in self.frames.iter() {
@@ -164,8 +167,9 @@ impl KernVmArea {
                     pte.set_dirty(true);
                     pte.set_valid(true);
                 }
+                Ok(())
             }
-            KernVmAreaType::Mmap => {}
+            KernVmAreaType::Mmap => Ok(())
         }
     }
 

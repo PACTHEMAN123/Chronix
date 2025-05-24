@@ -375,6 +375,14 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(badv),
         Trap::Exception(Exception::FetchPageFault) => TrapType::InstructionPageFault(badv),
         Trap::Interrupt(Interrupt::Timer) => TrapType::Timer,
+        Trap::Interrupt(Interrupt::HWI0) |
+        Trap::Interrupt(Interrupt::HWI1) |
+        Trap::Interrupt(Interrupt::HWI2) |
+        Trap::Interrupt(Interrupt::HWI3) |
+        Trap::Interrupt(Interrupt::HWI4) |
+        Trap::Interrupt(Interrupt::HWI5) |
+        Trap::Interrupt(Interrupt::HWI6) |
+        Trap::Interrupt(Interrupt::HWI7) => TrapType::ExternalInterrupt,
         Trap::Exception(Exception::PageModifyFault) => {
             handle_page_modify_fault(badv)
         },

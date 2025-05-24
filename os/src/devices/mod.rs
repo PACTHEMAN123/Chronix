@@ -2,11 +2,12 @@
 
 pub mod net;
 pub mod serial;
-pub mod block;
 pub mod plic;
 pub mod manager;
-use core::{any::Any, arch::global_asm};
-use alloc::{boxed::Box, string::String, sync::Arc};
+pub mod pci;
+pub mod mmio;
+use core::{any::Any, arch::global_asm, ops::Range};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use downcast_rs::DowncastSync;
 use hal::println;
@@ -57,9 +58,7 @@ pub struct DeviceMeta {
     /// the device wont be map in device manager if false
     pub need_mapping: bool,
     /// Mmio start address.
-    pub mmio_base: usize,
-    /// Mmio size.
-    pub mmio_size: usize,
+    pub mmio_ranges: Vec<Range<usize>>,
     /// Interrupt number.
     pub irq_no: Option<usize>,
     /// Device type. (TODO: maybe dup with DeviceMajor?)
@@ -107,12 +106,8 @@ pub trait Device: Sync + Send + DowncastSync {
         &self.meta().name
     }
 
-    fn mmio_base(&self) -> usize {
-        self.meta().mmio_base
-    }
-
-    fn mmio_size(&self) -> usize {
-        self.meta().mmio_size
+    fn mmio_ranges(&self) -> &Vec<Range<usize>> {
+        &self.meta().mmio_ranges
     }
 
     fn irq_no(&self) -> Option<usize> {
@@ -208,16 +203,10 @@ pub(crate) const fn as_dev_err(e: virtio_drivers::Error) -> DevError {
     }
 }
 
-global_asm!(include_str!("dtree.S"));
 
 pub fn get_device_tree_addr() -> usize {
-    unsafe extern "C" {
-        fn _dtb_start();
-    }
-    _dtb_start as *const usize as usize
+    hal::board::get_device_tree_addr()
 }
-
-
 
 lazy_static! {
     pub static ref DEVICE_MANAGER: SpinNoIrqLock<DeviceManager> = SpinNoIrqLock::new(DeviceManager::new());

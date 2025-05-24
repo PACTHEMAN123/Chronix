@@ -4,6 +4,8 @@ mod virtio_blk;
 mod pci_blk;
 mod mmio_blk;
 
+use core::sync::atomic::AtomicUsize;
+
 use hal::println;
 pub use virtio_blk::VirtIOBlock;
 pub use pci_blk::VirtIOPCIBlock;
@@ -18,6 +20,8 @@ use lazy_static::*;
 // lazy_static! {
 //     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
 // }
+
+pub static BLK_ID: AtomicUsize = AtomicUsize::new(0);
 
 lazy_static! {
     /// WARNING: should only be called after devices manager finish init

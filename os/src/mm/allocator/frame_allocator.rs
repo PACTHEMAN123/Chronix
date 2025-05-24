@@ -28,26 +28,31 @@ trait FrameAllocatorTrait {
 /// Bitmap Frame Allocator, the supported maximum memory space is 64GiB
 struct BitMapFrameAllocator {
     range: Range<PhysPageNum>,
+    align_log2: usize,
     inner: bitmap_allocator::BitAlloc16M,
 }
 
 impl FrameAllocatorTrait for BitMapFrameAllocator {
     const DEFAULT: Self = BitMapFrameAllocator {
         range: PhysPageNum(0)..PhysPageNum(0),
+        align_log2: 8,
         inner: bitmap_allocator::BitAlloc16M::DEFAULT
     };
 
     fn init(&mut self, range_pa: Range<PhysAddr>) {
-        self.range = range_pa.start.ceil()..range_pa.end.floor();
         info!("[FrameAllocator] range: {:#x}..{:#x}", range_pa.start.0, range_pa.end.0);
-        self.inner.insert(0..(range_pa.end.floor().0 - range_pa.start.ceil().0));
+        let start = range_pa.start.floor();
+        let aligned_start = start.0 & !((1 << self.align_log2) - 1);
+        let aligned_range_ppn = PhysPageNum::from(aligned_start)..range_pa.end.floor();
+        self.range = aligned_range_ppn.clone();
+        self.inner.insert((start.0 - aligned_range_ppn.start.0)..(aligned_range_ppn.end.0 - aligned_range_ppn.start.0));
     }
     
     fn alloc_contiguous(&mut self, size: usize, align_log2: usize) -> Option<Range<PhysPageNum>> {
-        if align_log2 > 0 {
-            log::warn!("BitMapFrameAllocator cannot support aligned allocate");
+        if align_log2 > self.align_log2 {
+            log::warn!("BitMapFrameAllocator cannot support align to {}", align_log2);
         }
-        let mut start = self.inner.alloc_contiguous(None, size, 0)?;
+        let mut start = self.inner.alloc_contiguous(None, size, align_log2)?;
         start += self.range.start.0;
         let range_ppn = PhysPageNum(start)..PhysPageNum(start + size);
         Some(range_ppn)

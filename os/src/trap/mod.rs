@@ -58,7 +58,7 @@ pub async fn user_trap_handler() -> bool {
         TrapType::Syscall => {
             let _sum = SumGuard::new();
             let cx = current_task().unwrap().get_trap_cx();
-            // jump to next instruction anyway
+            // jump to next instruction8 anyway
             *cx.sepc() += 4;
             // get system call return value
             let result = syscall(
