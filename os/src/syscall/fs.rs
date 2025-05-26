@@ -8,7 +8,7 @@ use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
     get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask
-}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserSliceReader, UserSliceSendReader, UserSliceSendWriter}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
     string::*,
@@ -22,20 +22,23 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     log::debug!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
+    let user_buf = UserSliceSendReader::from_raw_part(buf as *mut u8, len);
+    let buf = user_buf.to_ref(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+    let ret = file.write(buf).await?;
 
-    let start = buf & !(Constant::PAGE_SIZE - 1);
-    let end = buf + len;
-    let mut ret = 0;
-    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        let va = aligned_va.max(buf);
-        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        let va = VirtAddr::from(va);
-        let pa = task.with_mut_vm_space(|vm| {
-            translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
-        });
-        let data = pa.get_slice(len);
-        ret += file.write(data).await?;
-    }
+    // let start = buf & !(Constant::PAGE_SIZE - 1);
+    // let end = buf + len;
+    // let mut ret = 0;
+    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+    //     let va = aligned_va.max(buf);
+    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+    //     let va = VirtAddr::from(va);
+    //     let pa = task.with_mut_vm_space(|vm| {
+    //         translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
+    //     });
+    //     let data = pa.get_slice(len);
+    //     ret += file.write(data).await?;
+    // }
 
     return Ok(ret as isize);
 }
@@ -46,23 +49,28 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     log::debug!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
-    let start = buf & !(Constant::PAGE_SIZE - 1);
-    let end = buf + len;
-    let mut ret = 0;
-    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        let va = aligned_va.max(buf);
-        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        let va = VirtAddr::from(va);
-        let pa = task.with_mut_vm_space(|vm| {
-            translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
-        });
-        let data = pa.get_slice_mut(len);
-        let read_size = file.read(data).await?;
-        ret += read_size;
-        if read_size < len {
-            break;
-        }
-    }
+    let user_buf = UserSliceSendWriter::from_raw_part(buf as *mut u8, len);
+    let buf = user_buf.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+    let ret = file.read(buf).await?;
+
+    // let start = buf & !(Constant::PAGE_SIZE - 1);
+    // let end = buf + len;
+    // let mut ret = 0;
+    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+    //     let va = aligned_va.max(buf);
+    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+    //     let va = VirtAddr::from(va);
+    //     let pa = task.with_mut_vm_space(|vm| {
+    //         translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
+    //     });
+    //     let data = pa.get_slice_mut(len);
+    //     let read_size = file.read(data).await?;
+    //     ret += read_size;
+    //     if read_size < len {
+    //         break;
+    //     }
+    // }
+
     return Ok(ret as isize);
 }
 

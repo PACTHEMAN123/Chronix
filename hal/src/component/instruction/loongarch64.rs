@@ -66,7 +66,7 @@ impl InstructionHal for Instruction {
     }
     
     fn hart_start(hartid: usize, start_addr: usize, _opaque: usize) {
-        loongArch64::ipi::csr_mail_send(start_addr as u64 | 0x9000_0000_0000_0000, hartid, 0);
+        loongArch64::ipi::csr_mail_send(start_addr as u64 | 0x8000_0000_0000_0000, hartid, 0);
         loongArch64::ipi::send_ipi_single(hartid, 1);
     }
     

@@ -50,8 +50,8 @@ impl hal::mapper::MmioMapperHal for MmioMapper {
 
     #[cfg(target_arch = "loongarch64")]
     fn map_mmio_area(&self, range: core::ops::Range<usize>) -> core::ops::Range<usize> {
-        let va_start = range.start | 0x9000_0000_0000_0000;
-        let va_end = range.end | 0x9000_0000_0000_0000;
+        let va_start = range.start | 0x8000_0000_0000_0000;
+        let va_end = range.end | 0x8000_0000_0000_0000;
         va_start..va_end
     }
 }

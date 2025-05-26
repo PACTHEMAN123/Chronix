@@ -56,11 +56,11 @@ impl KernVmSpaceHal for KernVmSpace {
     }
 
     fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum>{
-        Some(PhysPageNum(vpn.0 & !(0x8_0000_0000_0000)))
+        Some(PhysPageNum(vpn.0 & !(Constant::KERNEL_ADDR_SPACE.start >> Constant::PAGE_SIZE_BITS)))
     }
     
     fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
-        Some(PhysAddr(va.0 & !(0x8000_0000_0000_0000)))
+        Some(PhysAddr(va.0 & !(Constant::KERNEL_ADDR_SPACE.start)))
     }
 
     fn mmap(&mut self, file: Arc<dyn File>) -> Result<VirtAddr, ()> {

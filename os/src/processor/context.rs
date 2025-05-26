@@ -49,6 +49,7 @@ impl EnvContext{
 
 /// RAII to guard sum flag
 #[repr(C)]
+#[derive(Debug)]
 pub struct SumGuard {}
 
 impl SumGuard{
