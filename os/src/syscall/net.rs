@@ -99,6 +99,9 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
 /// “assigning a name to a socket”
 pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     log::info!("[sys_bind] fd: {}, addr: {:?}, addr_len: {}", fd, addr, addr_len);
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap();
     let family = SaFamily::try_from(unsafe {
         Instruction::set_sum();
@@ -141,6 +144,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 /// passive. This socket will be used later to accept connections from other
 /// (active) sockets
 pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let current_task = current_task().unwrap();
     let socket_file = current_task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -157,6 +163,9 @@ pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
 /// `sockaddr` structure that contains the address of the remote socket.
 /// The `addrlen` argument specifies the size of this structure.
 pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap().clone();
     let remote_addr = match SaFamily::try_from(unsafe {
         Instruction::set_sum();
@@ -211,6 +220,9 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 /// socket. The newly created socket is usually in the `ESTABLISHED`
 
 pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -268,6 +280,9 @@ pub async fn sys_sendto(
     addr: usize,
     addr_len: usize,
 )-> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     // log::info!("addr is {}, addr_len is {}", addr, addr_len);
     let task = current_task().unwrap();
     let buf_slice = unsafe {
@@ -334,6 +349,9 @@ pub async fn sys_recvfrom(
     addr: usize,
     addrlen: usize,
 ) -> SysResult {
+    if (sockfd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     // log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
@@ -382,6 +400,9 @@ pub async fn sys_recvfrom(
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
 pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| -> Result<Arc<socket::Socket>, SysError> {
@@ -412,6 +433,9 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
 
 /// returns the peer address of the socket corresponding to the file descriptor `sockfd`
 pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -653,6 +677,9 @@ pub fn sys_getsockopt (
 /// sys_shutdown() allows a greater control over the behaviour of connection-oriented sockets.
 /// todo : how used for indicate read is shut down, write is shut down, or both 
 pub fn sys_shutdown(fd: usize, how: usize) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -727,6 +754,9 @@ pub async fn sys_sendmsg(
     msg: usize,
     flags: usize,
 )-> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     let task = current_task().unwrap();
     if flags != 0 {
         log::warn!("unsupported flags: {}", flags);
@@ -792,6 +822,9 @@ pub async fn sys_recvmsg(
     msg: usize,
     flags: usize,
 ) -> SysResult {
+    if (fd as isize) < 0 {
+        return Err(SysError::EBADF);
+    }
     if flags != 0 {
         log::warn!("unsupported flags: {}", flags);
     }
