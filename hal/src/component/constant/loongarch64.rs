@@ -19,7 +19,7 @@ impl ConstantsHal for Constant {
     
     const PTE_WIDTH: usize = 64;
     
-    const MEMORY_END: usize = 0x9000_0000_A000_0000;
+    const MEMORY_END: usize = 0x9000_0000_D000_0000;
 
     const SIGRET_TRAMPOLINE_SIZE: usize = Self::PAGE_SIZE;
     const SIGRET_TRAMPOLINE_TOP: usize = 0x0000_ffff_ffff_f000;

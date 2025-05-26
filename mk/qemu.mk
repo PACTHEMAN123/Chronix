@@ -50,7 +50,7 @@ endif
 # device tree
 DT := $(ARCH)-$(BOARD)
 DTB := $(DT).dtb
-DTB_DST := os/src/devices/dtree.dtb
+DTB_DST := hal/src/board/$(ARCH)-$(BOARD).dtb
 dumpdtb:
 	$(call building, "start to dumpdtb")
 	$(QEMU) $(QEMU_ARGS) -machine dumpdtb=$(DTB)

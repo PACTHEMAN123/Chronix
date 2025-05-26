@@ -112,12 +112,6 @@ impl ShmObj {
     }
 }
 
-impl Drop for ShmObj {
-    fn drop(&mut self) {
-        let _ = SHM_MANAGER.id_alloc.lock().dealloc(self.id);
-    }
-}
-
 /// shared memory manager
 pub struct ShmManager {
     files: SpinNoIrqLock<BTreeMap<usize, Arc<ShmObj>>>,
@@ -163,6 +157,7 @@ impl ShmManager {
     }
     ///
     pub fn remove(&self, id: usize) -> Option<Arc<ShmObj>> {
+        let _ = SHM_MANAGER.id_alloc.lock().dealloc(id);
         self.files.lock().remove(&id)
     }
 }

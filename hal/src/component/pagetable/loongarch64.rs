@@ -240,7 +240,7 @@ impl PageTableEntryHal for PageTableEntry {
         if val {
             self.bits |= PTEFlags::D.bits as usize;
         } else {
-            self.bits &= !PTEFlags::D.bits as usize;
+            self.bits &= !(PTEFlags::D.bits as usize);
         }
     }
 
@@ -252,7 +252,7 @@ impl PageTableEntryHal for PageTableEntry {
         if val {
             self.bits |= PTEFlags::V.bits as usize
         } else {
-            self.bits &= !PTEFlags::V.bits as usize
+            self.bits &= !(PTEFlags::V.bits as usize)
         }
     }
 
@@ -269,7 +269,7 @@ impl PageTableEntryHal for PageTableEntry {
     }
     
     fn is_leaf(&self) -> bool {
-        false
+        false 
     }
 }
 
@@ -361,7 +361,7 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
             if pte.bits == 0 {
                 return None;
             }
-            if pte.is_leaf() || i == Constant::PG_LEVEL - 1 {
+            if i == Constant::PG_LEVEL - 1 {
                 return Some((pte, i));
             }
             ppn = pte.ppn();

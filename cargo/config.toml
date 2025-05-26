@@ -1,6 +1,6 @@
 # set default build target
 [build]
-target = "riscv64gc-unknown-none-elf"
+target = "loongarch64-unknown-none"
 
 [profile.release]
 debug = true

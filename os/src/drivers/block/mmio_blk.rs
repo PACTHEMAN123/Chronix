@@ -1,19 +1,25 @@
 //! VirtIO Block using MMIO transport
 
+use core::sync::atomic::Ordering;
+
 use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::{format, vec};
 use hal::constant::{Constant, ConstantsHal};
 use hal::pagetable::MapPerm;
 use virtio_drivers::device::blk::VirtIOBlk;
-use virtio_drivers::transport;
+use virtio_drivers::transport::{self, Transport};
 use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 use crate::config::BLOCK_SIZE;
+use crate::devices::mmio::MmioDeviceDescripter;
 use crate::devices::{BlockDevice, DevId, Device, DeviceMajor};
 use crate::drivers::dma::VirtioHal;
 
 use crate::mm::vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal};
 use crate::mm::KVMSPACE;
 use crate::{devices::DeviceMeta, sync::UPSafeCell};
+
+use super::BLK_ID;
 
 pub struct VirtIOMMIOBlock {
     blk: UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>,
@@ -66,36 +72,20 @@ impl Device for VirtIOMMIOBlock {
 
 impl VirtIOMMIOBlock {
     // use a VirtIO MMIO paddr
-    pub fn new(paddr: usize, size: usize) -> Self {
-        let vaddr = paddr | Constant::KERNEL_ADDR_SPACE.start;
-        // UGLY: we need to read the header to construct
-        // should map the MMIO area first
-        KVMSPACE.lock().push_area(
-            KernVmArea::new(
-                vaddr.into()..(vaddr + size).into(), 
-                KernVmAreaType::MemMappedReg, 
-                MapPerm::R | MapPerm::W,
-            ), 
-            None
-        );
-
-        let header = core::ptr::NonNull::new(vaddr as *mut VirtIOHeader).unwrap();
-        let transport = unsafe {
-            MmioTransport::new(header, size)
-        }.unwrap();
+    pub fn new(mmio_dev: MmioDeviceDescripter, mmio_transport: MmioTransport) -> Self {
         let blk = UPSafeCell::new(
-            VirtIOBlk::<VirtioHal, MmioTransport>::new(transport).expect("failed to create blk driver"),
+            VirtIOBlk::<VirtioHal, MmioTransport>::new(mmio_transport).expect("failed to create blk driver"),
         );
+        let id = BLK_ID.fetch_add(1, Ordering::AcqRel);
         let meta = DeviceMeta {
             dev_id: DevId {
                 major: DeviceMajor::Block,
-                minor: 0,
+                minor: id,
             },
-            name: "virtio-mmio-blk".to_string(),
-            need_mapping: false, // WARN: we assume map before init the header
-            mmio_base: vaddr, // WARN: not sure about the mmio
-            mmio_size: size,
-            irq_no: None, // TODO: support interrupt for block device
+            name: format!("sda{}", id),
+            need_mapping: false,
+            mmio_ranges: vec![mmio_dev.mmio_region],
+            irq_no: None,
             dtype: crate::devices::DeviceType::Block,
         };
         Self { blk, meta }

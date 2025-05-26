@@ -5,11 +5,12 @@ pub mod uart;
 
 use core::task::Waker;
 
-use alloc::{boxed::Box, collections::vec_deque::VecDeque, string::ToString, sync::Arc};
+use alloc::{boxed::Box, collections::vec_deque::VecDeque, string::ToString, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use hal::constant::{Constant, ConstantsHal};
 use lazy_static::lazy_static;
 use uart::{Uart, UART_BAUD_RATE, UART_BUF_LEN};
+use alloc::vec;
 
 use crate::{devices::{CharDevice, DevId, Device, DeviceMajor, DeviceMeta, DeviceType, DEVICE_MANAGER}, sync::{mutex::SpinNoIrqLock, UPSafeCell}, utils::{get_waker, suspend_now, RingBuffer}, with_methods};
 
@@ -58,8 +59,7 @@ impl Serial {
             },
             name: "serial".to_string(),
             need_mapping: true,
-            mmio_base,
-            mmio_size,
+            mmio_ranges: vec![mmio_base..mmio_base+mmio_size],
             irq_no: Some(irq_no),
             dtype: DeviceType::Char,
         };

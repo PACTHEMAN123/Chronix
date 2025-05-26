@@ -11,7 +11,7 @@ buddy_system_allocator.workspace = true
 log.workspace = true
 lazy_static.workspace = true
 virtio-drivers.workspace = true
-
+fdt.workspace = true
 
 hal-marco = { path = "./hal-marco" }
 

@@ -54,6 +54,7 @@ pub(crate) fn rust_main(id: usize) {
         super::clear_bss();
         crate::console::init();
         print_info();
+        init_externel_interrupt();
     }
     unsafe { super::_main_for_arch(id); }
 }
@@ -85,10 +86,19 @@ core::arch::global_asm!(
         csrwr   $t0, LA_CSR_TLBRSAVE
         csrrd   $t0, LA_CSR_PGD
         lddir   $t0, $t0, 3
+        beqz    $t0, _break
         lddir   $t0, $t0, 2
+        beqz    $t0, _break
         lddir   $t0, $t0, 1
+        beqz    $t0, _break
         ldpte   $t0, 0
         ldpte   $t0, 1
+        tlbfill
+        csrrd   $t0, LA_CSR_TLBRSAVE
+        ertn
+    _break:
+        csrwr   $zero, LA_CSR_TLBRELO0
+        csrwr   $zero, LA_CSR_TLBRELO1
         tlbfill
         csrrd   $t0, LA_CSR_TLBRSAVE
         ertn
@@ -125,5 +135,15 @@ fn tlb_init() {
 
     unsafe {
         core::arch::asm!("invtlb 0x0, $r0, $r0"); //clear tlb
+    }
+}
+
+fn init_externel_interrupt() {
+    let device_tree_addr = crate::board::get_device_tree_addr();
+    let device_tree = unsafe {
+        fdt::Fdt::from_ptr(device_tree_addr as _).expect("parse DTB failed!")
+    };
+    if let Some(node) = device_tree.find_compatible(&["loongson,ls2k2000-eiointc"]) {
+        println!("{}", node.name);
     }
 }

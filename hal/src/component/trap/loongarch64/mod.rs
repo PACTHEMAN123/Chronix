@@ -352,8 +352,11 @@ fn handle_page_modify_fault(badv: usize) -> TrapType {
     }
     let tlbidx = register::tlbidx::read(); //获取TLB项索引
     assert_eq!(tlbidx.ne(), false);
-    register::tlbelo0::set_dirty(true);
-    register::tlbelo1::set_dirty(true);
+    if badv & 1 == 0 {
+        register::tlbelo0::set_dirty(true);
+    } else {
+        register::tlbelo1::set_dirty(true);
+    }
 
     unsafe {
         core::arch::asm!("tlbwr"); //重新将tlbelo写入tlb
@@ -372,6 +375,14 @@ fn get_trap_type() -> TrapType {
         Trap::Exception(Exception::StorePageFault) => TrapType::StorePageFault(badv),
         Trap::Exception(Exception::FetchPageFault) => TrapType::InstructionPageFault(badv),
         Trap::Interrupt(Interrupt::Timer) => TrapType::Timer,
+        Trap::Interrupt(Interrupt::HWI0) |
+        Trap::Interrupt(Interrupt::HWI1) |
+        Trap::Interrupt(Interrupt::HWI2) |
+        Trap::Interrupt(Interrupt::HWI3) |
+        Trap::Interrupt(Interrupt::HWI4) |
+        Trap::Interrupt(Interrupt::HWI5) |
+        Trap::Interrupt(Interrupt::HWI6) |
+        Trap::Interrupt(Interrupt::HWI7) => TrapType::ExternalInterrupt,
         Trap::Exception(Exception::PageModifyFault) => {
             handle_page_modify_fault(badv)
         },
@@ -381,7 +392,14 @@ fn get_trap_type() -> TrapType {
             TrapType::Processed
         },
         _ => {
-            warn!(
+            println!("{:#x}", loongArch64::register::pgdl::read().base());
+            let pgt = PageTable::from_token(
+                loongArch64::register::pgdl::read().base(), FakeFrameAllocator
+            );
+            if let Some((pte, _)) = pgt.find_pte(VirtAddr::from(badv).floor()) {
+                println!("{}", pte.bits);
+            }
+            warn!( 
                 "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
                 estat.cause(), 
                 badv, 

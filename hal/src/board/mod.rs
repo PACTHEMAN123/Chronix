@@ -9,3 +9,10 @@ mod loongarch64;
 
 #[cfg(target_arch = "loongarch64")]
 pub use loongarch64::*;
+
+pub fn get_device_tree_addr() -> usize {
+    unsafe extern "C" {
+        fn _dtb_start();
+    }
+    _dtb_start as *const usize as usize
+}

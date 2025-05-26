@@ -104,6 +104,11 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_external_interrupt() {
-        todo!()
+        register::ecfg::set_lie(
+            LineBasedInterrupt::HWI0 | LineBasedInterrupt::HWI1 |
+            LineBasedInterrupt::HWI2 | LineBasedInterrupt::HWI3 |
+            LineBasedInterrupt::HWI4 | LineBasedInterrupt::HWI5 |
+            LineBasedInterrupt::HWI6 | LineBasedInterrupt::HWI7 
+        );
     }
 }
