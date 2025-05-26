@@ -903,3 +903,37 @@ pub fn sys_umask(_mask: i32) -> SysResult {
     // TODO: implement this
     Ok(0x777)
 }
+
+/// pwrite:write on a file
+/// todo： make it async
+pub fn sys_pwrite(fd: usize, buf_ptr: usize, count: usize, offset: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|table| table.get_file(fd))?;
+    let buf = unsafe {
+        Instruction::set_sum();
+        let buf_ptr = buf_ptr as *mut u8;
+        core::slice::from_raw_parts_mut(buf_ptr, count) 
+    };
+    let ret = file.inode().unwrap().write_at(offset, buf);
+    match ret {
+        Ok(len) => Ok(len as isize),
+        Err(e) => Err(SysError::from_i32(e)),
+    }
+}
+
+/// pread:read from a file
+/// todo: make it async
+pub fn sys_pread(fd: usize, buf_ptr: usize, count: usize, offset: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|table| table.get_file(fd))?;
+    let buf = unsafe {
+        Instruction::set_sum();
+        let buf_ptr = buf_ptr as *mut u8;
+        core::slice::from_raw_parts_mut(buf_ptr, count) 
+    };
+    let ret = file.inode().unwrap().read_at(offset, buf);
+    match ret {
+        Ok(len) => Ok(len as isize),
+        Err(e) => Err(SysError::from_i32(e)),
+    }
+}
