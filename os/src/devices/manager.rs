@@ -2,10 +2,10 @@
 
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use fdt::Fdt;
-use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::MapPerm};
+use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::Transport;
 
-use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -17,9 +17,8 @@ type IrqNo = usize;
 /// Maintains device instances lifetimes
 /// Mapping interrupt No to device
 pub struct DeviceManager {    
-    /// Optional PLIC (Platform-Level Interrupt Controller) to manage external
-    /// interrupts.
-    pub plic: Option<PLIC>,
+    /// Optional interrupt controller
+    pub irq_ctrl: Option<IrqCtrl>,
     /// Optional PCI
     pub pci: Option<PciManager>,
     /// Optional MMIO
@@ -34,7 +33,7 @@ impl DeviceManager {
     /// create a new device manager
     pub fn new() -> Self {
         Self {
-            plic: None,
+            irq_ctrl: None,
             pci: None,
             mmio: None,
             devices: BTreeMap::new(),
@@ -43,8 +42,8 @@ impl DeviceManager {
     }
 
     
-    fn plic(&self) -> &PLIC {
-        self.plic.as_ref().unwrap()
+    fn irq_ctrl(&self) -> &IrqCtrl {
+        self.irq_ctrl.as_ref().unwrap()
     }
 
     fn pci(&self) -> &PciManager {
@@ -62,13 +61,16 @@ impl DeviceManager {
         let serial = scan_char_device(device_tree);
         self.devices.insert(serial.dev_id(), serial.clone());
         self.irq_map.insert(serial.irq_no().unwrap(), serial.clone());
+
+        if let Some(irq_ctrl) = IrqCtrl::from_dt(device_tree, MmioMapper) {
+            self.irq_ctrl = Some(irq_ctrl);
+        }
         
         if let Some(mut pci) = PciManager::scan_pcie_root(device_tree) {
             for mut device in pci.enumerate_devices() {
                 // pci bus has an advantage: no need to map or allocate 
                 // memory to recognize the device type.
                 let dev_class: PciDeviceClass = device.func_info.class.into();
-
                 let dev = match dev_class {
                     PciDeviceClass::MassStorageContorller => {
                         pci.init_device(&mut device).unwrap();
@@ -84,7 +86,7 @@ impl DeviceManager {
             }
             self.pci = Some(pci);
         }
-
+        
         let mmio = MmioManager::scan_mmio_root(device_tree);
         for deivce in mmio.enumerate_devices() {
             if let Ok(mmio_transport) = deivce.transport() {
@@ -104,10 +106,10 @@ impl DeviceManager {
         }
         self.mmio = Some(mmio);
 
-        let plic = scan_plic_device(device_tree);
-        if let Some(plic) = plic {
-            self.plic = Some(plic);
-        }
+        // let plic = scan_plic_device(device_tree);
+        // if let Some(plic) = plic {
+        //     self.plic = Some(plic);
+        // }
         // TODO
     }
 
@@ -135,8 +137,9 @@ impl DeviceManager {
                 );
             }
         }
-        // map plic
-        if let Some(plic) = &self.plic {
+        #[cfg(target_arch = "riscv64")]
+        if let Some(irq_ctrl) = &self.irq_ctrl{
+            let plic = &irq_ctrl.plic;
             let paddr_start = plic.mmio_base;
             let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
             let size = plic.mmio_size;
@@ -150,6 +153,7 @@ impl DeviceManager {
                 None
             );
         }
+
     }
 
     /// Device Init Stage3: init all devices
@@ -186,7 +190,7 @@ impl DeviceManager {
         for i in 0..2 {
             for dev in self.devices.values() {
                 if let Some(irq) = dev.irq_no() {
-                    self.plic().enable_irq(irq, i);
+                    self.irq_ctrl().enable_irq(irq);
                     log::info!("Enable external interrupt:{irq}, context:{i}");
                 }
             }
@@ -209,10 +213,10 @@ impl DeviceManager {
         }
         unsafe { Instruction::disable_interrupt() };
         log::trace!("[Device Manager]: handle interrupt");
-        if let Some(irq_num) = self.plic().claim_irq(irq_ctx()) {
+        if let Some(irq_num) = self.irq_ctrl().claim_irq() {
             if let Some(dev) = self.irq_map.get(&irq_num) {
                 dev.handle_irq();
-                self.plic().complete_irq(irq_num, irq_ctx());
+                self.irq_ctrl().complete_irq(irq_num);
                 return;
             }
         } 

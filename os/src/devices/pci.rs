@@ -2,7 +2,7 @@ use core::{ops::Range, ptr::null_mut};
 
 use alloc::{sync::Arc, vec::Vec};
 use fdt::{node::FdtNode, Fdt};
-use hal::{addr::VirtAddr, constant::{Constant, ConstantsHal}, pagetable::MapPerm};
+use hal::{addr::VirtAddr, constant::{Constant, ConstantsHal}, pagetable::MapPerm, print, println};
 use spin::Lazy;
 use virtio_drivers::transport::{pci::{bus::{BarInfo, BusDeviceIterator, Cam, Command, DeviceFunction, DeviceFunctionInfo, MemoryBarType, MmioCam, PciRoot}, PciTransport}, Transport};
 
@@ -298,6 +298,17 @@ impl PciManager {
         device.transport = Some(transport);
         Ok(())
     }
+
+    fn prase_interrput_map(pci_node: &FdtNode) -> Option<()>{
+        let data = pci_node.property("interrupt-map")?.value;
+        let (_, data, _) = unsafe { data.align_to::<u32>() };
+        for i in data {
+            print!("{:#x} ", change_endian(*i));
+        }
+        println!("");
+        None
+    }
+
 }
 
 const fn align_up(value: u32, alignment: u32) -> u32 {
@@ -315,4 +326,8 @@ pub const fn next_power_of_two(mut x: u32) -> u32 {
     x |= x >> 8;
     x |= x >> 16;
     return x+1;
+}
+
+const fn change_endian(x: u32) -> u32 {
+    return (x << 24) | ((x & 0x0000ff00) << 8) | ((x & 0x00ff0000) >> 8) | (x >> 24);
 }

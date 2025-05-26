@@ -38,6 +38,5 @@ smp = []
 fat32 = []
 net = []
 
-
 [profile.release]
 debug = true

@@ -3,3 +3,4 @@ pub mod mutex;
 pub mod sie_guard;
 mod backtrace;
 pub use backtrace::backtrace;
+pub mod bitfield;

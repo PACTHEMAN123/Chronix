@@ -30,8 +30,8 @@ riscv = "0.11.0"
 plic = "0.0.3"
 
 # crates on github
-bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", branch = "main" }
-fdt = { git = "https://github.com/repnop/fdt.git", branch = "master", default-feature = true}
+bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", branch = "main"}
+fdt = { git = "https://github.com/repnop/fdt.git", branch = "master", features = ["pretty-printing"] }
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", branch = "master", default-features = false, features = ["alloc", "lfn", "unicode"] }
 xmas-elf = { git = "https://github.com/zlc-dev/xmas-elf", branch = "master" }
 lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", branch = "main", default-features = false }

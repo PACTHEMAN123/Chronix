@@ -71,12 +71,12 @@ pub trait Inode {
     /// read at given offset in direct IO
     /// the Inode should make sure stop reading when at EOF itself
     fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
-        todo!()
+        Ok(0)
     }
     /// write at given offset in direct IO
     /// the Inode should make sure stop writing when at EOF itself
     fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
-        todo!()
+        Ok(0)
     }
     /// get the page cache it owned
     fn cache(&self) -> Arc<PageCache> {
