@@ -904,8 +904,8 @@ pub fn sys_umask(_mask: i32) -> SysResult {
     Ok(0x777)
 }
 
-/// pwrite:write on a file
-/// todo： make it async
+///pwrite:write on a file
+///todo： make it async
 pub fn sys_pwrite(fd: usize, buf_ptr: usize, count: usize, offset: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|table| table.get_file(fd))?;

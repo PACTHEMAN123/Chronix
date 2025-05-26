@@ -14,7 +14,7 @@ pub struct PLIC {
 
 impl PLIC {
     pub fn new(mmio_base: usize, mmio_size: usize, mmio: impl MmioMapperHal) -> PLIC {
-        let mmio_vbase = mmio.map_mmio_area(mmio_base..mmio_base+mmio_size).start;
+        let mmio_vbase = Constant::KERNEL_ADDR_SPACE.start + mmio_base;
         PLIC {
             mmio_base,
             mmio_size,
@@ -86,7 +86,8 @@ impl plic::HartContext for PLICCtxWrapper {
 }
 
 pub struct IrqCtrl {
-    plic: PLIC,
+    ///
+    pub plic: PLIC,
 }
 
 impl IrqCtrlHal for IrqCtrl {

@@ -137,6 +137,23 @@ impl DeviceManager {
                 );
             }
         }
+        #[cfg(target_arch = "riscv64")]
+        if let Some(irq_ctrl) = &self.irq_ctrl{
+            let plic = &irq_ctrl.plic;
+            let paddr_start = plic.mmio_base;
+            let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
+            let size = plic.mmio_size;
+            log::info!("[Device Manager]: mapping PLIC, from phys addr {:#x} to virt addr {:#x}, size {:#x}", paddr_start, vaddr_start, size);
+            KVMSPACE.lock().push_area(
+                KernVmArea::new(
+                    vaddr_start.into()..(vaddr_start + size).into(),
+                    KernVmAreaType::MemMappedReg, 
+                    MapPerm::R | MapPerm::W,
+                ),
+                None
+            );
+        }
+
     }
 
     /// Device Init Stage3: init all devices
