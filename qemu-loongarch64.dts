@@ -89,7 +89,7 @@
 		compatible = "pci-host-ecam-generic";
 	};
 
-	msi@2ff00000 {
+	msi@2ff00000 { 
 		loongson,msi-num-vecs = <0xe0>;
 		loongson,msi-base-vec = <0x20>;
 		interrupt-parent = <0x8002>;

@@ -17,8 +17,8 @@ mod user;
 
 pub use user::*;
 
-use hal::println;
-use vm::KernVmSpaceHal;
+use hal::constant::{Constant, ConstantsHal};
+use vm::{KernVmArea, KernVmSpaceHal};
 
 pub use page_table::*;
 
@@ -30,6 +30,31 @@ pub type UserVmSpace = vm::UserVmSpace;
 pub type PageTable = hal::pagetable::PageTable<allocator::FrameAllocator>;
 #[allow(missing_docs)]
 pub type FrameTracker = hal::common::FrameTracker<allocator::FrameAllocator>;
+
+pub struct MmioMapper;
+
+impl hal::mapper::MmioMapperHal for MmioMapper {
+    #[cfg(target_arch = "riscv64")]
+    fn map_mmio_area(&self, range: core::ops::Range<usize>) -> core::ops::Range<usize> {
+        let va_start = hal::addr::VirtAddr::from(range.start | Constant::KERNEL_ADDR_SPACE.start);
+        let va_end = hal::addr::VirtAddr::from(range.end | Constant::KERNEL_ADDR_SPACE.end);
+        KVMSPACE.lock().push_area(KernVmArea::new(
+                va_start..va_end, 
+                vm::KernVmAreaType::MemMappedReg, 
+                hal::pagetable::MapPerm::R | hal::pagetable::MapPerm::W
+            ), 
+            None
+        );
+        va_start.0..va_end.0
+    }
+
+    #[cfg(target_arch = "loongarch64")]
+    fn map_mmio_area(&self, range: core::ops::Range<usize>) -> core::ops::Range<usize> {
+        let va_start = range.start | 0x9000_0000_0000_0000;
+        let va_end = range.end | 0x9000_0000_0000_0000;
+        va_start..va_end
+    }
+}
 
 use super::sync::mutex::SpinNoIrqLock;
 lazy_static::lazy_static! {

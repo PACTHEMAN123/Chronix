@@ -12,12 +12,14 @@ log.workspace = true
 lazy_static.workspace = true
 virtio-drivers.workspace = true
 fdt.workspace = true
+paste.workspace = true
 
 hal-marco = { path = "./hal-marco" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv.workspace = true
 sbi-rt.workspace = true
+plic.workspace = true
 
 [target.'cfg(target_arch = "loongarch64")'.dependencies]
 loongArch64 = "0.2.4"

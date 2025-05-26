@@ -54,7 +54,6 @@ pub(crate) fn rust_main(id: usize) {
         super::clear_bss();
         crate::console::init();
         print_info();
-        init_externel_interrupt();
     }
     unsafe { super::_main_for_arch(id); }
 }
@@ -62,6 +61,7 @@ pub(crate) fn rust_main(id: usize) {
 
 fn print_info() {
     println!("\u{1B}[36m\n{}\u{1B}[0m", super::BANNER);
+    println!("[CINPHAL] IOCSR Support: {}", loongArch64::cpu::get_support_iocsr());
     println!("[CINPHAL] PA_LEN: {}", loongArch64::cpu::get_palen());
     println!("[CINPHAL] VA_LEN: {}", loongArch64::cpu::get_valen());
     println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
@@ -135,15 +135,5 @@ fn tlb_init() {
 
     unsafe {
         core::arch::asm!("invtlb 0x0, $r0, $r0"); //clear tlb
-    }
-}
-
-fn init_externel_interrupt() {
-    let device_tree_addr = crate::board::get_device_tree_addr();
-    let device_tree = unsafe {
-        fdt::Fdt::from_ptr(device_tree_addr as _).expect("parse DTB failed!")
-    };
-    if let Some(node) = device_tree.find_compatible(&["loongson,ls2k2000-eiointc"]) {
-        println!("{}", node.name);
     }
 }
