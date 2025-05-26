@@ -68,7 +68,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
 
 /// syscall: close
 pub fn sys_close(fd: usize) -> SysResult {
-    log::debug!("[sys_close]: close on fd: {}", fd);
+    log::info!("[sys_close]: close on fd: {}", fd);
     let task = current_task().unwrap();
     task.with_mut_fd_table(|table| table.remove(fd))?;
     Ok(0)
@@ -192,6 +192,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         let fd = task.with_mut_fd_table(|table| table.alloc_fd())?;
         let fd_info = FdInfo { file, flags: open_flags.into() };
         task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
+        log::info!("return fd {fd}");
         return Ok(fd as isize)
     } else {
         log::info!("[sys_openat]: pathname is empty!");
@@ -677,18 +678,21 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
     };
     let mut totol_len = 0usize;
+    let mut offset = file.pos();
     for (i, iov) in iovs.iter().enumerate() {
         if iov.len == 0 {
             continue;
         }
-        log::debug!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
+        log::info!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}, read from file pos {}", i, iov.base, iov.len, file.pos());
         let buf = unsafe {
             Instruction::set_sum();
             core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
         };
         let read_len = file.read(buf).await?;
         totol_len += read_len;
+        offset += read_len;
     }
+    assert!(offset == file.pos());
     Ok(totol_len as isize)
 }
 
@@ -717,6 +721,68 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         totol_len += write_len;
     }
     Ok(totol_len as isize)
+}
+
+/// pread() reads up to count bytes from file descriptor fd at offset
+/// offset (from the start of the file) into the buffer starting at buf.  
+/// The file offset is not changed.
+/// TODOS: now mostly copy from sys_read; need to deal with file offset under multi-thread
+/// UGLY: now reset file offset, try to add a read_at method for file?
+pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    log::debug!("[sys_pread] task {} try to read fd {} to buf {:#x} at offset {}, len {}", task.tid(), fd, buf, offset, count);
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let start = buf & !(Constant::PAGE_SIZE - 1);
+    let end = buf + count;
+    let old_pos = file.pos();
+    // assume: during file read, no task switch
+    file.seek(SeekFrom::Start(offset as u64))?;
+    let mut ret = 0;
+    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        let va = aligned_va.max(buf);
+        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        let va = VirtAddr::from(va);
+        let pa = task.with_mut_vm_space(|vm| {
+            translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
+        });
+        let data = pa.get_slice_mut(len);
+        let read_size = file.read(data).await?;
+        ret += read_size;
+        if read_size < len {
+            break;
+        }
+    }
+    file.set_pos(old_pos);
+    Ok(ret as isize)
+}
+
+/// pwrite() writes up to count bytes from the buffer starting at buf 
+/// to the file descriptor fd at offset offset. 
+/// The file offset is not changed.
+/// NOTICE: see pread
+pub async fn sys_pwrite(fd: usize, buf: usize, count: usize, offset: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    log::debug!("[sys_pwrite] task {} try to read fd {} to buf {:#x} at offset {}, len {}", task.tid(), fd, buf, offset, count);
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let start = buf & !(Constant::PAGE_SIZE - 1);
+    let end = buf + count;
+    let old_pos = file.pos();
+    // assume: during file read, no task switch
+    file.seek(SeekFrom::Start(offset as u64))?;
+    let mut ret = 0;
+    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        let va = aligned_va.max(buf);
+        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        let va = VirtAddr::from(va);
+        let pa = task.with_mut_vm_space(|vm| {
+            translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
+        });
+        let data = pa.get_slice(len);
+        ret += file.write(data).await?;
+    }
+    file.set_pos(old_pos);
+    log::debug!("finish pwrite return {}", ret);
+    Ok(ret as isize)
 }
 
 /// sendfile() copies data between one file descriptor and another.
