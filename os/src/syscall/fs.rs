@@ -683,14 +683,30 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         if iov.len == 0 {
             continue;
         }
-        log::info!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}, read from file pos {}", i, iov.base, iov.len, file.pos());
-        let buf = unsafe {
-            Instruction::set_sum();
-            core::slice::from_raw_parts_mut(iov.base as *mut u8, iov.len)
-        };
-        let read_len = file.read(buf).await?;
-        totol_len += read_len;
-        offset += read_len;
+        log::debug!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}, read from file pos {}", i, iov.base, iov.len, file.pos());
+
+        // ugly way
+        let start = iov.base & !(Constant::PAGE_SIZE - 1);
+        let end = iov.base + iov.len;
+        let mut ret = 0;
+
+        for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+            let va = aligned_va.max(iov.base);
+            let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+            let va = VirtAddr::from(va);
+            let pa = task.with_mut_vm_space(|vm| {
+                translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
+            });
+            let data = pa.get_slice_mut(len);
+            let read_size = file.read(data).await?;
+            ret += read_size;
+            if read_size < len {
+                break;
+            }
+        }
+
+        totol_len += ret;
+        offset += ret;
     }
     assert!(offset == file.pos());
     Ok(totol_len as isize)
@@ -712,13 +728,22 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         if iov.len == 0 {
             continue;
         }
-        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}", i, iov.base, iov.len);
-        let buf = unsafe {
-            Instruction::set_sum();
-            core::slice::from_raw_parts(iov.base as *const u8, iov.len)
-        };
-        let write_len = file.write(buf).await?;
-        totol_len += write_len;
+        log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}, file pos {}", i, iov.base, iov.len, file.pos());
+
+        let start = iov.base & !(Constant::PAGE_SIZE - 1);
+        let end = iov.base + iov.len;
+        let mut ret = 0;
+        for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+            let va = aligned_va.max(iov.base);
+            let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+            let va = VirtAddr::from(va);
+            let pa = task.with_mut_vm_space(|vm| {
+                translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
+            });
+            let data = pa.get_slice(len);
+            ret += file.write(data).await?;
+        }
+        totol_len += ret;
     }
     Ok(totol_len as isize)
 }
