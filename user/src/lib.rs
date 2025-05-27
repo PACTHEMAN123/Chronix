@@ -225,7 +225,7 @@ pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
     }
 }
 
-pub fn waitpid_nb(pid: usize, exit_code: &mut i32) -> isize {
+pub fn waitpid_nb(pid: isize, exit_code: &mut i32) -> isize {
     sys_waitpid(pid as isize, exit_code as *mut _)
 }
 

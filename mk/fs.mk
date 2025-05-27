@@ -32,6 +32,8 @@ disk-img: user
 	$(call building, "copying user apps and tests to the $(FS_IMG)")
 	@sudo cp -r $(USER_ELFS) mnt
 
+	@sudo cp ./scripts/run-oj.sh mnt
+
 	$(call building, "create bin/ lib/ dir")
 	@sudo mkdir mnt/bin
 	@sudo mkdir mnt/lib

@@ -175,6 +175,16 @@ impl DeviceManager {
             .collect()
     }
 
+    /// using given device name and major to find devices
+    pub fn find_dev_by_name(&self, name: &str, major: DeviceMajor) -> Arc<dyn Device> {
+        self.devices
+            .iter()
+            .find(|(dev_id, dev)| 
+            dev_id.major == major && dev.meta().name == name)
+            .map(|(_, dev)| dev.clone())
+            .expect("device not found")
+    }
+
     /// enable interrupt for device
     pub fn enable_irq(&mut self) {
         #[cfg(feature="smp")]

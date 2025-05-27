@@ -26,12 +26,27 @@ pub static BLK_ID: AtomicUsize = AtomicUsize::new(0);
 lazy_static! {
     /// WARNING: should only be called after devices manager finish init
     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = {
+        /*
         let blk = DEVICE_MANAGER.lock()
         .find_dev_by_major(DeviceMajor::Block)
         .into_iter()
         .map(|device| device.as_blk().unwrap())
         .next()
         .unwrap();
+         */
+
+        #[cfg(target_arch="riscv64")]
+        let blk = DEVICE_MANAGER.lock()
+            .find_dev_by_name("sda0", DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
+        #[cfg(target_arch="loongarch64")]
+        let blk = DEVICE_MANAGER.lock()
+            .find_dev_by_name("sda1", DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
         blk.clone()
     };
 }
