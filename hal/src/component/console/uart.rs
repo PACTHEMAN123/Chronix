@@ -1,6 +1,11 @@
 use crate::util::mutex::Mutex;
 
-const UART_ADDR: usize = 0x800000001FE001E0;
+#[cfg(target_arch="loongarch64")]
+const UART_ADDR: usize = 0x8000_0000_1fe0_01e0;
+
+// ugly: os kernel need to map this address
+#[cfg(target_arch="riscv64")]
+const UART_ADDR: usize = 0xffff_ffc0_1000_0000;
 
 static COM1: Mutex<Uart> = Mutex::new(Uart::new(UART_ADDR));
 

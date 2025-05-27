@@ -89,7 +89,7 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = {
         //info!("trying to open initproc");
-        let file = open_file("initproc", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("autotest", OpenFlags::O_WRONLY).unwrap();
         // let file = open_file("autotest", OpenFlags::O_WRONLY).unwrap();
         let reader = FileReader::new(file.clone());
         let elf = xmas_elf::ElfFile::new(&reader).unwrap();

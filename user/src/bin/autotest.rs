@@ -4,10 +4,11 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{chdir, exec, execve, fork, wait, yield_};
+use user_lib::{chdir, execve, fork, waitpid};
 
 fn run_cmd(cmd: &str) {
-    if fork() == 0 {
+    let pid = fork();
+    if pid == 0 {
         // default use musl busybox
         execve(
             "/musl/busybox",
@@ -17,9 +18,9 @@ fn run_cmd(cmd: &str) {
                 "HOME=/home/chronix",
             ],
         );
-    } else {
+    } else if pid > 0 {
         let mut result: i32 = 0;
-        wait(&mut result);
+        waitpid(pid as usize, &mut result);
     }
 }
 
