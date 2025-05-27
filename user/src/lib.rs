@@ -148,6 +148,10 @@ pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
 
+pub fn chdir(path: &str) -> isize {
+    sys_chdir(path.as_ptr() as *const u8)
+}
+
 pub const AT_FDCWD: isize = -100;
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_openat(AT_FDCWD, path, flags.bits)

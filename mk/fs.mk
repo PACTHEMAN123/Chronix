@@ -36,6 +36,8 @@ disk-img: user
 	@sudo mkdir mnt/bin
 	@sudo mkdir mnt/lib
 	@sudo mkdir mnt/lib64
+	@sudo mkdir mnt/usr
+	@sudo mkdir mnt/usr/lib64
 
 	$(call building, "sym-linking libc.so")
 ifeq ($(ARCH), riscv64)
@@ -48,6 +50,8 @@ else ifeq ($(ARCH), loongarch64)
 	@sudo ln -s /glibc/lib/ld-linux-loongarch-lp64d.so.1 mnt/lib64/ld-linux-loongarch-lp64d.so.1
 	@sudo ln -s /glibc/lib/libc.so.6 mnt/lib64/libc.so.6
 	@sudo ln -s /glibc/lib/libm.so mnt/lib64/libm.so.6
+	@sudo ln -s /glibc/lib/libc.so.6 mnt/usr/lib64/libc.so.6
+	@sudo ln -s /glibc/lib/libm.so.6 mnt/usr/lib64/libm.so.6
 	@sudo ln -s /musl/lib/libc.so mnt/lib/ld-musl-loongarch64-lp64d.so.1
 	@sudo ln -s /musl/lib/libc.so mnt/lib64/ld-musl-loongarch-lp64d.so.1
 endif
