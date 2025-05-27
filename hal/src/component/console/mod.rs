@@ -1,3 +1,5 @@
+mod uart;
+
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::util::sie_guard::SieGuard;
 

@@ -1,5 +1,5 @@
 //! The global allocator
-const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB kept for operating system
+const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB reserved for operating system
 use core::{alloc::{GlobalAlloc, Layout}, ptr::NonNull};
 
 use alloc::alloc::Allocator;

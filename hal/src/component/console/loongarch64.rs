@@ -1,6 +1,4 @@
-mod uart;
-
-pub use uart::{console_getchar, console_putchar};
+pub use super::uart::{console_getchar, console_putchar};
 
 impl core::fmt::Write for super::Stdout {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
