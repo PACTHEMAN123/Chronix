@@ -89,7 +89,7 @@
 		compatible = "pci-host-ecam-generic";
 	};
 
-	msi@2ff00000 { 
+	msi@2ff00000 {
 		loongson,msi-num-vecs = <0xe0>;
 		loongson,msi-base-vec = <0x20>;
 		interrupt-parent = <0x8002>;
@@ -172,6 +172,6 @@
 
 	chosen {
 		stdout-path = "/serial@1fe001e0";
-		rng-seed = <0xd8d4e000 0xa2c06b14 0xaa361234 0x9a5eaf41 0x1171702c 0x97626593 0xa0187e13 0x5fefca7e>;
+		rng-seed = <0x41440cd6 0xbd745147 0xc1539b6 0x5557468 0xd906320b 0xac65072a 0xf62725a4 0x1e569050>;
 	};
 };

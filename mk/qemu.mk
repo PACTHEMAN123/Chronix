@@ -16,15 +16,16 @@ QEMU_ARGS += -rtc base=utc
 QEMU_ARGS += -no-reboot
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
+QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true -m 1G
 else ifeq ($(ARCH), loongarch64)
+QEMU_ARGS += -m 1G
 endif
 
 
 ifeq ($(ARCH), riscv64)
-QEMU_RUN_ARGS := -kernel $(KERNEL_BIN) -m 1G
+QEMU_RUN_ARGS := -kernel $(KERNEL_BIN)
 else ifeq ($(ARCH), loongarch64)
-QEMU_RUN_ARGS := -kernel $(KERNEL_ELF) -m 1G
+QEMU_RUN_ARGS := -kernel $(KERNEL_ELF)
 endif
 
 ifneq ($(SMP),)

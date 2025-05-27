@@ -1,7 +1,7 @@
 use super::{Constant, ConstantsHal};
 
 impl ConstantsHal for Constant {
-    const KERNEL_ENTRY_PA: usize = 0x9000_0000;
+    const KERNEL_ENTRY_PA: usize = 0x8000_0000;
 
     const KERNEL_ADDR_SPACE: core::ops::Range<usize> = 0x9000_0000_0000_0000..0x9001_0000_0000_0000;
 
@@ -19,7 +19,7 @@ impl ConstantsHal for Constant {
     
     const PTE_WIDTH: usize = 64;
     
-    const MEMORY_END: usize = 0x9000_0000_D000_0000;
+    const MEMORY_END: usize = 0x9000_0000_B000_0000;
 
     const SIGRET_TRAMPOLINE_SIZE: usize = Self::PAGE_SIZE;
     const SIGRET_TRAMPOLINE_TOP: usize = 0x0000_ffff_ffff_f000;
