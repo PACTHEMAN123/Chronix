@@ -202,7 +202,8 @@ pub fn switch_to_current_task(processor: &mut Processor, task: &mut Arc<TaskCont
     unsafe {env.auto_sum();}
     //info!("already in switch");
     #[cfg(feature = "smp")]
-    if task.cpu_allowed() != 4 && task.cpu_allowed() != get_cpu_mask(processor.id()) {
+    if task.cpu_allowed() != 15 && task.cpu_allowed() != get_cpu_mask(processor.id()) {
+        warn!("[switch_to_current_task], set need migrate");
         processor.set_need_migrate(turn_cpu_mask_to_id(task.cpu_allowed()));
     }
     processor.set_current(Arc::clone(task));
