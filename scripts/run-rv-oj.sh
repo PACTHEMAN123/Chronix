@@ -16,6 +16,7 @@ cd /riscv/glibc
 ./libctest_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
+./lmbench_testcode.sh
 cd ..
 echo "finish to run glibc"
 
@@ -27,6 +28,7 @@ cd /riscv/musl
 ./libctest_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
+./lmbench_testcode.sh
 cd ..
 
 exit

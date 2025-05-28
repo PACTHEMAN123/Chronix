@@ -18,6 +18,7 @@ cd /loongarch/glibc
 ./libctest_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
+./lmbench_testcode.sh
 cd ..
 echo "finish to run glibc"
 
@@ -29,6 +30,7 @@ cd /loongarch/musl
 ./libctest_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
+./lmbench_testcode.sh
 cd ..
 
 exit
