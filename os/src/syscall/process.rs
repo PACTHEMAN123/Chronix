@@ -21,6 +21,7 @@ use crate::task::{exit_current_and_run_next, INITPROC};
 use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
 use crate::signal::SigSet;
+use crate::timer::get_current_time_duration;
 use crate::utils::{suspend_now, user_path_to_string};
 use alloc::string::ToString;
 use alloc::{sync::Arc, vec::Vec, string::String};

@@ -7,6 +7,7 @@ pub mod string;
 pub mod ring_buffer;
 pub mod macro_utils;
 pub mod round;
+pub mod timer;
 
 pub use async_utils::*;
 pub use path::*;

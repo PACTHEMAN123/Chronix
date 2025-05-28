@@ -334,7 +334,7 @@ pub trait KernVmSpaceHal {
 
     fn new() -> Self;
 
-    fn to_user<T: UserVmSpaceHal>(&self) -> T;
+    fn to_user(&self) -> UserVmSpace;
 
     fn push_area(&mut self, area: KernVmArea, data: Option<&[u8]>);
 

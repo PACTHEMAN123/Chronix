@@ -3,7 +3,7 @@ use core::fmt::Debug;
 use log::{info, warn};
 use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
 
-use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageTable, PageTableEntryHal, PageTableHal}, println};
+use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageTable, PageTableEntryHal, PageTableHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
@@ -338,21 +338,21 @@ pub fn set_user_trap_entry() {
 }
 
 fn handle_page_modify_fault(badv: usize) -> TrapType {
-    let va = VirtAddr(badv); //虚拟地址
+    let va = VirtAddr::from(badv); //虚拟地址
     let vpn: VirtPageNum = va.floor(); //虚拟地址的虚拟页号
     let token = register::pgdl::read().base();
-    let page_table = PageTable::<FakeFrameAllocator>::from_token(token, FakeFrameAllocator);
+    let page_table = PageTable::from_token(token, FakeFrameAllocator);
     let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
     if !pte.flags().contains(MapPerm::W) {
         return TrapType::StorePageFault(badv);
     }
     pte.set_dirty(true);
     unsafe {
-        core::arch::asm!("tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
+        core::arch::asm!("dbar 0", "tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
     }
     let tlbidx = register::tlbidx::read(); //获取TLB项索引
     assert_eq!(tlbidx.ne(), false);
-    if badv & 1 == 0 {
+    if vpn.0 & 1 == 0 {
         register::tlbelo0::set_dirty(true);
     } else {
         register::tlbelo1::set_dirty(true);

@@ -27,7 +27,7 @@ use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToStr
 use tmpfs::{fstype::TmpFSType, init_tmpfs};
 use vfs::{fstype::{FSType, MountFlags}, DCACHE};
 
-use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
+use crate::{devices::{DeviceMajor, DEVICE_MANAGER}, drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
 pub use ext4::Ext4SuperBlock;
 pub use vfs::{SuperBlock, SuperBlockInner};
 
@@ -78,9 +78,37 @@ pub fn get_filesystem(name: &str) -> &'static Arc<dyn FSType> {
 /// init the file system
 pub fn init() {
     register_all_fs();
+    let sdcard_dev_name;
+    let disk_dev_name;
+    #[cfg(target_arch="riscv64")]
+    {
+        sdcard_dev_name = "sda0";
+        disk_dev_name = "sda1";
+    }
+    #[cfg(target_arch="loongarch64")]
+    {
+        sdcard_dev_name = "sda0";
+        disk_dev_name = "sda1";
+    }
+
+    let sdcard_device = DEVICE_MANAGER.lock()
+            .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
-    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone())).unwrap();
+    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(sdcard_device)).unwrap();
+
+    // let diskimg_device = DEVICE_MANAGER.lock()
+    //         .find_dev_by_name(disk_dev_name, DeviceMajor::Block)
+    //         .as_blk()
+    //         .unwrap();
+
+    // let diskfs2 = get_filesystem(DISK_FS_NAME);
+    // let diskfs2_root = diskfs2.mount("disk", Some(diskfs_root.clone()), MountFlags::empty(), Some(diskimg_device)).unwrap();
+    // diskfs_root.add_child(diskfs2_root.clone());
+    // DCACHE.lock().insert(diskfs2_root.path(), diskfs2_root);
 
     // mount the dev file system under diskfs
     let devfs = get_filesystem("devfs");
