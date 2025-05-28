@@ -128,7 +128,7 @@ impl FdTable {
     pub fn remove(&mut self, fd: usize) -> Result<(), SysError> {
         if fd >= self.fd_table.len() {
             log::warn!("[fs::remove_1] fd {} is not valid",fd);
-            return Err(SysError::EMFILE);
+            return Err(SysError::EBADF);
         } else if self.fd_table[fd].is_none() {
             log::warn!("[fs::remove_2] fd {} is not valid",fd);
             return Err(SysError::EBADF);
