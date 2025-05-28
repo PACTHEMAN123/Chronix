@@ -50,7 +50,7 @@ impl FrameAllocatorTrait for BitMapFrameAllocator {
     
     fn alloc_contiguous(&mut self, size: usize, align_log2: usize) -> Option<Range<PhysPageNum>> {
         if align_log2 > self.align_log2 {
-            log::warn!("BitMapFrameAllocator cannot support align to {}", align_log2);
+            log::warn!("BitMapFrameAllocator cannot support align to {:#x}", 1 << align_log2);
         }
         let mut start = self.inner.alloc_contiguous(None, size, align_log2)?;
         start += self.range.start.0;

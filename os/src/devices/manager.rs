@@ -2,7 +2,7 @@
 
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use fdt::Fdt;
-use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
+use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::Transport;
 
 use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
@@ -137,22 +137,22 @@ impl DeviceManager {
                 );
             }
         }
-        #[cfg(target_arch = "riscv64")]
-        if let Some(irq_ctrl) = &self.irq_ctrl{
-            let plic = &irq_ctrl.plic;
-            let paddr_start = plic.mmio_base;
-            let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
-            let size = plic.mmio_size;
-            log::info!("[Device Manager]: mapping PLIC, from phys addr {:#x} to virt addr {:#x}, size {:#x}", paddr_start, vaddr_start, size);
-            KVMSPACE.lock().push_area(
-                KernVmArea::new(
-                    vaddr_start.into()..(vaddr_start + size).into(),
-                    KernVmAreaType::MemMappedReg, 
-                    MapPerm::R | MapPerm::W,
-                ),
-                None
-            );
-        }
+        // #[cfg(target_arch = "riscv64")]
+        // if let Some(irq_ctrl) = &self.irq_ctrl{
+        //     let plic = &irq_ctrl.plic;
+        //     let paddr_start = plic.mmio_base;
+        //     let vaddr_start = paddr_start | Constant::KERNEL_ADDR_SPACE.start;
+        //     let size = plic.mmio_size;
+        //     log::info!("[Device Manager]: mapping PLIC, from phys addr {:#x} to virt addr {:#x}, size {:#x}", paddr_start, vaddr_start, size);
+        //     KVMSPACE.lock().push_area(
+        //         KernVmArea::new(
+        //             vaddr_start.into()..(vaddr_start + size).into(),
+        //             KernVmAreaType::MemMappedReg, 
+        //             MapPerm::R | MapPerm::W,
+        //         ),
+        //         None
+        //     );
+        // }
 
     }
 
@@ -173,6 +173,16 @@ impl DeviceManager {
             .map(|(_, dev)| dev)
             .cloned()
             .collect()
+    }
+
+    /// using given device name and major to find devices
+    pub fn find_dev_by_name(&self, name: &str, major: DeviceMajor) -> Arc<dyn Device> {
+        self.devices
+            .iter()
+            .find(|(dev_id, dev)| 
+            dev_id.major == major && dev.meta().name == name)
+            .map(|(_, dev)| dev.clone())
+            .expect("device not found")
     }
 
     /// enable interrupt for device

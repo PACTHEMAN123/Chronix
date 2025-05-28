@@ -16,15 +16,16 @@ QEMU_ARGS += -rtc base=utc
 QEMU_ARGS += -no-reboot
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true
+QEMU_ARGS += -cpu rv64,m=true,a=true,f=true,d=true -m 1G
 else ifeq ($(ARCH), loongarch64)
+QEMU_ARGS += -m 1G
 endif
 
 
 ifeq ($(ARCH), riscv64)
-QEMU_RUN_ARGS := -kernel $(KERNEL_BIN) -m 1G
+QEMU_RUN_ARGS := -kernel $(KERNEL_BIN)
 else ifeq ($(ARCH), loongarch64)
-QEMU_RUN_ARGS := -kernel $(KERNEL_ELF) -m 1G
+QEMU_RUN_ARGS := -kernel $(KERNEL_ELF)
 endif
 
 ifneq ($(SMP),)
@@ -32,11 +33,15 @@ QEMU_ARGS += -smp $(CPU)
 endif
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(DISK_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x1
+QEMU_ARGS += -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
 else ifeq ($(ARCH), loongarch64)
-QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(DISK_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-pci,drive=x0
+QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x1
+QEMU_ARGS += -device virtio-blk-pci,drive=x1
 endif
 
 ifeq ($(NET_C),y)

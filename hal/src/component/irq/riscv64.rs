@@ -1,4 +1,4 @@
-use crate::{constant::{Constant, ConstantsHal}, mapper::MmioMapperHal};
+use crate::mapper::MmioMapperHal;
 
 use super::IrqCtrlHal;
 
@@ -13,8 +13,7 @@ pub struct PLIC {
 // const PLIC_ADDR: usize = 0xc00_0000 + VIRT_RAM_OFFSET;
 
 impl PLIC {
-    pub fn new(mmio_base: usize, mmio_size: usize, mmio: impl MmioMapperHal) -> PLIC {
-        let mmio_vbase = Constant::KERNEL_ADDR_SPACE.start + mmio_base;
+    pub fn new(mmio_base: usize, mmio_size: usize, mmio_vbase: usize) -> PLIC {
         PLIC {
             mmio_base,
             mmio_size,
@@ -32,6 +31,14 @@ impl PLIC {
         unsafe { (*plic).set_threshold(ctx, 0) };
         unsafe { (*plic).enable(src, ctx) };
         unsafe { (*plic).set_priority(src, 6) };
+    }
+
+    pub fn disable_irq(&self, irq: usize, ctx_id: usize) {
+        let plic = self.mmio_vbase as *mut plic::Plic;
+        // Setup PLIC
+        let src = PLICSrcWrapper::new(irq);
+        let ctx = PLICCtxWrapper::new(ctx_id);
+        unsafe { (*plic).disable(src, ctx) };
     }
 
     /// Return the IRQ number of the highest priority pending interrupt
@@ -97,7 +104,8 @@ impl IrqCtrlHal for IrqCtrl {
             let mmio_base = plic_reg.starting_address as usize;
             let mmio_size = plic_reg.size.unwrap();
             log::info!("plic base_address:{mmio_base:#x}, size:{mmio_size:#x}");
-            Some(IrqCtrl { plic: PLIC::new(mmio_base, mmio_size, mmio) })
+            let mmio_vbase = mmio.map_mmio_area(mmio_base..mmio_base+mmio_size).start;
+            Some(IrqCtrl { plic: PLIC::new(mmio_base, mmio_size, mmio_vbase) })
         } else {
             log::error!("[PLIC probe] faild to find plic");
             None
@@ -109,7 +117,7 @@ impl IrqCtrlHal for IrqCtrl {
     }
 
     fn disable_irq(&self, no: usize) {
-        // do nothing
+        self.plic.disable_irq(no, 0);
     }
 
     fn claim_irq(&self) -> Option<usize> {

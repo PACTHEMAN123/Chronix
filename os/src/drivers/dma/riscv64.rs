@@ -37,12 +37,18 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
 
     unsafe fn share(
         buffer: NonNull<[u8]>,
-        _direction: BufferDirection,
+        direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         let buffer = buffer.as_ref();
         let pages = (buffer.len() - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS;
         let frames = frames_alloc(pages).unwrap();
-        frames.range_ppn.get_slice_mut()[..buffer.len()].copy_from_slice(buffer);
+        match direction {
+            BufferDirection::DriverToDevice |
+            BufferDirection::Both => {
+                frames.range_ppn.get_slice_mut()[..buffer.len()].copy_from_slice(buffer);
+            }
+            BufferDirection::DeviceToDriver => {}
+        }
         let pa = frames.range_ppn.start.start_addr().0;
         core::mem::forget(frames);
         pa
