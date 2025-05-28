@@ -188,6 +188,9 @@ impl DeviceManager {
     /// enable interrupt for device
     pub fn enable_irq(&mut self) {
         #[cfg(feature="smp")]
+        use hal::board::MAX_PROCESSORS;
+        #[cfg(feature="smp")]
+        // todo!
         for i in 0..MAX_PROCESSORS * 2 {
             for dev in self.devices.values() {
                 if let Some(irq) = dev.irq_no() {

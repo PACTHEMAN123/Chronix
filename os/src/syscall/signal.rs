@@ -249,7 +249,7 @@ pub async fn sys_rt_sigtimedwait(
     info_ptr: usize,
     timeout_ptr: usize,
 )-> SysResult {
-    let task = current_task().unwrap();
+    let task = current_task().unwrap().clone();
     let mut set = unsafe {
         let _sum_guard = SumGuard::new();
         *(set_ptr as *mut SigSet)
@@ -279,7 +279,7 @@ pub async fn sys_rt_sigtimedwait(
         if !timeout.is_valid() {
             return  Err(SysError::EINVAL);
         }
-        suspend_timeout(task, timeout.into()).await;
+        suspend_timeout(current_task().unwrap(), timeout.into()).await;
     }
     task.set_running();
     let si = task.with_mut_sig_manager(|sig_manager| {
