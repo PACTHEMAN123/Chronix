@@ -392,14 +392,7 @@ fn get_trap_type() -> TrapType {
             TrapType::Processed
         },
         _ => {
-            println!("{:#x}", loongArch64::register::pgdl::read().base());
-            let pgt = PageTable::from_token(
-                loongArch64::register::pgdl::read().base(), FakeFrameAllocator
-            );
-            if let Some((pte, _)) = pgt.find_pte(VirtAddr::from(badv).floor()) {
-                println!("{}", pte.bits);
-            }
-            warn!( 
+            log::error!( 
                 "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
                 estat.cause(), 
                 badv, 

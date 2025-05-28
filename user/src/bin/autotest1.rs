@@ -25,8 +25,8 @@ fn run_cmd(cmd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
-    run_cmd("/musl/busybox --install /bin");
-    run_cmd("rm /bin/sh");
+    // run_cmd("/musl/busybox --install /bin");
+    // run_cmd("rm /bin/sh");
 
     println!("into user mode initproc");
     if fork() == 0 {

@@ -41,8 +41,8 @@ fn run_test() {
 
 #[no_mangle]
 fn main() -> i32 {
-    run_cmd("/musl/busybox --install /bin");
-    run_cmd("rm /bin/sh");
+    // run_cmd("/musl/busybox --install /bin");
+    // run_cmd("rm /bin/sh");
 
     println!("start to run musl test");
     chdir("/musl\0");
