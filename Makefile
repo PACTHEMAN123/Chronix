@@ -22,8 +22,7 @@ kernel-la: setup
 
 PHONY_TARGET += disk-img
 disk-img: setup
-	make -f Makefile.sub disk-img ARCH=loongarch64
-	make -f Makefile.sub disk-img ARCH=riscv64
+	make -f Makefile.sub disk-img
 
 PHONY_TARGET += run-rv
 run-rv: kernel-rv
@@ -46,7 +45,7 @@ PHONY_TARGET += clean
 clean:
 	make -f Makefile.sub clean ARCH=loongarch64
 	make -f Makefile.sub clean ARCH=riscv64
-	rm -f kernel-rv kernel-la disk.img disk-rv.img disk-la.img
+	rm -f kernel-rv kernel-la disk.img disk-copy.img
 	rm -rf testcase
 
 .PHONY: $(PHONY_TARGET)

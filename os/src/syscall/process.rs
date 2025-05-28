@@ -267,7 +267,11 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     let task = current_task().unwrap().clone();
     // for .sh we will use busybox sh as default
     let dentry = if path.ends_with(".sh") {
-        path = "/musl/busybox".to_string();
+        #[cfg(target_arch="riscv64")]
+        let path = "/riscv/musl/busybox".to_string();
+
+        #[cfg(target_arch="loongarch64")]
+        let path = "/loongarch/musl/busybox".to_string();
         argv_vec.insert(0, "busybox".to_string());
         argv_vec.insert(1, "sh".to_string());
         global_find_dentry(&path)?

@@ -9,8 +9,19 @@ use user_lib::{exec, execve, fork, wait, yield_};
 fn run_cmd(cmd: &str) {
     if fork() == 0 {
         // default use musl busybox
+        #[cfg(target_arch="riscv64")]
         execve(
-            "/musl/busybox",
+            "/riscv/musl/busybox",
+            &["busybox", "sh", "-c", cmd],
+            &[
+                "PATH=/:/bin",
+                "HOME=/home/chronix",
+            ],
+        );
+
+        #[cfg(target_arch="loongarch64")]
+        execve(
+            "/loongarch/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
                 "PATH=/:/bin",
@@ -23,25 +34,26 @@ fn run_cmd(cmd: &str) {
     }
 }
 
+fn init_env() {
+    #[cfg(target_arch="riscv64")]
+    run_cmd("/riscv/musl/busybox --install /bin");
+    #[cfg(target_arch="loongarch64")]
+    run_cmd("/loongarch/musl/busybox --install /bin");
+    run_cmd("rm /bin/sh");
+}
+
 #[no_mangle]
 fn main() -> i32 {
-    // run_cmd("/musl/busybox --install /bin");
-    // run_cmd("rm /bin/sh");
-
+    init_env();
     println!("into user mode initproc");
     if fork() == 0 {
         println!("into user mode initproc fork");
-        run_cmd("./run-oj.sh");
-        /* 
-        execve(
-            "/musl/busybox",
-            &["busybox", "sh"],
-            &[
-                "PATH=/:/bin",
-                "TERM=screen",
-            ],
-        );
-        */
+        
+        #[cfg(target_arch="riscv64")]
+        run_cmd("./riscv/run-oj.sh");
+
+        #[cfg(target_arch="loongarch64")]
+        run_cmd("./loongarch/run-oj.sh");
     } else {
         println!("into user mode initproc wait");
         loop {
