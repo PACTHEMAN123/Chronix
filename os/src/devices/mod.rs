@@ -234,7 +234,7 @@ pub fn init() {
     // init devices
     DEVICE_MANAGER.lock().init_devices();
 
-    #[cfg(not(feature="smp"))]
-    DEVICE_MANAGER.lock().enable_irq();
+    // #[cfg(not(feature="smp"))]
+    // DEVICE_MANAGER.lock().enable_irq();
     // log::info!("External interrupts enabled");
 }
