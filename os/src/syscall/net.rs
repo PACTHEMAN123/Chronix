@@ -1,6 +1,6 @@
-use core::{any::Any, clone, mem, option, panic};
+use core::{any::Any, clone, mem, option, panic, ptr};
 
-use alloc::{sync::Arc, task, vec,vec::Vec};
+use alloc::{ffi::CString, sync::Arc, task, vec::Vec,vec};
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
@@ -612,6 +612,19 @@ pub fn sys_getsockopt (
     option_value: usize,
     option_len: usize,
 ) -> SysResult {
+    fn write_string_to_ptr(mut optval_ptr: *mut u8, str:&str) {
+        let c_str = CString::new(str).expect("CString::new failed");
+        let bytes = c_str.as_bytes();
+        for byte in bytes {
+            unsafe {
+                optval_ptr.write(*byte);
+                optval_ptr = optval_ptr.offset(1);
+            }
+        }
+        unsafe {
+            optval_ptr.write(0);
+        }
+    }
     match SocketLevel::try_from(level)? {
         SocketLevel::SolSocket => {
             const SEND_BUFFER_SIZE: usize = 64 * 1024; // 64KB
@@ -633,13 +646,21 @@ pub fn sys_getsockopt (
                         optlen_ptr.write_volatile(size_of::<u32>() as u32);
                     }
                 },
+                SocketOption::ERROR => {
+                    let optval_ptr = option_value as *mut u32;
+                    let optlen_ptr = option_len as *mut u32;
+                    unsafe {
+                        optval_ptr.write_volatile(0 as u32);
+                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
+                    }
+                }
                 _ =>{
                     todo!()
                 } 
             }
         },
         SocketLevel::IpprotoTcp | SocketLevel::IpprotoIp  => {
-            const MAX_SEGMENT: usize = 1460; // 1460 bytesusually MTU
+            const MAX_SEGMENT: usize = 1460; // 1460 byte susually MTU
             let optlen_ptr = option_len as *mut u32;
             match TcpSocketOption::try_from(option_name)? {
                 TcpSocketOption::NODELAY => {
@@ -658,12 +679,11 @@ pub fn sys_getsockopt (
                 },
                 TcpSocketOption::INFO => {},
                 TcpSocketOption::CONGESTION => {
+                    log::warn!("[sys_getsockopt], TcpSocketOption::CONGESTION");
                     unsafe {
-                        let str = "reno".as_bytes();
+                        let str = "reno";
                         let optval_ptr = option_value as *mut u8;
-                        for (i, &byte) in str.iter().enumerate() {
-                            optval_ptr.add(i).write_volatile(byte);
-                        }
+                        write_string_to_ptr(optval_ptr, str);
                         optlen_ptr.write_volatile(4);
                     }
                 },
@@ -822,6 +842,7 @@ pub async fn sys_recvmsg(
     msg: usize,
     flags: usize,
 ) -> SysResult {
+    log::warn!("[sys_recvmsg] into sys_recvmsg");
     if (fd as isize) < 0 {
         return Err(SysError::EBADF);
     }
