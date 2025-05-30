@@ -3,7 +3,7 @@ use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32,
 use alloc::vec::Vec;
 use hal::{addr::{PhysAddr, VirtAddr}, println};
 use hashbrown::HashMap;
-use log::info;
+use log::{info, warn};
 use smoltcp::time;
 
 use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrWriter}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
@@ -40,6 +40,7 @@ pub async fn sys_futex(
     };
 
     let is_private = futex_op & FUTEX_PRIVATE_FLAG_BITMASK != 0;
+    let is_realtime = futex_op & FUTEX_CLOCK_REALTIME_BITMASK != 0;
     futex_op &= !(FUTEX_PRIVATE_FLAG_BITMASK | FUTEX_CLOCK_REALTIME_BITMASK);
 
     let futex_op = FutexOp::from(futex_op);
@@ -64,7 +65,7 @@ pub async fn sys_futex(
     
     match futex_op {
         FutexOp::Wait | FutexOp::WaitBitset => {
-            // info!("[sys_futex] wait at {:#x}", uaddr as *const _ as usize);
+            // info!("[sys_futex] task {} wait at {:?}", task.tid(), key);
             let res = { 
                 uaddr.load(Ordering::Acquire)
             };
@@ -80,7 +81,8 @@ pub async fn sys_futex(
             } else {
                 FutexWaiter::FUTEX_BITSET_MATCH_ANY
             };
-
+            
+            let cur = timer::get_current_time_duration();
             futex_manager().add_waiter(
                 &key,
                 FutexWaiter { 
@@ -94,7 +96,7 @@ pub async fn sys_futex(
                 !s.blocked_sigs
             });
             task.set_wake_up_sigs(wake_up_sigs);
-
+            
             if timeout.0.is_null() {
                 suspend_now().await;
             } else {
@@ -105,13 +107,17 @@ pub async fn sys_futex(
                     return Err(SysError::EINVAL);
                 }
                 let timeout = Into::<Duration>::into(timeout);
-                let cur = timer::get_current_time_duration();
-                if timeout <= cur {
-                    futex_manager().remove_waiter(&key, task.tid());
-                    task.set_running();
-                    return Err(SysError::ETIMEOUT);
+                let dur;
+                if is_realtime {
+                    if timeout <= cur {
+                        futex_manager().remove_waiter(&key, task.tid());
+                        task.set_running();
+                        return Err(SysError::ETIMEOUT);
+                    }
+                    dur = timeout - cur;
+                } else {
+                    dur = timeout;
                 }
-                let dur = timeout - cur;
                 let rem = suspend_timeout(&task, dur).await;
                 if rem.is_zero() {
                     futex_manager().remove_waiter(&key, task.tid());
@@ -131,6 +137,7 @@ pub async fn sys_futex(
             Ok(0)
         }
         FutexOp::Wake => {
+            // info!("[sys_futex] wake at {:?}", key);
             let n_wake = futex_manager().wake(&key, val)?;
             return Ok(n_wake);
         }
@@ -154,6 +161,7 @@ pub async fn sys_futex(
                 })?;
                 FutexHashKey::Shared { paddr }
             };
+            // info!("[sys_futex] requeue {:?} to {:?}", key, new_key);
             let timeout = timeout.0 as usize;
             futex_manager().requeue_waiters(key, new_key, timeout)?;
             Ok(n_woke)

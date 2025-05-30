@@ -74,8 +74,8 @@ impl TimeSpec {
         }
     }
      /// check if is valid
-     pub fn is_valid(&self) -> bool {
-        self.tv_sec as isize > 0 && self.tv_nsec as isize >= 0 && self.tv_nsec < 1000_000_000 
+    pub fn is_valid(&self) -> bool {
+        self.tv_sec as isize >= 0 && self.tv_nsec as isize >= 0 && self.tv_nsec < 1000_000_000 
     }
 }
 
