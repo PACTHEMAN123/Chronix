@@ -41,6 +41,8 @@ pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn FSType>>> =
 #[cfg(not(feature = "fat32"))]
 pub const DISK_FS_NAME: &str = "ext4";
 
+pub const SDCARD_NAME: &str = "sdcard";
+
 #[cfg(not(feature = "fat32"))]
 type DiskFSType = Ext4FSType;
 
@@ -55,8 +57,11 @@ type DiskFSType = Fat32FSType;
 /// register all filesystem
 /// we need this to borrow static reference to mount the fs
 fn register_all_fs() {
-    let diskfs = DiskFSType::new();
+    let diskfs = DiskFSType::new(DISK_FS_NAME);
     FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
+
+    let sdcardfs = DiskFSType::new(SDCARD_NAME);
+    FS_MANAGER.lock().insert(sdcardfs.name().to_string(), sdcardfs);
 
     let devfs = DevFsType::new();
     FS_MANAGER.lock().insert(devfs.name().to_string(), devfs);
@@ -96,26 +101,27 @@ pub fn init() {
             .as_blk()
             .unwrap();
 
+    let sdcard_device = DEVICE_MANAGER.lock()
+            .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
     let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(disk_device)).unwrap();
 
-    // let diskimg_device = DEVICE_MANAGER.lock()
-    //         .find_dev_by_name(disk_dev_name, DeviceMajor::Block)
-    //         .as_blk()
-    //         .unwrap();
-
-    // let diskfs2 = get_filesystem(DISK_FS_NAME);
-    // let diskfs2_root = diskfs2.mount("disk", Some(diskfs_root.clone()), MountFlags::empty(), Some(diskimg_device)).unwrap();
-    // diskfs_root.add_child(diskfs2_root.clone());
-    // DCACHE.lock().insert(diskfs2_root.path(), diskfs2_root);
+    let sdcard = get_filesystem(SDCARD_NAME);
+    let sdcard_root = sdcard.mount("sdcard", Some(diskfs_root.clone()), MountFlags::empty(), Some(sdcard_device)).unwrap();
+    diskfs_root.add_child(sdcard_root.clone());
+    log::info!("[FS] insert path: {}", sdcard_root.path());
+    DCACHE.lock().insert(sdcard_root.path(), sdcard_root);
 
     // mount the dev file system under diskfs
     let devfs = get_filesystem("devfs");
     let devfs_root = devfs.mount("dev", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_devfs(devfs_root.clone());
     diskfs_root.add_child(devfs_root.clone());
-    log::info!("insert path: {}", devfs_root.path());
+    log::info!("[FS] insert path: {}", devfs_root.path());
     DCACHE.lock().insert(devfs_root.path(), devfs_root);
 
     // mount the proc file system under diskfs
@@ -123,7 +129,7 @@ pub fn init() {
     let procfs_root = procfs.mount("proc", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_procfs(procfs_root.clone());
     diskfs_root.add_child(procfs_root.clone());
-    log::info!("insert path: {}", procfs_root.path());
+    log::info!("[FS] insert path: {}", procfs_root.path());
     DCACHE.lock().insert(procfs_root.path(), procfs_root);
 
     // mount the tmp file system under diskfs
@@ -131,10 +137,10 @@ pub fn init() {
     let tmpfs_root = tmpfs.mount("tmp", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_tmpfs(tmpfs_root.clone());
     diskfs_root.add_child(tmpfs_root.clone());
-    log::info!("insert path: {}", tmpfs_root.path());
+    log::info!("[FS] insert path: {}", tmpfs_root.path());
     DCACHE.lock().insert(tmpfs_root.path(), tmpfs_root);
 
-    info!("fs finish init");
+    info!("[FS] fs finish init");
 }
 
 bitflags::bitflags! {

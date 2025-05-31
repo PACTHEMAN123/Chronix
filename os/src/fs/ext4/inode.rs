@@ -168,7 +168,6 @@ impl Inode for Ext4Inode {
                 panic!("error when ls: {}", e);
             }
         };
-
         let mut name_iter = name.iter();
         let  _inode_type_iter = inode_type.iter();
 
