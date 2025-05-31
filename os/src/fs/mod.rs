@@ -82,8 +82,8 @@ pub fn init() {
     let disk_dev_name;
     #[cfg(target_arch="riscv64")]
     {
-        sdcard_dev_name = "sda0";
-        disk_dev_name = "sda1";
+        sdcard_dev_name = "sda1";
+        disk_dev_name = "sda0";
     }
     #[cfg(target_arch="loongarch64")]
     {
@@ -91,14 +91,14 @@ pub fn init() {
         disk_dev_name = "sda1";
     }
 
-    let sdcard_device = DEVICE_MANAGER.lock()
-            .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
+    let disk_device = DEVICE_MANAGER.lock()
+            .find_dev_by_name(disk_dev_name, DeviceMajor::Block)
             .as_blk()
             .unwrap();
 
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
-    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(sdcard_device)).unwrap();
+    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(disk_device)).unwrap();
 
     // let diskimg_device = DEVICE_MANAGER.lock()
     //         .find_dev_by_name(disk_dev_name, DeviceMajor::Block)

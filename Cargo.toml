@@ -34,7 +34,7 @@ bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", b
 fdt = { git = "https://github.com/repnop/fdt.git", branch = "master", features = ["pretty-printing"] }
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", branch = "master", default-features = false, features = ["alloc", "lfn", "unicode"] }
 xmas-elf = { git = "https://github.com/zlc-dev/xmas-elf", branch = "master" }
-lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", branch = "main", default-features = false }
+lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", default-features = false, rev = "15cc7cda7667735e2db66bb5713fb43fca7f2e1f" }
 
 [workspace.dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"
