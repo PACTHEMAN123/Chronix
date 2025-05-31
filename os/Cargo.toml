@@ -30,6 +30,7 @@ smoltcp.workspace = true
 
 # use other cargos in this project
 range-map = { path = "../utils/range-map" }
+segment-tree = { path = "../utils/segment-tree" }
 hal = { path = "../hal" }
 
 

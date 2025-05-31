@@ -4,7 +4,8 @@ members = [
     "os",
     "user",
     "hal",
-    "utils/range-map"
+    "utils/range-map",
+    "utils/segment-tree",
 ]
 
 # dependencies resolver

@@ -20,7 +20,7 @@ use crate::task::schedule::spawn_user_task;
 use crate::task::{exit_current_and_run_next, INITPROC};
 use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
-use crate::signal::SigSet;
+use crate::signal::{SigInfo, SigSet, SIGKILL};
 use crate::timer::get_current_time_duration;
 use crate::utils::{suspend_now, user_path_to_string};
 use alloc::string::ToString;
@@ -138,7 +138,7 @@ pub fn sys_fork() -> isize {
     // add new task to scheduler
     spawn_user_task(new_task);
     //info!("sys_fork: complete, new_pid = {}", new_pid);
-    new_pid  as isize
+    new_pid as isize
 }
 
 /// clone a new process/thread/ using clone flags
@@ -285,7 +285,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();
         let reader = FileReader::new(app.clone());
-        let elf = xmas_elf::ElfFile::new(&reader).unwrap();
+        let elf = xmas_elf::ElfFile::new(&reader).expect(app.dentry().unwrap().name());
         task.exec(&elf, Some(app), argv_vec, envp_vec)?;
         Ok(0)
     } else {
@@ -497,14 +497,15 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult {
 /// exit_group - exit all threads in a process
 pub fn sys_exit_group(exit_code: i32) -> SysResult {
     let task = current_task().unwrap();
+    log::debug!("[sys_exit_group]: set exit code {}", (exit_code & 0xFF) << 8);
+    task.set_exit_code((exit_code & 0xFF) << 8);
     task.with_thread_group(|tg| {
         for thread in tg.iter() {
             // info!("[sys_exit_group]: exit thread {}", thread.tid())
+            //  thread.recv_sigs(SigInfo { si_signo: SIGKILL, si_code: SigInfo::KERNEL, si_pid: Some(task.tid()) });
             thread.set_zombie();
         }
     });
-    log::debug!("[sys_exit_group]: set exit code {}", (exit_code & 0xFF) << 8);
-    task.set_exit_code((exit_code & 0xFF) << 8);
     Ok(0)
 }
 

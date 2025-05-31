@@ -1,12 +1,12 @@
 use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32, Ordering}, task::Waker, time::Duration};
 
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use hal::{addr::{PhysAddr, VirtAddr}, println};
 use hashbrown::HashMap;
 use log::{info, warn};
 use smoltcp::time;
 
-use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrWriter}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{current_task, manager::TASK_MANAGER}, timer::{self, ffi::TimeSpec, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
+use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrWriter}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{self, current_task, manager::TASK_MANAGER, task::TaskControlBlock}, timer::{self, ffi::TimeSpec, get_current_time_duration, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
 
 use super::{SysError, SysResult};
 
@@ -23,6 +23,22 @@ const FUTEX_OP_CMP_LT: u32 = 2;
 const FUTEX_OP_CMP_LE: u32 = 3;
 const FUTEX_OP_CMP_GT: u32 = 4;
 const FUTEX_OP_CMP_GE: u32 = 5;
+
+fn add_awaiter(fm: &mut FutexManager, task: &Arc<TaskControlBlock>, key: FutexHashKey, mask: u32) {
+    task.set_interruptable();
+    let wake_up_sigs = task.with_sig_manager(|s| {
+        !s.blocked_sigs
+    });
+    task.set_wake_up_sigs(wake_up_sigs);
+    fm.add_waiter(
+        &key,
+        FutexWaiter { 
+            tid: task.tid(), 
+            waker: task.waker().clone().unwrap(),
+            mask
+        } 
+    )
+}
 
 /// get futex
 #[allow(unused_variables)]
@@ -66,13 +82,6 @@ pub async fn sys_futex(
     match futex_op {
         FutexOp::Wait | FutexOp::WaitBitset => {
             // info!("[sys_futex] task {} wait at {:?}", task.tid(), key);
-            let res = { 
-                uaddr.load(Ordering::Acquire)
-            };
-            if res != val {
-                return Err(SysError::EAGAIN);
-            }
-            
             let mask = if futex_op == FutexOp::WaitBitset {
                 if val3 == 0 {
                     return Err(SysError::EINVAL);
@@ -82,54 +91,60 @@ pub async fn sys_futex(
                 FutexWaiter::FUTEX_BITSET_MATCH_ANY
             };
             
-            let cur = timer::get_current_time_duration();
-            futex_manager().add_waiter(
-                &key,
-                FutexWaiter { 
-                    tid: task.tid(), 
-                    waker: task.waker().clone().unwrap(),
-                    mask
-                } 
-            );
-            task.set_interruptable();
-            let wake_up_sigs = task.with_sig_manager(|s| {
-                !s.blocked_sigs
-            });
-            task.set_wake_up_sigs(wake_up_sigs);
-            
             if timeout.0.is_null() {
+                {
+                    // lock futex manager before check   
+                    let mut fm = futex_manager();
+                    if uaddr.load(Ordering::Acquire) != val {
+                        return Err(SysError::EAGAIN);
+                    }
+                    add_awaiter(&mut fm, &task, key, mask);
+                }
                 suspend_now().await;
             } else {
-                let timeout = unsafe {
-                    timeout.0.read()
-                };
-                if !timeout.is_valid() {
-                    return Err(SysError::EINVAL);
-                }
-                let timeout = Into::<Duration>::into(timeout);
                 let dur;
-                if is_realtime {
-                    if timeout <= cur {
-                        futex_manager().remove_waiter(&key, task.tid());
-                        task.set_running();
-                        return Err(SysError::ETIMEOUT);
+                {
+                    // lock futex manager before check   
+                    let mut fm = futex_manager();
+                    if uaddr.load(Ordering::Acquire) != val {
+                        return Err(SysError::EAGAIN);
                     }
-                    dur = timeout - cur;
-                } else {
-                    dur = timeout;
+                    add_awaiter(&mut fm, &task, key, mask);
+                    let cur = get_current_time_duration();
+                    let timeout = unsafe {
+                        timeout.0.read()
+                    };
+                    if !timeout.is_valid() {
+                        return Err(SysError::EINVAL);
+                    }
+                    let timeout = Into::<Duration>::into(timeout);
+                    if is_realtime {
+                        if timeout <= cur {
+                            fm.remove_waiter(&key, task.tid());
+                            task.set_running();
+                            return Err(SysError::ETIMEOUT);
+                        }
+                        dur = timeout - cur;
+                    } else {
+                        dur = timeout;
+                    }
                 }
                 let rem = suspend_timeout(&task, dur).await;
+                let mut fm = futex_manager();
                 if rem.is_zero() {
-                    futex_manager().remove_waiter(&key, task.tid());
                     task.set_running();
+                    fm.remove_waiter(&key, task.tid());
                     log::info!("[sys_futex] Woken by timeout");
                     return Err(SysError::ETIMEOUT);
                 }
             }
-            
+            let mut fm = futex_manager();
+            let wake_up_sigs = task.with_sig_manager(|s| {
+                    !s.blocked_sigs
+                });
             if task.with_sig_manager(|s| s.check_pending_flag(wake_up_sigs)) {
                 log::info!("[sys_futex] Woken by signal");
-                futex_manager().remove_waiter(&key, task.tid());
+                fm.remove_waiter(&key, task.tid());
                 return Err(SysError::EINTR);
             }
             // log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
@@ -232,8 +247,8 @@ pub async fn sys_futex(
                 }
                 spin_times += 1;
             }
-
-            let n_woke1 = futex_manager().wake(&key, val)?;
+            let mut fm = futex_manager();
+            let n_woke1 = fm.wake(&key, val)?;
 
             let check = match cmp {
                 FUTEX_OP_CMP_EQ => oldval == cmparg,
@@ -261,7 +276,7 @@ pub async fn sys_futex(
                     })?;
                     FutexHashKey::Shared { paddr }
                 };
-                futex_manager().wake(&key, val2)?
+                fm.wake(&key, val2)?
             } else {
                 0
             };
@@ -450,15 +465,15 @@ impl FutexManager {
     }
 
     /// 用于移除任务，任务可能是过期了，也可能是被信号中断了
-    pub fn remove_waiter(&mut self, key: &FutexHashKey, tid: Tid) {
+    pub fn remove_waiter(&mut self, key: &FutexHashKey, tid: Tid) -> Option<FutexWaiter> {
         if let Some(waiters) = self.futexs.get_mut(key) {
             for i in 0..waiters.len() {
                 if waiters[i].tid == tid {
-                    waiters.swap_remove(i);
-                    break;
+                    return Some(waiters.swap_remove(i));
                 }
             }
         }
+        None
     }
 
     pub fn wake(&mut self, key: &FutexHashKey, n: u32) -> SysResult {
