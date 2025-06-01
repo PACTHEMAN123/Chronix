@@ -5,9 +5,9 @@ use spin::Lazy;
 
 use crate::{processor::processor::current_processor, sync::mutex::SpinNoIrqLock, syscall::process};
 
-use super::{task::TaskControlBlock, tid::{PGid,Pid,Tid}, INITPROC,INITPROC_PID};
+use super::{task::TaskControlBlock, tid::{PGid,Pid,Tid}, INITPROC, INITPROC_PID};
 /// Task manager to manage all tasks in the system.
-pub struct TaskManager (SpinNoIrqLock<BTreeMap<Tid, Weak<TaskControlBlock>>>);
+pub struct TaskManager (SpinNoIrqLock<BTreeMap<Tid, Arc<TaskControlBlock>>>);
 impl TaskManager {
     /// Create a new `TaskManager`
     pub fn new() -> Self {
@@ -15,7 +15,7 @@ impl TaskManager {
     }
     /// add a task to the task manager
     pub fn add_task(&self, task: &Arc<TaskControlBlock>) {
-        self.0.lock().insert(task.tid(), Arc::downgrade(task));
+        self.0.lock().insert(task.tid(), task.clone());
     }
     /// remove a task from the task manager
     pub fn remove_task(&self, tid: Tid) {
@@ -24,7 +24,7 @@ impl TaskManager {
     /// get the task by tid
     pub fn get_task(&self, tid: Tid) -> Option<Arc<TaskControlBlock>> {
         match self.0.lock().get(&tid) {
-            Some(task)  => Some(task.upgrade().unwrap()),
+            Some(task)  => Some(task.clone()),
             None => None,
         }
     }
@@ -36,7 +36,7 @@ impl TaskManager {
     pub fn tasks_group(&self) -> Vec<Arc<TaskControlBlock>> {
         self.0.lock()
         .values()
-        .map(|task| task.upgrade().unwrap())
+        .map(|task| task.clone())
         .collect()
     }
     /// do something for each task

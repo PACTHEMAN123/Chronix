@@ -39,8 +39,8 @@ pub struct TrapContext {
     pub(crate) user_fx: FloatContext, // 47 ~ 79
     /// used in multi_core
     pub(crate) stored: usize, // 80
-    /// used for signal, when using SA_RESTART flag, need to restore last user arg0
-    pub(crate) last_user_arg0: usize, // 81
+    // /// used for signal, when using SA_RESTART flag, need to restore last user arg0
+    // pub(crate) last_user_arg0: usize, // 81
 }
 
 impl Debug for TrapContext {
@@ -145,8 +145,7 @@ impl TrapContextHal for TrapContext {
             era: entry,
             kernel_ctx: KernelContext::new(),
             user_fx: FloatContext::new(),
-            stored: 0,
-            last_user_arg0: 0,
+            stored: 0
         };
         *cs.sp() = sp;
         cs.set_arg_nth(0, argc);
@@ -182,13 +181,13 @@ impl TrapContextHal for TrapContext {
         self.user_fx.restore();
     }
 
-    fn save_last_user_arg0(&mut self) {
-        self.last_user_arg0 = self.r[4];
-    }
+    // fn save_last_user_arg0(&mut self) {
+    //     self.last_user_arg0 = self.r[4];
+    // }
 
-    fn restore_last_user_arg0(&mut self) {
-        self.r[4] = self.last_user_arg0;
-    }
+    // fn restore_last_user_arg0(&mut self) {
+    //     self.r[4] = self.last_user_arg0;
+    // }
 }
 
 impl FloatContextHal for FloatContext {

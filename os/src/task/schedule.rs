@@ -7,7 +7,7 @@ use core::{
 };
 
 use log::{debug, info, trace};
-use crate::{task::exit_current_and_run_next, timer::get_current_time_duration, trap::user_trap_handler};
+use crate::{syscall::SysError, timer::get_current_time_duration, trap::user_trap_handler};
 use crate::task::TaskControlBlock;
 use crate::executor;
 use crate::utils::async_utils::{get_waker,suspend_now};
@@ -86,7 +86,6 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
         current_task().unwrap().inner_exclusive_access().get_trap_cx() as *const TrapContext as usize,
     );*/
     let mut is_interrupted = false;
-
     loop {
         // check current task status before return
         match task.get_status() {
@@ -105,28 +104,39 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
             _ => {}
         }
 
-        // back from user space
-        is_interrupted = user_trap_handler().await;
+        // use loop to restart
+        loop {
+            // back from user space
+            is_interrupted = user_trap_handler().await;
 
-        // check current task status after return
-        // task status maybe already change
-        match task.get_status() {
-            TaskStatus::Zombie => {
-                //info!("zombie task {} exit", task.tid());
-                //info!("user time {}, kernel time {:?}", task.time_recorder().user_time().as_micros() , task.time_recorder().kernel_time());
-                break
-            },
-            TaskStatus::Stopped => suspend_now().await,
-            _ => {}
+            // check current task status after return
+            // task status maybe already change
+            match task.get_status() {
+                TaskStatus::Zombie => return,
+                TaskStatus::Stopped => suspend_now().await,
+                _ => {}
+            }
+
+            let need_restart = task.check_and_handle();
+            
+            // check current task status after handle signal
+            // task status maybe already change
+            match task.get_status() {
+                TaskStatus::Zombie => return,
+                TaskStatus::Stopped => suspend_now().await,
+                _ => {}
+            }
+            
+            let cx = task.get_trap_cx();
+            if !is_interrupted || !need_restart {
+                if is_interrupted {
+                    cx.set_ret_nth(0, -(SysError::EINTR as isize) as usize);
+                }
+                break;
+            }
+            *cx.sepc() -= 4;
         }
-
-        task.check_and_handle(is_interrupted);
     }
-    // when the task is zombie, we should switch to the next task
-    //info!("now exit run_tasks");
-    task.handle_zombie();
-    //info!("now task {} dropped", task.tid());
-    //drop(task);
 }
 
 /// spawn a new async user task

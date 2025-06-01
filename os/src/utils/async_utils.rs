@@ -236,8 +236,23 @@ impl Future for SuspendFuture {
     }
 }
 
+struct SuspendForeverFuture;
+
+
+impl Future for SuspendForeverFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Self::Output> {
+        Poll::Pending
+    }
+}
+
 pub async fn suspend_now() {
     SuspendFuture::new().await
+}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+pub async fn suspend_forever() {
+    SuspendForeverFuture.await
 }
 
 pub type Async<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

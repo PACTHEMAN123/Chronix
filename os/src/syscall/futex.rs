@@ -1,6 +1,6 @@
 use core::{hash::{BuildHasher, Hasher}, ops::DerefMut, sync::atomic::{AtomicU32, Ordering}, task::Waker, time::Duration};
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{collections::vec_deque::VecDeque, sync::Arc, vec::Vec};
 use hal::{addr::{PhysAddr, VirtAddr}, println};
 use hashbrown::HashMap;
 use log::{info, warn};
@@ -62,7 +62,7 @@ pub async fn sys_futex(
     let futex_op = FutexOp::from(futex_op);
     let task = current_task().unwrap().clone();
     
-    log::debug!("[sys_futex] task {}, futexop {:?}", task.tid(), futex_op);
+    // log::info!("[sys_futex] task {}, futexop {:?}", task.tid(), futex_op);
     let key = if is_private {
         FutexHashKey::Private {
             mm: task.get_raw_vm_ptr(),
@@ -120,8 +120,11 @@ pub async fn sys_futex(
                     let timeout = Into::<Duration>::into(timeout);
                     if is_realtime {
                         if timeout <= cur {
-                            fm.remove_waiter(&key, task.tid());
                             task.set_running();
+                            if fm.remove_waiter(&key, task.tid()).is_none() {
+                                return Ok(0);
+                            }
+                            log::info!("[sys_futex] Woken by timeout");
                             return Err(SysError::ETIMEOUT);
                         }
                         dur = timeout - cur;
@@ -133,7 +136,9 @@ pub async fn sys_futex(
                 let mut fm = futex_manager();
                 if rem.is_zero() {
                     task.set_running();
-                    fm.remove_waiter(&key, task.tid());
+                    if fm.remove_waiter(&key, task.tid()).is_none() {
+                        return Ok(0);
+                    }
                     log::info!("[sys_futex] Woken by timeout");
                     return Err(SysError::ETIMEOUT);
                 }
@@ -143,8 +148,11 @@ pub async fn sys_futex(
                     !s.blocked_sigs
                 });
             if task.with_sig_manager(|s| s.check_pending_flag(wake_up_sigs)) {
+                task.set_running();
+                if fm.remove_waiter(&key, task.tid()).is_none() {
+                    return Ok(0);
+                }
                 log::info!("[sys_futex] Woken by signal");
-                fm.remove_waiter(&key, task.tid());
                 return Err(SysError::EINTR);
             }
             // log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
@@ -442,7 +450,7 @@ impl BuildHasher for FutexHashKeyBuilder {
 
 #[allow(missing_docs, unused)]
 pub struct FutexManager {
-    futexs: HashMap<FutexHashKey, Vec<FutexWaiter>, FutexHashKeyBuilder>,
+    futexs: HashMap<FutexHashKey, VecDeque<FutexWaiter>, FutexHashKeyBuilder>,
 }
 
 #[allow(missing_docs, unused)]
@@ -456,10 +464,10 @@ impl FutexManager {
     pub fn add_waiter(&mut self, key: &FutexHashKey, waiter: FutexWaiter) {
         // log::info!("[futex::add_waiter] {:?} in {:?} ", waiter, key);
         if let Some(waiters) = self.futexs.get_mut(key) {
-            waiters.push(waiter);
+            waiters.push_back(waiter);
         } else {
-            let mut waiters = Vec::new();
-            waiters.push(waiter);
+            let mut waiters = VecDeque::new();
+            waiters.push_back(waiter);
             self.futexs.insert(*key, waiters);
         }
     }
@@ -469,7 +477,7 @@ impl FutexManager {
         if let Some(waiters) = self.futexs.get_mut(key) {
             for i in 0..waiters.len() {
                 if waiters[i].tid == tid {
-                    return Some(waiters.swap_remove(i));
+                    return waiters.remove(i);
                 }
             }
         }
@@ -480,7 +488,7 @@ impl FutexManager {
         if let Some(waiters) = self.futexs.get_mut(key) {
             let n = core::cmp::min(n as usize, waiters.len());
             for _ in 0..n {
-                let waiter = waiters.pop().unwrap();
+                let waiter = waiters.pop_front().unwrap();
                 log::debug!("[futex_wake] task {} has been woken", waiter.tid);
                 waiter.wake();
             }
@@ -500,7 +508,7 @@ impl FutexManager {
             let len = waiters.len();
             while i < len && count < max_count {
                 if (waiters[len - 1 - i].mask & mask) != 0 {
-                    let waiter = waiters.remove(i);
+                    let waiter = waiters.remove(i).unwrap();
                     // log::info!("[futex_wake] {:?} has been woken", waiter);
                     waiter.wake();
                     count += 1;
@@ -529,12 +537,12 @@ impl FutexManager {
         let n = core::cmp::min(n_req as usize, old_waiters.len());
         if let Some(new_waiters) = self.futexs.get_mut(&new) {
             for _ in 0..n {
-                new_waiters.push(old_waiters.pop().unwrap());
+                new_waiters.push_back(old_waiters.pop_front().unwrap());
             }
         } else {
-            let mut new_waiters = Vec::with_capacity(n);
+            let mut new_waiters = VecDeque::with_capacity(n);
             for _ in 0..n {
-                new_waiters.push(old_waiters.pop().unwrap());
+                new_waiters.push_back(old_waiters.pop_front().unwrap());
             }
             self.futexs.insert(new, new_waiters);
         }

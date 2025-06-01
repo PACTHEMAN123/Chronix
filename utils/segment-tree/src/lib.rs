@@ -36,11 +36,11 @@ struct RangeSetNode<A: Allocator + Clone> {
 }
 
 impl<A: Allocator + Clone> RangeSetNode<A> {
-    fn new() -> Self {
+    const fn new(status: RangeSetNodeStatus) -> Self {
         Self { 
             left: None, 
             right: None, 
-            status: RangeSetNodeStatus::Empty,
+            status,
         }
     }
 
@@ -55,29 +55,28 @@ impl<A: Allocator + Clone> RangeSetNode<A> {
         }
         
         let mid = range.start + (range.end - range.start) / 2;
+        if self.left.is_none() {
+            self.left = Some(Box::new_in(Self::new(self.status), alloc.clone()));
+        }
         if range.start < op_range.end && mid > op_range.start {
-            if self.left.is_none() {
-                self.left = Some(Box::new_in(Self::new(), alloc.clone()));
-            }
             self.left.as_mut().unwrap().operation(range.start..mid, op_range.clone(), op, alloc.clone());
         }
+        if self.right.is_none() {
+            self.right = Some(Box::new_in(Self::new(self.status), alloc.clone()));
+        }
         if mid < op_range.end && range.end > op_range.start {
-            if self.right.is_none() {
-                self.right = Some(Box::new_in(Self::new(), alloc.clone()));
-            }
             self.right.as_mut().unwrap().operation(mid..range.end, op_range.clone(), op, alloc.clone());
         }
         
-        let lstatus = match &self.left {
-            Some(node) => node.status,
-            None => self.status
-        };
-        let rstatus = match &self.right {
-            Some(node) => node.status,
-            None => self.status
-        };
+        let lstatus = self.left.as_ref().unwrap().status;
+        let rstatus = self.right.as_ref().unwrap().status;
 
         self.status = lstatus.combine(rstatus);
+
+        if self.status != RangeSetNodeStatus::Half {
+            self.left = None;
+            self.right = None;
+        }
     }
 
     fn intersect<U>(&self, range: Range<U>, op_range: Range<U>) -> U 
@@ -114,7 +113,7 @@ impl<U> RangeSet<U, Global>
     where U: Ord + Copy + Add<Output = U> + Sub<Output = U> + Div<usize, Output = U>
 {
     pub fn new(range: Range<U>) -> Self {
-        Self { root: RangeSetNode::new(), range, alloc: Global }
+        Self { root: RangeSetNode::new(RangeSetNodeStatus::Empty), range, alloc: Global }
     }
 }
 
@@ -123,7 +122,7 @@ impl<U, A> RangeSet<U, A>
         A: Allocator + Clone
 {
     pub fn new_in(range: Range<U>, alloc: A) -> Self {
-        Self { root: RangeSetNode::new(), range, alloc }
+        Self { root: RangeSetNode::new(RangeSetNodeStatus::Empty), range, alloc }
     }
 
     pub fn insert(&mut self, range: Range<U>) {
