@@ -466,7 +466,7 @@ impl FutexManager {
         if let Some(waiters) = self.futexs.get_mut(key) {
             waiters.push_back(waiter);
         } else {
-            let mut waiters = VecDeque::new();
+            let mut waiters = VecDeque::with_capacity(1);
             waiters.push_back(waiter);
             self.futexs.insert(*key, waiters);
         }

@@ -374,7 +374,7 @@ pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
 ///        and the signal will be delivered to an arbitrary thread within
 ///        that process.)
 pub fn sys_tgkill(tgid: isize, tid: isize, signo: i32) -> SysResult {
-    println!("[sys_tgkill] {} {} {}", tgid, tid, signo);
+    info!("[sys_tgkill] {} {} {}", tgid, tid, signo);
     if (signo < 0) || signo as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }
