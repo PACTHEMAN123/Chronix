@@ -352,17 +352,18 @@ pub async fn sys_rt_sigsuspend(mask_ptr: usize) -> SysResult {
 ///        wrong thread being signaled if a thread terminates and its thread
 ///        ID is recycled.  Avoid using this system call.
 pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
-    println!("[sys_tkill] {} {}", tid, sig);
+    info!("[sys_tkill] {} {}", tid, sig);
     if (sig < 0) || sig as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }
+    let cur_task = current_task().unwrap();
     let task = TASK_MANAGER.get_task(tid as usize)
-    .ok_or(SysError::ESRCH)?;
+        .ok_or(SysError::ESRCH)?;
     task.recv_sigs(
         SigInfo {
             si_signo: sig as usize,
             si_code: SigInfo::TKILL,
-            si_pid: Some(task.pid()),
+            si_pid: Some(cur_task.pid()),
         }
     );
     Ok(0)

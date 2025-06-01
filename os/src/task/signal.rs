@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigHandler, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID};
+use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigHandler, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID, trap::trap_return};
 
 use super::task::TaskControlBlock;
 
@@ -17,13 +17,10 @@ impl TaskControlBlock {
     /// all its follower should change
     pub fn set_sigaction(&self, signo: usize, sigaction: KSigAction) {
         //info!("[TCB] sync all child thread sigaction");
-        self.sig_manager.lock().set_sigaction(signo, sigaction);
-        self.with_mut_children(|children| {
-            if children.len() == 0 {
-                return;
-            }
-            for child in children.values() {
-                child.sig_manager.lock().set_sigaction(signo, sigaction);
+        // self.sig_manager.lock().set_sigaction(signo, sigaction);
+        self.with_mut_thread_group(|tg| {
+            for thread in tg.iter() {
+                thread.sig_manager.lock().set_sigaction(signo, sigaction);
             }
         })
     }
@@ -93,84 +90,93 @@ impl TaskControlBlock {
     /// before a task return form kernel to user
     /// and make correspond handle action
     /// if return true, need to restart the system call if it returns SIGINTR
-    pub fn check_and_handle(&self) -> bool {
+    pub fn check_and_handle(self: &Arc<Self>, mut is_intr: bool, old_a0: usize) {
         let mut sig_manager = self.sig_manager.lock();
-        let sig = if let Some(sig) = sig_manager.dequeue_one() {
-            sig
-        } else {
-            return false;
-        };
-        
-        // handle a signal
-        assert!(sig.si_signo != 0);
-        let sig_action = sig_manager.sig_handler[sig.si_signo];
-        let sa_flags = SigActionFlag::from_bits_truncate(sig_action.sa.sa_flags);
-        if sig_action.is_user {
-            let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
-            sig_manager.blocked_sigs.add_sig(sig.si_signo);
-            sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
-            // save fx state
-            let trap_cx = self.trap_context.exclusive_access();
-            trap_cx.fx_encounter_signal();
-            // push the current Ucontext into user stack
-            // (todo) notice that user may provide signal stack
-            // but now we dont support this flag
-            let sp = *trap_cx.sp();
-            let mut new_sp = sp - size_of::<UContext>();
-            let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
-            let ucontext_bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    &ucontext as *const UContext as *const u8,
-                    core::mem::size_of::<UContext>(),
-                )
-            };
-            // println!("copy_out to {:#x}", new_sp);
-            copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
-            self.set_sig_ucontext_ptr(new_sp);
+        while let Some(sig) = sig_manager.dequeue_one() {
+            // handle a signal
+            assert!(sig.si_signo != 0);
+            let sig_action = sig_manager.sig_handler[sig.si_signo];
+            // log::info!("[check_and_handle] task {} action {:?}", self.tid(), sig_action);
+            let sa_flags = SigActionFlag::from_bits_truncate(sig_action.sa.sa_flags);
             
-            // the first argument of every signal handlers is signo
-            trap_cx.set_arg_nth(0, sig.si_signo);
-
-            // SA_SIGINFO flag is set, need to pass more args
-            // void (*sa_sigaction)(int, siginfo_t *, void *ucontext)
-            if sa_flags.contains(SigActionFlag::SA_SIGINFO) {
-                log::warn!("using SA_SIGINFO flags, pass more arguments");
-                // the second argument
-                trap_cx.set_arg_nth(1, new_sp);
-                // the third argument
-                let mut siginfo_v = LinuxSigInfo::default();
-                siginfo_v.si_signo = sig.si_signo as _;
-                siginfo_v.si_code = sig.si_code;
-                new_sp -= size_of::<LinuxSigInfo>();
-                let siginfo_v_bytes: &[u8] = unsafe {
-                    core::slice::from_raw_parts(
-                        &siginfo_v as *const LinuxSigInfo as *const u8,
-                        core::mem::size_of::<LinuxSigInfo>(),
-                    )
-                };
-                copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), siginfo_v_bytes);
-                trap_cx.set_arg_nth(2, new_sp);
+            let trap_cx = self.trap_context.exclusive_access();
+            
+            if sa_flags.contains(SigActionFlag::SA_RESTART) && is_intr {
+                *trap_cx.sepc() -= 4;
+                trap_cx.set_ret_nth(0, old_a0);
+                is_intr = false
             }
 
-            // set the current trap cx sepc to reach user handler
-            // log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
-            *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
-            // sp
-            *trap_cx.sp() = new_sp;
-            // ra: when user signal handler ended, return to sigreturn_trampoline
-            // which calls sys_sigreturn
-            *trap_cx.ra() = sigreturn_trampoline_addr();
-        } else {
-            drop(sig_manager);
-            let handler = unsafe {
-                core::mem::transmute::<*const (), SigHandler>(
-                    sig_action.sa.sa_handler as *const (),
-                )
-            };
-            handler(sig.si_signo as i32);
-            // sig_manager.bitmap.remove_sig(signo.si_signo);
-        }
-        sa_flags.contains(SigActionFlag::SA_RESTART)
+            if sig_action.is_user {
+                let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
+                if !sa_flags.contains(SigActionFlag::SA_NODEFER) {
+                    sig_manager.blocked_sigs.add_sig(sig.si_signo);
+                };
+                sig_manager.blocked_sigs |= sig_action.sa.sa_mask[0];
+                // save fx state
+                trap_cx.fx_encounter_signal();
+                // push the current Ucontext into user stack
+                // (todo) notice that user may provide signal stack
+                // but now we dont support this flag
+                let sp = *trap_cx.sp();
+                let mut new_sp = sp - size_of::<UContext>();
+                let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
+                let ucontext_bytes: &[u8] = unsafe {
+                    core::slice::from_raw_parts(
+                        &ucontext as *const UContext as *const u8,
+                        core::mem::size_of::<UContext>(),
+                    )
+                };
+                // println!("copy_out to {:#x}", new_sp);
+                copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
+                self.set_sig_ucontext_ptr(new_sp);
+                
+                // the first argument of every signal handlers is signo
+                trap_cx.set_arg_nth(0, sig.si_signo);
+
+                // SA_SIGINFO flag is set, need to pass more args
+                // void (*sa_sigaction)(int, siginfo_t *, void *ucontext)
+                if sa_flags.contains(SigActionFlag::SA_SIGINFO) {
+                    log::warn!("using SA_SIGINFO flags, pass more arguments");
+                    // the second argument
+                    trap_cx.set_arg_nth(2, new_sp);
+                    // the third argument
+                    let mut siginfo_v = LinuxSigInfo::default();
+                    siginfo_v.si_signo = sig.si_signo as _;
+                    siginfo_v.si_code = sig.si_code;
+                    siginfo_v._pad[1] = sig.si_pid.unwrap_or(0) as i32;
+                    new_sp -= size_of::<LinuxSigInfo>();
+                    let siginfo_v_bytes: &[u8] = unsafe {
+                        core::slice::from_raw_parts(
+                            &siginfo_v as *const LinuxSigInfo as *const u8,
+                            core::mem::size_of::<LinuxSigInfo>(),
+                        )
+                    };
+                    copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), siginfo_v_bytes);
+                    trap_cx.set_arg_nth(1, new_sp);
+                }
+
+                // set the current trap cx sepc to reach user handler
+                // log::info!("set signal handler sepc: {:x}", sig_action.sa.sa_handler as *const usize as usize);
+                *trap_cx.sepc() = sig_action.sa.sa_handler as *const usize as usize;
+                // sp
+                *trap_cx.sp() = new_sp;
+                // ra: when user signal handler ended, return to sigreturn_trampoline
+                // which calls sys_sigreturn
+                *trap_cx.ra() = sigreturn_trampoline_addr();
+                *trap_cx.tp() = ucontext.uc_mcontext.get_tp();
+
+                break;
+            } else {
+                let handler = unsafe {
+                    core::mem::transmute::<*const (), SigHandler>(
+                        sig_action.sa.sa_handler as *const (),
+                    )
+                };
+                handler(sig.si_signo as i32);
+                // sig_manager.bitmap.remove_sig(signo.si_signo);
+            }
+        };
     }
 }
 

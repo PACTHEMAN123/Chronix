@@ -24,14 +24,14 @@ pub fn term_sig_handler(signo: i32){
     info!("[term_sig_handler]: task {} recv sig {}, terminated", task.gettid(), signo);
 
     // exit all the members of a thread group (process)
-    task.do_group_exit((task.exit_code() & 0xff00) | signo as usize);
+    task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
 }
 
 /// handlers for Ign
 /// ignore the signal
-pub fn ign_sig_handler(signo: i32) {
-    let task = current_task().unwrap().clone();
-    info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.gettid(), signo);
+pub fn ign_sig_handler(_signo: i32) {
+    // let task = current_task().unwrap().clone();
+    // info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.gettid(), signo);
     // do nothing
 }
 
@@ -45,7 +45,7 @@ pub fn core_sig_handler(signo: i32) {
     info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.gettid(), signo);
 
     // exit all the members of a thread group (process)
-    task.do_group_exit((task.exit_code() & 0xff00) | signo as usize);
+    task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
     // todo: produce a core dump file?
 }
 

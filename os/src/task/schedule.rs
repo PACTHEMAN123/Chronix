@@ -104,38 +104,20 @@ pub async fn run_tasks(task: Arc<TaskControlBlock>) {
             _ => {}
         }
 
-        // use loop to restart
-        loop {
-            // back from user space
-            is_interrupted = user_trap_handler().await;
+        let cx = task.get_trap_cx();
+        let old_a0 = cx.ret_nth(0);
+        // back from user space
+        is_interrupted = user_trap_handler().await;
 
-            // check current task status after return
-            // task status maybe already change
-            match task.get_status() {
-                TaskStatus::Zombie => return,
-                TaskStatus::Stopped => suspend_now().await,
-                _ => {}
-            }
-
-            let need_restart = task.check_and_handle();
-            
-            // check current task status after handle signal
-            // task status maybe already change
-            match task.get_status() {
-                TaskStatus::Zombie => return,
-                TaskStatus::Stopped => suspend_now().await,
-                _ => {}
-            }
-            
-            let cx = task.get_trap_cx();
-            if !is_interrupted || !need_restart {
-                if is_interrupted {
-                    cx.set_ret_nth(0, -(SysError::EINTR as isize) as usize);
-                }
-                break;
-            }
-            *cx.sepc() -= 4;
+        // check current task status after return
+        // task status maybe already change
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {}
         }
+
+        task.check_and_handle(is_interrupted, old_a0);
     }
 }
 

@@ -78,11 +78,11 @@ pub async fn user_trap_handler() -> bool {
             // // cx is changed during sys_exec, so we have to call it again
             // cx.save_to(0, cx.ret_nth(0));
             // report that the syscall is interrupt
+            cx.set_ret_nth(0, result as usize);
             if result == -(SysError::EINTR as isize) {
                 log::warn!("[user_trap_handler] task {} syscall is interrupted", cx.syscall_id());
                 return true;
             }
-            cx.set_ret_nth(0, result as usize);
         }
         TrapType::StorePageFault(stval)
         | TrapType::InstructionPageFault(stval)
@@ -128,9 +128,9 @@ pub async fn user_trap_handler() -> bool {
             manager.handle_irq();
         }
         TrapType::Processed => {}
-        _ => {
+        trap => {
             panic!(
-                "[trap_handler] Unsupported trap!"
+                "[trap_handler] Unsupported trap! {:?}", trap
             );
         }
     }

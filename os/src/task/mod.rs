@@ -90,8 +90,8 @@ lazy_static! {
         //info!("trying to open initproc");
         
         #[cfg(target_arch="riscv64")]
-        let file = open_file("/riscv/autotest1", OpenFlags::O_WRONLY).unwrap();
-        // let file = open_file("/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
+        // let file = open_file("/riscv/autotest1", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
 
         #[cfg(target_arch="loongarch64")]
         let file = open_file("/loongarch/autotest1", OpenFlags::O_WRONLY).unwrap();
