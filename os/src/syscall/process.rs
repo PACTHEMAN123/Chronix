@@ -296,7 +296,12 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();
         let reader = FileReader::new(app.clone());
-        let elf = xmas_elf::ElfFile::new(&reader).expect(app.dentry().unwrap().name());
+        let elf = xmas_elf::ElfFile::new(&reader).map_err(
+            |err| {
+                log::warn!("[sys_execve] file: {} err: {}", app.dentry().unwrap().name(), err); 
+                SysError::EINVAL
+            }
+        )?;
         task.exec(&elf, Some(app), argv_vec, envp_vec)?;
         Ok(0)
     } else {
