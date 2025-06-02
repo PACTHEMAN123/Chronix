@@ -5,7 +5,7 @@ use fatfs::{info, warn};
 use lwext4_rust::bindings::EEXIST;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
-use spin::RwLock;
+use spin::{RwLock, Spin};
 
 use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::{get_waker, suspend_now, yield_now}};
 
@@ -257,58 +257,18 @@ impl UdpSocket {
 
 impl UdpSocket {
     fn get_ephemeral_port(&self) -> SockResult<u16> {
-        let mut small_rng = SmallRng::seed_from_u64(SOCK_RAND_SEED);
+        const PORT_START: u16 = 0xc000;
+        const PORT_END: u16 = 0xffff;
         static CURR: SpinNoIrqLock<u16> = SpinNoIrqLock::new(PORT_START);
-        // 1. quick temp random scan
-        let mut attempt = 0;
-        while attempt < 3 { // at most 3 attempts
-            let _base = {
-                let mut curr = CURR.lock();
-                let base = *curr;
-                // every time randomely increase the step size:（1-1023）
-                *curr = curr.wrapping_add(small_rng.random::<u16>() % 1024 + 1);
-                if *curr < PORT_START || *curr > PORT_END {
-                    *curr = PORT_START;
-                }
-                base
-            };
-
-            // 2. from base randomly scam PORT_MAX_ATTEMPTS 
-            const PORT_MAX_ATTEMPTS: usize = 128; // every time tries 128 ports at most
-            let ports: Vec<u16> = (0..PORT_MAX_ATTEMPTS)
-                .map(|_| small_rng.random_range(PORT_START..=PORT_END))
-                .collect();
-    
-            for &port in &ports {
-                if LISTEN_TABLE.can_listen(port) {
-                    return Ok(port);
-                }
-            }
-    
-            attempt += 1;
-        }
-    
-        // 3. back to the usual way
         let mut curr = CURR.lock();
-        let start_port = *curr;
-        let mut port = start_port;
-        loop {
-            port = if port == PORT_END {
-                PORT_START
-            } else {
-                port + 1
-            };
-    
-            if LISTEN_TABLE.can_listen(port) {
-                *curr = port; 
-                return Ok(port);
-            }
-    
-            if port == start_port {
-                break; 
-            }
+
+        let port = *curr;
+        if *curr == PORT_END {
+            *curr = PORT_START;
+        } else {
+            *curr += 1;
         }
-        Err(SysError::EADDRINUSE)
+        Ok(port)
     }
 
     async fn block_on<F, R>(&self, mut f: F) -> SockResult<R>

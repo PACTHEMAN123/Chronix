@@ -16,6 +16,7 @@ cd /loongarch/glibc
 ./busybox_testcode.sh
 ./lua_testcode.sh
 ./libctest_testcode.sh
+./netperf_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
 ./lmbench_testcode.sh
@@ -28,6 +29,7 @@ cd /loongarch/musl
 ./busybox_testcode.sh
 ./lua_testcode.sh
 ./libctest_testcode.sh
+./netperf_testcode.sh
 ./iozone_testcode.sh
 ./libcbench_testcode.sh
 ./lmbench_testcode.sh
