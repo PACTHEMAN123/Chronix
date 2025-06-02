@@ -27,7 +27,7 @@ use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToStr
 use tmpfs::{fstype::TmpFSType, init_tmpfs};
 use vfs::{fstype::{FSType, MountFlags}, DCACHE};
 
-use crate::{drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
+use crate::{devices::{DeviceMajor, DEVICE_MANAGER}, drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
 pub use ext4::Ext4SuperBlock;
 pub use vfs::{SuperBlock, SuperBlockInner};
 
@@ -40,6 +40,8 @@ pub static FS_MANAGER: SpinNoIrqLock<BTreeMap<String, Arc<dyn FSType>>> =
 /// the default filesystem on disk
 #[cfg(not(feature = "fat32"))]
 pub const DISK_FS_NAME: &str = "ext4";
+
+pub const SDCARD_NAME: &str = "sdcard";
 
 #[cfg(not(feature = "fat32"))]
 type DiskFSType = Ext4FSType;
@@ -55,8 +57,11 @@ type DiskFSType = Fat32FSType;
 /// register all filesystem
 /// we need this to borrow static reference to mount the fs
 fn register_all_fs() {
-    let diskfs = DiskFSType::new();
+    let diskfs = DiskFSType::new(DISK_FS_NAME);
     FS_MANAGER.lock().insert(diskfs.name().to_string(), diskfs);
+
+    let sdcardfs = DiskFSType::new(SDCARD_NAME);
+    FS_MANAGER.lock().insert(sdcardfs.name().to_string(), sdcardfs);
 
     let devfs = DevFsType::new();
     FS_MANAGER.lock().insert(devfs.name().to_string(), devfs);
@@ -78,16 +83,45 @@ pub fn get_filesystem(name: &str) -> &'static Arc<dyn FSType> {
 /// init the file system
 pub fn init() {
     register_all_fs();
+    let sdcard_dev_name;
+    let disk_dev_name;
+    #[cfg(target_arch="riscv64")]
+    {
+        sdcard_dev_name = "sda1";
+        disk_dev_name = "sda0";
+    }
+    #[cfg(target_arch="loongarch64")]
+    {
+        sdcard_dev_name = "sda0";
+        disk_dev_name = "sda1";
+    }
+
+    let disk_device = DEVICE_MANAGER.lock()
+            .find_dev_by_name(disk_dev_name, DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
+    let sdcard_device = DEVICE_MANAGER.lock()
+            .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
+            .as_blk()
+            .unwrap();
+
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
-    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(BLOCK_DEVICE.clone())).unwrap();
+    let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(disk_device)).unwrap();
+
+    let sdcard = get_filesystem(SDCARD_NAME);
+    let sdcard_root = sdcard.mount("sdcard", Some(diskfs_root.clone()), MountFlags::empty(), Some(sdcard_device)).unwrap();
+    diskfs_root.add_child(sdcard_root.clone());
+    log::info!("[FS] insert path: {}", sdcard_root.path());
+    DCACHE.lock().insert(sdcard_root.path(), sdcard_root);
 
     // mount the dev file system under diskfs
     let devfs = get_filesystem("devfs");
     let devfs_root = devfs.mount("dev", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_devfs(devfs_root.clone());
     diskfs_root.add_child(devfs_root.clone());
-    log::info!("insert path: {}", devfs_root.path());
+    log::info!("[FS] insert path: {}", devfs_root.path());
     DCACHE.lock().insert(devfs_root.path(), devfs_root);
 
     // mount the proc file system under diskfs
@@ -95,7 +129,7 @@ pub fn init() {
     let procfs_root = procfs.mount("proc", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_procfs(procfs_root.clone());
     diskfs_root.add_child(procfs_root.clone());
-    log::info!("insert path: {}", procfs_root.path());
+    log::info!("[FS] insert path: {}", procfs_root.path());
     DCACHE.lock().insert(procfs_root.path(), procfs_root);
 
     // mount the tmp file system under diskfs
@@ -103,10 +137,10 @@ pub fn init() {
     let tmpfs_root = tmpfs.mount("tmp", Some(diskfs_root.clone()), MountFlags::empty(), None).unwrap();
     init_tmpfs(tmpfs_root.clone());
     diskfs_root.add_child(tmpfs_root.clone());
-    log::info!("insert path: {}", tmpfs_root.path());
+    log::info!("[FS] insert path: {}", tmpfs_root.path());
     DCACHE.lock().insert(tmpfs_root.path(), tmpfs_root);
 
-    info!("fs finish init");
+    info!("[FS] fs finish init");
 }
 
 bitflags::bitflags! {

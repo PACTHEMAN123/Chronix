@@ -6,10 +6,9 @@ use log::info;
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::round_down_to_page};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, sync::mutex::SpinNoIrqLock, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
 
 use super::{KernVmArea, KernVmAreaType, KernVmSpaceHal, MapFlags, MaxEndVpn, PageFaultAccessType, StartPoint, UserVmArea, UserVmAreaType, UserVmAreaView, UserVmFile, UserVmSpaceHal};
-
 
 /// User's VmSpace
 pub struct UserVmSpace {
@@ -32,9 +31,9 @@ impl UserVmSpace {
     }
 }
 
-impl UserVmSpaceHal for UserVmSpace {
+impl UserVmSpace {
 
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             page_table: PageTable::new_in(0, FrameAllocator),
             areas: RangeMap::new(),
@@ -42,11 +41,18 @@ impl UserVmSpaceHal for UserVmSpace {
         }
     }
 
-    fn get_page_table(&self) -> &PageTable {
+    pub fn enable(&self) {
+        unsafe {
+            self.get_page_table().enable_low();
+            Instruction::tlb_flush_all();
+        }
+    }
+
+    pub fn get_page_table(&self) -> &PageTable {
         &self.page_table
     }
 
-    fn map_elf<T: Reader + ?Sized>(&mut self, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, offset: VirtAddr) -> 
+    pub fn map_elf<T: Reader + ?Sized>(&mut self, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, offset: VirtAddr) -> 
         (MaxEndVpn, StartPoint) {
         let elf_header = elf.header;
         let ph_count = elf_header.pt2.ph_count();
@@ -112,9 +118,9 @@ impl UserVmSpaceHal for UserVmSpace {
         )
     }
     
-    fn from_elf<T: Reader + ?Sized>(elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> 
+    pub fn from_elf<T: Reader + ?Sized>(elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>) -> 
         Result<(Self, super::StackTop, super::EntryPoint, Vec<AuxHeader>), SysError> {
-        let mut ret = KVMSPACE.lock().to_user::<Self>();
+        let mut ret = KVMSPACE.lock().to_user();
 
         let elf_header = elf.header;
         let mut entry = elf_header.pt2.entry_point() as usize;
@@ -177,36 +183,20 @@ impl UserVmSpaceHal for UserVmSpace {
         ))
     }
 
-    fn push_area(&mut self, mut area: UserVmArea, data: Option<&[u8]>) -> &mut UserVmArea{
-        let mut pg_offset = 0;
-        if let Some(back) = self.areas.get(area.range_vpn().end) {
-            if area.check_back_contiguous(back) {
-                let back = self.areas.force_remove_one(back.range_vpn());
-                area.push_back_unchecked(back);
-            }
-        }
-        if let Some(pre) = self.areas.get(area.range_vpn().start - 1) {
-            if pre.check_back_contiguous(&area) {
-                pg_offset = area.range_vpn().start.0 - pre.range_vpn().start.0;
-                let mut pre = self.areas.force_remove_one(pre.range_vpn());
-                core::mem::swap(&mut pre, &mut area);
-                area.push_back_unchecked(pre);
-            }
-        }
+    pub fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>) -> &mut UserVmArea{
         match self.areas.try_insert(area.range_vpn(), area) {
             Ok(area) => {
                 if let Some(data) = data{
-                    area.copy_data(&mut self.page_table, data, pg_offset);
+                    area.copy_data(&mut self.page_table, data, 0);
                 }
                 area.map(&mut self.page_table);
-                // log::info!("[push_area] {:?}", area.to_view());
                 area
             },
             Err(_) => panic!("[push_area] fail")
         }
     }
 
-    fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr {
+    pub fn reset_heap_break(&mut self, new_brk: VirtAddr) -> VirtAddr {
         let heap = match self.find_heap() {
             Some(heap) => heap,
             None => {
@@ -251,8 +241,8 @@ impl UserVmSpaceHal for UserVmSpace {
         }
     }
     
-    fn from_existed(uvm_space: &mut Self) -> Self {
-        let mut ret = KVMSPACE.lock().to_user::<Self>();
+    pub fn from_existed(uvm_space: &mut Self) -> Self {
+        let mut ret = KVMSPACE.lock().to_user();
         ret.heap_bottom_va = uvm_space.heap_bottom_va;
         for (_, area) in uvm_space.areas.iter_mut() {
             if let Ok(new_area) =  area.clone_cow(&mut uvm_space.page_table) {
@@ -264,7 +254,7 @@ impl UserVmSpaceHal for UserVmSpace {
         ret
     }
     
-    fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError> {
+    pub fn alloc_mmap_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, file: Arc<dyn File>, offset: usize) -> Result<VirtAddr, SysError> {
         if len == 0 {
             return Err(SysError::EINVAL);
         }
@@ -289,7 +279,7 @@ impl UserVmSpaceHal for UserVmSpace {
         Ok(start)
     }
 
-    fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, shm_id: usize, pid: usize) -> Result<VirtAddr, SysError> {
+    pub fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, shm_id: usize, pid: usize) -> Result<VirtAddr, SysError> {
         if len == 0 {
             return Err(SysError::EINVAL);
         }
@@ -324,24 +314,49 @@ impl UserVmSpaceHal for UserVmSpace {
         Ok(start)
     }
 
+    pub fn try_union(&mut self, va: VirtAddr, len: usize) -> Result<(), ()> {
+        let mut start = va.floor();
+        let end = (va + len).ceil();
+        while start < end {
+            let vma1 = self.areas.get(start).ok_or(())?;
+            let new_start = vma1.range_vpn().end;
+            if new_start >= end {
+                return Ok(());
+            }
+            let vma2: &UserVmArea = self.areas.get(new_start).ok_or(())?;
+            if vma1.check_back_contiguous(vma2) {
+                let vma2 = self.areas.force_remove_one(vma2.range_vpn());
+                let vma1 = self.areas.get_mut(start).unwrap();
+                vma1.push_back_unchecked(vma2);
+                let new_range = vma1.range_vpn().clone();
+                let _ = self.areas.extend_back(new_range);
+                start = new_start;
+            } else {
+                return Err(());
+            }
+        }
+        Ok(())
+    }
     
-    fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError> {
-        let mut left: UserVmArea;
+    pub fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError> {
+        self.try_union(va, len).map_err(|_| SysError::EINVAL)?;
         let right: UserVmArea;
         let mut mid: UserVmArea;
-        if let Some((range_vpn, _)) = self.areas.get_key_value_mut(va.floor()) {
+        if let Some((range_vpn, left)) = self.areas.get_key_value_mut(va.floor()) {
             if va + len > range_vpn.end.start_addr() {
                 return Err(SysError::EINVAL);
             }
-            left = self.areas.force_remove_one(range_vpn);
             mid = left.split_off(va.floor());
+            let new_range = left.range_vpn();
+            if new_range.end <= new_range.start {
+                self.areas.force_remove_one(range_vpn);
+            } else {
+                let _ = self.areas.reduce_back(new_range);
+            }
             right = mid.split_off((va + len).ceil());
             mid.unmap(&mut self.page_table);
         } else {
             return Err(SysError::EINVAL);
-        }
-        if !left.range_va.is_empty() {
-            self.areas.try_insert(left.range_vpn(), left).map_err(|_| SysError::EFAULT)?;
         }
         if !right.range_va.is_empty() {
             self.areas.try_insert(right.range_vpn(), right).map_err(|_| SysError::EFAULT)?;
@@ -349,25 +364,25 @@ impl UserVmSpaceHal for UserVmSpace {
         Ok(mid)
     }
     
-    fn check_free(&self, va: VirtAddr, len: usize) -> Result<(), ()> {
+    pub fn check_free(&self, va: VirtAddr, len: usize) -> Result<(), ()> {
         let range = va.floor()..(va+len).ceil();
         self.areas.is_range_free(range)
     }
     
-    fn get_area_view(&self, va: VirtAddr) -> Option<UserVmAreaView> {
+    pub fn get_area_view(&self, va: VirtAddr) -> Option<UserVmAreaView> {
         let area = self.areas.get(va.floor())?;
         Some(area.into())
     }
 
-    fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea> {
+    pub fn get_area_mut(&mut self, va: VirtAddr) -> Option<&mut UserVmArea> {
         self.areas.get_mut(va.floor())
     }
 
-    fn get_area_ref(&self, va: VirtAddr) -> Option<&UserVmArea> {
+    pub fn get_area_ref(&self, va: VirtAddr) -> Option<&UserVmArea> {
         self.areas.get(va.floor())
     }
 
-    fn handle_page_fault(&mut self, va: VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
+    pub fn handle_page_fault(&mut self, va: VirtAddr, access_type: super::PageFaultAccessType) -> Result<(), ()> {
         let vpn = va.floor();
         if let Some(area) = self.areas.get_mut(va.floor()) {
             area.handle_page_fault(&mut self.page_table, vpn, access_type)
@@ -377,7 +392,7 @@ impl UserVmSpaceHal for UserVmSpace {
         }
     }
     
-    fn access_no_fault(&mut self, va: VirtAddr, len: usize, access_type: super::PageFaultAccessType) -> bool {
+    pub fn access_no_fault(&mut self, va: VirtAddr, len: usize, access_type: super::PageFaultAccessType) -> bool {
         let mut vpn = va.floor();
         let end = (va+len).floor();
         while vpn < end {
@@ -395,7 +410,7 @@ impl UserVmSpaceHal for UserVmSpace {
         return true;
     }
     
-    fn ensure_access(&mut self, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> Result<(), ()> {
+    pub fn ensure_access(&mut self, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> Result<(), ()> {
         let mut vpn = va.floor();
         let end = (va+len).ceil();
         while vpn < end {
@@ -411,6 +426,14 @@ impl UserVmSpaceHal for UserVmSpace {
             }
         }
         return Ok(());
+    }
+
+    pub fn translate_vpn(&self, vpn: VirtPageNum) -> Option<PhysPageNum> {
+        self.get_page_table().translate_vpn(vpn)
+    }
+
+    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.get_page_table().translate_va(va)
     }
 }
 

@@ -142,8 +142,8 @@ impl KernVmSpaceHal for KernVmSpace {
         ret
     }
 
-    fn to_user<T: UserVmSpaceHal>(&self) -> T {
-        let ret = T::new();
+    fn to_user(&self) -> UserVmSpace {
+        let ret = UserVmSpace::new();
 
         ret.get_page_table().root_ppn
             .start_addr()

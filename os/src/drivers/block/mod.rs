@@ -51,6 +51,7 @@ lazy_static! {
     };
 }
 
+
 #[allow(unused)]
 pub fn block_device_test() {
     let block_device = BLOCK_DEVICE.clone();

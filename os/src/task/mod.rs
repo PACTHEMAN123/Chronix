@@ -52,38 +52,37 @@ pub fn suspend_current_and_run_next() {
 
 // /// pid of usertests app in make run TEST=1
 // pub const IDLE_PID: usize = 0;
-/// pid of the init process
 pub const INITPROC_PID: usize = 0;
-/// Exit the current 'Running' task ////and run the next task in task list.
-pub fn exit_current_and_run_next(exit_code: i32)  {
-    // take from Processor
-    let task = current_task().unwrap().clone();
-    if task.is_leader() {
-         task.exit_code.store(exit_code, Ordering::Relaxed);
-    }
+// /// Exit the current 'Running' task ////and run the next task in task list.
+// pub fn exit_current_and_run_next(exit_code: i32)  {
+//     // take from Processor
+//     let task = current_task().unwrap().clone();
+//     if task.is_leader() {
+//          task.exit_code.store((exit_code as usize & 0xFF) << 8, Ordering::Relaxed);
+//     }
    
-    let tid = task.gettid();
-    // println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
-    if tid == INITPROC_PID {
-        println!(
-            "[kernel] Initproc process exit with exit_code {} ...",
-            exit_code
-        );
-        if exit_code != 0 {
-            //crate::sbi::shutdown(255); //255 == -1 for err hint
-            Instruction::shutdown(true)
-        } else {
-            //crate::sbi::shutdown(0); //0 for success hint
-            Instruction::shutdown(false)
-        }
-    }
+//     let tid = task.gettid();
+//     // println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
+//     if tid == INITPROC_PID {
+//         println!(
+//             "[kernel] Initproc process exit with exit_code {} ...",
+//             exit_code
+//         );
+//         if exit_code != 0 {
+//             //crate::sbi::shutdown(255); //255 == -1 for err hint
+//             Instruction::shutdown(true)
+//         } else {
+//             //crate::sbi::shutdown(0); //0 for success hint
+//             Instruction::shutdown(false)
+//         }
+//     }
 
-    // **** access current TCB exclusively
-    // Change status to Zombie
-    //info!("now set task {} status to Zombie", task.tid());
-    task.with_mut_task_status(|state| *state = TaskStatus::Zombie);
-    // do not move to its parent but under initproc
-}
+//     // **** access current TCB exclusively
+//     // Change status to Zombie
+//     //info!("now set task {} status to Zombie", task.tid());
+//     task.with_mut_task_status(|state| *state = TaskStatus::Zombie);
+//     // do not move to its parent but under initproc
+// }
 
 lazy_static! {
     ///Globle process that init user shell
@@ -91,8 +90,8 @@ lazy_static! {
         //info!("trying to open initproc");
         
         #[cfg(target_arch="riscv64")]
-        let file = open_file("/riscv/autotest1", OpenFlags::O_WRONLY).unwrap();
-        // let file = open_file("/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
+        // let file = open_file("/riscv/autotest1", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
 
         #[cfg(target_arch="loongarch64")]
         let file = open_file("/loongarch/autotest1", OpenFlags::O_WRONLY).unwrap();

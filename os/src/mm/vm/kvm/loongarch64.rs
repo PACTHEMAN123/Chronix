@@ -45,8 +45,8 @@ impl KernVmSpaceHal for KernVmSpace {
         ret
     }
 
-    fn to_user<T: UserVmSpaceHal>(&self) -> T {
-        T::new()
+    fn to_user(&self) -> UserVmSpace {
+        UserVmSpace::new()
     }
     
     fn push_area(&mut self, area: KernVmArea, _data: Option<&[u8]>) {

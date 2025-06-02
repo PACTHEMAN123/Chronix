@@ -25,7 +25,7 @@ use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use crate::timer::timer::ITimer;
-use crate::utils::SendWrapper;
+use crate::utils::{suspend_forever, SendWrapper};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, task, vec};
@@ -61,10 +61,23 @@ use log::*;
 use super::tid::{PGid, Pid, Tid, TidAddress, TidHandle};
 /// pack Arc<Spin> into a struct
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
+
+/// pack Option<Arc<Spin> into a struct
+pub type SharedOption<T> = Option<Arc<SpinNoIrqLock<T>>>;
+
 /// new a shared object
 pub fn new_shared<T>(data: T) -> Shared<T> {
     Arc::new(SpinNoIrqLock::new(data))
 }
+/// new a shared option object
+pub fn new_shared_option<T>(data: Option<T>) -> SharedOption<T> {
+    if let Some(data) = data {
+        Some(Arc::new(SpinNoIrqLock::new(data)))
+    } else {
+        None
+    }
+}
+
 /// Task 
 pub struct TaskControlBlock {
     // ! immutable
@@ -84,7 +97,9 @@ pub struct TaskControlBlock {
     pub time_recorder: UPSafeCell<TimeRecorder>,
     // ! mutable only in self context, can be accessed by other tasks
     /// exit code of the task
-    pub exit_code: AtomicI32,
+    pub exit_code: AtomicUsize,
+    /// ELF file the task executes
+    pub elf: SpinNoIrqLock<Option<Arc<dyn File>>>,
     #[allow(unused)]
     /// base address of the user stack, can be used in thread create
     pub base_size: AtomicUsize,
@@ -109,8 +124,6 @@ pub struct TaskControlBlock {
     pub sig_ucontext_ptr: AtomicUsize, 
     /// current working dentry
     pub cwd: Shared<Arc<dyn Dentry>>,
-    /// ELF file the task executes
-    pub elf: Shared<Option<Arc<dyn File>>>,
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
     /// Futexes used by the task.
@@ -128,7 +141,10 @@ pub struct TaskControlBlock {
 
 /// Hold a group of threads which belongs to the same process.
 pub struct ThreadGroup {
-    members: BTreeMap<Pid, Weak<TaskControlBlock>>,
+    members: BTreeMap<Tid, Weak<TaskControlBlock>>,
+    alive: usize,
+    pub group_exiting: bool,
+    pub group_exit_code: usize,
 }
 
 impl ThreadGroup {
@@ -136,6 +152,9 @@ impl ThreadGroup {
     pub fn new() -> Self {
         Self {
             members: BTreeMap::new(),
+            alive: 0,
+            group_exiting: false,
+            group_exit_code: 0
         }
     }
     /// Get the number of threads in the group.
@@ -144,15 +163,46 @@ impl ThreadGroup {
     }
     /// Add a task to the group.
     pub fn push(&mut self, task: Arc<TaskControlBlock>) {
+        if !task.is_zombie() {
+            self.alive += 1;
+        }
         self.members.insert(task.tid(), Arc::downgrade(&task));
     }
     /// Remove a task from the group.
     pub fn remove(&mut self, task: &TaskControlBlock) {
+        if !task.is_zombie() {
+            self.alive -= 1;
+        }
         self.members.remove(&task.tid());
+    }
+    pub fn add_alive(&mut self, val: usize) {
+        if self.alive + val > self.members.len() {
+            panic!("[ThreadGroup::add_alive] alive > len")
+        }
+        self.alive += val;
+    }
+    pub fn sub_alive(&mut self, val: usize) {
+        if self.alive < val {
+            panic!("[ThreadGroup::sub_alive] alive < 0")
+        }
+        self.alive -= val;
+    }
+    pub fn get_alive(&self) -> usize {
+        self.alive
     }
     /// Get an iterator over the tasks in the group.
     pub fn iter(&self) -> impl Iterator<Item = Arc<TaskControlBlock>> + '_ {
-        self.members.values().map(|t| t.upgrade().unwrap())
+        self.members.values().filter_map(|t| t.upgrade())
+    }
+
+    /// Get an iterator over the tasks in the group.
+    pub fn iter_tid(&self) -> impl Iterator<Item = &Tid> + '_ {
+        self.members.keys()
+    }
+
+    pub fn clear(&mut self) {
+        self.alive = 0;
+        self.members.clear();
     }
 }
 
@@ -177,15 +227,14 @@ impl TaskControlBlock {
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
-        itimers: [ITimer;3],
-        elf: Option<Arc<dyn File>>
+        itimers: [ITimer;3]
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
         sche_entity: TaskLoadTracker
     );
     generate_atomic_accessors!(
-        exit_code: i32,
+        exit_code: usize,
         sig_ucontext_ptr: usize
     );
     #[cfg(feature = "smp")]
@@ -326,7 +375,7 @@ impl TaskControlBlock {
             waker: UPSafeCell::new(None),
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
-            exit_code: AtomicI32::new(0),
+            exit_code: AtomicUsize::new(0),
             base_size: AtomicUsize::new(user_sp),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             vm_space: new_shared(vm_space),
@@ -338,7 +387,7 @@ impl TaskControlBlock {
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
-            elf: new_shared(elf_file),
+            elf: SpinNoIrqLock::new(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
@@ -381,7 +430,7 @@ impl TaskControlBlock {
         ) = UserVmSpace::from_elf(&elf, elf_file.clone())?;
 
         // update the executing elf file
-        self.with_mut_elf(|elf| *elf = elf_file );
+        *self.elf.lock() = elf_file;
         //  NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
         //info!("terminating all threads except main");
@@ -450,9 +499,9 @@ impl TaskControlBlock {
         if flag.contains(CloneFlags::THREAD){
             //info!("creating a thread");
             is_leader = false;
-            leader = Some(Arc::downgrade(self));
-            parent = self.parent.clone();
-            children = self.children.clone();
+            leader = Some(Arc::downgrade(&self.get_leader()));
+            parent = self.get_leader().parent.clone();
+            children = new_shared(BTreeMap::new());
             thread_group = self.thread_group.clone();
             pgid = self.pgid.clone();
             cwd = self.cwd.clone();
@@ -479,7 +528,7 @@ impl TaskControlBlock {
                         UserVmSpace::from_existed(vm)
                 )
             );
-            unsafe { Instruction::tlb_flush_all() };
+            // unsafe { Instruction::tlb_flush_all() };
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
             //info!("cloning a file descriptor table");
@@ -495,7 +544,7 @@ impl TaskControlBlock {
             waker: UPSafeCell::new(None),
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
-            exit_code: AtomicI32::new(0),
+            exit_code: AtomicUsize::new(0),
             base_size: AtomicUsize::new(0),
             task_status: status,
             vm_space,
@@ -507,7 +556,7 @@ impl TaskControlBlock {
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd,
-            elf: self.elf.clone(),
+            elf: SpinNoIrqLock::new(self.elf.lock().clone()),
             itimers,
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
@@ -524,7 +573,7 @@ impl TaskControlBlock {
         }
         // update user start 
         task_control_block.time_recorder().update_user_start(get_current_time_duration());
-        task_control_block.with_mut_thread_group(|thread_group| thread_group.push(task_control_block.clone()));
+        task_control_block.thread_group.lock().push(task_control_block.clone());
         if task_control_block.is_leader() {
             PROCESS_GROUP_MANAGER.add_task_to_group(task_control_block.pgid(), &task_control_block);
         }
@@ -657,8 +706,74 @@ impl TaskControlBlock {
         let _ = self.exit_robust_list();
     }
 
+    pub fn do_exit(self: &Arc<Self>, code: usize) {
+        log::info!("[do_exit] task {} exiting", self.tid());
+        self.exit_code.store(code, Ordering::Release);
+        let mut tg = self.thread_group.lock();
+        tg.sub_alive(1);
+        let need_notify = tg.alive == 0;
+        if tg.get_alive() == 0 && !tg.group_exiting {
+            tg.group_exiting = true;
+            tg.group_exit_code = code;
+        }
+        if self.is_leader() && tg.alive != 0 && !tg.group_exiting {
+            log::warn!("[do_exit] main thread exited but other threads is still alive");
+            tg.group_exiting = true;
+            tg.group_exit_code = code;
+            for task in tg.iter() {
+                if task.tid() == self.tid() {
+                    continue;
+                }
+                task.recv_sigs(SigInfo { si_signo: SIGKILL, si_code: SigInfo::KERNEL, si_pid: Some(self.pid()) });
+            }
+        }
+        drop(tg);
+        // will not release memory space
+        self.mm_release();
+        self.with_mut_children(|children|{
+            if children.len() == 0 {
+                return;
+            }
+            let initproc = &INITPROC;
+            for child in children.values() {
+                if child.is_zombie() {
+                    initproc.recv_sigs_process_level(
+                        SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
+                    );
+                }
+                *child.parent.lock() = Some(Arc::downgrade(initproc));
+            }
+            initproc.children.lock().extend(children.clone()); 
+            children.clear();
+        });
+        self.with_mut_fd_table(|table|table.fd_table.clear());
+        self.set_zombie();
+        if need_notify {
+            self.notify_parent();
+        }
+    }
+
+    pub fn do_group_exit(self: &Arc<Self>, mut code: usize) {
+        let mut tg = self.thread_group.lock();
+        if tg.group_exiting {
+            code = tg.group_exit_code;
+        } else {
+            tg.group_exiting = true;
+            tg.group_exit_code = code;
+            for task in tg.iter() {
+                if task.tid() == self.tid() {
+                    continue;
+                }
+                task.recv_sigs(SigInfo { si_signo: SIGKILL, si_code: SigInfo::KERNEL, si_pid: Some(self.pid()) });
+            }
+        }
+        drop(tg);
+        self.do_exit(code)
+    }
+
     /// 
-    pub fn handle_zombie(self: &Arc<Self>){
+    #[deprecated = "use do_exit and do_group_exit instead"]
+    pub fn handle_zombie(self: &Arc<Self>) {
         log::info!("[handle_zombie] task {} start to handle itself", self.tid());
         self.mm_release();
     

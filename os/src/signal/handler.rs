@@ -6,7 +6,7 @@
 
 use log::*;
 
-use crate::{signal::{SigSet, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGRTMAX, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ}, task::current_task};
+use crate::{signal::{SigSet, SIGABRT, SIGALRM, SIGBUS, SIGCHLD, SIGCONT, SIGFPE, SIGHUP, SIGILL, SIGINT, SIGIO, SIGKILL, SIGPIPE, SIGPROF, SIGPWR, SIGQUIT, SIGRTMAX, SIGSEGV, SIGSTKFLT, SIGSTOP, SIGSYS, SIGTERM, SIGTRAP, SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGUSR1, SIGUSR2, SIGVTALRM, SIGWINCH, SIGXCPU, SIGXFSZ}, task::current_task, utils::{dyn_future, Async}};
 
 pub const SIG_ERR: usize = usize::MAX;
 /// when sig_handler is set to SIG_DFL
@@ -15,28 +15,23 @@ pub const SIG_ERR: usize = usize::MAX;
 pub const SIG_DFL: usize = 0;
 pub const SIG_IGN: usize = 1;
 
+pub type SigHandler = fn(i32);
+
 /// handlers for Term
 /// terminate the process.
-pub fn term_sig_handler(signo: usize) {
+pub fn term_sig_handler(signo: i32){
     let task = current_task().unwrap().clone();
     info!("[term_sig_handler]: task {} recv sig {}, terminated", task.gettid(), signo);
 
     // exit all the members of a thread group (process)
-    task.with_thread_group(|tg| {
-        for t in tg.iter() {
-            t.set_zombie();
-        }
-    });
-
-    // set the exit code
-    task.set_exit_code(signo as i32 & 0x7f);
+    task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
 }
 
 /// handlers for Ign
 /// ignore the signal
-pub fn ign_sig_handler(signo: usize) {
-    let task = current_task().unwrap().clone();
-    info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.gettid(), signo);
+pub fn ign_sig_handler(_signo: i32) {
+    // let task = current_task().unwrap().clone();
+    // info!("[ign_sig_handler]: task {} recv sig {}, do nothing", task.gettid(), signo);
     // do nothing
 }
 
@@ -45,21 +40,18 @@ pub fn ign_sig_handler(signo: usize) {
 /// The default action of certain signals is to cause a process to
 /// terminate and produce a core dump file, a file containing an image
 /// of the process's memory at the time of termination. 
-pub fn core_sig_handler(signo: usize) {
+pub fn core_sig_handler(signo: i32) {
     let task = current_task().unwrap().clone();
     info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.gettid(), signo);
-    task.with_thread_group(|tg| {
-        for t in tg.iter() {
-            info!("[core_sig_handler]: set task {} to zombie", t.tid());
-            t.set_zombie();
-        }
-    })
+
+    // exit all the members of a thread group (process)
+    task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
     // todo: produce a core dump file?
 }
 
 /// handlers for Stop
 /// stop the process.
-pub fn stop_sig_handler(signo: usize) {
+pub fn stop_sig_handler(signo: i32) {
     let task = current_task().unwrap().clone();
     info!("[stop_sig_handler]: task {} recv sig {}, stop", task.gettid(), signo);
 
@@ -75,7 +67,7 @@ pub fn stop_sig_handler(signo: usize) {
 
 /// handlers for Cont
 /// continue the process if it is currently stopped.
-pub fn cont_sig_handler(signo: usize) {
+pub fn cont_sig_handler(signo: i32) {
     let task = current_task().unwrap().clone();
     info!("[cont_sig_handler]: task {} recv sig {}, continue", task.gettid(), signo);
 
@@ -88,6 +80,7 @@ pub fn cont_sig_handler(signo: usize) {
         }
     })
 }
+
 
 /// get the default "Action" (here, aka. handlers) of given signo
 pub fn get_default_handler(signo: usize) -> usize {
@@ -127,6 +120,6 @@ pub fn get_default_handler(signo: usize) -> usize {
         // The default action for an unhandled real-time signal is to
         // terminate the receiving process.
         _ => term_sig_handler,
-    } as *const () as usize;
+    } as *const SigHandler as usize;
     handler
 }

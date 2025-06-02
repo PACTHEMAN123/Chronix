@@ -21,10 +21,11 @@ unsafe impl Sync for Ext4SuperBlock {}
 // EXT4 FS super block implement 
 impl Ext4SuperBlock {
     /// create a new ext4 super block using device
-    pub fn new(inner: SuperBlockInner) -> Arc<dyn SuperBlock> {
+    pub fn new(inner: SuperBlockInner, mount_point: &'static str, device_name: &'static str) -> Arc<dyn SuperBlock> {
+        log::info!("mount a ext fs at {}, device name {}", mount_point, device_name);
         let block_device = inner.device.as_ref().unwrap().clone();
         let disk = Disk::new(block_device);
-        let block = Ext4BlockWrapper::<Disk>::new(disk).expect("failed to create ext4fs");
+        let block = Ext4BlockWrapper::<Disk>::new(disk, mount_point, device_name).expect("failed to create ext4fs");
         Arc::new(Self {inner, block})
     }
 }

@@ -168,7 +168,6 @@ impl Inode for Ext4Inode {
                 panic!("error when ls: {}", e);
             }
         };
-
         let mut name_iter = name.iter();
         let  _inode_type_iter = inode_type.iter();
 
@@ -231,10 +230,10 @@ impl Inode for Ext4Inode {
             // get the cached page or read page using IO and store in cache
             
             let page = if let Some(page) = cache.get_page(page_offset) {
-                //info!("[PAGE CACHE]: hit at offset: {:x}", page_offset);
+                // info!("[PAGE CACHE]: read hit at offset: {:#x}", page_offset);
                 page.clone()
             } else {
-                //info!("[PAGE CACHE]: miss at offset: {:x}", page_offset);
+                // info!("[PAGE CACHE]: read miss at offset: {:#x}", page_offset);
                 // direct read at the offset of page size
                 let mut page = Page::new(page_offset);
                 let read_size = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), offset);
@@ -260,6 +259,8 @@ impl Inode for Ext4Inode {
         let cpath = file.get_path();
         let path = cpath.to_str().unwrap();
         file.file_open(path, O_RDWR)?;
+        let file_size = file.file_size() as usize;
+        log::warn!("[PAGE CACHE] write at file size {file_size}");
         
         // get the page-aligned offset
         let mut total_write_size = 0usize;
@@ -274,13 +275,15 @@ impl Inode for Ext4Inode {
 
             // get the cached page or read page using IO and store in cache
             let page = if let Some(page) = cache.get_page(page_offset) {
-                //info!("[PAGE CACHE]: hit at offset: {}", page_offset);
+                // info!("[PAGE CACHE]: read hit at offset: {:#x}", page_offset);
                 page.clone()
             } else {
-                //info!("[PAGE CACHE]: miss at offset: {}", page_offset);
-                // unlike read, no need to read out the data
-                // just simply cache data and write back when inode drop
-                let page = Page::new(page_offset);
+                // info!("[PAGE CACHE]: read miss at offset: {:#x}", page_offset);
+                let mut page = Page::new(page_offset);
+                if page_offset < file_size {
+                    // write inside the file bound, should read out the data first
+                    let _ = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), offset);
+                }
                 cache.insert_page(page_offset, page.clone());
                 page
             };
@@ -570,7 +573,7 @@ impl Inode for Ext4Inode {
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
         let file = self.file.exclusive_access();
-        //info!("Drop struct Inode {:?}", file.get_path());
+        info!("Drop struct Inode {:?}", file.get_path());
 
         // flush the dirty page in page cache
         let cache = self.cache.clone();

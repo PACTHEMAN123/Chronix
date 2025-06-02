@@ -180,7 +180,7 @@ impl SigManager {
                     return queue.pop_front()
                 }
             }
-            log::warn!("[SigManager] no expected signals");
+            log::warn!("[SigManager] no expected signals, expected: {:?}", expected);
             return None;
         }
         for i in 0..self.pending_sigs.len() {

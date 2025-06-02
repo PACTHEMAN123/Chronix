@@ -139,6 +139,7 @@ pub mod sys_error;
 pub mod net;
 /// ipc
 pub mod ipc;
+use alloc::format;
 use fatfs::info;
 pub use fs::*;
 use futex::{sys_futex, sys_get_robust_list, sys_set_robust_list, FUTEX_OWNER_DIED, FUTEX_TID_MASK, FUTEX_WAITERS};
@@ -153,7 +154,7 @@ pub use time::*;
 pub use signal::*;
 pub use sche::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, mm::UserPtr, signal::{SigAction, SigSet}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::SendWrapper};
+use crate::{fs::RenameFlags, mm::UserPtr, signal::{SigAction, SigSet}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 

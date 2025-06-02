@@ -352,16 +352,18 @@ pub async fn sys_rt_sigsuspend(mask_ptr: usize) -> SysResult {
 ///        wrong thread being signaled if a thread terminates and its thread
 ///        ID is recycled.  Avoid using this system call.
 pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
+    info!("[sys_tkill] {} {}", tid, sig);
     if (sig < 0) || sig as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }
+    let cur_task = current_task().unwrap();
     let task = TASK_MANAGER.get_task(tid as usize)
-    .ok_or(SysError::ESRCH)?;
+        .ok_or(SysError::ESRCH)?;
     task.recv_sigs(
         SigInfo {
             si_signo: sig as usize,
             si_code: SigInfo::TKILL,
-            si_pid: Some(task.pid()),
+            si_pid: Some(cur_task.pid()),
         }
     );
     Ok(0)
@@ -373,18 +375,20 @@ pub fn sys_tkill(tid: isize, sig: i32) -> SysResult {
 ///        and the signal will be delivered to an arbitrary thread within
 ///        that process.)
 pub fn sys_tgkill(tgid: isize, tid: isize, signo: i32) -> SysResult {
+    info!("[sys_tgkill] {} {} {}", tgid, tid, signo);
     if (signo < 0) || signo as usize >= SIGRTMAX || tid < 0{
         return Err(SysError::EINVAL);
     }
     if tgid < 0 || tid < 0 {
         return Err(SysError::EINVAL);
     }
+    let cur_task = current_task().unwrap();
     let task = TASK_MANAGER.get_task(tgid as usize).ok_or(SysError::ESRCH)?;
     if task.is_leader() {
         task.with_mut_thread_group(|thread_group| -> SysResult {
             for thread in thread_group.iter() {
                 if thread.tid() == tid as usize {
-                    thread.recv_sigs(SigInfo { si_signo: signo as usize, si_code: SigInfo::TKILL, si_pid: Some(task.pid())});
+                    thread.recv_sigs(SigInfo { si_signo: signo as usize, si_code: SigInfo::TKILL, si_pid: Some(cur_task.pid())});
                     return Ok(0)
                 }
             }

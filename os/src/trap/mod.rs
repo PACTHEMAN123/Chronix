@@ -21,6 +21,8 @@ use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
 use crate::mm::vm::{KernVmSpaceHal, PageFaultAccessType, UserVmSpaceHal};
 use crate::mm::KVMSPACE;
+use crate::signal::{SigInfo, SIGILL, SIGSEGV, SIGTRAP};
+use crate::utils::timer::TimerGuard;
 use hal::addr::VirtAddr;
 
 use crate::utils::async_utils::yield_now;
@@ -29,12 +31,12 @@ use crate::processor::context::SumGuard;
 use crate::syscall::{syscall, SysError};
 use crate::task::task::TaskControlBlock;
 use crate::task::{
-     current_user_token, exit_current_and_run_next, suspend_current_and_run_next, current_task,
+     current_user_token, current_task,
 };
 use crate::processor::processor::{current_processor, current_trap_cx};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
-use alloc::task;
+use alloc::{format, task};
 use log::{info, warn};
 use core::sync::atomic::Ordering;
 
@@ -53,12 +55,13 @@ pub async fn user_trap_handler() -> bool {
                 "[user_trap_handler] task {} break point",
                 task.tid()
             );
-            exit_current_and_run_next(-1);
+            let task = current_task().unwrap().clone();
+            // task.set_stopped();
+            task.recv_sigs(SigInfo { si_signo: SIGTRAP, si_code: SigInfo::KERNEL, si_pid: None });
         }
         TrapType::Syscall => {
             let _sum = SumGuard::new();
             let cx = current_task().unwrap().get_trap_cx();
-            // jump to next instruction8 anyway
             *cx.sepc() += 4;
             // get system call return value
             let result = syscall(
@@ -72,12 +75,10 @@ pub async fn user_trap_handler() -> bool {
                     cx.syscall_arg_nth(5)
                 ]
             ).await;
-            // save last user arg0 to restore for possible SA_RESTART flag in signal
-            cx.save_last_user_arg0();
-            // cx is changed during sys_exec, so we have to call it again
-            cx.save_to(0, cx.ret_nth(0));
-            cx.set_ret_nth(0, result as usize);
+            // // cx is changed during sys_exec, so we have to call it again
+            // cx.save_to(0, cx.ret_nth(0));
             // report that the syscall is interrupt
+            cx.set_ret_nth(0, result as usize);
             if result == -(SysError::EINTR as isize) {
                 log::warn!("[user_trap_handler] task {} syscall is interrupted", cx.syscall_id());
                 return true;
@@ -97,26 +98,23 @@ pub async fn user_trap_handler() -> bool {
                 _ => unreachable!(),
             };
 
-            match current_task() {
-                None => {},
-                Some(task) => {
-                    let res = task.with_mut_vm_space(|vm_space| vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
-                    match res {
-                        Ok(()) => {}
-                        Err(()) => {
-                            log::warn!(
-                                "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?} epc: {epc:#x}",
-                            );
-                            exit_current_and_run_next(-2);
-                        }
-                    }
+            let task = current_task().unwrap();
+            let res = task.with_mut_vm_space(|vm_space| vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
+            match res {
+                Ok(()) => {}
+                Err(()) => {
+                    log::warn!(
+                        "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?} epc: {epc:#x}",
+                    );
+                    task.recv_sigs(SigInfo { si_signo: SIGSEGV, si_code: SigInfo::KERNEL, si_pid: None });
                 }
-            };
+            }
         }
         TrapType::IllegalInstruction(_) => {
             println!("[trap_handler] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
-            exit_current_and_run_next(-3);
+            let task = current_task().unwrap();
+            task.recv_sigs(SigInfo { si_signo: SIGILL, si_code: SigInfo::KERNEL, si_pid: None });
         }
         TrapType::Timer => {
             crate::timer::timer::TIMER_MANAGER.check();
@@ -130,9 +128,9 @@ pub async fn user_trap_handler() -> bool {
             manager.handle_irq();
         }
         TrapType::Processed => {}
-        _ => {
+        trap => {
             panic!(
-                "[trap_handler] Unsupported trap!"
+                "[trap_handler] Unsupported trap! {:?}", trap
             );
         }
     }

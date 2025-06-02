@@ -12,18 +12,20 @@ use crate::fs::{
     vfs::file::open_file,
     OpenFlags,
 };
-use crate::mm::copy_out;
+use crate::mm::{copy_out, UserPtrSendWriter};
 use crate::mm::{translated_refmut, translated_str, translated_ref};
 use crate::processor::context::SumGuard;
 use crate::syscall::at_helper;
 use crate::task::schedule::spawn_user_task;
-use crate::task::{exit_current_and_run_next, INITPROC};
+use crate::task::INITPROC;
 use crate::task::manager::{TaskManager, PROCESS_GROUP_MANAGER, TASK_MANAGER};
 use crate::processor::processor::{current_processor, current_task, current_trap_cx, current_user_token, PROCESSORS};
-use crate::signal::SigSet;
+use crate::signal::{SigInfo, SigSet, SIGKILL};
+use crate::timer::get_current_time_duration;
 use crate::utils::{suspend_now, user_path_to_string};
 use alloc::string::ToString;
 use alloc::{sync::Arc, vec::Vec, string::String};
+use fatfs::warn;
 use hal::addr::{PhysAddrHal, PhysPageNumHal, VirtAddr};
 use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
@@ -108,7 +110,9 @@ pub fn sys_gettid() -> SysResult {
 
 /// exit the current process with the given exit code
 pub fn sys_exit(exit_code: i32) -> SysResult {
-    exit_current_and_run_next(exit_code);
+    let task = current_task().unwrap().clone();
+    info!("[sys_exit] task {} exited with exit code {}", task.tid(), exit_code);
+    task.do_exit((exit_code as usize & 0xFF) << 8);
     Ok(0)
 }
 
@@ -137,7 +141,7 @@ pub fn sys_fork() -> isize {
     // add new task to scheduler
     spawn_user_task(new_task);
     //info!("sys_fork: complete, new_pid = {}", new_pid);
-    new_pid  as isize
+    new_pid as isize
 }
 
 /// clone a new process/thread/ using clone flags
@@ -207,7 +211,15 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
         }
     }
     if flags.contains(CloneFlags::CHILD_SETTID) {
+        // If a thread is started using clone(2) with the
+        // CLONE_CHILD_SETTID flag, set_child_tid is set to the value
+        // passed in the ctid argument of that system call.
         new_task.tid_address().set_child_tid = Some(child_tid.0);
+        // When set_child_tid is set, the very first thing the new
+        // thread does is to write its thread ID at this address.
+        unsafe {
+            (child_tid.0 as *mut u32).write_volatile(new_tid as u32);
+        }
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {
         new_task.tid_address().clear_child_tid = Some(child_tid.0);
@@ -226,7 +238,7 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
 /// stack, heap, and (initialized and uninitialized) data segments.
 /// more details, see: https://man7.org/linux/man-pages/man2/execve.2.html
 pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult {
-    let mut path = user_path_to_string(pathname as *const u8).unwrap();
+    let path = user_path_to_string(pathname as *const u8).unwrap();
     let token = current_user_token(&current_processor());
     let mut argv = argv as *const usize;
     let mut envp = envp as *const usize;
@@ -284,7 +296,12 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();
         let reader = FileReader::new(app.clone());
-        let elf = xmas_elf::ElfFile::new(&reader).unwrap();
+        let elf = xmas_elf::ElfFile::new(&reader).map_err(
+            |err| {
+                log::warn!("[sys_execve] file: {} err: {}", app.dentry().unwrap().name(), err); 
+                SysError::EINVAL
+            }
+        )?;
         task.exec(&elf, Some(app), argv_vec, envp_vec)?;
         Ok(0)
     } else {
@@ -313,62 +330,65 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
     // get the all target zombie process
     let res_task = {
         let children = task.children();
-        if  children.is_empty() {
-            log::debug!("[sys_waitpid]: fail on no child");
+        if children.is_empty() {
             return Err(SysError::ESRCH);
         }
         match pid {
             -1 => {
                 children
-                .values()
-                .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
+                    .values()
+                    .find(|c|c.is_zombie() && c.thread_group.lock().get_alive() == 0)
             }
             pid if pid > 0 => {
                 if let Some(child) = children.get(&(pid as usize)) {
-                    if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
+                    if child.is_zombie() && child.thread_group.lock().get_alive() == 0 {
                         Some(child)
                     } else {
                         None
                     }
                 } else {
-                    panic!("[sys_waitpid]: no child with pid {}", pid);
+                    log::warn!("[sys_waitpid]: no child with pid {}", pid);
+                    return Err(SysError::ESRCH);
                 }
             }
             _ => {
-                panic!("[sys_waitpid]: not implement");
+                log::warn!("[sys_waitpid]: not implement");
+                return Err(SysError::EINVAL);
             }
         }.cloned()
     };
 
     if let Some(res_task) = res_task {
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
-        if exit_code_ptr != 0 {
+        
+        let exit_code_ptr = UserPtrSendWriter::new(exit_code_ptr as *mut i32);
+        if exit_code_ptr != core::ptr::null() {
+            let exit_code_mut = exit_code_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
             let exit_code = res_task.exit_code();
-            log::debug!("[sys_waitpid]: TCB {} first time exit code {}", task.tid() ,exit_code);
-            let exit_code = (exit_code & 0xFF) << 8; 
-            let exit_code_bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    &exit_code as *const i32 as *const u8,
-                    core::mem::size_of::<i32>(),
-                )
-            };
-            copy_out(&mut task.vm_space.lock(), VirtAddr(exit_code_ptr), exit_code_bytes);
+            *exit_code_mut = exit_code as i32;
         }
+
+        let mut res_task_tg = res_task.thread_group.lock();
+        for thread in res_task_tg.iter() {
+            TASK_MANAGER.remove_task(thread.tid());
+        }
+        res_task_tg.clear();
+        
         let tid = res_task.tid();
         task.remove_child(tid);
-        TASK_MANAGER.remove_task(tid);
         PROCESS_GROUP_MANAGER.remove(&task);
         return Ok(tid as isize);
     } else if option.contains(WaitOptions::WNOHANG) {
         return Ok(0);
     } else {
         log::debug!("[sys_waitpid]: TCB {} waiting for SIGCHLD", task.gettid());
-        let (child_pid, exit_code,child_user_time,child_kernel_time) = loop {
+        let res_task = loop {
             task.set_interruptable();
             let block_sig = task.with_sig_manager(|sig_manager|{
                 sig_manager.blocked_sigs
             });
             task.set_wake_up_sigs(!block_sig | SigSet::SIGCHLD);
+            
             suspend_now().await;
             task.set_running();
             
@@ -386,54 +406,52 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     -1 => {
                         children
                         .values()
-                        .find(|c|c.is_zombie() && c.with_thread_group(|tg| tg.len() == 1))
+                        .find(|c|c.is_zombie() && c.thread_group.lock().get_alive() == 0)
                     }
                     pid if pid > 0 => {
                         if let Some(child) = children.get(&(pid as usize)) {
-                            if child.is_zombie() && child.with_thread_group(|tg| tg.len() == 1) {
+                            if child.is_zombie() && child.thread_group.lock().get_alive() == 0 {
                                 Some(child)
                             } else {
                                 None
                             }
                         } else {
-                            panic!("[sys_waitpid]: no child with pid {}", pid);
+                            log::warn!("[sys_waitpid]: no child with pid {}", pid);
+                            return Err(SysError::ESRCH);
                         }
                     }
                     _ => {
-                        panic!("[sys_waitpid]: not implement");
+                        log::warn!("[sys_waitpid]: not implement");
+                        return Err(SysError::EINVAL);
                     }
                 };
                 if let Some(child) = child {
-                    break (
-                        child.pid(),
-                        child.exit_code(),
-                        child.time_recorder().user_time(),
-                        child.time_recorder().kernel_time()
-                    );
+                    break child.clone();
                 }
             }else {
                 log::warn!("[sys_waitpid] wake up by no signal");
                 return Err(SysError::EINTR);
             }
         };
-        task.time_recorder().update_child_time((child_user_time,child_kernel_time));
-        // write into exit code pointer
-        if exit_code_ptr != 0 {
-            log::debug!("[sys_waitpid]: TCB {} get child {}, exit code {}", task.tid(), child_pid, exit_code);
-            let exit_code = (exit_code & 0xFF) << 8;
-            let exit_code_bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    &exit_code as *const i32 as *const u8,
-                    core::mem::size_of::<i32>(),
-                )
-            };
-            copy_out(&mut task.vm_space.lock(), VirtAddr(exit_code_ptr), exit_code_bytes);
+
+        res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
+        let exit_code_ptr = UserPtrSendWriter::new(exit_code_ptr as *mut i32);
+        if exit_code_ptr != core::ptr::null() {
+            let exit_code_mut = exit_code_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+            let exit_code = res_task.exit_code();
+            *exit_code_mut = exit_code as i32;
         }
-        task.remove_child(child_pid);
-        TASK_MANAGER.remove_task(child_pid);
-        //info!("remove task {} from PROCESS_GROUP_MANAGER", task.tid());
+
+        let mut res_task_tg = res_task.thread_group.lock();
+        for thread in res_task_tg.iter() {
+            TASK_MANAGER.remove_task(thread.tid());
+        }
+        res_task_tg.clear();
+        
+        let tid = res_task.tid();
+        task.remove_child(tid);
         PROCESS_GROUP_MANAGER.remove(&task);
-        return Ok(child_pid as isize);
+        return Ok(tid as isize);
     }
 }
 /// yield immediatly to another process
@@ -496,14 +514,8 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult {
 /// exit_group - exit all threads in a process
 pub fn sys_exit_group(exit_code: i32) -> SysResult {
     let task = current_task().unwrap();
-    task.with_thread_group(|tg| {
-        for thread in tg.iter() {
-            // info!("[sys_exit_group]: exit thread {}", thread.tid())
-            thread.set_zombie();
-        }
-    });
-    log::debug!("[sys_exit_group]: set exit code {}", (exit_code & 0xFF) << 8);
-    task.set_exit_code((exit_code & 0xFF) << 8);
+    info!("[sys_exit_group] task group {} exited with exit code {}", task.pid(), exit_code);
+    task.do_group_exit((exit_code as usize & 0xFF) << 8);
     Ok(0)
 }
 

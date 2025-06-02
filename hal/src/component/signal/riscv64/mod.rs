@@ -15,6 +15,12 @@ pub struct MContext {
     pub fpstate: [usize; 66],
 }
 
+impl MContext  {
+    pub fn get_tp(&self) -> usize {
+        self.user_x[4]
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 /// UContext: 

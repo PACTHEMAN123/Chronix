@@ -5,7 +5,7 @@ use hal::println;
 use super::*;
 
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 /// signal action struct under riscv-linux arch
 pub struct SigAction {
@@ -51,7 +51,7 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 /// signal action warpper for kernel
 pub struct KSigAction {
     /// inner sigaction

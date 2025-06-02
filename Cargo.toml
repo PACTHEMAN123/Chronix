@@ -4,7 +4,8 @@ members = [
     "os",
     "user",
     "hal",
-    "utils/range-map"
+    "utils/range-map",
+    "utils/segment-tree",
 ]
 
 # dependencies resolver
@@ -34,7 +35,7 @@ bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", b
 fdt = { git = "https://github.com/repnop/fdt.git", branch = "master", features = ["pretty-printing"] }
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", branch = "master", default-features = false, features = ["alloc", "lfn", "unicode"] }
 xmas-elf = { git = "https://github.com/zlc-dev/xmas-elf", branch = "master" }
-lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", branch = "main", default-features = false }
+lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", default-features = false, branch = "main" }
 
 [workspace.dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"

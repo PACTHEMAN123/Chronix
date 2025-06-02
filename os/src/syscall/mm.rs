@@ -1,10 +1,12 @@
 //! memory related syscall
 #![allow(missing_docs)]
 
+use core::time::Duration;
+
 use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::vm::{MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task};
+use crate::{config::PAGE_SIZE, mm::vm::{MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task, timer::get_current_time_duration, utils::timer::TimerGuard};
 
 use super::{SysError, SysResult};
 

@@ -54,7 +54,7 @@ pub fn abs_path_to_parent(path: &str) -> Option<String> {
 /// rel path should be like: c ./c
 pub fn rel_path_to_abs(parent_path: &str, rel_path: &str) -> Option<String> {
     if !parent_path.starts_with('/') {
-        warn!("parent path should be absolute path!");
+        log::error!("parent path should be absolute path!");
         return None;
     }
     // parent path
