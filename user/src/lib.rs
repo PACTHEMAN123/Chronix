@@ -480,3 +480,7 @@ pub fn mmap(addr: usize, len: usize, prot: MmapProt, flags: MmapFlags, fd: usize
 pub fn mremap(old_addr: usize, old_size: usize, new_size: usize, flags: MremapFlags, new_addr:usize) -> isize {
     sys_mremap(old_addr, old_size, new_size, flags.bits, new_addr)
 }
+
+pub fn shutdown() -> isize {
+    sys_shutdown(0, 0, 0, 0)
+}

@@ -4,55 +4,85 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{chdir, execve, fork, waitpid};
+use user_lib::{execve, fork, shutdown, wait};
 
 fn run_cmd(cmd: &str) {
-    let pid = fork();
-    if pid == 0 {
+    if fork() == 0 {
         // default use musl busybox
+        #[cfg(target_arch="riscv64")]
         execve(
-            "/musl/busybox",
+            "/riscv/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
                 "PATH=/:/bin",
                 "HOME=/home/chronix",
             ],
         );
-    } else if pid > 0 {
+
+        #[cfg(target_arch="loongarch64")]
+        execve(
+            "/loongarch/musl/busybox",
+            &["busybox", "sh", "-c", cmd],
+            &[
+                "PATH=/:/bin",
+                "HOME=/home/chronix",
+            ],
+        );
+    } else {
         let mut result: i32 = 0;
-        waitpid(pid as usize, &mut result);
+        wait(&mut result);
     }
 }
 
-fn run_test() {
-    run_cmd("./basic_testcode.sh");
-    run_cmd("./busybox_testcode.sh");
-    run_cmd("./lua_testcode.sh");
-    run_cmd("./libcbench_testcode.sh");
-    run_cmd("./libctest_testcode.sh");
-    run_cmd("./lmbench_testcode.sh");
-    run_cmd("./iozone_testcode.sh");
-    run_cmd("./cyclictest_testcode.sh");
-    // TODOS
-    // run_cmd("./iperf_testcode.sh")
-    // run_cmd("./netperf") ?
-    // run_cmd("./ltp_testcode.sh")
+fn init_env() {
+    #[cfg(target_arch="riscv64")]
+    run_cmd("/riscv/musl/busybox --install /bin");
+    #[cfg(target_arch="loongarch64")]
+    run_cmd("/loongarch/musl/busybox --install /bin");
+    run_cmd("rm /bin/sh");
+    run_cmd("mkdir -p /etc");
+    
+    // 创建 /etc/protocols 文件
+    run_cmd("echo 'ip      0       IP      # Internet protocol' > /etc/protocols");
+    run_cmd("echo 'icmp    1       ICMP    # Internet Control Message Protocol' >> /etc/protocols");
+    run_cmd("echo 'tcp     6       TCP     # Transmission Control Protocol' >> /etc/protocols");
+    run_cmd("echo 'udp     17      UDP     # User Datagram Protocol' >> /etc/protocols");
+    
+    // 创建 /etc/nsswitch.conf 文件
+    run_cmd("echo 'hosts: files dns' > /etc/nsswitch.conf");
+    run_cmd("echo 'networks: files' >> /etc/nsswitch.conf");
+    run_cmd("echo 'protocols: files' >> /etc/nsswitch.conf");
+    run_cmd("echo 'services: files' >> /etc/nsswitch.conf");
 }
 
 #[no_mangle]
 fn main() -> i32 {
-    // run_cmd("/musl/busybox --install /bin");
-    // run_cmd("rm /bin/sh");
+    init_env();
+    println!("into user mode initproc");
+    if fork() == 0 {
+        println!("into user mode initproc fork");
+        
+        #[cfg(target_arch="riscv64")]
+        run_cmd("./riscv/run-oj.sh");
 
-    println!("start to run musl test");
-    chdir("/musl\0");
-    run_test();
-    println!("finish running musl test");
+        #[cfg(target_arch="loongarch64")]
+        run_cmd("./loongarch/run-oj.sh");
 
-    println!("start to run glibc test");
-    chdir("/glibc\0");
-    run_test();
-    println!("finish running glibc test");
-
+        shutdown();
+    } else {
+        println!("into user mode initproc wait");
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = wait(&mut exit_code);
+            if pid == -1 || pid == -3 {
+                // println!("in pid == -1");
+                return -1;
+            }
+            println!(
+                "[initproc] Released a zombie process, pid={}, exit_code={}",
+                pid, exit_code,
+            );
+        }
+    }
     0
 }

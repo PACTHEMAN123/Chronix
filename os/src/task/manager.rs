@@ -17,8 +17,14 @@ impl TaskManager {
     pub fn add_task(&self, task: &Arc<TaskControlBlock>) {
         self.0.lock().insert(task.tid(), task.clone());
     }
+    /// 
+    pub fn has_task_except_initproc(&self) -> bool {
+        let tasks = self.0.lock();
+        return tasks.len() > 1
+    }
     /// remove a task from the task manager
     pub fn remove_task(&self, tid: Tid) {
+        assert!(tid != INITPROC_PID);
         self.0.lock().remove(&tid);
     }
     /// get the task by tid

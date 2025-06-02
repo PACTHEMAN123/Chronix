@@ -54,14 +54,10 @@ impl InstructionHal for Instruction {
         // do nothing
     }
     
-    fn shutdown(failure: bool) -> ! {
-        unsafe { 
-            Instruction::disable_interrupt();
-        }
-        println!("shutdown, failure: {}", failure);
-        unsafe {
-            (POWEROFF_REG_MMIO as *mut u8).write_volatile(POWEROFF_VALUE);
-        };
+    unsafe fn shutdown(failure: bool) -> ! {
+        Instruction::disable_interrupt();
+        println!("[CINPHAL] system shutdown, failure: {}", failure);
+        (POWEROFF_REG_MMIO as *mut u8).write_volatile(POWEROFF_VALUE);
         loop {}
     }
     

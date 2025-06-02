@@ -20,5 +20,5 @@ fn panic(info: &PanicInfo) -> ! {
     } else {
         error!("[kernel] Panicked: {}", info.message());
     }
-    Instruction::shutdown(true)
+    unsafe { Instruction::shutdown(true) }
 }

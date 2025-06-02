@@ -68,8 +68,6 @@ pub mod utils;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool,Ordering}};
 
-#[allow(unused)]
-static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
 /// id is the running processor, now start others
 #[allow(unused)]
 fn processor_start(id: usize) {
@@ -85,9 +83,9 @@ fn processor_start(id: usize) {
 }
 
 /// the rust entry-point of os
-pub fn main(id: usize) -> ! {
-    if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok()
-    {
+/// return true if need reboot (but not supported yet)
+pub fn main(id: usize, first: bool) -> bool {
+    if first {
         info!("id: {id}");
         banner::print_banner();
         mm::init();
@@ -118,9 +116,9 @@ pub fn main(id: usize) -> ! {
         Instruction::enable_timer_interrupt();
     }
     timer::set_next_trigger();
-    loop {
-        let _tasks = executor::run_until_idle();
-    }
+    executor::run_until_shutdown();
+    // return false: HAL will shutdown
+    false
 }
 
 hal::define_entry!(main);

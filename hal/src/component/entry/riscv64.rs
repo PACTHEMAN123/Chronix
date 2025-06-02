@@ -1,5 +1,7 @@
-use core::sync::atomic::{AtomicBool, Ordering};
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}};
+use core::sync::atomic::Ordering;
+use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println, timer::{Timer, TimerHal}};
+
+use super::RUNNING_PROCESSOR;
 
 #[repr(C, align(4096))]
 pub struct BootPageTable([u64; Constant::PTES_PER_PAGE]);
@@ -62,16 +64,23 @@ unsafe extern "C" fn _start(id: usize) -> ! {
     )
 }
 
-pub static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
-
 pub(crate) fn rust_main(id: usize) {
-    if FIRST_PROCESSOR.load(Ordering::Acquire) {
-        FIRST_PROCESSOR.store(false, Ordering::Release);
+    let is_first = RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0;
+
+    if is_first {
         super::clear_bss();
         crate::console::init();
         print_info();
+        let _ = unsafe { super::_main_for_arch(id, true) };
+    } else {
+        let _ = unsafe { super::_main_for_arch(id, false) };
     }
-    unsafe { super::_main_for_arch(id) };
+    
+    if RUNNING_PROCESSOR.fetch_sub(1, Ordering::AcqRel) == 1 {
+        unsafe { Instruction::shutdown(false) }
+    }
+    
+    loop {}
 }
 
 fn print_info() {

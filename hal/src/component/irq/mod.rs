@@ -1,8 +1,6 @@
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
 
-use core::range::Range;
-
 #[cfg(target_arch = "riscv64")]
 pub use riscv64::*;
 

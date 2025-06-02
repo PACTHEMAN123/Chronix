@@ -20,7 +20,7 @@ use crate::syscall::futex::{futex_manager, FutexHashKey, RobustList, RobustListH
 use crate::syscall::process::CloneFlags;
 use crate::signal::{KSigAction, SigInfo, SigManager, SigSet, SIGCHLD, SIGKILL, SIGSTOP};
 use crate::syscall::SysError;
-use crate::task::current_task;
+use crate::task::{current_task, INITPROC_PID};
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
@@ -707,6 +707,12 @@ impl TaskControlBlock {
     }
 
     pub fn do_exit(self: &Arc<Self>, code: usize) {
+        if self.is_zombie() {
+            return;
+        }
+        if self.tid() == INITPROC_PID {
+            panic!("initproc exited");
+        }
         log::info!("[do_exit] task {} exiting", self.tid());
         self.exit_code.store(code, Ordering::Release);
         let mut tg = self.thread_group.lock();

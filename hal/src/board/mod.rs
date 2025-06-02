@@ -1,6 +1,8 @@
 #[cfg(target_arch = "riscv64")]
 mod riscv64;
 
+use core::cell::OnceCell;
+
 #[cfg(target_arch = "riscv64")]
 pub use riscv64::*;
 

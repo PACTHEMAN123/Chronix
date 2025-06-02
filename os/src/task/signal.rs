@@ -41,10 +41,11 @@ impl TaskControlBlock {
             if manager.wake_sigs.contain_sig(sig.si_signo) && self.is_interruptable() {
                 //info!("[TCB]: tid {} has been wake up", self.gettid());
                 self.wake();
-            } else if manager.wake_sigs.contain_sig(sig.si_signo) && self.is_zombie() {
+            } 
+            /* else if manager.wake_sigs.contain_sig(sig.si_signo) && self.is_zombie() {
                 log::info!("[TCB]: wake up tid {} to finish its handle zombie", self.gettid());
                 self.wake();
-            }
+            } */
         });
     }
     /// Unix has two types of signal: Process level and Thread level

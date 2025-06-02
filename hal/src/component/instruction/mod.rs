@@ -8,7 +8,8 @@ pub trait InstructionHal {
     unsafe fn enable_external_interrupt();
     unsafe fn clear_sum();
     unsafe fn set_sum();
-    fn shutdown(failure: bool) -> !;
+    /// shutdown is unsafe, because it will not trigger drop
+    unsafe fn shutdown(failure: bool) -> !;
     fn hart_start(hartid: usize, start_addr: usize, opaque: usize);
     fn set_tp(processor_addr: usize);
     fn get_tp() -> usize;

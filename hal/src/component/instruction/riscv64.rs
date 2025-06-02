@@ -2,6 +2,8 @@ use core::arch::asm;
 
 use riscv::register;
 
+use crate::println;
+
 use super::{Instruction, InstructionHal};
 
 impl InstructionHal for Instruction {
@@ -39,8 +41,9 @@ impl InstructionHal for Instruction {
         register::sstatus::set_sum();
     }
 
-    fn shutdown(failure: bool) -> !{
+    unsafe fn shutdown(failure: bool) -> !{
         use sbi_rt::{system_reset, NoReason, Shutdown, SystemFailure};
+        println!("[CINPHAL] system shutdown, failure: {}", failure);
         if !failure {
             system_reset(Shutdown, NoReason);
         } else {

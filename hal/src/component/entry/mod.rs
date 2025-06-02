@@ -1,8 +1,10 @@
 // Declare the _main_for_arch exists.
 
+use core::sync::atomic::AtomicUsize;
+
 use super::constant::{Constant, ConstantsHal};
 unsafe extern "Rust" {
-    pub(crate) unsafe fn _main_for_arch(id: usize);
+    pub(crate) unsafe fn _main_for_arch(id: usize, first: bool) -> bool;
 }
 
 /// Boot Stack Size.
@@ -23,6 +25,9 @@ const BANNER: &str = r" ________  ___  ________   ________  ___  ___  ________  
 #[unsafe(link_section = ".bss.stack")]
 pub(crate) static mut BOOT_STACK: [u8; MAX_PROCESSORS * BOOT_STACK_SIZE] = [0; MAX_PROCESSORS * BOOT_STACK_SIZE];
 
+#[unsafe(link_section = ".data")] // store in data section, to avoid clear_bss() changing it
+pub(crate) static RUNNING_PROCESSOR: AtomicUsize = AtomicUsize::new(0);
+
 /// clear BSS segment
 fn clear_bss() {
     unsafe extern "C" {
@@ -41,8 +46,8 @@ fn clear_bss() {
 macro_rules! define_entry {
     ($main_fn: ident) => {
         #[unsafe(export_name = "_main_for_arch")]
-        fn hal_defined_main(id: usize) {
-            $main_fn(id);
+        fn hal_defined_main(id: usize, first: bool) -> bool {
+            $main_fn(id, first)
         }
     };
 }

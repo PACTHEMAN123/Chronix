@@ -15,6 +15,7 @@ const SYSCALL_KILL: usize = 129;
 const SYSCALL_SIGACTION: usize = 134;
 const SYSCALL_SIGPROCMASK: usize = 135;
 const SYSCALL_SIGRETURN: usize = 139;
+const SYSCALL_REBOOT: usize = 142;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_SOCKET: usize = 198;
@@ -217,4 +218,8 @@ pub fn sys_mmap(addr: usize, len: usize, prot: i32, flags: i32, fd: usize, offse
 
 pub fn sys_mremap(old_addr: usize, old_size: usize, new_size: usize, flags: i32, new_addr:usize) -> isize {
     syscall(SYSCALL_MREMAP, [old_addr, old_size, new_size, flags as _, new_addr, 0])
+}
+
+pub fn sys_shutdown(magic1: i32, magic2: i32, cmd: u32, args: usize) -> isize {
+    syscall(SYSCALL_REBOOT, [magic1 as _, magic2 as _, cmd as _, args, 0, 0])
 }

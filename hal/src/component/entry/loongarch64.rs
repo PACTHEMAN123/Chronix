@@ -2,8 +2,9 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}};
 
-const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
+use super::RUNNING_PROCESSOR;
 
+const VIRT_RAM_OFFSET: usize = Constant::KERNEL_ADDR_SPACE.start;
 
 #[naked]
 #[unsafe(no_mangle)]
@@ -46,16 +47,21 @@ unsafe extern "C" fn _start() -> ! {
     );
 }
 
-pub static FIRST_PROCESSOR: AtomicBool = AtomicBool::new(true);
-
 pub(crate) fn rust_main(id: usize) {
+    let is_first = RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0;
     tlb_init();
-    if FIRST_PROCESSOR.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
+    if is_first {
         super::clear_bss();
         crate::console::init();
         print_info();
+        let _ = unsafe { super::_main_for_arch(id, true) };
+    } else {
+        let _ = unsafe { super::_main_for_arch(id, false) };
     }
-    unsafe { super::_main_for_arch(id); }
+    if RUNNING_PROCESSOR.fetch_sub(1, Ordering::AcqRel) == 1 {
+        unsafe { Instruction::shutdown(false) }
+    }
+    loop {}
 }
 
 

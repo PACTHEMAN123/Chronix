@@ -93,7 +93,10 @@ pub async fn sys_futex(
             
             if timeout.0.is_null() {
                 {
-                    // lock futex manager before check   
+                    if uaddr.load(Ordering::Acquire) != val {
+                        return Err(SysError::EAGAIN);
+                    }
+                    // lock futex manager before check
                     let mut fm = futex_manager();
                     if uaddr.load(Ordering::Acquire) != val {
                         return Err(SysError::EAGAIN);
@@ -104,7 +107,10 @@ pub async fn sys_futex(
             } else {
                 let dur;
                 {
-                    // lock futex manager before check   
+                    if uaddr.load(Ordering::Acquire) != val {
+                        return Err(SysError::EAGAIN);
+                    }
+                    // lock futex manager before check
                     let mut fm = futex_manager();
                     if uaddr.load(Ordering::Acquire) != val {
                         return Err(SysError::EAGAIN);
