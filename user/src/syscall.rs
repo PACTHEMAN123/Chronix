@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use crate::SignalAction;
+use crate::{SignalAction, TimeVal};
 
 const SYSCALL_DUP: usize = 24;
 const SYSCALL_CHDIR: usize = 49;
@@ -16,7 +16,7 @@ const SYSCALL_SIGACTION: usize = 134;
 const SYSCALL_SIGPROCMASK: usize = 135;
 const SYSCALL_SIGRETURN: usize = 139;
 const SYSCALL_REBOOT: usize = 142;
-const SYSCALL_GET_TIME: usize = 169;
+const SYSCALL_GETTIMEOFDAY: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_SOCKET: usize = 198;
 const SYSCALL_BIND: usize = 200;
@@ -115,8 +115,8 @@ pub fn sys_kill(pid: usize, signal: i32) -> isize {
     syscall(SYSCALL_KILL, [pid, signal as usize, 0,0,0,0])
 }
 
-pub fn sys_get_time() -> isize {
-    syscall(SYSCALL_GET_TIME, [0, 0, 0,0,0,0])
+pub fn sys_get_time_of_day(tv: &mut TimeVal) -> isize {
+    syscall(SYSCALL_GETTIMEOFDAY, [tv as *mut _ as usize, 0, 0,0,0,0])
 }
 
 pub fn sys_getpid() -> isize {

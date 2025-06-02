@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use lazy_static::*;
 use crate::sync::mutex::SpinNoIrqLock;
 
+use super::INITPROC_PID;
+
 ///each task owns unique TaskId
 pub type Tid = usize;
 /// each process owns unique Pid
@@ -20,7 +22,7 @@ impl TidAllocator {
     ///Create an empty `TidAllocator`
     pub fn new() -> Self {
         TidAllocator {
-            current: 0,
+            current: INITPROC_PID,
             recycled: Vec::new(),
         }
     }

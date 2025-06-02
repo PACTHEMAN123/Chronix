@@ -37,10 +37,10 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
         0 => {
             // sent to every process in the process group of current process
             for process in PROCESS_GROUP_MANAGER
-            .get_group(pgid)
-            .unwrap()
-            .into_iter()
-            .map(|inner| inner.upgrade().unwrap())
+                .get_group(pgid)
+                .unwrap()
+                .into_iter()
+                .map(|inner| inner.upgrade().unwrap())
             {
                 process.recv_sigs_process_level(
                     SigInfo {
@@ -56,6 +56,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             //panic!("[sys_kill] unsupport for sending signal to all process");
             TASK_MANAGER.for_each_task(|task|{
                 if task.tid() == INITPROC_PID {
+                    return;
                 }
                 if signo != 0 && task.is_leader(){
                     task.recv_sigs_process_level(
@@ -69,10 +70,10 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             //panic!("[sys_kill] unsupport for sending signal to specific process group");
             let inner_pid = -pid as usize;
             for task in PROCESS_GROUP_MANAGER
-            .get_group(pgid)
-            .unwrap()
-            .into_iter()
-            .map(|t| t.upgrade().unwrap())
+                .get_group(pgid)
+                .unwrap()
+                .into_iter()
+                .map(|t| t.upgrade().unwrap())
             {
                 if task.tid() == inner_pid {
                     task.recv_sigs_process_level(SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pgid()) });

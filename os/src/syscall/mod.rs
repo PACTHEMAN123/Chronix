@@ -163,7 +163,7 @@ pub type SysResult = Result<isize, SysError>;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    log::debug!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
+    // log::debug!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
     let result = match syscall_id { 
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
@@ -225,10 +225,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(args[0] , args[1] , args[2] ).await,
         SYSCALL_REBOOT => sys_reboot(args[0] as _, args[0] as _, args[0] as _, args[0]).await,
-        SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
+        SYSCALL_TIMES => sys_times(args[0]),
         SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_UMASK => sys_umask(args[0] as i32),
-        SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut TimeVal),
+        SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0]),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),

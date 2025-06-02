@@ -8,46 +8,44 @@ use hal::instruction::{Instruction, InstructionHal};
 use xmas_elf::program::Flags;
 
 use crate::{
-    processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
+    mm::{UserPtrSendReader, UserPtrSendWriter}, processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, get_current_time_us, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
 };
 use super::{SysError, SysResult};
 /// get current time of day
-pub fn sys_gettimeofday(tv: *mut TimeVal) -> SysResult {
-    let _sum_guard = SumGuard::new();
-    let current_time = get_current_time_ms();
+pub fn sys_gettimeofday(tv: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let tv_ptr = UserPtrSendWriter::new(tv as *mut TimeVal);
+    let current_time = get_current_time_us();
     let time_val = TimeVal {
-        sec: current_time / 1000,
-        usec: (current_time % 1000) * 1000,
+        sec: current_time / 1_000_000,
+        usec: (current_time % 1_000_000),
     };
-    
-    unsafe {
-        tv.write_volatile(time_val);
-    }
+    *tv_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)? = time_val;
     Ok(0)
 }
 use crate::timer::ffi::Tms;
 /// times syscall
-pub fn sys_times(tms: *mut Tms) -> SysResult {
-    let _sum_guard = SumGuard::new();
+pub fn sys_times(tms: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let tms_ptr = UserPtrSendWriter::new(tms as *mut Tms);
     let current_task = current_task().unwrap();
     let tms_val = Tms::from_time_recorder(current_task.time_recorder());
-    unsafe {
-        tms.write_volatile(tms_val);
-    }
+    *tms_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)? = tms_val;
     Ok(0)
 }
 /// sleep syscall
 pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
-    let time_val_ptr = time_ptr as *const TimeSpec;
-    let time_val = unsafe {*time_val_ptr};
+    let task = current_task().unwrap();
+    let time_val_ptr = UserPtrSendReader::new_const(time_ptr as *const TimeSpec);
+    let time_val = *time_val_ptr.to_ref(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+    let time_out_ptr = UserPtrSendWriter::new(time_out_ptr as *mut TimeSpec);
+    let time_out = time_out_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
     let sleep_time_duration = time_val.into();
     let remain = suspend_timeout(current_task().unwrap(), sleep_time_duration).await;
-    if remain.is_zero(){
+    if remain.is_zero() {
         Ok(0)
-    }else{
-        unsafe {
-            (time_out_ptr as *mut TimeSpec).write(remain.into());
-        }
+    } else {
+        *time_out = remain.into();
         Err(SysError::EINTR)
     }
 }

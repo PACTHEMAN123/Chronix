@@ -331,7 +331,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
     let res_task = {
         let children = task.children();
         if children.is_empty() {
-            return Err(SysError::ESRCH);
+            return Err(SysError::ECHILD);
         }
         match pid {
             -1 => {
@@ -405,8 +405,8 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                 let child = match pid {
                     -1 => {
                         children
-                        .values()
-                        .find(|c|c.is_zombie() && c.thread_group.lock().get_alive() == 0)
+                            .values()
+                            .find(|c|c.is_zombie() && c.thread_group.lock().get_alive() == 0)
                     }
                     pid if pid > 0 => {
                         if let Some(child) = children.get(&(pid as usize)) {

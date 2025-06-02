@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{exec, execve, fork, wait, yield_};
+use user_lib::{execve, fork, getpid, kill, shutdown, sigaction, sleep, wait, yield_, SignalAction, SignalFlags, SIGKILL, SIGTERM};
 
 fn run_cmd(cmd: &str) {
     if fork() == 0 {
@@ -42,10 +42,20 @@ fn init_env() {
     run_cmd("rm /bin/sh");
 }
 
+fn term_sig_handler(_signo: i32) {
+    println!("[initproc] term_sig_handler");
+    kill(-1, SIGTERM);
+    sleep(500);
+    kill(-1, SIGKILL);
+    shutdown();
+    loop { yield_(); }
+}
+
+
 #[no_mangle]
 fn main() -> i32 {
     init_env();
-
+    let initproc_pid = getpid();
     println!("into user mode initproc");
     if fork() == 0 {
         println!("into user mode initproc fork");
@@ -67,14 +77,19 @@ fn main() -> i32 {
                 "TERM=screen",
             ],
         );
+        println!("[secondproc] execve busybox fail");
+        kill(initproc_pid, SIGTERM);
     } else {
+        let term_sig_action = SignalAction { handler: term_sig_handler as *const fn(i32) as usize, mask: SignalFlags::all() };
+        sigaction(SIGTERM, Some(&term_sig_action), None);
         println!("into user mode initproc wait");
         loop {
             let mut exit_code: i32 = 0;
             let pid = wait(&mut exit_code);
-            if pid == -1 {
-                // println!("in pid == -1");
-                return -1;
+            // -10: ECHILD
+            if pid == -10 {
+                println!("[initproc] no child process, shutdown");
+                kill(initproc_pid, SIGTERM);
             }
             println!(
                 "[initproc] Released a zombie process, pid={}, exit_code={}",

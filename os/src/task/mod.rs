@@ -49,40 +49,8 @@ pub use crate::processor::processor::{
 pub fn suspend_current_and_run_next() {
     // replace by yield_now in async_utils
 }
-
-// /// pid of usertests app in make run TEST=1
-// pub const IDLE_PID: usize = 0;
-pub const INITPROC_PID: usize = 0;
-// /// Exit the current 'Running' task ////and run the next task in task list.
-// pub fn exit_current_and_run_next(exit_code: i32)  {
-//     // take from Processor
-//     let task = current_task().unwrap().clone();
-//     if task.is_leader() {
-//          task.exit_code.store((exit_code as usize & 0xFF) << 8, Ordering::Relaxed);
-//     }
-   
-//     let tid = task.gettid();
-//     // println!("[kernel] Task {} exit with exit_code {} ...", tid, exit_code);
-//     if tid == INITPROC_PID {
-//         println!(
-//             "[kernel] Initproc process exit with exit_code {} ...",
-//             exit_code
-//         );
-//         if exit_code != 0 {
-//             //crate::sbi::shutdown(255); //255 == -1 for err hint
-//             Instruction::shutdown(true)
-//         } else {
-//             //crate::sbi::shutdown(0); //0 for success hint
-//             Instruction::shutdown(false)
-//         }
-//     }
-
-//     // **** access current TCB exclusively
-//     // Change status to Zombie
-//     //info!("now set task {} status to Zombie", task.tid());
-//     task.with_mut_task_status(|state| *state = TaskStatus::Zombie);
-//     // do not move to its parent but under initproc
-// }
+/// pid of initproc (must > 0)
+pub const INITPROC_PID: usize = 1;
 
 lazy_static! {
     ///Globle process that init user shell

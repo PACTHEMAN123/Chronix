@@ -140,6 +140,7 @@ bitflags! {
         const IO = 0x80000000 ;
     }
 }
+
 pub fn thread_create(flags:CloneFlags) -> isize {
     let mut stack: [usize;1024] = [0;1024];
     sys_clone(flags.bits() as _, stack.as_mut_ptr() as usize, 0)
@@ -174,9 +175,16 @@ pub fn exit(exit_code: i32) -> ! {
 pub fn yield_() -> isize {
     sys_yield()
 }
-pub fn get_time() -> isize {
-    sys_get_time()
+
+pub fn get_time_ms() -> isize {
+    let mut tv: TimeVal = TimeVal { sec: 0, usec: 0 };
+    let ret = sys_get_time_of_day(&mut tv);
+    if ret < 0 {
+        return ret;
+    }
+    return (tv.sec*1000 + tv.usec/1000) as isize;
 }
+
 pub fn getpid() -> isize {
     sys_getpid()
 }
@@ -230,8 +238,8 @@ pub fn waitpid_nb(pid: isize, exit_code: &mut i32) -> isize {
 }
 
 pub fn sleep(period_ms: usize) {
-    let start = sys_get_time();
-    while sys_get_time() < start + period_ms as isize {
+    let start = get_time_ms();
+    while get_time_ms() < start + period_ms as isize {
         sys_yield();
     }
 }
@@ -323,8 +331,8 @@ bitflags! {
     }
 }
 
-pub fn kill(pid: usize, signum: i32) -> isize {
-    sys_kill(pid, signum)
+pub fn kill(pid: isize, signum: i32) -> isize {
+    sys_kill(pid as usize, signum)
 }
 
 pub fn sigaction(
@@ -483,4 +491,14 @@ pub fn mremap(old_addr: usize, old_size: usize, new_size: usize, flags: MremapFl
 
 pub fn shutdown() -> isize {
     sys_shutdown(0, 0, 0, 0)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+/// TimeVal struct for syscall, TimeVal stans for low-precision time value
+pub struct TimeVal {
+    /// seconds
+    pub sec: usize,
+    /// microseconds
+    pub usec: usize,
 }

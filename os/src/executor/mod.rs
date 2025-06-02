@@ -145,6 +145,7 @@ pub fn os_is_shutting_down() -> bool {
     SystemStatus::ShutingDown == SYSTEM_STATUS.load(Ordering::Acquire).into()
 }
 
+#[allow(unused)]
 pub fn do_shutdown() -> Result<(), ()> {
     if TASK_MANAGER.has_task_except_initproc() {
         TASK_MANAGER.for_each_task(|task| {
@@ -166,7 +167,7 @@ pub fn run_until_idle() -> usize {
         //info!("already fetch a runnable");
         runnable.run();
         len += 1;
-        if os_is_shutting_down() && do_shutdown().is_ok() {
+        if os_is_shutting_down() {
             break;
         }
     }
@@ -184,7 +185,7 @@ pub fn run_until_idle() -> usize {
         //info!("already fetch a runnable, runnable_num: {:?},current_processor_id: {}",current_processor().task_nums(),current_processor().id());
         runnable.run();
         len += 1;
-        if os_is_shutting_down() && do_shutdown().is_ok() {
+        if os_is_shutting_down() {
             break;
         }
     }
@@ -194,7 +195,7 @@ pub fn run_until_idle() -> usize {
 pub fn run_until_shutdown() {
     loop {
         let _tasks = run_until_idle();
-        if os_is_shutting_down() && do_shutdown().is_ok() {
+        if os_is_shutting_down() {
             break;
         }
     }
