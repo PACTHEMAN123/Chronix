@@ -149,7 +149,7 @@ pub struct TtyFile {
 impl TtyFile {
     pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
         let meta = SpinNoIrqLock::new(TtyMeta {
-            fg_pgid: 0 as u32, // warning: shell will use this process group id
+            fg_pgid: 1 as u32, // warning: shell will use this process group id
             win_size: WinSize::new(),
             termios: Termios::new(),
         });

@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{execve, fork, getpid, kill, shutdown, sigaction, sleep, wait, yield_, SignalAction, SignalFlags, SIGKILL, SIGTERM};
+use user_lib::{execve, fork, getpid, kill, shutdown, sigaction, sleep, wait, yield_, SignalAction, SignalFlags, SIGKILL, SIGSTOP, SIGTERM};
 
 fn run_cmd(cmd: &str) {
     if fork() == 0 {
@@ -40,6 +40,19 @@ fn init_env() {
     #[cfg(target_arch="loongarch64")]
     run_cmd("/loongarch/musl/busybox --install /bin");
     run_cmd("rm /bin/sh");
+    run_cmd("mkdir -p /etc");
+    
+    // 创建 /etc/protocols 文件
+    run_cmd("echo 'ip      0       IP      # Internet protocol' > /etc/protocols");
+    run_cmd("echo 'icmp    1       ICMP    # Internet Control Message Protocol' >> /etc/protocols");
+    run_cmd("echo 'tcp     6       TCP     # Transmission Control Protocol' >> /etc/protocols");
+    run_cmd("echo 'udp     17      UDP     # User Datagram Protocol' >> /etc/protocols");
+    
+    // 创建 /etc/nsswitch.conf 文件
+    run_cmd("echo 'hosts: files dns' > /etc/nsswitch.conf");
+    run_cmd("echo 'networks: files' >> /etc/nsswitch.conf");
+    run_cmd("echo 'protocols: files' >> /etc/nsswitch.conf");
+    run_cmd("echo 'services: files' >> /etc/nsswitch.conf");
 }
 
 fn term_sig_handler(_signo: i32) {
@@ -50,7 +63,6 @@ fn term_sig_handler(_signo: i32) {
     shutdown();
     loop { yield_(); }
 }
-
 
 #[no_mangle]
 fn main() -> i32 {
@@ -80,9 +92,9 @@ fn main() -> i32 {
         println!("[secondproc] execve busybox fail");
         kill(initproc_pid, SIGTERM);
     } else {
+        println!("into user mode initproc wait");
         let term_sig_action = SignalAction { handler: term_sig_handler as *const fn(i32) as usize, mask: SignalFlags::all() };
         sigaction(SIGTERM, Some(&term_sig_action), None);
-        println!("into user mode initproc wait");
         loop {
             let mut exit_code: i32 = 0;
             let pid = wait(&mut exit_code);

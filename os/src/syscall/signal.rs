@@ -26,13 +26,12 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
     if signo == 0 {
         // If sig is 0, then no signal is sent
         return Ok(0);
-    }
-    else if signo < 0 || signo as usize >= SIGRTMAX {
+    } else if signo < 0 || signo as usize >= SIGRTMAX {
         return Err(SysError::EINVAL);
     }
-    let task = current_task().unwrap().clone();
-    log::info!("[sys_kill]: task {} sending signo: {} to pid: {}", task.tid(), signo, pid);
-    let pgid = task.pgid();
+    let cur_task = current_task().unwrap().clone();
+    log::info!("[sys_kill]: task {} sending signo: {} to pid: {}", cur_task.tid(), signo, pid);
+    let pgid = cur_task.pgid();
     match pid {
         0 => {
             // sent to every process in the process group of current process
@@ -41,12 +40,13 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
                 .unwrap()
                 .into_iter()
                 .map(|inner| inner.upgrade().unwrap())
+                .filter(|inner| inner.is_leader())
             {
                 process.recv_sigs_process_level(
                     SigInfo {
                         si_signo: signo as usize,
                         si_code: SigInfo::USER,
-                        si_pid: Some(pgid)
+                        si_pid: Some(cur_task.pid())
                     }
                 );
             }
@@ -60,7 +60,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
                 }
                 if signo != 0 && task.is_leader(){
                     task.recv_sigs_process_level(
-                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pid()) },
+                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(cur_task.pid()) },
                     );
                 }
             });
@@ -76,7 +76,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
                 .map(|t| t.upgrade().unwrap())
             {
                 if task.tid() == inner_pid {
-                    task.recv_sigs_process_level(SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pgid()) });
+                    task.recv_sigs_process_level(SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(cur_task.pgid()) });
                 }
             }
         }
@@ -86,7 +86,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             if let Some(task) = TASK_MANAGER.get_task(pid as usize) {
                 if task.is_leader() {
                     task.recv_sigs_process_level(
-                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(task.pid()) },
+                        SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(cur_task.pid()) },
                     );
                 }else {
                     // todo standard error

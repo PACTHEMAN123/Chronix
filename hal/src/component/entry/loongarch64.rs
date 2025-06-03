@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}};
+use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}, instruction::{Instruction, InstructionHal}};
 
 use super::RUNNING_PROCESSOR;
 
