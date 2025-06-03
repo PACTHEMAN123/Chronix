@@ -690,8 +690,8 @@ impl TaskControlBlock {
     fn mm_release(&self) {
         match self.tid_address_ref().clear_child_tid {
             Some(addr) if addr != 0 && (addr & 3) == 0 => {
-                let child_tid_ptr = UserPtrReader::new(addr as *mut AtomicU32);
-                if let Some(child_tid) = child_tid_ptr.to_ref(&mut self.vm_space.lock()) {
+                let child_tid_ptr = UserPtrWriter::new(addr as *mut AtomicU32);
+                if let Some(child_tid) = child_tid_ptr.to_mut(&mut self.vm_space.lock()) {
                     child_tid.store(0, Ordering::Release);
                 }
                 self.futex_wake(addr, false, &mut self.vm_space.lock());
