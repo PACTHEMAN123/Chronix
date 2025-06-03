@@ -295,7 +295,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     if dentry.state() != DentryState::NEGATIVE {
         let task = current_task().unwrap();
         let app = dentry.open(OpenFlags::empty()).unwrap();
-        let reader = FileReader::new(app.clone());
+        let reader = FileReader::new(app.clone()).map_err(|_| SysError::EINVAL)?;
         let elf = xmas_elf::ElfFile::new(&reader).map_err(
             |err| {
                 log::warn!("[sys_execve] file: {} err: {}", app.dentry().unwrap().name(), err); 
@@ -514,7 +514,7 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult {
 /// exit_group - exit all threads in a process
 pub fn sys_exit_group(exit_code: i32) -> SysResult {
     let task = current_task().unwrap();
-    info!("[sys_exit_group] task group {} exited with exit code {}", task.pid(), exit_code);
+    // log::info!("[sys_exit_group] task group {} exited with exit code {}", task.pid(), exit_code);
     task.do_group_exit((exit_code as usize & 0xFF) << 8);
     Ok(0)
 }

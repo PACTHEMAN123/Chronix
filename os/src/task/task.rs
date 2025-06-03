@@ -9,7 +9,7 @@ use crate::fs::devfs::tty::TTY;
 use crate::processor::context::{EnvContext,SumGuard};
 use crate::fs::vfs::{Dentry, DCACHE};
 use crate::fs::{Stdin, Stdout, vfs::File};
-use crate::mm::{copy_out, copy_out_str, translate_uva_checked, UserPtr, UserPtrRead, UserPtrReader, UserPtrSendWriter, UserVmSpace, KVMSPACE};
+use crate::mm::{copy_out, copy_out_str, translate_uva_checked, UserPtr, UserPtrRead, UserPtrReader, UserPtrSendWriter, UserPtrWriter, UserVmSpace, KVMSPACE};
 use crate::processor::processor::{current_processor, PROCESSORS};
 #[cfg(feature = "smp")]
 use crate::processor::schedule::TaskLoadTracker;
@@ -208,7 +208,7 @@ impl ThreadGroup {
 
 impl Drop for TaskControlBlock {
     fn drop(&mut self) {
-        info!("Dropping TCB {}", self.tid.0);
+        // info!("Dropping TCB {}", self.tid.0);
     }
 }
 
@@ -598,7 +598,7 @@ impl TaskControlBlock {
         };
 
         if futex_manager().wake(&key, 1).is_ok() {
-            // info!("[handle_zombie] successfully wake: {:?}", key);
+            // println!("[handle_zombie] successfully wake: {:?}", key);
         }
     }
 
@@ -690,15 +690,12 @@ impl TaskControlBlock {
     fn mm_release(&self) {
         match self.tid_address_ref().clear_child_tid {
             Some(addr) if addr != 0 && (addr & 3) == 0 => {
-                if Arc::strong_count(&self.vm_space) > 1 {
-                    log::debug!("[handle_zombie] task {} clear_child_tid: {:#x}", self.tid(), addr);
-                    let _sum_guard = SumGuard::new();
-                    unsafe {
-                        &*(addr as *const AtomicU32)
-                    }.store(0, Ordering::Release);
-                    self.futex_wake(addr, false, &mut self.vm_space.lock());
-                    self.futex_wake(addr, true, &mut self.vm_space.lock());
+                let child_tid_ptr = UserPtrReader::new(addr as *mut AtomicU32);
+                if let Some(child_tid) = child_tid_ptr.to_ref(&mut self.vm_space.lock()) {
+                    child_tid.store(0, Ordering::Release);
                 }
+                self.futex_wake(addr, false, &mut self.vm_space.lock());
+                self.futex_wake(addr, true, &mut self.vm_space.lock());
                 self.tid_address().clear_child_tid = None;
             }
             _ => {}
@@ -713,11 +710,11 @@ impl TaskControlBlock {
         if self.tid() == INITPROC_PID {
             panic!("initproc exited");
         }
-        log::info!("[do_exit] task {} exiting", self.tid());
+        // log::info!("[do_exit] task {} exiting", self.tid());
         self.exit_code.store(code, Ordering::Release);
         let mut tg = self.thread_group.lock();
         tg.sub_alive(1);
-        let need_notify = tg.alive == 0;
+        let is_last = tg.alive == 0;
         if tg.get_alive() == 0 && !tg.group_exiting {
             tg.group_exiting = true;
             tg.group_exit_code = code;
@@ -752,9 +749,10 @@ impl TaskControlBlock {
             initproc.children.lock().extend(children.clone()); 
             children.clear();
         });
-        self.with_mut_fd_table(|table|table.fd_table.clear());
         self.set_zombie();
-        if need_notify {
+        if is_last {
+            self.vm_space.lock().clear();
+            self.with_mut_fd_table(|table|table.fd_table.clear());
             self.notify_parent();
         }
     }
@@ -767,7 +765,7 @@ impl TaskControlBlock {
             tg.group_exiting = true;
             tg.group_exit_code = code;
             for task in tg.iter() {
-                if task.tid() == self.tid() {
+                if task.tid() == self.tid() || task.is_zombie() {
                     continue;
                 }
                 task.recv_sigs(SigInfo { si_signo: SIGKILL, si_code: SigInfo::KERNEL, si_pid: Some(self.pid()) });

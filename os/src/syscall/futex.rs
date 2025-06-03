@@ -62,7 +62,7 @@ pub async fn sys_futex(
     let futex_op = FutexOp::from(futex_op);
     let task = current_task().unwrap().clone();
     
-    // log::info!("[sys_futex] task {}, futexop {:?}", task.tid(), futex_op);
+    log::info!("[sys_futex] task {}, futexop {:?}", task.tid(), futex_op);
     let key = if is_private {
         FutexHashKey::Private {
             mm: task.get_raw_vm_ptr(),
@@ -81,7 +81,7 @@ pub async fn sys_futex(
     
     match futex_op {
         FutexOp::Wait | FutexOp::WaitBitset => {
-            // info!("[sys_futex] task {} wait at {:?}", task.tid(), key);
+            log::debug!("[sys_futex] task {} wait at {:?}", task.tid(), key);
             let mask = if futex_op == FutexOp::WaitBitset {
                 if val3 == 0 {
                     return Err(SysError::EINVAL);
@@ -123,7 +123,7 @@ pub async fn sys_futex(
                     if !timeout.is_valid() {
                         return Err(SysError::EINVAL);
                     }
-                    let timeout = Into::<Duration>::into(timeout);
+                    let timeout: Duration = timeout.into();
                     if is_realtime {
                         if timeout <= cur {
                             task.set_running();
@@ -166,7 +166,6 @@ pub async fn sys_futex(
             Ok(0)
         }
         FutexOp::Wake => {
-            // info!("[sys_futex] wake at {:?}", key);
             let n_wake = futex_manager().wake(&key, val)?;
             return Ok(n_wake);
         }
@@ -495,7 +494,7 @@ impl FutexManager {
             let n = core::cmp::min(n as usize, waiters.len());
             for _ in 0..n {
                 let waiter = waiters.pop_front().unwrap();
-                log::debug!("[futex_wake] task {} has been woken", waiter.tid);
+                log::debug!("[futex_wake] task {} has been woken at {:?}", waiter.tid, key);
                 waiter.wake();
             }
             Ok(n as isize)

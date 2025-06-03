@@ -3,7 +3,7 @@ use core::{arch::asm, ops::Range};
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{DynamicFrameAllocator, FrameAllocatorHal}, common::FrameTracker, constant::{Constant, ConstantsHal}};
+use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{DynamicFrameAllocator, FrameAllocatorHal, FrameAllocatorTrackerExt}, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
 use super::{MapPerm, PageTableEntryHal, PageTableHal};
 
@@ -305,11 +305,11 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
     }
 
     fn new_in(_: usize, alloc: A) -> Self {
-        let frame = alloc.alloc(1).unwrap();
-        frame.get_slice_mut::<u8>().fill(0);
+        let frame = alloc.alloc_tracker(1).unwrap();
+        frame.range_ppn.get_slice_mut::<u8>().fill(0);
         Self {
-            root_ppn: frame.start,
-            frames: Vec::new(),
+            root_ppn: frame.range_ppn.start,
+            frames: alloc::vec![frame],
             alloc
         }
     }
@@ -385,5 +385,9 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
         Some(PhysPageNum(ppn.0 + offset))
     }
     
-
+    fn clear(&mut self) {
+        let root = self.frames.swap_remove(0);
+        self.frames.clear();
+        self.frames.push(root);
+    }
 }

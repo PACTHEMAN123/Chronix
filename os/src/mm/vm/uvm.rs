@@ -17,20 +17,6 @@ pub struct UserVmSpace {
     heap_bottom_va: VirtAddr
 }
 
-#[allow(missing_docs, unused)]
-impl UserVmSpace {
-    fn find_heap(&mut self) -> Option<&mut UserVmArea> {
-        while let Some(area) = self.areas.get_mut(self.heap_bottom_va.floor()) {
-            if area.vma_type != UserVmAreaType::Heap {
-                self.heap_bottom_va = area.range_vpn().end.start_addr();
-            } else {
-                break;
-            }
-        }
-        self.areas.get_mut(self.heap_bottom_va.floor())
-    }
-}
-
 impl UserVmSpace {
 
     pub fn new() -> Self {
@@ -435,9 +421,26 @@ impl UserVmSpace {
     pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
         self.get_page_table().translate_va(va)
     }
+
+    pub fn clear(&mut self) {
+        self.areas.iter_mut().for_each(|(_, vma)| {
+            vma.frames.clear();
+        });
+    }
 }
 
 impl UserVmSpace {
+    fn find_heap(&mut self) -> Option<&mut UserVmArea> {
+        while let Some(area) = self.areas.get_mut(self.heap_bottom_va.floor()) {
+            if area.vma_type != UserVmAreaType::Heap {
+                self.heap_bottom_va = area.range_vpn().end.start_addr();
+            } else {
+                break;
+            }
+        }
+        self.areas.get_mut(self.heap_bottom_va.floor())
+    }
+
     fn load_dl_interp_if_needed<T: Reader + ?Sized>(&mut self, elf: &xmas_elf::ElfFile<'_, T>) -> Result<Option<(usize, usize)>, SysError> {
         let elf_header = elf.header;
         let ph_count = elf_header.pt2.ph_count();
@@ -473,7 +476,7 @@ impl UserVmSpace {
         // log::info!("follow symlink to {}", dentry.path());
         interp_file = dentry.open(OpenFlags::O_RDWR).unwrap();
 
-        let reader = FileReader::new(interp_file.clone());
+        let reader = FileReader::new(interp_file.clone()).map_err(|_| SysError::ENOEXEC)?;
         let interp_elf = xmas_elf::ElfFile::new(&reader).map_err(|_| SysError::ENOEXEC)?;
         self.map_elf(&interp_elf, Some(interp_file), Constant::DL_INTERP_OFFSET.into());
 

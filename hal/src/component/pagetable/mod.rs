@@ -99,6 +99,7 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn find_pte(&self, vpn: VirtPageNum) -> Option<(&mut PTE, usize)>;
     fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, perm: MapPerm, level: PageLevel) -> Result<&mut PTE, ()>;
     fn unmap(&mut self, vpn: VirtPageNum) -> Result<PTE, ()>;
+    fn clear(&mut self);
     unsafe fn enable_high(&self);
     unsafe fn enable_low(&self);
 }

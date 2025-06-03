@@ -20,7 +20,7 @@ use crate::processor::processor::{current_processor,current_task,current_user_to
 /// syscall: write
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    log::debug!("task {} trying to write fd {}", task.gettid(), fd);
+    // log::debug!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let user_buf = UserSliceSendReader::from_raw_part(buf as *mut u8, len);
     let buf = user_buf.to_ref(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
@@ -172,7 +172,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -191,7 +191,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             parent.add_child(dentry.clone());
         }
         if dentry.state() == DentryState::NEGATIVE {
-            log::debug!("cannot open {}, not exist", path);
+            log::warn!("cannot open {}, not exist", path);
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();

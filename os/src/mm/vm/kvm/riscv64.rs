@@ -174,6 +174,9 @@ impl KernVmSpaceHal for KernVmSpace {
     
     fn mmap(&mut self, file: Arc<dyn File>) -> Result<VirtAddr, ()> {
         let len = file.inode().ok_or(())?.getattr().st_size as usize;
+        if len == 0 {
+            return Err(());
+        }
         let len = (len - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1);
         let range_vpn = self.areas.find_free_range(   
             VirtAddr::from(Constant::KERNEL_VM_BOTTOM).floor()..VirtAddr::from(Constant::KERNEL_VM_TOP).floor(), 

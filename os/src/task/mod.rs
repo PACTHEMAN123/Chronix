@@ -65,7 +65,7 @@ lazy_static! {
         // let file = open_file("/loongarch/autotest", OpenFlags::O_WRONLY).unwrap();
         let file = open_file("/loongarch/initproc", OpenFlags::O_WRONLY).unwrap();
 
-        let reader = FileReader::new(file.clone());
+        let reader = FileReader::new(file.clone()).unwrap();
         let elf = xmas_elf::ElfFile::new(&reader).unwrap();
         TaskControlBlock::new(&elf, Some(file)).unwrap()
         // let v = inode.read_all();

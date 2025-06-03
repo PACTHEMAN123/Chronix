@@ -404,4 +404,10 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
         register::asid::set_asid(0);
         register::pgdl::set_base(self.get_token());
     }
+
+    fn clear(&mut self) {
+        let root = self.frames.swap_remove(0);
+        self.frames.clear();
+        self.frames.push(root);
+    }
 }

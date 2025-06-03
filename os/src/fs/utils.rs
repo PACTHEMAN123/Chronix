@@ -20,19 +20,19 @@ pub struct FileReader {
 } 
 
 impl FileReader {
-    pub fn new(file: Arc<dyn File>) -> Self {
-        let va = KVMSPACE.lock().mmap(file.clone()).unwrap();
-        let inode = file.inode().unwrap();
+    pub fn new(file: Arc<dyn File>) -> Result<Self, ()> {
+        let va = KVMSPACE.lock().mmap(file.clone())?;
+        let inode = file.inode().ok_or(())?;
         let len = inode.getattr().st_size as usize;
         let vpn_range = va.floor().0..(va + len).ceil().0;
-        Self { 
+        Ok(Self { 
             inode,
             va,
             len,
             mapped: UPSafeCell::new(
                 RangeSet::new(vpn_range)
             )
-        }
+        })
     }
 }
 
@@ -64,6 +64,6 @@ impl Reader for FileReader {
 
 impl Drop for FileReader {
     fn drop(&mut self) {
-        KVMSPACE.lock().unmap(self.va).unwrap();
+        let _ = KVMSPACE.lock().unmap(self.va);
     }
 }
