@@ -400,6 +400,23 @@ impl UserVmSpace {
         let mut vpn = va.floor();
         let end = (va+len).ceil();
         while vpn < end {
+            if access_type.contains(PageFaultAccessType::WRITE) {
+                let ret = unsafe { 
+                    hal::trap::try_write_user(vpn.start_addr().0 as *mut u8)
+                };
+                if ret.is_ok() {
+                    vpn += 1;
+                    continue;
+                }
+            } else if access_type.contains(PageFaultAccessType::READ) {
+                let ret = unsafe { 
+                    hal::trap::try_read_user(vpn.start_addr().0 as *mut u8)
+                };
+                if ret.is_ok() {
+                    vpn += 1;
+                    continue;
+                }
+            }
             if let Some(area) = self.areas.get_mut(vpn) {
                 for vpn in vpn..end.min(area.range_vpn().end) {
                     if !area.access_no_fault(vpn, access_type) {

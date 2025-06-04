@@ -177,7 +177,6 @@ impl TaskControlBlock {
                         )
                     };
                     handler(sig.si_signo as i32);
-                    // sig_manager.bitmap.remove_sig(signo.si_signo);
                 }
             } else {
                 break;

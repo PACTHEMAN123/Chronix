@@ -2,9 +2,10 @@
 
 .equ CRMD,  0x0
 .equ PRMD,  0x1
-.equ ERA,  0x6
-.equ BADV, 0x7
-.equ BADI, 0x8
+.equ ESTAT, 0x5
+.equ ERA,   0x6
+.equ BADV,  0x7
+.equ BADI,  0x8
 .equ KSAVE_CTX,  0x30
 
 .macro SAVE_GP n
@@ -17,7 +18,9 @@
     .globl __trap_from_user
     .globl __restore
     .globl __trap_from_kernel
-    .balign 4096
+    .globl __user_rw_exception_entry
+    .globl __user_rw_trap_vector
+    .align 12
 __trap_from_user:
     csrwr $sp, KSAVE_CTX
     # now sp->*TrapContext in user space, KSAVE_CTX->user stack
@@ -110,7 +113,7 @@ __restore:
     ld.d $sp, $sp, 3*8
     ertn
 
-    .balign 4096
+    .align 12
 __trap_from_kernel:
     # need to save caller-saved regs
     # note that we need save ERA & BADV here
@@ -158,3 +161,32 @@ __trap_from_kernel:
     ld.d $r21, $sp, 19*8
     addi.d $sp, $sp, 20*8
     ertn
+
+
+__user_rw_exception_entry:
+    csrrd   $a0, ERA
+    addi.d  $a0, $a0, 4
+    csrwr   $a0, ERA
+    csrrd   $a1, ESTAT
+    srli.d  $a1, $a1, 16
+    andi    $a1, $a1, 0x3f
+    move    $a0, $zero
+    ertn
+
+# 在计算中断的例外入口时，中断对应的例外号是中断号+64
+    .align 12
+__user_rw_trap_vector:
+    nop
+    nop
+    b __user_rw_exception_entry
+    nop
+    b __user_rw_exception_entry
+    nop
+    b __trap_from_kernel
+    nop
+    b __user_rw_exception_entry
+    nop
+    .rept 123
+        b __trap_from_kernel
+        nop
+    .endr

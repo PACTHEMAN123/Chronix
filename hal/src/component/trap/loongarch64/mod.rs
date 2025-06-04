@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{arch::asm, fmt::Debug};
 
 use log::{info, warn};
 use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
@@ -327,6 +327,7 @@ pub fn set_kernel_trap_entry() {
         fn __trap_from_kernel();
     }
     register::eentry::set_eentry(__trap_from_kernel as usize);
+    register::ecfg::set_vs(0);
 }
 
 pub fn set_user_trap_entry() {
@@ -334,18 +335,139 @@ pub fn set_user_trap_entry() {
         fn __trap_from_user();
     }
     register::eentry::set_eentry(__trap_from_user as usize);
+    register::ecfg::set_vs(0);
 }
+
+fn set_user_rw_trap_entry() {
+    unsafe extern "C" {
+        fn __user_rw_trap_vector();
+    }
+    register::eentry::set_eentry(__user_rw_trap_vector as usize);
+    register::ecfg::set_vs(1);
+}
+
+#[unsafe(no_mangle)]
+pub unsafe fn try_read_user(uaddr: *const u8) -> Result<(), TrapType> {
+    const LOAD_PAGE_FAULT: usize = 1;
+    let mut is_ok: usize = ((uaddr as usize) & !(Constant::PAGE_SIZE - 1)) | 1;
+    let ecode: usize;
+    let old_eentry = register::eentry::read();
+    let old_ecfg = register::ecfg::read();
+    let _prmd: usize;
+    set_user_rw_trap_entry();
+    asm!(
+        "
+        .equ PRMD,  0x1
+        csrrd {0}, PRMD
+        ld.bu $zero, $a0, 0
+        csrwr {0}, PRMD
+        ",
+        out(reg) _prmd,
+        inlateout("$a0") is_ok,
+        out("$a1") ecode,
+        options(nostack, preserves_flags)
+    );
+    register::eentry::set_eentry(old_eentry.eentry());
+    register::ecfg::set_vs(old_ecfg.vs());
+
+    if is_ok == 0 {
+        if ecode == LOAD_PAGE_FAULT {
+            return Err(TrapType::LoadPageFault(uaddr as usize));
+        } else {
+            return Err(TrapType::Other);
+        }
+    }
+
+    Ok(())
+}
+
+pub unsafe fn try_write_user(uaddr: *const u8) -> Result<(), TrapType> {
+    const LOAD_PAGE_FAULT: usize = 1;
+    const WRITE_PAGE_FAULT: usize = 2;
+    const PAGE_MODIFY_FAULT: usize = 4;
+    let mut is_ok: usize = uaddr as usize;
+    let mut ecode: usize;
+    let old_eentry = register::eentry::read();
+    let old_ecfg = register::ecfg::read();
+    let mut prmd: usize;
+    set_user_rw_trap_entry();
+    asm!(
+        "
+        .equ PRMD,  0x1
+        csrrd {0}, PRMD
+        ld.b $a1, $a0, 0
+        st.b $a1, $a0, 0
+        ",
+        out(reg) prmd,
+        inlateout("$a0") is_ok,
+        out("$a1") ecode,
+        options(nostack, preserves_flags)
+    );
+
+    if is_ok == 0 && ecode == PAGE_MODIFY_FAULT {
+        match handle_page_modify_fault(uaddr as usize) {
+            TrapType::Processed => {
+                asm!(
+                    "
+                    .equ PRMD,  0x1
+                    csrwr {0}, PRMD
+                    ",
+                    in(reg) prmd,
+                    options(nostack, preserves_flags)
+                );
+                register::eentry::set_eentry(old_eentry.eentry());
+                register::ecfg::set_lie(old_ecfg.lie());
+                register::ecfg::set_vs(old_ecfg.vs());
+                return Err(TrapType::StorePageFault(uaddr as usize));
+            },
+            _ => {}
+        }
+        asm!(
+            "
+            .equ PRMD,  0x1
+            ld.b $a1, $a0, 0
+            st.b $a1, $a0, 0
+            csrwr {0}, PRMD
+            ",
+            in(reg) prmd,
+            inlateout("$a0") is_ok,
+            out("$a1") ecode,
+            options(nostack, preserves_flags)
+        );
+    }
+    
+    register::eentry::set_eentry(old_eentry.eentry());
+    register::ecfg::set_lie(old_ecfg.lie());
+    register::ecfg::set_vs(old_ecfg.vs());
+    
+
+    if is_ok == 0 {
+        if ecode == LOAD_PAGE_FAULT {
+            return Err(TrapType::LoadPageFault(uaddr as usize));
+        } else if ecode == WRITE_PAGE_FAULT {
+            return Err(TrapType::StorePageFault(uaddr as usize));
+        } else {
+            return Err(TrapType::Other);
+        }
+    }
+    
+    Ok(())
+} 
+
 
 fn handle_page_modify_fault(badv: usize) -> TrapType {
     let va = VirtAddr::from(badv); //虚拟地址
     let vpn: VirtPageNum = va.floor(); //虚拟地址的虚拟页号
     let token = register::pgdl::read().base();
     let page_table = PageTable::from_token(token, FakeFrameAllocator);
-    let (pte, _) = page_table.find_pte(vpn).unwrap(); //获取页表项
-    if !pte.flags().contains(MapPerm::W) {
-        return TrapType::StorePageFault(badv);
+    if let Some((pte, _)) = page_table.find_pte(vpn) { //获取页表项
+        if !pte.flags().contains(MapPerm::W) {
+            return TrapType::StorePageFault(badv);
+        }
+        pte.set_dirty(true);
+    } else {
+        return TrapType::Other;
     }
-    pte.set_dirty(true);
     unsafe {
         core::arch::asm!("dbar 0", "tlbsrch", "tlbrd",); //根据TLBEHI的虚双页号查询TLB对应项
     }

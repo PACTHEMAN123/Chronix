@@ -1,9 +1,9 @@
-use core::arch::asm;
+use core::arch::{asm, naked_asm};
 
 use log::info;
 use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sepc, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
-use crate::instruction::{Instruction, InstructionHal};
+use crate::{instruction::{Instruction, InstructionHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 
@@ -327,6 +327,87 @@ pub fn set_user_trap_entry() {
         stvec::write(__trap_from_user as usize, TrapMode::Direct);
     }
 }
+
+fn set_user_rw_trap_entry() {
+    unsafe extern "C" {
+        fn __user_rw_trap_vector();
+    }
+    unsafe {
+        stvec::write(__user_rw_trap_vector as usize, TrapMode::Vectored);
+    }
+}
+
+
+pub unsafe fn try_read_user(uaddr: *const u8) -> Result<(), TrapType> {
+    const LOAD_PAGE_FAULT: usize = 13;
+    let mut is_ok: usize = uaddr as usize;
+    let mut scause: usize;
+    let old_entry = stvec::read();
+    let old_sstatus: usize;
+    set_user_rw_trap_entry();
+    asm!(
+        "
+        csrr {0}, sstatus
+        lbu a1, 0(a0)
+        csrw sstatus, {0}
+        ",
+        out(reg) old_sstatus,
+        inlateout("a0") is_ok,
+        out("a1") scause,
+        options(nostack, preserves_flags)
+    );
+    unsafe {
+        stvec::write(old_entry.address(), old_entry.trap_mode().unwrap());
+    }
+
+    if is_ok == 0 {
+        if scause == LOAD_PAGE_FAULT {
+            return Err(TrapType::LoadPageFault(uaddr as usize));
+        } else {
+            return Err(TrapType::Other);
+        }
+    }
+
+    Ok(())
+}
+
+pub unsafe fn try_write_user(uaddr: *const u8) -> Result<(), TrapType> {
+    const LOAD_PAGE_FAULT: usize = 13;
+    const WRITE_PAGE_FAULT: usize = 15;
+    let mut is_ok: usize = uaddr as usize;
+    let mut scause: usize;
+    let old_entry = stvec::read();
+    let old_sstatus: usize;
+    set_user_rw_trap_entry();
+    asm!(
+        "
+        csrr {0}, sstatus
+        lbu a1, 0(a0)
+        sb  a1, 0(a0)
+        csrw sstatus, {0}
+        ",
+        out(reg) old_sstatus,
+        inlateout("a0") is_ok,
+        out("a1") scause,
+        options(nostack, preserves_flags)
+    );
+    unsafe {
+        stvec::write(old_entry.address(), old_entry.trap_mode().unwrap());
+    }
+
+    if is_ok == 0 {
+        if scause == LOAD_PAGE_FAULT {
+            return Err(TrapType::LoadPageFault(uaddr as usize));
+        } else if scause == WRITE_PAGE_FAULT {
+            return Err(TrapType::StorePageFault(uaddr as usize));
+        } else {
+            return Err(TrapType::Other);
+        }
+    }
+    
+    Ok(())
+} 
+
 
 fn get_trap_type() -> TrapType {
     let scause = scause::read();

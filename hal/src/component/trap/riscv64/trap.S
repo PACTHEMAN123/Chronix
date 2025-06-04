@@ -9,6 +9,8 @@
     .globl __trap_from_user
     .globl __restore
     .globl __trap_from_kernel
+    .globl __user_rw_exception_entry
+    .globl __user_rw_trap_vector
     .align 2
 __trap_from_user:
     csrrw sp, sscratch, sp
@@ -131,3 +133,34 @@ __trap_from_kernel:
     ld  tp, 16*8(sp)
     addi sp, sp, 17*8
     sret
+
+__user_rw_exception_entry:
+    csrr a0, sepc
+    lbu  a1, 0(a0)
+    andi a1, a1, 0x3
+    addi a0, zero, 0x3
+    bne  a0, a1, _l1 # is compressed instruction?
+    csrr a0, sepc
+    addi a0, a0, 4
+    j    _l2
+_l1:
+    csrr a0, sepc
+    addi a0, a0, 2
+_l2:
+    csrw sepc, a0
+    mv   a0, zero
+    csrr a1, scause
+    sret
+
+# When MODE=Vectored, all synchronous exceptions into supervisor mode 
+# cause the pc to be set to the address in the BASE field, whereas
+# interrupts cause the pc to be set to the address in the BASE field 
+# plus four times the interrupt cause number.
+    .align 8
+__user_rw_trap_vector:
+    j __user_rw_exception_entry
+    .rept 16
+    .align 2
+    j __trap_from_kernel
+    .endr
+    unimp

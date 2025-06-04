@@ -92,6 +92,14 @@ impl<T, P: UserPtrPerm> UserPtr<T, P> {
         }
     }
 
+    pub unsafe fn cast_perm<P2: UserPtrPerm>(self) -> UserPtr<T, P2> {
+        UserPtr {
+            ptr: self.ptr,
+            _mark: PhantomData,
+            _sum_guard: self._sum_guard
+        }
+    }
+
     /// get the raw pointer unchecked
     pub unsafe fn to_raw_ptr_unchecked(&self) -> *mut T {
         self.ptr

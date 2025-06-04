@@ -602,9 +602,9 @@ impl TaskControlBlock {
         }
     }
 
-    fn handle_futex_death(&self, addr: UserPtrReader<AtomicU32>, pi: bool, pending_op: bool, vm: &mut UserVmSpace) -> Result<(), ()> {
+    fn handle_futex_death(&self, addr: UserPtrWriter<AtomicU32>, pi: bool, pending_op: bool, vm: &mut UserVmSpace) -> Result<(), ()> {
         
-        let futex = addr.to_ref(vm).ok_or(())?;
+        let futex = addr.to_mut(vm).ok_or(())?;
 
         let mut old_val = futex.load(Ordering::Acquire);
         let mut new_val;
@@ -670,7 +670,7 @@ impl TaskControlBlock {
             ).ok_or(())?;
             info!("[exit_robust_list] task: {} entry: {:?} futex: {:?}", self.tid(), entry, entry.clone() + futex_offset);
             if entry != pending {
-                if self.handle_futex_death((entry + futex_offset).cast(), pi, false, &mut self.vm_space.lock()).is_err() {
+                if self.handle_futex_death(unsafe { (entry + futex_offset).cast_perm().cast() }, pi, false, &mut self.vm_space.lock()).is_err() {
                     return Err(());
                 }
             }
@@ -683,7 +683,7 @@ impl TaskControlBlock {
             }
         }
         let _ = pending.to_ref(&mut self.vm_space.lock()).ok_or(())?;
-        self.handle_futex_death((pending + futex_offset).cast(), pip, true, &mut self.vm_space.lock())?;
+        self.handle_futex_death(unsafe { (pending + futex_offset).cast_perm().cast() }, pip, true, &mut self.vm_space.lock())?;
         Ok(())
     }
 

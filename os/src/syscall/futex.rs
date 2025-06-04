@@ -78,10 +78,9 @@ pub async fn sys_futex(
         })?;
         FutexHashKey::Shared { paddr }
     };
-    
     match futex_op {
         FutexOp::Wait | FutexOp::WaitBitset => {
-            log::debug!("[sys_futex] task {} wait at {:?}", task.tid(), key);
+            log::info!("[sys_futex] task {} wait at {:?}", task.tid(), key);
             let mask = if futex_op == FutexOp::WaitBitset {
                 if val3 == 0 {
                     return Err(SysError::EINVAL);
@@ -161,7 +160,7 @@ pub async fn sys_futex(
                 log::info!("[sys_futex] Woken by signal");
                 return Err(SysError::EINTR);
             }
-            // log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
+            log::info!("[sys_futex] woken at {:#x}", uaddr as *const _ as usize);
             task.set_running();
             Ok(0)
         }
