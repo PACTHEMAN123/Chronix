@@ -8,7 +8,7 @@ use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
     get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask
-}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserSliceReader, UserSliceSendReader, UserSliceSendWriter}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrSendReader, UserPtrSendWriter, UserSliceReader, UserSliceSendReader, UserSliceSendWriter}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
 use crate::utils::{
     path::*,
     string::*,
@@ -839,16 +839,14 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
     let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
     let mut buf = vec![0u8; count];
+    let off_ptr = UserPtrSendWriter::new(offset as *mut usize);
     let len;
-    if offset == 0 {
+    if off_ptr == core::ptr::null() {
         len = in_file.read(&mut buf).await?;
     } else {
-        unsafe {
-            Instruction::set_sum();
-            let off = (offset as *const usize).read();
-            len = in_file.inode().unwrap().read_at(off, &mut buf).expect("read failed");
-            (offset as *mut usize).write(off + len);
-        }
+        let off = off_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+        len = in_file.inode().unwrap().read_at(*off, &mut buf).expect("read failed");
+        *off += len;
     }
     let ret = out_file.write(&buf[..len]).await?;
     Ok(ret as isize)

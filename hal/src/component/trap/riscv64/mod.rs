@@ -349,11 +349,17 @@ pub unsafe fn try_read_user(uaddr: *const u8) -> Result<(), TrapType> {
         "
         csrr {0}, sstatus
         lbu a1, 0(a0)
-        csrw sstatus, {0}
         ",
         out(reg) old_sstatus,
         inlateout("a0") is_ok,
         out("a1") scause,
+        options(nostack, preserves_flags)
+    );
+    asm!(
+        "
+        csrw sstatus, {0}
+        ",
+        in(reg) old_sstatus,
         options(nostack, preserves_flags)
     );
     unsafe {
@@ -384,11 +390,17 @@ pub unsafe fn try_write_user(uaddr: *const u8) -> Result<(), TrapType> {
         csrr {0}, sstatus
         lbu a1, 0(a0)
         sb  a1, 0(a0)
-        csrw sstatus, {0}
         ",
         out(reg) old_sstatus,
         inlateout("a0") is_ok,
         out("a1") scause,
+        options(nostack, preserves_flags)
+    );
+    asm!(
+        "
+        csrw sstatus, {0}
+        ",
+        in(reg) old_sstatus,
         options(nostack, preserves_flags)
     );
     unsafe {

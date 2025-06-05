@@ -324,7 +324,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
     
     let task = current_task().unwrap().clone();
-    log::warn!("[sys_waitpid]: TCB: {}, pid: {pid}, exitcode_ptr: {:x}, option: {option}", task.tid() ,exit_code_ptr);
+    // println!("[sys_waitpid]: TCB: {}, pid: {}, exitcode_ptr: {:x}, option: {}", task.tid(), pid, exit_code_ptr, option);
     let option = WaitOptions::from_bits_truncate(option);
     // todo: now only support for pid == -1 and pid > 0
     // get the all target zombie process
@@ -348,7 +348,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     }
                 } else {
                     log::warn!("[sys_waitpid]: no child with pid {}", pid);
-                    return Err(SysError::ESRCH);
+                    return Err(SysError::ECHILD);
                 }
             }
             _ => {
@@ -395,9 +395,9 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
             // todo: missing check if getting the expect signal
             // now check the child one more time
             let si = task.with_mut_sig_manager(|sig_manager|{
-                log::warn!("replace check to dequeue");
-                sig_manager.check_pending(SigSet::SIGCHLD)
-                //sig_manager.dequeue_expected(SigSet::SIGCHLD)
+                // log::warn!("replace check to dequeue");
+                // sig_manager.check_pending(SigSet::SIGCHLD)
+                sig_manager.dequeue_expected_one(SigSet::SIGCHLD)
             });
             if let Some(si) = si {
                 log::debug!("[sys_waitpid] task {} get signal: {}", task.gettid(), si.si_signo);
@@ -417,7 +417,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                             }
                         } else {
                             log::warn!("[sys_waitpid]: no child with pid {}", pid);
-                            return Err(SysError::ESRCH);
+                            return Err(SysError::ECHILD);
                         }
                     }
                     _ => {
@@ -429,7 +429,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     break child.clone();
                 }
             }else {
-                log::warn!("[sys_waitpid] wake up by no signal");
+                log::warn!("[sys_waitpid] wake up by unexpected signal");
                 return Err(SysError::EINTR);
             }
         };

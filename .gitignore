@@ -25,3 +25,5 @@ ltp/
 kernel-la
 kernel-rv
 testcase/
+
+log.txt

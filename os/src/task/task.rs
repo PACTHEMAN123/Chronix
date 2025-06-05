@@ -47,7 +47,7 @@ use core::any::Any;
 use core::arch::global_asm;
 use core::ops::Deref;
 use core::ptr::{null, null_mut};
-use core::sync::atomic::AtomicU32;
+use core::sync::atomic::{AtomicBool, AtomicU32};
 use core::time::Duration;
 use core::{
     ptr::slice_from_raw_parts_mut,
@@ -99,7 +99,7 @@ pub struct TaskControlBlock {
     /// exit code of the task
     pub exit_code: AtomicUsize,
     /// ELF file the task executes
-    pub elf: SpinNoIrqLock<Option<Arc<dyn File>>>,
+    pub elf: Shared<Option<Arc<dyn File>>>,
     #[allow(unused)]
     /// base address of the user stack, can be used in thread create
     pub base_size: AtomicUsize,
@@ -313,7 +313,7 @@ impl TaskControlBlock {
     }
     /// get the clone of ref of the leader of the thread group
     pub fn get_leader(self: &Arc<Self>) -> Arc<Self> {
-        if self.is_leader {
+        if self.is_leader() {
             self.clone()
         } else{
             self.leader.as_ref().unwrap().upgrade().unwrap()
@@ -387,7 +387,7 @@ impl TaskControlBlock {
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd: new_shared(root_dentry), 
-            elf: SpinNoIrqLock::new(elf_file),
+            elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
@@ -418,7 +418,7 @@ impl TaskControlBlock {
     }
 
     /// 
-    pub fn exec<T: Reader + ?Sized>(&self, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, argv: Vec<String>, envp: Vec<String>) ->
+    pub fn exec<T: Reader + ?Sized>(self: &Arc<Self>, elf: &xmas_elf::ElfFile<'_, T>, elf_file: Option<Arc<dyn File>>, argv: Vec<String>, envp: Vec<String>) ->
         Result<(), SysError> {
         self.mm_release();
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -431,21 +431,17 @@ impl TaskControlBlock {
 
         // update the executing elf file
         *self.elf.lock() = elf_file;
-        //  NOTE: should do termination before switching page table, so that other
+        // NOTE: should do termination before switching page table, so that other
         // threads will trap in by page fault and be handled by handle_zombie
-        //info!("terminating all threads except main");
-        let _pid = self.with_thread_group(|thread_group|{
-            let mut pid = 0;
+        // info!("terminating all threads except main");
+        self.with_thread_group(|thread_group|{
             for thread in thread_group.iter() {
-                if !thread.is_leader() {
-                    thread.set_zombie();
-                }else {
-                    pid = thread.gettid();
+                if thread.tid() != self.tid() {
+                    thread.do_exit(0);
                 }
             }
-            pid
         });
-
+        
         // change hart page table
         vm_space.enable();
 
@@ -490,6 +486,7 @@ impl TaskControlBlock {
         let pgid;
         let cwd;
         let itimers;
+        let elf;
         let sig_manager = new_shared(
             match flag.contains(CloneFlags::SIGHAND) {
             true => SigManager::from_another(&self.sig_manager.lock()),
@@ -497,17 +494,16 @@ impl TaskControlBlock {
         });
 
         if flag.contains(CloneFlags::THREAD){
-            //info!("creating a thread");
             is_leader = false;
             leader = Some(Arc::downgrade(&self.get_leader()));
             parent = self.get_leader().parent.clone();
-            children = new_shared(BTreeMap::new());
+            children = self.children.clone();
             thread_group = self.thread_group.clone();
             pgid = self.pgid.clone();
             cwd = self.cwd.clone();
             itimers = self.itimers.clone();
-        }
-        else{
+            elf = self.elf.clone();
+        } else {
             is_leader = true;
             leader = None;
             parent =  new_shared(Some(Arc::downgrade(self)));
@@ -516,19 +512,19 @@ impl TaskControlBlock {
             pgid = new_shared(*self.pgid.lock());
             cwd = new_shared(self.cwd());
             itimers = new_shared([ITimer::ZERO; 3]);
+            elf = new_shared(self.elf.lock().clone())
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
             info!("task {} cloning a vm", self.tid());
             vm_space = self.vm_space.clone();
-        }else {
+        } else {
             vm_space = new_shared(
                 self.with_mut_vm_space(
                     |vm| 
                         UserVmSpace::from_existed(vm)
                 )
             );
-            // unsafe { Instruction::tlb_flush_all() };
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
             //info!("cloning a file descriptor table");
@@ -556,7 +552,7 @@ impl TaskControlBlock {
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
             cwd,
-            elf: SpinNoIrqLock::new(self.elf.lock().clone()),
+            elf,
             itimers,
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
@@ -719,38 +715,27 @@ impl TaskControlBlock {
             tg.group_exiting = true;
             tg.group_exit_code = code;
         }
-        if self.is_leader() && tg.alive != 0 && !tg.group_exiting {
-            log::warn!("[do_exit] main thread exited but other threads is still alive");
-            tg.group_exiting = true;
-            tg.group_exit_code = code;
-            for task in tg.iter() {
-                if task.tid() == self.tid() {
-                    continue;
-                }
-                task.recv_sigs(SigInfo { si_signo: SIGKILL, si_code: SigInfo::KERNEL, si_pid: Some(self.pid()) });
-            }
-        }
         drop(tg);
         // will not release memory space
         self.mm_release();
-        self.with_mut_children(|children|{
-            if children.len() == 0 {
-                return;
-            }
-            let initproc = &INITPROC;
-            for child in children.values() {
-                if child.is_zombie() {
-                    initproc.recv_sigs_process_level(
-                        SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
-                    );
-                }
-                *child.parent.lock() = Some(Arc::downgrade(initproc));
-            }
-            initproc.children.lock().extend(children.clone()); 
-            children.clear();
-        });
         self.set_zombie();
         if is_last {
+            self.with_mut_children(|children|{
+                if children.is_empty() {
+                    return;
+                }
+                let initproc = &INITPROC;
+                for child in children.values() {
+                    if child.is_zombie() {
+                        initproc.recv_sigs_process_level(
+                            SigInfo { si_signo: SIGCHLD, si_code: SigInfo::CLD_EXITED, si_pid: None }
+                        );
+                    }
+                    *child.parent.lock() = Some(Arc::downgrade(initproc));
+                }
+                initproc.children.lock().extend(children.clone()); 
+                children.clear();
+            });
             self.vm_space.lock().clear();
             self.with_mut_fd_table(|table|table.fd_table.clear());
             self.notify_parent();
@@ -783,7 +768,7 @@ impl TaskControlBlock {
     
         let mut thread_group = self.thread_group.lock();
 
-        if !self.get_leader().is_zombie() || (self.is_leader && thread_group.len() > 1) || (!self.is_leader && thread_group.len() > 2)
+        if !self.get_leader().is_zombie() || (self.is_leader() && thread_group.len() > 1) || (!self.is_leader() && thread_group.len() > 2)
         {
             log::debug!("[handle_zombie] task {} return, {} remain in thread group", self.tid(), thread_group.len());
             if !self.is_leader() {

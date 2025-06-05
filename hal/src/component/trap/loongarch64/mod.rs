@@ -346,7 +346,6 @@ fn set_user_rw_trap_entry() {
     register::ecfg::set_vs(1);
 }
 
-#[unsafe(no_mangle)]
 pub unsafe fn try_read_user(uaddr: *const u8) -> Result<(), TrapType> {
     const LOAD_PAGE_FAULT: usize = 1;
     let mut is_ok: usize = ((uaddr as usize) & !(Constant::PAGE_SIZE - 1)) | 1;

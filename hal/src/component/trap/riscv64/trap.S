@@ -138,13 +138,11 @@ __user_rw_exception_entry:
     csrr a0, sepc
     lbu  a1, 0(a0)
     andi a1, a1, 0x3
-    addi a0, zero, 0x3
-    bne  a0, a1, _l1 # is compressed instruction?
-    csrr a0, sepc
+    addi a1, a1, -0x3
+    bnez a1, _l1 # is compressed instruction?
     addi a0, a0, 4
     j    _l2
 _l1:
-    csrr a0, sepc
     addi a0, a0, 2
 _l2:
     csrw sepc, a0
