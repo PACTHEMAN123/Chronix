@@ -3,10 +3,10 @@
 
 use core::time::Duration;
 
-use hal::{addr::{VirtAddr, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
+use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::vm::{MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task, timer::get_current_time_duration, utils::timer::TimerGuard};
+use crate::{config::PAGE_SIZE, mm::vm::{self, MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task, timer::get_current_time_duration, utils::timer::TimerGuard};
 
 use super::{SysError, SysResult};
 
@@ -140,7 +140,7 @@ pub fn sys_mmap(
                 let start_va = task.with_mut_vm_space(|m| {
                     m.alloc_anon_area(addr, length, perm, flags, 0, 0)
                 })?;
-                // log::info!("[sys_mmap] private anonymous: {:#x}", start_va);
+                // log::info!("[sys_mmap] private anonymous: {:?}", start_va);
                 Ok(start_va.0 as _)
             } else {
                 let file = task.with_fd_table(|t| t.get_file(fd))?;
@@ -156,18 +156,32 @@ pub fn sys_mmap(
 }
 
 /// syscall munmap
-pub fn sys_munmap(addr: VirtAddr, length: usize) -> SysResult {
-    // (todo) unmap the area in task's vm space
+pub fn sys_munmap(addr: VirtAddr, mut length: usize) -> SysResult {
     let task = current_task().unwrap().clone();
+    if length == 0 {
+        return Ok(0);
+    }
+    length = (length - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1);
     task.with_mut_vm_space(|m| {
-        m.unmap(addr, length)
+        let end_vpn = (addr + length).ceil();
+        let mut cur_vpn = addr.floor();
+        while cur_vpn < end_vpn {
+            if let Ok(vma) = m.unmap(cur_vpn.start_addr(), length) {
+                let new_vpn = vma.range_vpn().end;
+                length -= (new_vpn.0 - cur_vpn.0) << Constant::PAGE_SIZE_BITS;
+                cur_vpn = new_vpn;
+            } else {
+                break;
+            }
+        }
+        Ok(())
     })?;
     Ok(0)
 }
 
 /// syscall mprotect
-pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
-    if addr.page_offset() != 0 || len == 0 || len % Constant::PAGE_SIZE != 0 {
+pub fn sys_mprotect(addr: VirtAddr, mut length: usize, prot: i32) -> SysResult {
+    if addr.page_offset() != 0 || length == 0 || length % Constant::PAGE_SIZE != 0 {
         return Err(SysError::EINVAL);
     }
     let prot = MmapProt::from_bits_truncate(prot);
@@ -175,9 +189,19 @@ pub fn sys_mprotect(addr: VirtAddr, len: usize, prot: i32) -> SysResult {
     // log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
     let task = current_task().unwrap().clone();
     task.with_mut_vm_space(|vm| -> SysResult {
-        let mut vma = vm.unmap(addr, len)?;
-        vma.map_perm = perm;
-        vm.push_area(vma, None);
+        let end_vpn = (addr + length).ceil();
+        let mut cur_vpn = addr.floor();
+        while cur_vpn < end_vpn {
+            if let Ok(mut vma) = vm.unmap(cur_vpn.start_addr(), length) {
+                let new_vpn = vma.range_vpn().end;
+                length -= (new_vpn.0 - cur_vpn.0) << Constant::PAGE_SIZE_BITS;
+                cur_vpn = new_vpn;
+                vma.map_perm = perm;
+                vm.push_area(vma, None);
+            } else {
+                break;
+            }
+        }
         Ok(0)
     })
 }

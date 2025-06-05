@@ -566,6 +566,9 @@ impl TaskControlBlock {
         if !flag.contains(CloneFlags::THREAD) {
             //info!("fork should in this ");
             self.add_child(task_control_block.clone());
+            log::info!("[fork] new process pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
+        } else {
+            log::info!("[fork] new thread pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
         }
         // update user start 
         task_control_block.time_recorder().update_user_start(get_current_time_duration());
@@ -706,11 +709,11 @@ impl TaskControlBlock {
         if self.tid() == INITPROC_PID {
             panic!("initproc exited");
         }
-        // log::info!("[do_exit] task {} exiting", self.tid());
+        log::info!("[do_exit] task {} exiting", self.tid());
         self.exit_code.store(code, Ordering::Release);
         let mut tg = self.thread_group.lock();
         tg.sub_alive(1);
-        let is_last = tg.alive == 0;
+        let is_last = tg.get_alive() == 0;
         if tg.get_alive() == 0 && !tg.group_exiting {
             tg.group_exiting = true;
             tg.group_exit_code = code;

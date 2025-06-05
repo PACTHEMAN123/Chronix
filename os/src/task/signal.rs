@@ -61,7 +61,7 @@ impl TaskControlBlock {
                 thread.recv_sigs(sig_info);
                 signal_delivered = true;
                 break;
-            } 
+            }
             if !signal_delivered {
                 let task = tg.iter().next().unwrap();
                 task.recv_sigs(sig_info);

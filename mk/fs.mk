@@ -39,6 +39,8 @@ disk-img: user
 	sudo mkdir mnt/usr
 	sudo mkdir mnt/usr/lib64
 
+	sudo cp -r attach mnt/
+
 	sudo umount mnt
 	sudo rm -rf mnt
 	sudo chmod 777 $(DISK_IMG)

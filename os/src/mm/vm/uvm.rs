@@ -300,9 +300,10 @@ impl UserVmSpace {
         Ok(start)
     }
 
-    pub fn try_union(&mut self, va: VirtAddr, len: usize) -> Result<(), ()> {
-        let mut start = va.floor();
-        let end = (va + len).ceil();
+    /// try union the VMAs in a given vpn range, if all sucess, return Ok 
+    fn try_union(&mut self, vpn: VirtPageNum, pg_len: usize) -> Result<(), ()> {
+        let mut start = vpn;
+        let end = vpn + pg_len;
         while start < end {
             let vma1 = self.areas.get(start).ok_or(())?;
             let new_start = vma1.range_vpn().end;
@@ -324,29 +325,52 @@ impl UserVmSpace {
         Ok(())
     }
     
+    /// unmap one vma in the vpn range `va.floor()..(va+len).ceil()`
+    /// return Err when no matched vma
     pub fn unmap(&mut self, va: VirtAddr, len: usize) -> Result<UserVmArea, SysError> {
-        self.try_union(va, len).map_err(|_| SysError::EINVAL)?;
-        let right: UserVmArea;
+        let vpn = va.floor();
+        let pg_len = (va + len).ceil().0 - vpn.0;
+        let _ = self.try_union(vpn, pg_len);
+        
         let mut mid: UserVmArea;
-        if let Some((range_vpn, left)) = self.areas.get_key_value_mut(va.floor()) {
-            if va + len > range_vpn.end.start_addr() {
+        let old_range;
+        let new_range;
+        if let Some((range_vpn, front)) = self.areas.get_key_value_mut(vpn) {
+            mid = front.split_off(va.floor());
+            new_range = front.range_vpn();
+            old_range = range_vpn;
+        } else {
+            if let Some((range_vpn, front)) = self.areas.range_mut(vpn..vpn+pg_len).next() {
+                mid = front.split_off(va.floor());
+                new_range = front.range_vpn();
+                old_range = range_vpn;
+            } else {
+                log::warn!("[unmap] no matched area");
                 return Err(SysError::EINVAL);
             }
-            mid = left.split_off(va.floor());
-            let new_range = left.range_vpn();
-            if new_range.end <= new_range.start {
-                self.areas.force_remove_one(range_vpn);
-            } else {
-                let _ = self.areas.reduce_back(new_range);
-            }
-            right = mid.split_off((va + len).ceil());
-            mid.unmap(&mut self.page_table);
+        }
+
+        if new_range.is_empty() {
+            // front area is empty, remove it
+            self.areas.force_remove_one(old_range);
         } else {
-            return Err(SysError::EINVAL);
+            // front area is not empty, update rangemap
+            let _ = self.areas.reduce_back(new_range);
         }
-        if !right.range_va.is_empty() {
-            self.areas.try_insert(right.range_vpn(), right).map_err(|_| SysError::EFAULT)?;
+
+        if vpn + pg_len < mid.range_vpn().end {
+            let back = mid.split_off(vpn + pg_len);
+            if !back.range_va.is_empty() {
+                self.areas.try_insert(back.range_vpn(), back).map_err(|_| { 
+                        log::warn!("[unmap] try insert error");
+                        SysError::EFAULT 
+                    }
+                )?;
+            }
         }
+        
+        mid.unmap(&mut self.page_table);
+
         Ok(mid)
     }
     
@@ -504,7 +528,7 @@ impl UserVmSpace {
 #[allow(missing_docs, unused)]
 impl UserVmArea {
 
-    fn range_vpn(&self) -> Range<VirtPageNum> {
+    pub fn range_vpn(&self) -> Range<VirtPageNum> {
         self.range_va.start.floor()..self.range_va.end.ceil()
     }
 

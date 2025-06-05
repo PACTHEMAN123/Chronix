@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{execve, fork, getpid, kill, shutdown, sigaction, sleep, wait, yield_, SignalAction, SignalFlags, SIGKILL, SIGTERM};
+use user_lib::{close, execve, fork, getpid, kill, open, shutdown, sigaction, sleep, wait, yield_, OpenFlags, SignalAction, SignalFlags, SIGKILL, SIGTERM};
 
 fn run_cmd(cmd: &str) {
     if fork() == 0 {
