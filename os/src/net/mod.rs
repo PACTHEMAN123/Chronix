@@ -153,7 +153,7 @@ impl InterfaceWrapper {
             // when return None means no active sockets or all the sockets are handled
             None => {
                 // do nothing, just call poll interface
-                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(5), Box::new(NetPollTimer{}));
+                let empty_timer = Timer::new(get_current_time_duration()+Duration::from_millis(2), Box::new(NetPollTimer{}));
                 TIMER_MANAGER.add_timer(empty_timer);
             }
         }

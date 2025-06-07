@@ -333,10 +333,10 @@ impl TcpSocket {
                         Err(SysError::EAGAIN)
                     }
                 })
-            }).await; 
+            }).await;
             if let Ok(bytes) = ret {
                 if bytes > TCP_TX_BUF_LEN / 2 {
-                    ksleep(Duration::from_millis(3)).await;
+                    ksleep(Duration::from_millis(2)).await;
                 } else {
                     yield_now().await;
                 }

@@ -38,7 +38,17 @@ impl ListenEntry {
     /// check if the listen entry can accept incoming connection
     fn can_accept(&self, dst: IpAddress) -> bool {
         match self.listen_endpoint.addr {
-            Some(addr) => addr == dst,
+            Some(addr) => {
+                if addr == dst {
+                    return true;
+                }
+                if let IpAddress::Ipv6(v6) = addr {
+                    if v6.is_unspecified()  || (dst.as_bytes().len() == 4 && v6.is_ipv4_mapped() && v6.as_bytes()[12..] == dst.as_bytes()[..]){ 
+                        return true;
+                    }
+                }
+                false
+            },
             None => true,
         }
     }
@@ -129,7 +139,7 @@ impl ListenTable {
         if let Some(entry) = self.inner[port as usize].lock().deref(){
             entry.syn_queue.iter().any(|&handle| is_connected(handle))
         }else{
-            log::info!("have been set as listening, wouldn't happen");
+            log::error!("have been set as listening, wouldn't happen");
             false
         }    
     }
@@ -139,7 +149,7 @@ impl ListenTable {
         if let Some(entry) = self.inner[dst.port as usize].lock().deref_mut() {
             if !entry.can_accept(dst.addr) {
                 log::warn!("[LISTEN_TABLE] not listening on addr {}", dst.addr);
-                return;;
+                return;
             }
             if entry.syn_queue.len() >= LISTEN_QUEUE_SIZE {
                 log::warn!("[LISTEN_TABLE] syn_queue overflow!");
