@@ -36,6 +36,7 @@ fdt = { git = "https://github.com/repnop/fdt.git", branch = "master", features =
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", branch = "master", default-features = false, features = ["alloc", "lfn", "unicode"] }
 xmas-elf = { git = "https://github.com/zlc-dev/xmas-elf", branch = "master" }
 lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", default-features = false, branch = "main" }
+# lwext4_rust = { path = "../ext4fs", default-features = false }
 
 [workspace.dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"

@@ -26,7 +26,6 @@ pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask_ptr: usize) -> 
         }
     };
     if !task.is_leader() {
-        log::warn!("task {pid} not leader, should failed to set affinity?");
         // hack the cyclictest
         // return Err(SysError::ESRCH);
     }

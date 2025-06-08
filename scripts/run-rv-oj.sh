@@ -15,9 +15,8 @@ cd /riscv/glibc
 ./lua_testcode.sh
 ./libctest_testcode.sh
 ./netperf_testcode.sh
-./iozone_testcode.sh
 ./libcbench_testcode.sh
-./lmbench_testcode.sh
+./cyclictest_testcode.sh
 cd ..
 echo "finish to run glibc"
 
@@ -28,9 +27,17 @@ cd /riscv/musl
 ./lua_testcode.sh
 ./libctest_testcode.sh
 ./netperf_testcode.sh
-./iozone_testcode.sh
 ./libcbench_testcode.sh
-./lmbench_testcode.sh
+./cyclictest_testcode.sh
+cd ..
+echo "finish to run musl"
+
+echo "start to run iz"
+cd /riscv/glibc
+./iozone_testcode.sh
+cd ..
+cd /riscv/musl
+./iozone_testcode.sh
 cd ..
 
 exit

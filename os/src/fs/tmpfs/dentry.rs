@@ -81,5 +81,6 @@ impl Dentry for TmpDentry {
         // even it is unlink, as long as someone owns the file (like fd table)
         // since in tmpfs, dentry is the only thing that holds inode
         // should not drop inode here.
+        self.set_state(DentryState::NEGATIVE);
     }
 }

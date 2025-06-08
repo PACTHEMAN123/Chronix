@@ -172,7 +172,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
 
     if let Some(path) = user_path_to_string(pathname) {
-        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+        log::debug!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -242,14 +242,16 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
 pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i32) -> SysResult {
     let _sum_guard= SumGuard::new();
     let at_flags = AtFlags::from_bits_truncate(flags);
-    
+    let o_flags = OpenFlags::from_bits_truncate(flags);
+
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-    if dentry.state() == DentryState::NEGATIVE {
-        return Err(SysError::ENOENT);
+    log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
+    let inode = dentry.inode();
+    if inode.is_none() {
+        return Err(SysError::ENOENT)
     }
-
-    let stat = dentry.inode().unwrap().getattr();
+    let stat = inode.unwrap().getattr();
     let stat_ptr = stat_buf as *mut Kstat;
     unsafe {
         Instruction::set_sum();
@@ -494,6 +496,18 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
 
     //inode.unlink().expect("inode unlink failed");
     dentry.clear_inode();
+    Ok(0)
+}
+
+/// syscall: symlinkat
+pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *const u8) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let old_path = user_path_to_string(old_path_ptr).expect("failed to get old path");
+    let new_path = user_path_to_string(new_path_ptr).expect("failed to get new path");
+    log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
+    let dentry = at_helper(task, new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    log::info!("get dentry path {}", dentry.path());
+    dentry.inode().unwrap().symlink(&new_path)?;
     Ok(0)
 }
 

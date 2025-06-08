@@ -17,6 +17,7 @@ const SYSCALL_FCNTL: usize = 25;
 const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UNLINKAT: usize = 35;
+const SYSCALL_SYMLINKAT: usize = 36;
 const SYSCALL_LINKAT: usize = 37;
 const SYSCALL_UMOUNT2: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
@@ -115,6 +116,7 @@ const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECE: usize = 226;
 const SYSCALL_MSYNC: usize = 227;
+const SYSCALL_MLOCK: usize = 228;
 const SYSCALL_MADSIVE: usize = 233;
 const SYSCALL_GET_MEMPOLICY: usize = 236;
 const SYSCALL_WAITPID: usize = 260;
@@ -175,6 +177,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
+        SYSCALL_SYMLINKAT => sys_symlinkat(args[0] as *const u8, args[1] as isize, args[2] as *const u8),
         SYSCALL_LINKAT => sys_linkat(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as i32),
         SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as usize),
         SYSCALL_STATFS => sys_statfs(args[0], args[1]),
@@ -280,6 +283,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SYNC => sys_temp(),
         SYSCALL_FSYNC => sys_temp(),
         SYSCALL_MSYNC => sys_temp(),
+        SYSCALL_MLOCK => sys_temp(),
         SYSCALL_MEMBARRIER => sys_temp(),
         _ => { 
             log::warn!("Unsupported syscall_id: {}", syscall_id);

@@ -2,7 +2,7 @@
 
 use alloc::sync::{Arc, Weak};
 
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}};
+use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError};
 
 pub struct TmpInode {
     inner: InodeInner,
@@ -130,6 +130,26 @@ impl Inode for TmpInode {
         // do nothing
         // when call unlink, the dentry will drop inode, becoming a neg dentry
         Ok(0)
+    }
+
+    fn truncate(&self, size: usize) -> Result<usize, SysError> {
+        let old_size = self.inner.size();
+        if size > old_size {
+            // expand the page cache
+            let page_cache = self.cache.clone();
+            let offset_aligned_start = old_size / PAGE_SIZE * PAGE_SIZE;
+            for offset_aligned in (offset_aligned_start..size).step_by(PAGE_SIZE) {
+                let page = Page::new(offset_aligned);
+                page_cache.insert_page(offset_aligned, page.clone());
+            }
+            self.inner.set_size(size);
+            Ok(size)
+        } else if old_size == size {
+            return Ok(size)
+        } else {
+            log::warn!("not support reduce size for tmp file");
+            return Ok(size)
+        }
     }
 
     fn getattr(&self) -> Kstat {
