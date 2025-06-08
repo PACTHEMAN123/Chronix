@@ -111,6 +111,10 @@ pub trait Dentry: Send + Sync {
     fn set_state(&self, state: DentryState) {
         *self.dentry_inner().state.lock() = state;
     }
+    /// determine if negative dentry
+    fn is_negative(&self) -> bool {
+        *self.dentry_inner().state.lock() == DentryState::NEGATIVE
+    }
     /// get the absolute path of the dentry
     fn path(&self) -> String {
         if let Some(p) = self.parent() {

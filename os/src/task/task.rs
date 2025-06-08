@@ -131,10 +131,8 @@ pub struct TaskControlBlock {
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
-    #[cfg(feature = "smp")]
     /// the cpu allowed to run this task
     pub cpu_allowed: AtomicUsize,
-    #[cfg(feature = "smp")]
     /// the processor id of the task
     pub processor_id: AtomicUsize,
 }
@@ -235,10 +233,7 @@ impl TaskControlBlock {
     );
     generate_atomic_accessors!(
         exit_code: usize,
-        sig_ucontext_ptr: usize
-    );
-    #[cfg(feature = "smp")]
-    generate_atomic_accessors!(
+        sig_ucontext_ptr: usize,
         cpu_allowed: usize,
         processor_id: usize
     );
@@ -319,7 +314,7 @@ impl TaskControlBlock {
             self.leader.as_ref().unwrap().upgrade().unwrap()
         }
     }
-    #[cfg(feature = "smp")]
+
     pub fn turn_cpu_mask_id(self: Arc<Self>) -> usize {
         let ret = match self.cpu_allowed() {
             1 => 0,
@@ -392,9 +387,7 @@ impl TaskControlBlock {
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
-            #[cfg(feature = "smp")]
-            cpu_allowed: AtomicUsize::new(15), 
-            #[cfg(feature = "smp")]
+            cpu_allowed: AtomicUsize::new(15),
             processor_id: AtomicUsize::new(current_processor().id())  
         });
         // info!("in new");
@@ -557,9 +550,7 @@ impl TaskControlBlock {
             robust: UPSafeCell::new(UserPtrSendWriter::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
-            #[cfg(feature = "smp")]
             cpu_allowed: AtomicUsize::new(15),
-            #[cfg(feature = "smp")]
             processor_id: AtomicUsize::new(self.processor_id())
         });
         // add child except when creating a thread

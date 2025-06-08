@@ -476,6 +476,9 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
     }
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT);
+    }
     let inode = dentry.inode().unwrap();
     let is_dir = inode.inode_inner().mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {

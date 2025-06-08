@@ -96,6 +96,22 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
     Ok(0)
 }
 
+/// syscall: sys clock getres
+/// clock_getres() finds the resolution (precision) of
+/// the specified clock clockid, and, if res is non-NULL, stores it in
+/// the struct timespec pointed to by res.  The resolution of clocks
+/// depends on the implementation and cannot be configured by a
+/// particular process.
+pub fn sys_clock_getres(_clockid: usize, res_ptr: usize) -> SysResult {
+    if res_ptr == 0 {
+        return Ok(0)
+    }
+    let res = UserPtrSendWriter::new(res_ptr as *mut TimeSpec);
+    let task = current_task().unwrap().clone();
+    *res.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)? = Duration::from_nanos(1).into();
+    Ok(0)
+}
+
 /// Interval timer allows processes to receive signals after a specified time interval
 /// set a itimer, now only irealtimer implemented
 pub fn sys_setitimer(

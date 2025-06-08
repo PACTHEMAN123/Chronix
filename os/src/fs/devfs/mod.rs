@@ -11,7 +11,7 @@ use tty::{TtyDentry, TtyFile, TtyInode, TTY};
 use urandom::{UrandomDentry, UrandomInode};
 use zero::{ZeroDentry, ZeroInode};
 
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{fs::devfs::cpu_dma_latency::{CpuDmaLatencyDentry, CpuDmaLatencyInode}, sync::mutex::SpinNoIrqLock};
 
 use super::{vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, Inode, InodeInner, DCACHE}, OpenFlags, SuperBlock};
 
@@ -22,6 +22,7 @@ pub mod fstype;
 pub mod rtc;
 pub mod urandom;
 pub mod zero;
+pub mod cpu_dma_latency;
 
 /// init the whole /dev
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
@@ -69,6 +70,13 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     log::debug!("dcache insert: {}", zero_dentry.path());
     DCACHE.lock().insert(zero_dentry.path(), zero_dentry.clone());
     
+    // add /dev/cpu_dma_latency
+    let cpu_dma_latency_dentry = CpuDmaLatencyDentry::new("cpu_dma_latency", Some(root_dentry.clone()));
+    let cpu_dma_latency_inode = CpuDmaLatencyInode::new(sb.clone().unwrap());
+    cpu_dma_latency_dentry.set_inode(cpu_dma_latency_inode);
+    cpu_dma_latency_dentry.add_child(cpu_dma_latency_dentry.clone());
+    log::debug!("dcache insert: {}", cpu_dma_latency_dentry.path());
+    DCACHE.lock().insert(cpu_dma_latency_dentry.path(), cpu_dma_latency_dentry.clone());
 }
 
 

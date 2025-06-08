@@ -55,6 +55,7 @@ const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_GETITIMER: usize = 102;
 const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
+const SYSCALL_CLOCK_GETRES: usize = 114;
 const SYSCALL_CLOCK_NANOSLEEP: usize = 115;
 const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_SCHED_SETSCHEDULER: usize = 119;
@@ -115,6 +116,7 @@ const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECE: usize = 226;
 const SYSCALL_MSYNC: usize = 227;
 const SYSCALL_MADSIVE: usize = 233;
+const SYSCALL_GET_MEMPOLICY: usize = 236;
 const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_RENAMEAT2: usize = 276;
@@ -163,7 +165,7 @@ pub type SysResult = Result<isize, SysError>;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    // log::debug!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
+    log::debug!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
     let result = match syscall_id { 
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
@@ -208,6 +210,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETITIMER => sys_getitimer(args[0], args[1]),
         SYSCALL_SETITIMER => sys_setitimer(args[0],args[1],args[2]),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1]),
+        SYSCALL_CLOCK_GETRES => sys_clock_getres(args[0], args[1]),
         SYSCALL_CLOCK_NANOSLEEP => sys_clock_nanosleep(args[0], args[1], args[2], args[3]).await,
         SYSCALL_SYSLOG => sys_syslog(args[0], args[1], args[2]),
         SYSCALL_SCHED_SETAFFINITY => sys_sched_setaffinity(args[0] , args[1] , args[2] ),
@@ -273,6 +276,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_RECVMSG => sys_recvmsg(args[0], args[1], args[2]).await,
         SYSCALL_MPROTECE => sys_mprotect(args[0].into(), args[1], args[2] as _),
         SYSCALL_MADSIVE =>  sys_temp(),
+        SYSCALL_GET_MEMPOLICY => sys_temp(),
         SYSCALL_SYNC => sys_temp(),
         SYSCALL_FSYNC => sys_temp(),
         SYSCALL_MSYNC => sys_temp(),
