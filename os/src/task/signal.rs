@@ -6,7 +6,7 @@ use alloc::sync::Arc;
 use fatfs::info;
 use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
 
-use crate::{mm::{copy_out, vm::UserVmSpaceHal}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigHandler, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID, trap::trap_return};
+use crate::{mm::{vm::UserVmSpaceHal, UserPtrRaw}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigHandler, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID, trap::trap_return};
 
 use super::task::TaskControlBlock;
 
@@ -123,14 +123,12 @@ impl TaskControlBlock {
                     let sp = *trap_cx.sp();
                     let mut new_sp = sp - size_of::<UContext>();
                     let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
-                    let ucontext_bytes: &[u8] = unsafe {
-                        core::slice::from_raw_parts(
-                            &ucontext as *const UContext as *const u8,
-                            core::mem::size_of::<UContext>(),
-                        )
-                    };
+                    let mut vm = self.vm_space.lock();
+                    let dst = 
+                        UserPtrRaw::new(new_sp as *mut UContext).ensure_write(&mut vm).unwrap();
                     // println!("copy_out to {:#x}", new_sp);
-                    copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
+                    // copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
+                    dst.write(ucontext);
                     self.set_sig_ucontext_ptr(new_sp);
                     
                     // the first argument of every signal handlers is signo
@@ -148,13 +146,9 @@ impl TaskControlBlock {
                         siginfo_v.si_code = sig.si_code;
                         siginfo_v._pad[1] = sig.si_pid.unwrap_or(0) as i32;
                         new_sp -= size_of::<LinuxSigInfo>();
-                        let siginfo_v_bytes: &[u8] = unsafe {
-                            core::slice::from_raw_parts(
-                                &siginfo_v as *const LinuxSigInfo as *const u8,
-                                core::mem::size_of::<LinuxSigInfo>(),
-                            )
-                        };
-                        copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), siginfo_v_bytes);
+                        let dst = 
+                            UserPtrRaw::new(new_sp as *mut LinuxSigInfo).ensure_write(&mut vm).unwrap();
+                        dst.write(siginfo_v);
                         trap_cx.set_arg_nth(1, new_sp);
                     }
 

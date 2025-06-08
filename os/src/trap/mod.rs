@@ -178,8 +178,9 @@ fn kernel_trap_handler() {
         TrapType::StorePageFault(stval)
         | TrapType::LoadPageFault(stval)
         | TrapType::InstructionPageFault(stval) => {
-            log::debug!(
-                "[kernel_trap_handler] encounter page fault, addr {stval:#x}",
+            // warn: page fault from kernel is dangerous
+            log::warn!(
+                "[kernel_trap_handler] encounter page fault, addr {stval:#x} epc {epc:#x}",
             );
 
             let access_type = match trap_type {
@@ -190,7 +191,11 @@ fn kernel_trap_handler() {
             };
 
             match current_task() {
-                None => {},
+                None => {
+                    panic!(
+                        "[kernel_trap_handler] cannot handle page fault, addr {stval:#x}, access type: {access_type:?}, epc: {epc:#x}"
+                    );
+                },
                 Some(task) => {
                     let res = task.with_mut_vm_space(|vm_space|vm_space.handle_page_fault(VirtAddr::from(stval), access_type));
                     match res {

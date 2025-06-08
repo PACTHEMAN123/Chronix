@@ -30,7 +30,6 @@ use crate::fs::{
     vfs::{File, FileInner},
     OpenFlags,
 };
-use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use bitflags::*;

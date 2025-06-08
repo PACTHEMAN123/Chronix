@@ -4,7 +4,7 @@ use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, mm::UserBuffer, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily};
 pub type SockResult<T> = Result<T, SysError>;

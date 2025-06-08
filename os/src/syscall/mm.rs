@@ -6,7 +6,7 @@ use core::time::Duration;
 use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use log::info;
 
-use crate::{config::PAGE_SIZE, mm::vm::{self, MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task, timer::get_current_time_duration, utils::timer::TimerGuard};
+use crate::{config::PAGE_SIZE, ipc::sysv::SHM_MANAGER, mm::vm::{self, MapFlags, UserVmArea, UserVmAreaType, UserVmFile, UserVmSpaceHal}, task::current_task, timer::get_current_time_duration, utils::timer::TimerGuard};
 
 use super::{SysError, SysResult};
 
@@ -124,7 +124,7 @@ pub fn sys_mmap(
         MmapFlags::MAP_SHARED => {
             if flags.contains(MmapFlags::MAP_ANONYMOUS) {
                 let start_va = task.with_mut_vm_space(|m| {
-                    m.alloc_anon_area(addr, length, perm, flags, 0, task.pid())
+                    m.alloc_anon_area(addr, length, perm, flags, SHM_MANAGER.alloc(length, task.pid()))
                 })?;
                 Ok(start_va.0 as _)
             } else {
@@ -138,7 +138,7 @@ pub fn sys_mmap(
         MmapFlags::MAP_PRIVATE => {
             if flags.contains(MmapFlags::MAP_ANONYMOUS) {
                 let start_va = task.with_mut_vm_space(|m| {
-                    m.alloc_anon_area(addr, length, perm, flags, 0, 0)
+                    m.alloc_anon_area(addr, length, perm, flags, None)
                 })?;
                 // log::info!("[sys_mmap] private anonymous: {:?}", start_va);
                 Ok(start_va.0 as _)
@@ -268,12 +268,12 @@ pub fn sys_mremap(
         )?
     } else if let UserVmFile::Shm(shm) = old_area.file.clone() {
         vm.alloc_anon_area(
-            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), shm.get_id(), task.pid()
+            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), Some(shm)
         )?
     } else {
         assert!(!old_area.map_flags.contains(MapFlags::SHARED));
         vm.alloc_anon_area(
-            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), 0, 0
+            new_addr, new_size, old_area.map_perm, old_area.get_mmap_flags(), None
         )?
     };
     

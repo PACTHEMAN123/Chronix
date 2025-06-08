@@ -150,6 +150,7 @@ impl ShmManager {
         if let Some(file) = self.files.lock().get(&id).cloned() {
             Some(file)
         } else {
+            self.id_alloc.lock().alloc_at(id)?;
             let shm = Arc::new(ShmObj::new(id, size, pid));
             self.files.lock().insert(id, shm.clone());
             Some(shm)

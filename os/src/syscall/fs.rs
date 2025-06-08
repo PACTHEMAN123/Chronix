@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use core::{any::Any, ptr::copy_nonoverlapping};
+use core::{any::Any, ops::DerefMut, ptr::copy_nonoverlapping};
 
 use alloc::{string::ToString, sync::Arc, vec};
 use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
@@ -8,13 +8,12 @@ use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
     get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask
-}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrSendReader, UserPtrSendWriter, UserSliceReader, UserSliceSendReader, UserSliceSendWriter}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}};
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::block_on};
 use crate::utils::{
     path::*,
     string::*,
 };
 use super::{SysResult,SysError};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::processor::processor::{current_processor,current_task,current_user_token};
 
 /// syscall: write
@@ -22,8 +21,11 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     // log::debug!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
-    let user_buf = UserSliceSendReader::from_raw_part(buf as *mut u8, len);
-    let buf = user_buf.to_ref(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+    let user_buf = 
+        UserSliceRaw::new(buf as *mut u8, len)
+            .ensure_read(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+    let buf = user_buf.to_ref();
     let ret = file.write(buf).await?;
 
     // let start = buf & !(Constant::PAGE_SIZE - 1);
@@ -47,10 +49,13 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    log::debug!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
+    // log::debug!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
-    let user_buf = UserSliceSendWriter::from_raw_part(buf as *mut u8, len);
-    let buf = user_buf.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+    let user_buf = 
+        UserSliceRaw::new(buf as *mut u8, len)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+    let buf = user_buf.to_mut();
     let ret = file.read(buf).await?;
 
     // let start = buf & !(Constant::PAGE_SIZE - 1);
@@ -170,9 +175,12 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let open_flags = OpenFlags::from_bits(flags as i32).unwrap();
     let at_flags = AtFlags::from_bits_truncate(flags as i32);
     let task = current_task().unwrap().clone();
-
-    if let Some(path) = user_path_to_string(pathname) {
-        log::debug!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+    let opt_path = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.vm_space.lock()
+        );
+    if let Some(path) = opt_path {
+        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -220,7 +228,12 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 /// then pathname is interpreted relative to the current working directory of the calling process (like mkdir(2)).
 /// If pathname is absolute, then dirfd is ignored.
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
-    if let Some(path) = user_path_to_string(pathname) {
+    let task = current_task().unwrap();
+    let opt_path = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.vm_space.lock()
+        );
+    if let Some(path) = opt_path {
         let task = current_task().unwrap().clone();
         let dentry = at_helper(task, dirfd, pathname, AtFlags::empty())?;
         if dentry.state() != DentryState::NEGATIVE {
@@ -266,7 +279,10 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
 /// is set to indicate the error.
 pub fn sys_chdir(path: *const u8) -> SysResult {
     let task = current_task().unwrap().clone();
-    let path = user_path_to_string(path).unwrap();
+    let path = user_path_to_string(
+            UserPtrRaw::new(path), 
+            &mut task.vm_space.lock()
+        ).ok_or(SysError::EINVAL)?;
     info!("try to switch to path {}", path);
     let old_dentry = task.cwd();
     let new_dentry = if path.starts_with("/") {
@@ -471,7 +487,10 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult {
     const AT_REMOVEDIR: i32 = 0x200;
     let task = current_task().unwrap().clone();
-    let path = user_path_to_string(pathname).unwrap();
+    let path = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.vm_space.lock()
+        ).ok_or(SysError::EINVAL)?;
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
     let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if dentry.parent().is_none() {
@@ -712,26 +731,32 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
             continue;
         }
         log::debug!("[sys_readv]: iov[{}], ptr: {:#x}, len: {}, read from file pos {}", i, iov.base, iov.len, file.pos());
+        
+        let iov_buf =
+            UserSliceRaw::new(iov.base as *mut u8, iov.len)
+                .ensure_write(&mut task.vm_space.lock())
+                .ok_or(SysError::EINVAL)?;
+        let ret = file.read(iov_buf.to_mut()).await?;
 
         // ugly way
-        let start = iov.base & !(Constant::PAGE_SIZE - 1);
-        let end = iov.base + iov.len;
-        let mut ret = 0;
+        // let start = iov.base & !(Constant::PAGE_SIZE - 1);
+        // let end = iov.base + iov.len;
+        // let mut ret = 0;
 
-        for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-            let va = aligned_va.max(iov.base);
-            let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-            let va = VirtAddr::from(va);
-            let pa = task.with_mut_vm_space(|vm| {
-                translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
-            });
-            let data = pa.get_slice_mut(len);
-            let read_size = file.read(data).await?;
-            ret += read_size;
-            if read_size < len {
-                break;
-            }
-        }
+        // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        //     let va = aligned_va.max(iov.base);
+        //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        //     let va = VirtAddr::from(va);
+        //     let pa = task.with_mut_vm_space(|vm| {
+        //         translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
+        //     });
+        //     let data = pa.get_slice_mut(len);
+        //     let read_size = file.read(data).await?;
+        //     ret += read_size;
+        //     if read_size < len {
+        //         break;
+        //     }
+        // }
 
         totol_len += ret;
         offset += ret;
@@ -758,19 +783,25 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         }
         log::debug!("[sys_writev]: iov[{}], ptr: {:#x}, len: {}, file pos {}", i, iov.base, iov.len, file.pos());
 
-        let start = iov.base & !(Constant::PAGE_SIZE - 1);
-        let end = iov.base + iov.len;
-        let mut ret = 0;
-        for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-            let va = aligned_va.max(iov.base);
-            let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-            let va = VirtAddr::from(va);
-            let pa = task.with_mut_vm_space(|vm| {
-                translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
-            });
-            let data = pa.get_slice(len);
-            ret += file.write(data).await?;
-        }
+        let iov_buf =
+            UserSliceRaw::new(iov.base as *mut u8, iov.len)
+                .ensure_read(&mut task.vm_space.lock())
+                .ok_or(SysError::EINVAL)?;
+        let ret = file.write(iov_buf.to_ref()).await?;
+
+        // let start = iov.base & !(Constant::PAGE_SIZE - 1);
+        // let end = iov.base + iov.len;
+        // let mut ret = 0;
+        // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+        //     let va = aligned_va.max(iov.base);
+        //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+        //     let va = VirtAddr::from(va);
+        //     let pa = task.with_mut_vm_space(|vm| {
+        //         translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
+        //     });
+        //     let data = pa.get_slice(len);
+        //     ret += file.write(data).await?;
+        // }
         totol_len += ret;
     }
     Ok(totol_len as isize)
@@ -785,26 +816,31 @@ pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> Sy
     let task = current_task().unwrap().clone();
     log::debug!("[sys_pread] task {} try to read fd {} to buf {:#x} at offset {}, len {}", task.tid(), fd, buf, offset, count);
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let start = buf & !(Constant::PAGE_SIZE - 1);
-    let end = buf + count;
     let old_pos = file.pos();
     // assume: during file read, no task switch
     file.seek(SeekFrom::Start(offset as u64))?;
-    let mut ret = 0;
-    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        let va = aligned_va.max(buf);
-        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        let va = VirtAddr::from(va);
-        let pa = task.with_mut_vm_space(|vm| {
-            translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
-        });
-        let data = pa.get_slice_mut(len);
-        let read_size = file.read(data).await?;
-        ret += read_size;
-        if read_size < len {
-            break;
-        }
-    }
+    let user_buf =
+        UserSliceRaw::new(buf as *mut u8, count)
+                .ensure_write(&mut task.vm_space.lock())
+                .ok_or(SysError::EINVAL)?;
+    let ret = file.read(user_buf.to_mut()).await?;
+    // let start = buf & !(Constant::PAGE_SIZE - 1);
+    // let end = buf + count;
+    // let mut ret = 0;
+    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+    //     let va = aligned_va.max(buf);
+    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+    //     let va = VirtAddr::from(va);
+    //     let pa = task.with_mut_vm_space(|vm| {
+    //         translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
+    //     });
+    //     let data = pa.get_slice_mut(len);
+    //     let read_size = file.read(data).await?;
+    //     ret += read_size;
+    //     if read_size < len {
+    //         break;
+    //     }
+    // }
     file.set_pos(old_pos);
     Ok(ret as isize)
 }
@@ -817,22 +853,27 @@ pub async fn sys_pwrite(fd: usize, buf: usize, count: usize, offset: usize) -> S
     let task = current_task().unwrap().clone();
     log::debug!("[sys_pwrite] task {} try to read fd {} to buf {:#x} at offset {}, len {}", task.tid(), fd, buf, offset, count);
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let start = buf & !(Constant::PAGE_SIZE - 1);
-    let end = buf + count;
     let old_pos = file.pos();
     // assume: during file read, no task switch
     file.seek(SeekFrom::Start(offset as u64))?;
-    let mut ret = 0;
-    for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        let va = aligned_va.max(buf);
-        let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        let va = VirtAddr::from(va);
-        let pa = task.with_mut_vm_space(|vm| {
-            translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
-        });
-        let data = pa.get_slice(len);
-        ret += file.write(data).await?;
-    }
+    let user_buf = 
+        UserSliceRaw::new(buf as *mut u8, count)
+            .ensure_read(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+    let ret = file.write(user_buf.to_ref()).await?;
+    // let start = buf & !(Constant::PAGE_SIZE - 1);
+    // let end = buf + count;
+    // let mut ret = 0;
+    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
+    //     let va = aligned_va.max(buf);
+    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
+    //     let va = VirtAddr::from(va);
+    //     let pa = task.with_mut_vm_space(|vm| {
+    //         translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
+    //     });
+    //     let data = pa.get_slice(len);
+    //     ret += file.write(data).await?;
+    // }
     file.set_pos(old_pos);
     log::debug!("finish pwrite return {}", ret);
     Ok(ret as isize)
@@ -856,12 +897,16 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
     let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
     let mut buf = vec![0u8; count];
-    let off_ptr = UserPtrSendWriter::new(offset as *mut usize);
+    let off_ptr = {
+        UserPtrRaw::new(offset as *mut usize)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?
+    };
     let len;
-    if off_ptr == core::ptr::null() {
+    if off_ptr.raw == core::ptr::null() {
         len = in_file.read(&mut buf).await?;
     } else {
-        let off = off_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+        let off = off_ptr.to_mut();
         len = in_file.inode().unwrap().read_at(*off, &mut buf).expect("read failed");
         *off += len;
     }
@@ -967,7 +1012,11 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
     if pathname.is_null() && !flags.contains(AtFlags::AT_EMPTY_PATH) {
         return Err(SysError::EFAULT);
     }
-    let dentry = match user_path_to_string(pathname) {
+    let opt_path = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.vm_space.lock()
+        );
+    let dentry = match opt_path {
         Some(path) => {
             if path.starts_with("/") {
                 global_find_dentry(&path)?
