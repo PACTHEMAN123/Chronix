@@ -1,7 +1,7 @@
 use super::{SysError,SysResult};
 use core::sync::atomic::AtomicUsize;
 
-use crate::{mm::{UserPtrSendReader, UserPtrSendWriter}, task::{current_task, manager::TASK_MANAGER, task::CpuMask}}; 
+use crate::{mm::UserPtrRaw, task::{current_task, manager::TASK_MANAGER, task::CpuMask}}; 
 
 /// syscall: 
 /// sets the CPU affinity mask of the thread whose ID is pid to the value specified by mask.
@@ -30,9 +30,11 @@ pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask_ptr: usize) -> 
         // return Err(SysError::ESRCH);
     }
     // todo: handle when pid is 0 , which means calling processor is used but now we have opened all the processors
-    let mask = UserPtrSendReader::new_const(mask_ptr as *const CpuMask);
-    let cpu_mask = *mask.to_ref(&mut cur_task.vm_space.lock()).ok_or(SysError::EFAULT)?;
-    let task_cpu_mask = match cpu_mask {
+    let mask_ptr = UserPtrRaw::new(mask_ptr as *const CpuMask)
+        .ensure_read(&mut cur_task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?;
+    let mask = *mask_ptr.to_ref();
+    let task_cpu_mask = match mask {
         CpuMask::CPU_ALL => {
             15
         }
@@ -68,7 +70,10 @@ pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask_ptr: usize) -> 
 pub fn sys_sched_getaffinity(pid: usize, cpusetusize: usize, mask_ptr: usize) -> SysResult {
     log::info!("sys_sched_getaffinity pid {pid} cpusetsize {cpusetusize} mask {:#x}", mask_ptr);
     let cur_task = current_task().unwrap().clone();
-    let mask = UserPtrSendWriter::new(mask_ptr as *mut CpuMask);
+    let mask_ptr = UserPtrRaw::new(mask_ptr as *const CpuMask)
+        .ensure_write(&mut cur_task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?;
+    let mask = mask_ptr.to_mut();
     if cpusetusize < size_of::<CpuMask>() {
         return Err(SysError::EINVAL);
     } 
@@ -107,7 +112,7 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetusize: usize, mask_ptr: usize) ->
         }
     };
     log::info!("cpu mask {:?}", cpu_mask);
-    *mask.to_mut(&mut cur_task.vm_space.lock()).ok_or(SysError::EFAULT)? = cpu_mask;
+    *mask = cpu_mask;
     Ok(size_of::<CpuMask>() as isize)
 }
 ///

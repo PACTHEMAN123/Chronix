@@ -521,8 +521,12 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
 /// syscall: symlinkat
 pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *const u8) -> SysResult {
     let task = current_task().unwrap().clone();
-    let old_path = user_path_to_string(old_path_ptr).expect("failed to get old path");
-    let new_path = user_path_to_string(new_path_ptr).expect("failed to get new path");
+    let old_path = user_path_to_string(
+        UserPtrRaw::new(old_path_ptr), 
+        &mut task.vm_space.lock()).expect("failed to get old path");
+    let new_path = user_path_to_string(
+        UserPtrRaw::new(new_path_ptr), 
+        &mut task.vm_space.lock()).expect("failed to get new path");
     log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
     let dentry = at_helper(task, new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     log::info!("get dentry path {}", dentry.path());

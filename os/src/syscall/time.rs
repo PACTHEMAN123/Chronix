@@ -117,9 +117,12 @@ pub fn sys_clock_getres(_clockid: usize, res_ptr: usize) -> SysResult {
     if res_ptr == 0 {
         return Ok(0)
     }
-    let res = UserPtrSendWriter::new(res_ptr as *mut TimeSpec);
     let task = current_task().unwrap().clone();
-    *res.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)? = Duration::from_nanos(1).into();
+    let res_ptr = UserPtrRaw::new(res_ptr as *const TimeSpec)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EINVAL)?;
+    let res = res_ptr.to_mut();
+    *res = Duration::from_nanos(1).into();
     Ok(0)
 }
 
