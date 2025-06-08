@@ -5,7 +5,6 @@ use alloc::boxed::Box;
 use crate::syscall::SysError;
 
 use crate::fs::vfs::File;
-use crate::mm::UserBuffer;
 use hal::console::console_getchar;
 use crate::task::suspend_current_and_run_next;
 ///Standard input

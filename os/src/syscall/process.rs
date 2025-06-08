@@ -1,5 +1,6 @@
 //! process related syscall
 
+use core::ops::{Add, DerefMut};
 use core::ptr::null;
 use core::sync::atomic::Ordering;
 use crate::config::PAGE_SIZE;
@@ -12,8 +13,7 @@ use crate::fs::{
     vfs::file::open_file,
     OpenFlags,
 };
-use crate::mm::{copy_out, UserPtrSendWriter};
-use crate::mm::{translated_refmut, translated_str, translated_ref};
+use crate::mm::UserPtrRaw;
 use crate::processor::context::SumGuard;
 use crate::syscall::at_helper;
 use crate::task::schedule::spawn_user_task;
@@ -31,6 +31,7 @@ use hal::instruction::{Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{TrapContext, TrapContextHal};
+use lwext4_rust::bindings::EINVAL;
 use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::info;
 
@@ -238,42 +239,61 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
 /// stack, heap, and (initialized and uninitialized) data segments.
 /// more details, see: https://man7.org/linux/man-pages/man2/execve.2.html
 pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult {
-    let path = user_path_to_string(pathname as *const u8).unwrap();
-    let token = current_user_token(&current_processor());
-    let mut argv = argv as *const usize;
-    let mut envp = envp as *const usize;
+    let task = current_task().unwrap();
+    let path = user_path_to_string(
+            UserPtrRaw::new(pathname as *const u8), 
+            &mut task.vm_space.lock()
+        ).unwrap();
+    let mut argv = UserPtrRaw::new(argv as *const UserPtrRaw<u8>);
+    let mut envp = UserPtrRaw::new(envp as *const UserPtrRaw<u8>);
 
     // parse argv
     let mut argv_vec: Vec<String> = Vec::new();
     loop {
+        let mut vm = task.vm_space.lock();
         // argv can be specified as null
-        if argv == core::ptr::null() {
+        if argv.is_null() {
             break;
         }
-        let argv_str_ptr = *translated_ref(token, argv as *const usize);
-        if argv_str_ptr == 0 {
+        let argv_str_ptr = 
+            argv.ensure_read(vm.deref_mut()).ok_or(SysError::EINVAL)?;
+        if argv_str_ptr.to_ref().is_null() {
             break;
         }
-        argv_vec.push(translated_str(token, argv_str_ptr as *const u8));
-        unsafe {
-            argv = argv.add(1);
-        }
+        argv_vec.push(
+            argv_str_ptr
+                .to_ref()
+                .cstr_slice(vm.deref_mut())
+                .ok_or(SysError::EINVAL)?
+                .to_str()
+                .map_err(|_| SysError::EINVAL)?
+                .to_string()
+        );
+        argv = argv.add(1);
     }
     // parse envp
     let mut envp_vec: Vec<String> = Vec::new();
     loop {
+        let mut vm = task.vm_space.lock();
         // envp can be specified as null
-        if envp == core::ptr::null() {
+        if envp.is_null() {
             break;
         }
-        let envp_str_ptr = *translated_ref(token, envp as *const usize);
-        if envp_str_ptr == 0 {
+        let envp_str_ptr = 
+            envp.ensure_read(vm.deref_mut()).ok_or(SysError::EINVAL)?;
+        if envp_str_ptr.to_ref().is_null() {
             break;
         }
-        envp_vec.push(translated_str(token, envp_str_ptr as *const u8));
-        unsafe {
-            envp = envp.add(1);
-        }
+        envp_vec.push(
+            envp_str_ptr
+                .to_ref()
+                .cstr_slice(vm.deref_mut())
+                .ok_or(SysError::EINVAL)?
+                .to_str()
+                .map_err(|_| SysError::EINVAL)?
+                .to_string()
+        );
+        envp = envp.add(1);
     }
 
     let task = current_task().unwrap().clone();
@@ -360,10 +380,13 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
 
     if let Some(res_task) = res_task {
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
-        
-        let exit_code_ptr = UserPtrSendWriter::new(exit_code_ptr as *mut i32);
-        if exit_code_ptr != core::ptr::null() {
-            let exit_code_mut = exit_code_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+
+        if exit_code_ptr != 0 {
+            let mut vm = task.vm_space.lock();
+            let exit_code_ptr = UserPtrRaw::new(exit_code_ptr as *mut i32)
+                .ensure_write(vm.deref_mut())
+                .ok_or(SysError::EINVAL)?;
+            let exit_code_mut = exit_code_ptr.to_mut();
             let exit_code = res_task.exit_code();
             *exit_code_mut = exit_code as i32;
         }
@@ -435,9 +458,13 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         };
 
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
-        let exit_code_ptr = UserPtrSendWriter::new(exit_code_ptr as *mut i32);
-        if exit_code_ptr != core::ptr::null() {
-            let exit_code_mut = exit_code_ptr.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EINVAL)?;
+        
+        if exit_code_ptr != 0 {
+            let mut vm: crate::sync::mutex::spin_mutex::MutexGuard<'_, crate::mm::vm::UserVmSpace, crate::sync::mutex::SpinNoIrq> = task.vm_space.lock();
+            let exit_code_ptr = UserPtrRaw::new(exit_code_ptr as *mut i32)
+                .ensure_write(vm.deref_mut())
+                .ok_or(SysError::EINVAL)?;
+            let exit_code_mut = exit_code_ptr.to_mut();
             let exit_code = res_task.exit_code();
             *exit_code_mut = exit_code as i32;
         }

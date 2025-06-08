@@ -157,7 +157,7 @@ pub use signal::*;
 pub use sche::*;
 pub use reboot::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, mm::UserPtr, signal::{SigAction, SigSet}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
+use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -238,7 +238,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_SETSID => sys_setsid(),
         SYSCALL_SYSINFO => sys_sysinfo(args[0]),
         SYSCALL_SHMGET => sys_shmget(args[0] as _, args[1] as _, args[2] as _),
-        SYSCALL_SHMCTL => sys_shmctl(args[0] as _, args[1] as _, UserPtr::new(args[2] as *mut _)),
+        SYSCALL_SHMCTL => sys_shmctl(args[0] as _, args[1] as _, UserPtrRaw::new(args[2] as *mut _)),
         SYSCALL_SHMAT => sys_shmat(args[0] as _, VirtAddr::from(args[1]), args[2] as _),
         SYSCALL_SHMDT => sys_shmdt(VirtAddr::from(args[0])),
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),

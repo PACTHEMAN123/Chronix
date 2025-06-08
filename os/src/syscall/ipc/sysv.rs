@@ -3,7 +3,7 @@ use core::ops::Deref;
 use alloc::task;
 use hal::{addr::{VirtAddr, VirtAddrHal, VirtPageNumHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm};
 
-use crate::{ipc::sysv::{self, ShmIdDs, IPC_PRIVATE}, mm::{vm::{MapFlags, UserVmFile, UserVmSpaceHal}, UserPtrSendWriter}, syscall::{mm::MmapFlags, SysError, SysResult}, task::current_task};
+use crate::{ipc::sysv::{self, ShmIdDs, IPC_PRIVATE}, mm::{vm::{MapFlags, UserVmFile, UserVmSpaceHal}, UserPtrRaw}, syscall::{mm::MmapFlags, SysError, SysResult}, task::current_task};
 
 bitflags! {
     struct ShmGetFlags: i32 {
@@ -83,7 +83,7 @@ pub fn sys_shmat(shmid: i32, mut shmaddr: VirtAddr, shmflg: i32) -> SysResult {
         let ret = vm.alloc_anon_area(
             shmaddr, shm.shmid_ds.lock().segsz, perm, 
             MmapFlags::MAP_SHARED, 
-            shm.get_id(), task.pid()
+            Some(shm.clone())
         )?;
         shm.shmid_ds.lock().attach(task.pid());
         log::info!("[sys_shmat] success: {:?}", ret);
@@ -116,16 +116,16 @@ pub fn sys_shmdt(shmaddr: VirtAddr) -> SysResult {
     }
 }
 
-pub fn sys_shmctl(shmid: i32, op: i32, shmid_ds: UserPtrSendWriter<ShmIdDs>) -> SysResult {
+pub fn sys_shmctl(shmid: i32, op: i32, shmid_ds: UserPtrRaw<ShmIdDs>) -> SysResult {
     log::info!("[sys_shmctl] {} {} {:?}", shmid, op, shmid_ds);
-    let task = current_task().unwrap();
     match op {
         IPC_STAT => {
+            let task = current_task().unwrap();
             let shm = sysv::SHM_MANAGER.get(shmid as usize).ok_or(SysError::ENOENT)?;
-            let shmid_ds = shmid_ds.to_mut(&mut task.vm_space.lock()).ok_or(SysError::EFAULT)?;
-            unsafe {
-                (shmid_ds as *mut ShmIdDs).write(*shm.shmid_ds.lock());
-            }
+            shmid_ds
+                .ensure_write(&mut task.vm_space.lock())
+                .ok_or(SysError::EINVAL)?
+                .write(*shm.shmid_ds.lock());
             Ok(0)
         }
         IPC_RMID => {

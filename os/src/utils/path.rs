@@ -4,20 +4,22 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{info, warn};
 
+use crate::mm::UserPtrRaw;
 use crate::utils::string;
 
 use super::c_str_to_string;
 
 /// translate a user space string to path
-pub fn user_path_to_string(cpath: *const u8) -> Option<String> {
+pub fn user_path_to_string(cpath: UserPtrRaw<u8>, vm: &mut crate::mm::vm::UserVmSpace ) -> Option<String> {
     if cpath.is_null() {
         return None;
     }
-    let path = c_str_to_string(cpath);
+    let slice = cpath.cstr_slice(vm)?;
+    let path = slice.to_str().ok()?;
     if path.eq("") {
         None
     } else {
-        Some(path)
+        Some(path.to_string())
     }
 }
 

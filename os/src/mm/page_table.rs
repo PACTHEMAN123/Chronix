@@ -7,8 +7,9 @@ use crate::mm::vm::{PageFaultAccessType, UserVmSpaceHal};
 
 use super::{allocator::FrameAllocator, vm::UserVmSpace, PageTable};
 
+#[deprecated = "unsafe"]
 /// translate a pointer to a mutable u8 Vec through page table
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+pub unsafe fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token, FrameAllocator);
     let mut start = ptr as usize;
     let end = start + len;
@@ -30,8 +31,9 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
+#[deprecated = "unsafe"]
 /// Translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
-pub fn translated_str(token: usize, ptr: *const u8) -> String {
+pub unsafe fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token, FrameAllocator);
     let mut string = String::new();
     let mut va = ptr as usize;
@@ -51,16 +53,19 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
 
 
 #[allow(unused)]
+#[deprecated = "unsafe"]
 ///Translate a generic through page table and return a reference
-pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
+pub unsafe fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
     let page_table = PageTable::from_token(token, FrameAllocator);
     page_table
         .translate_va(VirtAddr::from(ptr as usize))
         .unwrap()
         .get_ref()
 }
+
+#[deprecated = "unsafe"]
 ///Translate a generic through page table and return a mutable reference
-pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+pub unsafe fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let page_table = PageTable::from_token(token, FrameAllocator);
     let va = ptr as usize;
     page_table
@@ -84,6 +89,7 @@ pub fn translate_uva_checked(user_vm_space: &mut UserVmSpace, va: VirtAddr, acce
 
 
 #[allow(unused)]
+#[deprecated = "UserSlice is better"]
 /// copy out 
 pub fn copy_out<T: Copy>(user_vm_space: &mut UserVmSpace, mut dst: VirtAddr, mut src: &[T]) {
     assert!(dst.0 < Constant::USER_ADDR_SPACE.end);
@@ -137,6 +143,7 @@ pub fn copy_out_str(user_vm_space: &mut UserVmSpace, mut dst: VirtAddr, str: &st
 }
 
 #[allow(unused)]
+#[deprecated = "UserSlice is better"]
 /// copy in
 pub fn copy_in<T: Copy>(user_vm_space: &mut UserVmSpace, mut dst: &mut [T], mut src: VirtAddr) {
     let size = size_of::<T>();
@@ -157,7 +164,7 @@ pub fn copy_in<T: Copy>(user_vm_space: &mut UserVmSpace, mut dst: &mut [T], mut 
     }
 }
 
-#[allow(unused)]
+#[allow(unused, deprecated)]
 /// copy in a str
 pub unsafe fn copy_in_str(user_vm_space: &mut UserVmSpace, mut str: &mut str, mut src: VirtAddr) {
     let mut dst = str.as_bytes_mut();
@@ -165,11 +172,13 @@ pub unsafe fn copy_in_str(user_vm_space: &mut UserVmSpace, mut str: &mut str, mu
 }
 
 ///Array of u8 slice that user communicate with os
+#[deprecated]
 pub struct UserBuffer {
     ///U8 vec
     pub buffers: Vec<&'static mut [u8]>,
 }
 
+#[allow(deprecated)]
 impl UserBuffer {
     ///Create a `UserBuffer` by parameter
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
@@ -185,6 +194,7 @@ impl UserBuffer {
     }
 }
 
+#[allow(deprecated)]
 impl IntoIterator for UserBuffer {
     type Item = *mut u8;
     type IntoIter = UserBufferIterator;
@@ -197,12 +207,14 @@ impl IntoIterator for UserBuffer {
     }
 }
 /// Iterator of `UserBuffer`
+#[deprecated]
 pub struct UserBufferIterator {
     buffers: Vec<&'static mut [u8]>,
     current_buffer: usize,
     current_idx: usize,
 }
 
+#[allow(deprecated)]
 impl Iterator for UserBufferIterator {
     type Item = *mut u8;
     fn next(&mut self) -> Option<Self::Item> {

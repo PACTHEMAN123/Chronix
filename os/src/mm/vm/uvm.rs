@@ -6,7 +6,7 @@ use log::info;
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, sync::mutex::SpinNoIrqLock, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv::{self, ShmObj}, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, sync::mutex::SpinNoIrqLock, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
 
 use super::{KernVmArea, KernVmAreaType, KernVmSpaceHal, MapFlags, MaxEndVpn, PageFaultAccessType, StartPoint, UserVmArea, UserVmAreaType, UserVmAreaView, UserVmFile, UserVmSpaceHal};
 
@@ -265,8 +265,11 @@ impl UserVmSpace {
         Ok(start)
     }
 
-    pub fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, shm_id: usize, pid: usize) -> Result<VirtAddr, SysError> {
+    pub fn alloc_anon_area(&mut self, va: VirtAddr, len: usize, perm: MapPerm, flags: MmapFlags, shm: Option<Arc<ShmObj>>) -> Result<VirtAddr, SysError> {
         if len == 0 {
+            return Err(SysError::EINVAL);
+        }
+        if flags.contains(MmapFlags::MAP_SHARED) && shm.is_none() {
             return Err(SysError::EINVAL);
         }
         let len = (va.page_offset() + len - 1 + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1);
@@ -277,20 +280,15 @@ impl UserVmSpace {
             range
         } else {
             self.areas
-            .find_free_range(
-                VirtAddr::from(Constant::USER_SHARE_BEG).floor()..VirtAddr::from(Constant::USER_SHARE_END).floor(), 
-                len / Constant::PAGE_SIZE
-            )
-            .ok_or(SysError::ENOMEM)?
+                .find_free_range(
+                    VirtAddr::from(Constant::USER_SHARE_BEG).floor()..VirtAddr::from(Constant::USER_SHARE_END).floor(), 
+                    len / Constant::PAGE_SIZE
+                )
+                .ok_or(SysError::ENOMEM)?
         };
         let range_va = range.start.start_addr()..range.end.start_addr();
         let start = range_va.start;
-        if flags.contains(MmapFlags::MAP_SHARED) {
-            let shm = if shm_id == 0 {
-                sysv::SHM_MANAGER.alloc(len, pid).ok_or(SysError::ENOENT)?
-            } else {
-                sysv::SHM_MANAGER.get(shm_id).ok_or(SysError::ENOENT)?
-            };
+        if let Some(shm) = shm {
             let vma = UserVmArea::new_mmap(range_va.clone(), perm, flags, UserVmFile::Shm(shm), 0, len);
             self.push_area(vma, None);
         } else {
@@ -421,6 +419,9 @@ impl UserVmSpace {
     }
     
     pub fn ensure_access(&mut self, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> Result<(), ()> {
+        if va.0 >= Constant::USER_ADDR_SPACE.end {
+            return Err(());
+        }
         let mut vpn = va.floor();
         let end = (va+len).ceil();
         while vpn < end {
@@ -1083,3 +1084,23 @@ impl UserLazyFaultHandler for UserMmapHandler {
         }
     }
 }
+
+
+/// lock pages avoid swapping out
+pub struct UserVmPagesLocker {
+    // todo...
+}
+
+impl Clone for UserVmPagesLocker {
+    fn clone(&self) -> Self {
+        Self {  }
+    }
+}
+
+impl Drop for UserVmPagesLocker {
+    fn drop(&mut self) {
+        // to unlock pages
+    }
+}
+
+unsafe impl Send for UserVmPagesLocker {}

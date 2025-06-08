@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use log::{info, warn};
 use smoltcp::time;
 
-use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrWriter}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{self, current_task, manager::TASK_MANAGER, task::TaskControlBlock}, timer::{self, ffi::TimeSpec, get_current_time_duration, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
+use crate::{mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw}, processor::context::SumGuard, signal::{SigSet, SIGKILL, SIGSTOP}, sync::mutex::SpinNoIrqLock, task::{self, current_task, manager::TASK_MANAGER, task::TaskControlBlock}, timer::{self, ffi::TimeSpec, get_current_time_duration, timed_task::suspend_timeout}, utils::{suspend_now, SendWrapper}};
 
 use super::{SysError, SysResult};
 
@@ -570,7 +570,7 @@ impl FutexManager {
 #[repr(C)]
 pub struct RobustList {
     ///
-	pub next: UserPtrWriter<RobustList>
+	pub next: UserPtrRaw<RobustList>
 }
 
 /// Robust List Head
@@ -592,7 +592,7 @@ pub struct RobustListHead {
 	/// always have full knowledge of all locks that the thread
 	/// _might_ have taken. We check the owner TID in any case,
 	/// so only truly owned locks will be handled.
-    pub list_op_pending: UserPtrWriter<RobustList>,
+    pub list_op_pending: UserPtrRaw<RobustList>,
 }
 
 /// Are there any waiters for this robust futex:
