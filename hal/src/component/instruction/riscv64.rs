@@ -2,7 +2,7 @@ use core::arch::asm;
 
 use riscv::register;
 
-use crate::println;
+use crate::{constant::{Constant, ConstantsHal}, println};
 
 use super::{Instruction, InstructionHal};
 
@@ -52,8 +52,8 @@ impl InstructionHal for Instruction {
         unreachable!()
     }
 
-    fn hart_start(hartid: usize, start_addr: usize, opaque: usize) {
-        sbi_rt::hart_start(hartid, start_addr, opaque);
+    fn hart_start(hartid: usize, opaque: usize) {
+        sbi_rt::hart_start(hartid, Constant::KERNEL_ENTRY_PA, opaque);
     }
     
     #[inline(always)]

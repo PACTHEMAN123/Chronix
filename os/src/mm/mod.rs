@@ -36,8 +36,9 @@ pub struct MmioMapper;
 impl hal::mapper::MmioMapperHal for MmioMapper {
     #[cfg(target_arch = "riscv64")]
     fn map_mmio_area(&self, range: core::ops::Range<usize>) -> core::ops::Range<usize> {
+        use hal::println;
         let va_start = hal::addr::VirtAddr::from(range.start | Constant::KERNEL_ADDR_SPACE.start);
-        let va_end = hal::addr::VirtAddr::from(range.end | Constant::KERNEL_ADDR_SPACE.end);
+        let va_end = hal::addr::VirtAddr::from(range.end | Constant::KERNEL_ADDR_SPACE.start);
         KVMSPACE.lock().push_area(KernVmArea::new(
                 va_start..va_end, 
                 vm::KernVmAreaType::MemMappedReg, 

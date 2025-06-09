@@ -77,7 +77,7 @@ fn processor_start(id: usize) {
         if i == id {
             continue;
         }
-        Instruction::hart_start(i, Constant::KERNEL_ENTRY_PA,0);
+        Instruction::hart_start(i, 0);
         // info!("[kernel] start to wake up processor {}... ",i);
     }
 }

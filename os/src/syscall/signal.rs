@@ -10,6 +10,7 @@ use hal::{
 };
 use log::*;
 use super::{SysError,SysResult};
+use crate::mm::UserPtrRaw;
 use crate::{processor, timer};
 use crate::processor::context::SumGuard;
 use crate::processor::processor::current_processor;
@@ -177,19 +178,24 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
     let task = current_task().unwrap().clone();
     let mut sig_manager = task.sig_manager.lock();
     if old_set as usize != 0 {
-        let _sum_guard = SumGuard::new();
-        unsafe {
-            *old_set = sig_manager.blocked_sigs;
-            debug!("[sys_rt_sigprocmask] old set: {:?}", sig_manager.blocked_sigs);
-        }
+        UserPtrRaw::new(old_set)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?
+            .write(sig_manager.blocked_sigs);
+        debug!("[sys_rt_sigprocmask] old set: {:?}", sig_manager.blocked_sigs);
     }
     if set as usize == 0 {
         debug!("arg set is null");
         return Ok(0);
     }
-    let _sum_guard = SumGuard::new();
     
-    let new_sig_mask = unsafe { SigSet::from_bits(*set as usize).unwrap() };
+    let new_sig_mask = SigSet::from_bits(
+        *UserPtrRaw::new(set)
+            .ensure_read(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?
+            .to_ref() as usize
+    ).ok_or(SysError::EINVAL)?;
+    
     log::debug!(
         "[sys_rt_sigprocmask] how {}, new sig mask: {:?}",
         how,

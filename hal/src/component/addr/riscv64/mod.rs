@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use crate::component::constant::{Constant, ConstantsHal};
+use crate::{component::constant::{Constant, ConstantsHal}, println};
 
 use super::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal};
 

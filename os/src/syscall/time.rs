@@ -29,9 +29,8 @@ use crate::timer::ffi::Tms;
 /// times syscall
 pub fn sys_times(tms: usize) -> SysResult {
     let task = current_task().unwrap();
-    let mut vm = task.vm_space.lock();
     let tms_ptr = UserPtrRaw::new(tms as *mut Tms)
-        .ensure_write(&mut vm)
+        .ensure_write(&mut task.vm_space.lock())
         .ok_or(SysError::EINVAL)?;
     let current_task = current_task().unwrap();
     let tms_val = Tms::from_time_recorder(current_task.time_recorder());

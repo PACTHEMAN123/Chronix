@@ -19,7 +19,7 @@ use crate::processor::processor::{current_processor,current_task,current_user_to
 /// syscall: write
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    // log::debug!("task {} trying to write fd {}", task.gettid(), fd);
+    log::debug!("task {} trying to write fd {}", task.gettid(), fd);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
@@ -125,7 +125,6 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
 /// and errno is set to indicate the error. 
 /// The contents of the array pointed to by buf are undefined on error.
 pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
-    let _sum_guard = SumGuard::new();
     let task = current_task().unwrap();
     task.with_cwd(|cwd| {
         let path = cwd.path();
@@ -134,10 +133,11 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
             return Err(SysError::ERANGE);
         } else {
             //info!("copying path: {}, len: {}", path, path.len());
-            let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
-            new_buf.fill(0 as u8);
-            let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, path.len()) };
-            new_buf.copy_from_slice(path.as_bytes());
+            let new_buf = UserSliceRaw::new(buf as *mut u8, len)
+                .ensure_write(&mut task.vm_space.lock())
+                .ok_or(SysError::EINVAL)?;
+            new_buf.to_mut()[path.len()..].fill(0 as u8);
+            new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
             return Ok(buf as isize);
         }
     })
@@ -431,10 +431,10 @@ struct LinuxDirent64 {
 pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     const LEN_BEFORE_NAME: usize = 19;
     let task = current_task().unwrap().clone();
-    let _sum_guard = SumGuard::new();
-    let buf_slice = unsafe {
-        core::slice::from_raw_parts_mut(buf as *mut u8, len)
-    };
+    let user_buf = UserSliceRaw::new(buf as *mut u8, len)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EINVAL)?;
+    let buf_slice = user_buf.to_mut();
     assert!(buf_slice.len() == len);
 
     let file = task.with_fd_table(|t| t.get_file(fd))?;
@@ -552,13 +552,12 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     }
     
     let path = inode.readlink()?;
-    unsafe {
-        Instruction::set_sum();
-        let new_buf = core::slice::from_raw_parts_mut(buf as *mut u8, len);
-        new_buf.fill(0u8);
-        let new_buf = core::slice::from_raw_parts_mut(buf as *mut u8, path.len());
-        new_buf.copy_from_slice(path.as_bytes());
-    }
+    let new_buf = UserSliceRaw::new(buf as *mut u8, len)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EINVAL)?;
+    new_buf.to_mut()[path.len()..].fill(0u8);
+    new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
+
     return Ok(path.len() as isize)
 }
 
@@ -573,7 +572,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
     const UTIME_OMIT: usize = 0x3ffffffe;
     let task = current_task().unwrap().clone();
     let at_flags = AtFlags::from_bits_truncate(flags);
-    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     log::info!("[sys_utimensat]: path: {}", dentry.path());
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::ENOENT);
@@ -587,10 +586,11 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
         inner.set_ctime(current_time);
         inner.set_mtime(current_time);
     } else {
-        let times = unsafe {
-            Instruction::set_sum();
-            core::slice::from_raw_parts_mut(times as *mut TimeSpec, 2)
-        };
+        let times_ptr =
+            UserSliceRaw::new(times as *mut TimeSpec, 2)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+        let times = times_ptr.to_mut();
         log::info!("[sys_utimensat] times {:?}", times);
         match times[0].tv_nsec {
             UTIME_NOW => inner.set_atime(current_time),
@@ -640,9 +640,6 @@ pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
 pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    unsafe {
-        Instruction::set_sum();
-    }
     file.ioctl(cmd, arg)
 }
 
@@ -724,13 +721,12 @@ pub struct IoVec {
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let iovs = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
-    };
+    let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
+        .ensure_read(&mut task.vm_space.lock())
+        .ok_or(SysError::EINVAL)?;
     let mut totol_len = 0usize;
     let mut offset = file.pos();
-    for (i, iov) in iovs.iter().enumerate() {
+    for (i, iov) in iovs.to_ref().iter().enumerate() {
         if iov.len == 0 {
             continue;
         }
@@ -776,12 +772,11 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let iovs = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts(iov as *const IoVec, iovcnt)
-    };
+    let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
+        .ensure_read(&mut task.vm_space.lock())
+        .ok_or(SysError::EINVAL)?;
     let mut totol_len = 0usize;
-    for (i, iov) in iovs.iter().enumerate() {
+    for (i, iov) in iovs.to_ref().iter().enumerate() {
         if iov.len == 0 {
             continue;
         }

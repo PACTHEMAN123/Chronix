@@ -163,9 +163,10 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
     // set parent tid and child tid
     let _sum_guard = SumGuard::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
-        unsafe {
-            (parent_tid.0 as *mut u32).write_volatile(new_tid as u32);
-        }
+        let user_ptr = UserPtrRaw::new(parent_tid.0 as *mut u32)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+        user_ptr.write(new_tid as u32);
     }
     if flags.contains(CloneFlags::CHILD_SETTID) {
         // If a thread is started using clone(2) with the
@@ -174,9 +175,10 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
         new_task.tid_address().set_child_tid = Some(child_tid.0);
         // When set_child_tid is set, the very first thing the new
         // thread does is to write its thread ID at this address.
-        unsafe {
-            (child_tid.0 as *mut u32).write_volatile(new_tid as u32);
-        }
+        let user_ptr = UserPtrRaw::new(child_tid.0 as *mut u32)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EINVAL)?;
+        user_ptr.write(new_tid as u32);
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {
         new_task.tid_address().clear_child_tid = Some(child_tid.0);

@@ -186,7 +186,6 @@ impl<T> Sub<usize> for UserPtrRaw<T> {
 
 unsafe impl<T> Send for UserPtrRaw<T> {}
 
-#[repr(C)]
 #[derive(Clone)]
 pub struct UserPtr<T, P: UserPtrPerm> {
     pub raw: UserPtrRaw<T>,
