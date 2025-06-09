@@ -167,7 +167,7 @@ pub type SysResult = Result<isize, SysError>;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
-    log::debug!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
+    // log::info!("task {}, syscall id: {}", current_task().unwrap().tid() ,syscall_id);
     let result = match syscall_id { 
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),

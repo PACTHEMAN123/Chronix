@@ -237,7 +237,7 @@ impl dyn Dentry {
                     // );
                     // neg_dentry.set_state(DentryState::NEGATIVE);
                     let neg_dentry = current_dentry.new_neg_dentry(name);
-                    //info!("[DCACHE]: insert key: {}", neg_dentry.path());
+                    // info!("[DCACHE]: insert key: {}", neg_dentry.path());
                     DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
                     return Ok(neg_dentry);
                 }
@@ -315,6 +315,15 @@ pub fn global_find_dentry(path: &str) -> Result<Arc<dyn Dentry>, SysError> {
         Arc::clone(dcache.get("/").unwrap())
     };
     root_dentry.walk(path)
+}
+
+/// helper function: try to update DCACHE when create new inode
+pub fn global_update_dentry(path: &str, inode: Arc<dyn Inode>) -> Result<(), SysError> {
+    let cache = DCACHE.lock();
+    if let Some(dentry) = cache.get(path) {
+        dentry.set_inode(inode);
+    }
+    return Ok(())
 }
 
 impl<T: Send + Sync + 'static> Dentry for MaybeUninit<T> {

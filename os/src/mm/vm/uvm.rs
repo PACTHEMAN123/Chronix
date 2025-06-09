@@ -511,6 +511,7 @@ impl UserVmSpace {
         let interp_file;
         let dentry = global_find_dentry(&interp).expect("cannot find interp dentry");
         if dentry.state() == DentryState::NEGATIVE {
+            log::warn!("dentry path {}, failed to find interp file", dentry.path());
             return Err(SysError::ENOENT);
         }
         // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inode_inner().mode);

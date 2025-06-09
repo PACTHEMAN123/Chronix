@@ -64,7 +64,7 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
 /// syscall: clock_gettime
 pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    log::debug!("[sys_clock_gettime]: clock id {}", clock_id);
+    // log::info!("[sys_clock_gettime]: clock id {}", clock_id);
     let _sum_guard = SumGuard::new();
     if ts == 0 {
         return Ok(0)
