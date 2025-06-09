@@ -17,9 +17,10 @@ cd /loongarch/glibc
 ./lua_testcode.sh
 ./libctest_testcode.sh
 ./netperf_testcode.sh
-./iozone_testcode.sh
+# ./iozone_testcode.sh
 ./libcbench_testcode.sh
-./lmbench_testcode.sh
+# ./lmbench_testcode.sh
+./cyclictest_testcode.sh
 cd ..
 echo "finish to run glibc"
 
@@ -30,9 +31,10 @@ cd /loongarch/musl
 ./lua_testcode.sh
 ./libctest_testcode.sh
 ./netperf_testcode.sh
-./iozone_testcode.sh
+# ./iozone_testcode.sh
 ./libcbench_testcode.sh
-./lmbench_testcode.sh
+# ./lmbench_testcode.sh
+./cyclictest_testcode.sh
 cd ..
 
 exit

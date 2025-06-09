@@ -88,5 +88,6 @@ fn print_info() {
     println!("[CINPHAL] PA_LEN: {}", 56);
     println!("[CINPHAL] VA_LEN: {}", 39);
     println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
+    println!("[CINPHAL] start address: {:#x}", _start as usize);
     println!("");
 }

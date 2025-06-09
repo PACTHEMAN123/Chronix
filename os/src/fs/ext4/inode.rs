@@ -37,7 +37,7 @@ use crate::config::BLOCK_SIZE;
 /// The inode of the Ext4 filesystem
 pub struct Ext4Inode {
     inner: InodeInner,
-    file: UPSafeCell<Ext4File>,
+    file: SpinNoIrqLock<Ext4File>,
     cache: Arc<PageCache>,
 }
 
@@ -55,7 +55,7 @@ impl Ext4Inode {
         let size = file.file_size();
         Self {
             inner: InodeInner::new(Some(super_block.clone()), mode, size as usize),
-            file: UPSafeCell::new(file),
+            file: SpinNoIrqLock::new(file),
             cache: Arc::new(PageCache::new()),
         }
     }
@@ -81,7 +81,7 @@ impl Ext4Inode {
 
         //Todo ? ../
         //注：lwext4创建文件必须提供文件path的绝对路径
-        let file = self.file.exclusive_access();
+        let file = self.file.lock();
         let path = file.get_path();
         let fpath = String::from(path.to_str().unwrap().trim_end_matches('/')) + "/" + p;
         info!("dealt with full path: {}", fpath.as_str());
@@ -100,8 +100,8 @@ impl Inode for Ext4Inode {
     }
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
-        let file = self.file.exclusive_access();
         let size = {
+            let mut file = self.file.lock();
             let path = file.get_path();
             file.file_open(path.to_str().unwrap(), O_RDONLY).unwrap();
             let fsize = file.file_size() as usize;
@@ -128,7 +128,7 @@ impl Inode for Ext4Inode {
     /// Look up the node with given `name` in the directory
     /// Return the node if found.
     fn lookup(&self, name: &str) -> Option<Arc<dyn Inode>> {
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let full_path = String::from(file.get_path().to_str().unwrap().trim_end_matches('/')) + "/" + name;
         log::debug!("try to look up {}", full_path);
         if file.check_inode_exist(full_path.as_str(), InodeTypes::EXT4_DE_REG_FILE) {
@@ -156,7 +156,7 @@ impl Inode for Ext4Inode {
 
     /// list all files' name in the directory
     fn ls(&self) -> Vec<String> {
-        let file = self.file.exclusive_access();
+        let file = self.file.lock();
 
         if file.get_type() != InodeTypes::EXT4_DE_DIR {
             info!("not a directory");
@@ -185,7 +185,7 @@ impl Inode for Ext4Inode {
     /// Read data from inode at offset
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
         debug!("To read_at {}, buf len={}", offset, buf.len());
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDONLY)?;
@@ -200,7 +200,7 @@ impl Inode for Ext4Inode {
     /// Write data to inode at offset
     fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, i32> {
         debug!("To write_at {}, buf len={}", offset, buf.len());
-        let file =  self.file.exclusive_access();
+        let mut file =  self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR)?;
@@ -255,7 +255,7 @@ impl Inode for Ext4Inode {
     }
 
     fn cache_write_at(self: Arc<Self>, offset: usize, buf: &[u8]) -> Result<usize, i32> {
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let cpath = file.get_path();
         let path = cpath.to_str().unwrap();
         file.file_open(path, O_RDWR)?;
@@ -304,7 +304,7 @@ impl Inode for Ext4Inode {
     /// Truncate the inode to the given size
     fn truncate(&self, size: usize) -> Result<usize, SysError> {
         log::info!("truncate file to size {}", size);
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR).expect("file open failed");
@@ -316,7 +316,7 @@ impl Inode for Ext4Inode {
     /// Create a new inode and return the inode
     fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
         let ty: InodeTypes = mode.into();
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
         info!("create {:?} on Ext4fs: {}", ty, fpath);
@@ -328,8 +328,6 @@ impl Inode for Ext4Inode {
         }
 
         let types = ty;
-
-        let file = self.file.exclusive_access();
 
         let result = if file.check_inode_exist(fpath, types.clone()) {
             info!("inode already exists");
@@ -360,7 +358,7 @@ impl Inode for Ext4Inode {
 
     fn getattr(&self) -> Kstat {
         let inner = self.inode_inner();
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let ty = file.get_type();
 
         let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
@@ -409,7 +407,7 @@ impl Inode for Ext4Inode {
         });
         let mask = mask & SUPPORTED_MASK;
         let inner = self.inode_inner();
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let ty = file.get_type();
         let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
             let path = file.get_path();
@@ -465,7 +463,7 @@ impl Inode for Ext4Inode {
     }
 
     fn symlink(&self, target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
-        let file = self.file.exclusive_access();
+        let file = self.file.lock();
         // create symlink
         file.symlink_create(target_path).expect("symlink create failed");
         // get the symlink Inode
@@ -477,14 +475,14 @@ impl Inode for Ext4Inode {
     }
 
     fn link(&self, target_path: &str) -> Result<usize, SysError> {
-        let file = self.file.exclusive_access();
+        let file = self.file.lock();
         // create hard link
         file.link_create(target_path).expect("link create failed");
         Ok(0)
     }
 
     fn readlink(&self) -> Result<String, SysError> {
-        let file = self.file.exclusive_access();
+        let file = self.file.lock();
         let mut path_buf: Vec<u8> = vec![0u8; 512];
         let len = file.symlink_read(&mut path_buf).expect("symlink read failed");
         path_buf.truncate(len + 1);
@@ -497,7 +495,7 @@ impl Inode for Ext4Inode {
 
     /// remove the file that Ext4Inode holds
     fn unlink(&self) -> Result<usize, i32> {
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let itype = file.get_type();
         let cpath = file.get_path();
         let path = cpath.to_str().unwrap();
@@ -516,7 +514,7 @@ impl Inode for Ext4Inode {
 
     fn remove(&self, name: &str, mode: InodeMode) -> Result<usize, i32> {
         let ty = InodeTypes::from(mode);
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let parent_path = String::from(file.get_path().to_str().unwrap());
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
 
@@ -540,7 +538,7 @@ impl Inode for Ext4Inode {
     }
 
     fn rename(&self, target: &str, new_inode: Option<Arc<dyn Inode>>) -> Result<(), SysError> {
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         let path = file.get_path();
         let old_path = path.to_str().expect("failed");
         let ty = file.get_type();
@@ -572,7 +570,7 @@ impl Inode for Ext4Inode {
 
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
-        let file = self.file.exclusive_access();
+        let mut file = self.file.lock();
         info!("Drop struct Inode {:?}", file.get_path());
 
         // flush the dirty page in page cache

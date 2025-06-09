@@ -116,9 +116,8 @@ __restore:
     .align 12
 __trap_from_kernel:
     # need to save caller-saved regs
-    # note that we need save ERA & BADV here
-    addi.d $sp, $sp, -20*8
-    st.d $ra, $sp, 0*8
+    addi.d $sp, $sp, -21*8
+    st.d $r21, $sp, 0*8
     st.d $tp, $sp, 1*8
     st.d $a0, $sp, 2*8
     st.d $a1, $sp, 3*8
@@ -137,9 +136,12 @@ __trap_from_kernel:
     st.d $t6, $sp, 16*8
     st.d $t7, $sp, 17*8
     st.d $t8, $sp, 18*8
-    st.d $r21, $sp, 19*8
+    # save fp for backtrace
+    st.d $fp, $sp, 19*8
+    st.d $ra, $sp, 20*8
+    addi.d $fp, $sp, 21*8
     bl kernel_trap_handler
-    ld.d $ra, $sp, 0*8
+    ld.d $r21, $sp, 0*8
     ld.d $tp, $sp, 1*8
     ld.d $a0, $sp, 2*8
     ld.d $a1, $sp, 3*8
@@ -158,8 +160,9 @@ __trap_from_kernel:
     ld.d $t6, $sp, 16*8
     ld.d $t7, $sp, 17*8
     ld.d $t8, $sp, 18*8
-    ld.d $r21, $sp, 19*8
-    addi.d $sp, $sp, 20*8
+    ld.d $fp, $sp, 19*8
+    ld.d $ra, $sp, 20*8
+    addi.d $sp, $sp, 21*8
     ertn
 
 

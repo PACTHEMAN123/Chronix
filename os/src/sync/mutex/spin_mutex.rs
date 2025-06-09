@@ -2,7 +2,7 @@ use core::{
     cell::UnsafeCell,
     marker::PhantomData,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicIsize, Ordering},
 };
 
 use crate::utils::async_utils::SendWrapper;
@@ -42,10 +42,10 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
     #[inline(always)]
     fn wait_unlock(&self) {
         let mut try_count = 0usize;
-        while self.lock.load(Ordering::Relaxed) {
+        while self.lock.load(Ordering::Acquire) {
             core::hint::spin_loop();
             try_count += 1;
-            if try_count == 0x10000000 {
+            if try_count == 0x1000000 {
                 panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
             }
         }
@@ -60,7 +60,7 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
             self.wait_unlock();
             if self
                 .lock
-                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
                 .is_ok()
             {
                 break;

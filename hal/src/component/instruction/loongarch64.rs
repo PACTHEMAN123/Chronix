@@ -1,6 +1,6 @@
 use loongArch64::register::{self, ecfg::LineBasedInterrupt};
 
-use crate::{println, trap::FP_REG_DIRTY};
+use crate::{constant::{Constant, ConstantsHal}, println, trap::FP_REG_DIRTY};
 
 const POWEROFF_REG_MMIO: usize = 0x8000_0000_100e_001c;
 const POWEROFF_VALUE: u8 = 0x34;
@@ -61,8 +61,8 @@ impl InstructionHal for Instruction {
         loop {}
     }
     
-    fn hart_start(hartid: usize, start_addr: usize, _opaque: usize) {
-        loongArch64::ipi::csr_mail_send(start_addr as u64 | 0x8000_0000_0000_0000, hartid, 0);
+    fn hart_start(hartid: usize, _opaque: usize) {
+        loongArch64::ipi::csr_mail_send(Constant::KERNEL_ENTRY_PA as u64 | 0x9000_0000_0000_0000, hartid, 0);
         loongArch64::ipi::send_ipi_single(hartid, 1);
     }
     

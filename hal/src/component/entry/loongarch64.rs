@@ -71,6 +71,7 @@ fn print_info() {
     println!("[CINPHAL] PA_LEN: {}", loongArch64::cpu::get_palen());
     println!("[CINPHAL] VA_LEN: {}", loongArch64::cpu::get_valen());
     println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
+    println!("[CINPHAL] start address: {:#x}", _start as usize);
     println!("");
 }
 

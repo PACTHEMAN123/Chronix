@@ -94,9 +94,8 @@ __restore:
 
 __trap_from_kernel:
     # need to save caller-saved regs
-    # note that we need save sepc & stval here
-    addi sp, sp, -17*8
-    sd  ra,  0*8(sp)
+    addi sp, sp, -18*8
+    sd  tp,  0*8(sp)
     sd  t0,  1*8(sp)
     sd  t1,  2*8(sp)
     sd  t2,  3*8(sp)
@@ -112,9 +111,12 @@ __trap_from_kernel:
     sd  a5, 13*8(sp)
     sd  a6, 14*8(sp)
     sd  a7, 15*8(sp)
-    sd  tp, 16*8(sp)
+    # save fp for backtrace
+    sd  fp, 16*8(sp)
+    sd  ra, 17*8(sp)
+    addi fp, sp, 18*8
     call kernel_trap_handler
-    ld  ra,  0*8(sp)
+    ld  tp,  0*8(sp)
     ld  t0,  1*8(sp)
     ld  t1,  2*8(sp)
     ld  t2,  3*8(sp)
@@ -130,8 +132,9 @@ __trap_from_kernel:
     ld  a5, 13*8(sp)
     ld  a6, 14*8(sp)
     ld  a7, 15*8(sp)
-    ld  tp, 16*8(sp)
-    addi sp, sp, 17*8
+    ld  fp, 16*8(sp)
+    ld  ra, 17*8(sp)
+    addi sp, sp, 18*8
     sret
 
 __user_rw_exception_entry:
