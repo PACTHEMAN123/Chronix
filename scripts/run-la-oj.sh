@@ -28,6 +28,7 @@ cd /loongarch/musl
 ./lua_testcode.sh
 ./libctest_testcode.sh
 ./netperf_testcode.sh
+./iperf_testcode.sh
 ./libcbench_testcode.sh
 cd ..
 

@@ -216,8 +216,7 @@ impl File for Socket {
         if buf.len() == 0 {
             return Ok(0);
         }
-        let bytes = self.sk.recv(buf).await.map(|e|e.0).unwrap();
-        Ok(bytes)
+        self.sk.recv(buf).await.map(|e|e.0)
     }
 
     #[doc = " Write `UserBuffer` to file"]
@@ -226,8 +225,7 @@ impl File for Socket {
         if buf.len() == 0 {
             return Ok(0);
         }
-        let bytes = self.sk.send(buf, None).await.unwrap();
-        Ok(bytes)
+        self.sk.send(buf, None).await.map(|e|e)
     }
 
     async fn base_poll(&self, events:PollEvents) -> PollEvents {
