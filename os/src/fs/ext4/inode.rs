@@ -218,10 +218,20 @@ impl Inode for Ext4Inode {
         let mut current_offset = offset;
         let mut buf_offset = 0usize;
 
+        // get the file size on disk (may not sync)
+        let file_size = {
+            let mut file = self.file.lock();
+            let cpath = file.get_path();
+            let path = cpath.to_str().unwrap();
+            file.file_open(path, O_RDWR)?;
+            file.file_size() as usize
+        };
+
         while buf_offset < buf.len() {
             let cache = self.cache.clone();
-            //info!("current offset: {}, file end: {}", current_offset, cache.end());
-            if current_offset > cache.end() {
+            let max_end = cmp::max(cache.end(), file_size);
+            // info!("current offset: {:#x}, file end: {:#x}", current_offset, max_end);
+            if current_offset >= max_end {
                 break;
             }
             let page_offset = current_offset / PAGE_SIZE * PAGE_SIZE;
@@ -236,7 +246,8 @@ impl Inode for Ext4Inode {
                 // info!("[PAGE CACHE]: read miss at offset: {:#x}", page_offset);
                 // direct read at the offset of page size
                 let mut page = Page::new(page_offset);
-                let read_size = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), offset);
+                let read_size = Arc::get_mut(&mut page).unwrap()
+                    .read_from(self.clone(), page_offset);
                 cache.insert_page(page_offset, page.clone());
                 cache.update_end(page_offset + read_size);
                 page
@@ -246,22 +257,30 @@ impl Inode for Ext4Inode {
             let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..]);
             //info!("read at offset: {}, read_size: {}", in_page_offset, page_read_size);
 
+
             total_read_size += page_read_size;
             buf_offset += page_read_size;
             current_offset += page_read_size; 
+
+            if page_read_size < PAGE_SIZE {
+                // may reach the end
+                break;
+            }
         }
 
+        // log::info!("[cache_read_at] buf len {}, file offset {:#x}, read size {:#x}", buf.len(), offset ,total_read_size);
         Ok(total_read_size)
     }
 
     fn cache_write_at(self: Arc<Self>, offset: usize, buf: &[u8]) -> Result<usize, i32> {
-        let mut file = self.file.lock();
-        let cpath = file.get_path();
-        let path = cpath.to_str().unwrap();
-        file.file_open(path, O_RDWR)?;
-        let file_size = file.file_size() as usize;
-        log::warn!("[PAGE CACHE] write at file size {file_size}");
-        
+        // get file size
+        let file_size = {
+            let mut file = self.file.lock();
+            let cpath = file.get_path();
+            let path = cpath.to_str().unwrap();
+            file.file_open(path, O_RDWR)?;
+            file.file_size() as usize
+        };
         // get the page-aligned offset
         let mut total_write_size = 0usize;
         let mut current_offset = offset;
@@ -282,7 +301,7 @@ impl Inode for Ext4Inode {
                 let mut page = Page::new(page_offset);
                 if page_offset < file_size {
                     // write inside the file bound, should read out the data first
-                    let _ = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), offset);
+                    let _ = Arc::get_mut(&mut page).unwrap().read_from(self.clone(), page_offset);
                 }
                 cache.insert_page(page_offset, page.clone());
                 page
@@ -291,13 +310,14 @@ impl Inode for Ext4Inode {
             // now use the buf to fill in the page
             let page_write_size = page.write_at(in_page_offset, &buf[buf_offset..]);
             page.set_dirty();
-            cache.update_end(page_offset + page_write_size);
+            cache.update_end(page_offset + page_write_size + in_page_offset);
 
             total_write_size += page_write_size;
             buf_offset += page_write_size;
             current_offset += page_write_size;
         }
 
+        // log::info!("[cache_write_at] buf len {}, offset {:#x}, write size {:#x}", buf.len(), offset, total_write_size);
         Ok(total_write_size)
     }
 
@@ -570,8 +590,8 @@ impl Inode for Ext4Inode {
 
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
-        let mut file = self.file.lock();
-        info!("Drop struct Inode {:?}", file.get_path());
+        // let mut file = self.file.lock();
+        info!("Drop struct Inode");
 
         // flush the dirty page in page cache
         let cache = self.cache.clone();
@@ -580,11 +600,12 @@ impl Drop for Ext4Inode {
             if page.is_dirty() == false {
                 continue;
             }
+            // info!("flush dirty page at offset {:#x}", offset);
             self.write_at(offset, page.get_slice::<u8>()).expect("[PageCache]: failed at flush");
         }
 
-        file.file_close().expect("failed to close fd");
-        let _ = file; // todo
+        // file.file_close().expect("failed to close fd");
+        // let _ = file; // todo
     }
 }
 

@@ -501,20 +501,23 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let is_dir = inode.inode_inner().mode == InodeMode::DIR;
+    let inode_mode = inode.inode_inner().mode;
+    let is_dir = inode_mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {
         return Err(SysError::ENOTDIR);
     } else if flags != AT_REMOVEDIR && is_dir {
         return Err(SysError::EPERM);
     }
+    // should clear inode first to drop inode (flush datas to disk)
+    dentry.clear_inode();
+    drop(inode);
     // use parent inode to remove the inode in the fs
     let name = abs_path_to_name(&path).unwrap();
     let parent = dentry.parent().unwrap();
-    parent.inode().unwrap().remove(&name, inode.inode_inner().mode).expect("remove failed");
+    parent.inode().unwrap().remove(&name, inode_mode).expect("remove failed");
     parent.remove_child(&name);
 
     //inode.unlink().expect("inode unlink failed");
-    dentry.clear_inode();
     Ok(0)
 }
 

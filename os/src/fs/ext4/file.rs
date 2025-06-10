@@ -1,6 +1,7 @@
 //! (FileWrapper + VfsNodeOps) -> OSInodeInner
 //! OSInodeInner -> OSInode
 
+use core::cmp;
 use core::sync::atomic::AtomicUsize;
 
 use async_trait::async_trait;
@@ -91,10 +92,17 @@ impl File for Ext4File {
     fn writable(&self) -> bool {
         self.writable
     }
+    
+    fn size(&self) -> usize {
+        let disk_file_size = self.inode().unwrap().getattr().st_size as usize;
+        let page_cache_end = self.inode().unwrap().cache().end();
+        cmp::max(disk_file_size, page_cache_end)
+    }
+
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
 
-        let size = inode.read_at(self.pos(), buf).unwrap();
+        let size = inode.cache_read_at(self.pos(), buf).unwrap();
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
         Ok(size)
     }
@@ -104,7 +112,7 @@ impl File for Ext4File {
         }
         let pos = self.pos();
         let inode = self.dentry().unwrap().inode().unwrap();
-        let size = inode.write_at(pos, buf).unwrap();
+        let size = inode.cache_write_at(pos, buf).unwrap();
         self.set_pos(pos + size);
         Ok(size)
     }

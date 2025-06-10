@@ -6,8 +6,8 @@
 use core::{cmp, sync::atomic::{AtomicUsize, Ordering}};
 
 use crate::{fs::vfs::Inode, sync::mutex::SpinNoIrqLock};
-use alloc::sync::Arc;
-use hashbrown::HashMap;
+use alloc::{collections::btree_map::BTreeMap, sync::Arc};
+// use hashbrown::HashMap;
 use log::info;
 
 use super::page::{Page, PAGE_SIZE};
@@ -15,7 +15,10 @@ use super::page::{Page, PAGE_SIZE};
 pub struct PageCache {
     /// from file offset(should be page aligned)
     /// to the cached page
-    pages: SpinNoIrqLock<HashMap<usize, Arc<Page>>>,
+    /// TODO: now use BTreeMap to flush data from low off to high off
+    /// to avoid the 'Seek Beyond file size' problem
+    /// should fs support this?
+    pages: SpinNoIrqLock<BTreeMap<usize, Arc<Page>>>,
     /// the postion of EOF
     /// save it to prevent endless read
     /// notice that it may need to update when 
@@ -27,12 +30,12 @@ impl PageCache {
     /// create a new Page Cache
     pub fn new() -> Self {
         Self {
-            pages: SpinNoIrqLock::new(HashMap::new()),
+            pages: SpinNoIrqLock::new(BTreeMap::new()),
             end: AtomicUsize::new(0usize),
         }
     }
     /// get the cache inner
-    pub fn get_pages(&self) -> &SpinNoIrqLock<HashMap<usize, Arc<Page>>> {
+    pub fn get_pages(&self) -> &SpinNoIrqLock<BTreeMap<usize, Arc<Page>>> {
         &self.pages
     }
     /// get the page at file offset
@@ -47,6 +50,7 @@ impl PageCache {
     }
     pub fn update_end(&self, offset: usize) {
         let end = self.end.load(Ordering::Acquire);
+        // log::info!("updated end ({:#x} {:#x}) => {:#x}", end, offset, cmp::max(end, offset));
         self.end.store(cmp::max(end, offset), Ordering::Release);
     }
     pub fn end(&self) -> usize {
