@@ -100,14 +100,7 @@ impl Inode for Ext4Inode {
     }
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
-        let size = {
-            let mut file = self.file.lock();
-            let path = file.get_path();
-            file.file_open(path.to_str().unwrap(), O_RDONLY).unwrap();
-            let fsize = file.file_size() as usize;
-            file.file_close().unwrap();
-            fsize
-        };
+        let size = self.getattr().st_size as usize;
         if offset >= size {
             info!("[Ext4 INode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
@@ -254,18 +247,13 @@ impl Inode for Ext4Inode {
             };
 
             // now use the page to fill in the buf
-            let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..]);
+            let buf_read_size = cmp::min(max_end - current_offset, buf.len() - buf_offset);
+            let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..buf_offset + buf_read_size]);
             //info!("read at offset: {}, read_size: {}", in_page_offset, page_read_size);
-
 
             total_read_size += page_read_size;
             buf_offset += page_read_size;
-            current_offset += page_read_size; 
-
-            if page_read_size < PAGE_SIZE {
-                // may reach the end
-                break;
-            }
+            current_offset += page_read_size;
         }
 
         // log::info!("[cache_read_at] buf len {}, file offset {:#x}, read size {:#x}", buf.len(), offset ,total_read_size);
@@ -386,7 +374,8 @@ impl Inode for Ext4Inode {
             file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
             let fsize = file.file_size() as usize;
             file.file_close().expect("failed to close");
-            fsize
+            let page_cache_end = self.cache().end();
+            cmp::max(page_cache_end, fsize)
         } else {
             // DIR size should be 0
             0
@@ -434,7 +423,8 @@ impl Inode for Ext4Inode {
             file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
             let fsize = file.file_size() as usize;
             file.file_close().expect("failed to close");
-            fsize
+            let page_cache_end = self.cache().end();
+            cmp::max(page_cache_end, fsize)
         } else {
             // DIR size should be 0
             0
@@ -601,7 +591,8 @@ impl Drop for Ext4Inode {
                 continue;
             }
             // info!("flush dirty page at offset {:#x}", offset);
-            self.write_at(offset, page.get_slice::<u8>()).expect("[PageCache]: failed at flush");
+            let buf_flush_size = cmp::min(cache.end() - offset, PAGE_SIZE);
+            self.write_at(offset, &page.get_slice::<u8>()[..buf_flush_size]).expect("[PageCache]: failed at flush");
         }
 
         // file.file_close().expect("failed to close fd");

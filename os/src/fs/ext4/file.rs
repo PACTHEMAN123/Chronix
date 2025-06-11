@@ -94,9 +94,7 @@ impl File for Ext4File {
     }
     
     fn size(&self) -> usize {
-        let disk_file_size = self.inode().unwrap().getattr().st_size as usize;
-        let page_cache_end = self.inode().unwrap().cache().end();
-        cmp::max(disk_file_size, page_cache_end)
+        self.inode().unwrap().getattr().st_size as usize
     }
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
@@ -114,6 +112,18 @@ impl File for Ext4File {
         let inode = self.dentry().unwrap().inode().unwrap();
         let size = inode.cache_write_at(pos, buf).unwrap();
         self.set_pos(pos + size);
+        Ok(size)
+    }
+
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, SysError> {
+        let inode = self.dentry().unwrap().inode().unwrap();
+        let size = inode.cache_read_at(offset, buf).unwrap();
+        Ok(size)
+    }
+    
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, SysError> {
+        let inode = self.dentry().unwrap().inode().unwrap();
+        let size = inode.cache_write_at(offset, buf).unwrap();
         Ok(size)
     }
 }

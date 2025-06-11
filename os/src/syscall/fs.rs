@@ -894,7 +894,7 @@ pub async fn sys_pwrite(fd: usize, buf: usize, count: usize, offset: usize) -> S
 /// If offset is NULL, then data will be read from in_fd starting at
 /// the file offset, and the file offset will be updated by the call.
 pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult {
-    info!("[sys_sendfile]: out fd: {out_fd}, in fd: {in_fd}, offset: {offset}, count: {count}");
+    info!("[sys_sendfile]: out fd: {out_fd}, in fd: {in_fd}, offset: {offset}, count: {:#x}", count);
     let task = current_task().unwrap().clone();
     let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
     let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
@@ -909,7 +909,7 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
         len = in_file.read(&mut buf).await?;
     } else {
         let off = off_ptr.to_mut();
-        len = in_file.inode().unwrap().read_at(*off, &mut buf).expect("read failed");
+        len = in_file.read_at(*off, &mut buf).await?;
         *off += len;
     }
     let ret = out_file.write(&buf[..len]).await?;

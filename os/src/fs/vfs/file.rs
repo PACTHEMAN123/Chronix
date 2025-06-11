@@ -69,10 +69,18 @@ pub trait File: Send + Sync + DowncastSync {
     fn readable(&self) -> bool;
     /// If writable
     fn writable(&self) -> bool;
-    /// Read file to `UserBuffer`
+    /// Read file, will adjust file offset
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError>;
-    /// Write `UserBuffer` to file
+    /// Write file, will adjust file offset
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError>;
+    /// Read file, file offset will not change
+    async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, SysError> {
+        todo!()
+    }
+    /// Write file, file offset will not change
+    async fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, SysError> {
+        todo!()
+    }
     /// get the dentry it points to
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
         Some(self.file_inner().dentry.clone())
