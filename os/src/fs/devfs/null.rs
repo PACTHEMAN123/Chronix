@@ -4,7 +4,7 @@ use alloc::sync::{Arc, Weak};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
+use crate::{config::BLOCK_SIZE, devices::{DevId, DeviceMajor}, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 
 pub struct NullFile {
@@ -92,7 +92,9 @@ impl NullInode {
     pub fn new(super_block: Weak<dyn SuperBlock>) -> Arc<Self> {
         let size = BLOCK_SIZE;
         Arc::new(Self {
-            inner: InodeInner::new(Some(super_block), InodeMode::CHAR, size),
+            inner: InodeInner::new(Some(super_block),
+             InodeMode::CHAR | InodeMode::OWNER_READ | InodeMode::OWNER_WRITE | InodeMode::OWNER_EXEC
+             , size),
         })
     }
 }
@@ -104,18 +106,19 @@ impl Inode for NullInode {
 
     fn getattr(&self) -> crate::fs::Kstat {
         let inner = self.inode_inner();
+        let rdev = ((1usize & 0xfff) << 8) | (3usize & 0xff);
         Kstat {
-            st_dev: 0,
+            st_dev: 1,
             st_ino: inner.ino as u64,
             st_mode: inner.mode.bits() as _,
             st_nlink: inner.nlink() as u32,
             st_uid: 0,
             st_gid: 0,
-            st_rdev: 0,
+            st_rdev: rdev as u64,
             _pad0: 0,
             st_size: inner.size() as _,
             _pad1: 0,
-            st_blksize: 0,
+            st_blksize: BLOCK_SIZE as i32,
             st_blocks: 0,
             st_atime_sec: inner.atime().tv_sec as _,
             st_atime_nsec: inner.atime().tv_nsec as _,
@@ -167,8 +170,8 @@ impl Inode for NullInode {
                 tv_sec: inner.mtime().tv_sec as _,
                 tv_nsec: inner.mtime().tv_nsec as _,
             },
-            stx_rdev_major: 0,
-            stx_rdev_minor: 0,
+            stx_rdev_major: 1,
+            stx_rdev_minor: 3,
             stx_dev_major: 0,
             stx_dev_minor: 0,
             stx_mnt_id: 0,

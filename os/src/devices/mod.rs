@@ -47,6 +47,14 @@ pub struct DevId {
     pub minor: usize,
 }
 
+impl DevId {
+    /// 
+    pub fn makedev(&self) -> usize {
+        let major = self.major as usize;
+        ((major & 0xfff) << 8) | (self.minor & 0xff)
+    }
+}
+
 /// meta data for any devices
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceMeta {

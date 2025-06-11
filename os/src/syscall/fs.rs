@@ -262,14 +262,14 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
     let inode = dentry.inode();
     if inode.is_none() {
+        log::warn!("no inode");
         return Err(SysError::ENOENT)
     }
     let stat = inode.unwrap().getattr();
-    let stat_ptr = stat_buf as *mut Kstat;
-    unsafe {
-        Instruction::set_sum();
-        stat_ptr.write(stat);
-    }
+    let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?;
+    stat_ptr.write(stat);
     Ok(0)
 }
 
