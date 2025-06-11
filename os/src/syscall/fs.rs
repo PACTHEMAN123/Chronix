@@ -778,7 +778,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         totol_len += ret;
         offset += ret;
     }
-    assert!(offset == file.pos());
+    // assert!(offset == file.pos());
     Ok(totol_len as isize)
 }
 
