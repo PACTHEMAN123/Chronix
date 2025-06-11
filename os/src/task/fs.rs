@@ -53,14 +53,14 @@ impl FdTable {
             self.fd_table.push(None);
             Ok(self.fd_table.len() - 1)
         } else {
-            Err(SysError::EBADF)
+            Err(SysError::EMFILE)
         }
     }
     /// allocate a new fd greater or equal to given bound
     /// expend the table if the max fd is not enough
     pub fn alloc_fd_from(&mut self, bound: usize) -> Result<usize, SysError> {
         if bound > self.rlimit.rlim_max {
-            return Err(SysError::EBADF)
+            return Err(SysError::EMFILE)
         }
 
         if self.fd_table.len() <= bound {
@@ -163,7 +163,7 @@ impl FdTable {
     pub fn dup3(&mut self, old_fd: usize, new_fd: usize, flags: FdFlags) -> Result<usize, SysError> {
         let file = self.get_file(old_fd)?;
         if self.fd_table.len() <= new_fd {
-            self.fd_table.resize(new_fd.checked_add(1).ok_or(SysError::EBADF)?, None);
+            self.fd_table.resize(new_fd.checked_add(1).ok_or(SysError::EMFILE)?, None);
         }
         self.fd_table[new_fd] = Some(FdInfo {file, flags});
         Ok(new_fd)
@@ -173,7 +173,7 @@ impl FdTable {
     pub fn dup3_with_flags(&mut self, old_fd: usize, new_fd: usize) -> Result<usize, SysError> {
         let fd_info = self.get_fd_info(old_fd)?;
         if self.fd_table.len() <= new_fd {
-            self.fd_table.resize(new_fd.checked_add(1).ok_or(SysError::EBADF)?, None);
+            self.fd_table.resize(new_fd.checked_add(1).ok_or(SysError::EMFILE)?, None);
         }
         self.fd_table[new_fd] = Some(fd_info);
         Ok(new_fd)

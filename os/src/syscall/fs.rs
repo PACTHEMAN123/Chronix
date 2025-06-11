@@ -381,7 +381,7 @@ pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx
     log::debug!("[sys_statx]: statx dirfd: {}, path: {:?}, at_flags {:?}, open_flags: {:?}", dirfd, pathname, at_flags, open_flags);
 
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-    if dentry.state() == DentryState::NEGATIVE {
+    if dentry.state() == DentryState::NEGATIVE && dentry.inode().is_none() {
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
@@ -575,12 +575,26 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
     const UTIME_OMIT: usize = 0x3ffffffe;
     let task = current_task().unwrap().clone();
     let at_flags = AtFlags::from_bits_truncate(flags);
-    let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-    log::info!("[sys_utimensat]: path: {}", dentry.path());
-    if dentry.state() == DentryState::NEGATIVE {
-        return Err(SysError::ENOENT);
+    log::info!("[sys_utimensat]: dirfd {}, pathname ptr {:#x}, flags {:?}", dirfd, pathname as usize, at_flags);
+    if dirfd as i32 != AtFlags::AT_FDCWD.bits() && pathname.is_null() && at_flags.contains(AtFlags::AT_SYMLINK_NOFOLLOW) {
+        return Err(SysError::EINVAL)
     }
-    let inode = dentry.inode().unwrap();
+    // VERSIONS: .... To support this, the Linux
+    // utimensat() system call implements a nonstandard feature: if
+    // pathname is NULL, then the call modifies the timestamps of the
+    // file referred to by the file descriptor dirfd
+    let inode = if pathname.is_null() {
+        let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
+        file.inode().unwrap()
+    } else {
+        let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
+        log::info!("[sys_utimensat]: path: {}", dentry.path());
+        if dentry.is_negative() {
+            return Err(SysError::ENOENT);
+        }
+        dentry.inode().unwrap()
+    };
+    
     let inner = inode.inode_inner();
     
     let current_time = TimeSpec::from(get_current_time_duration());
