@@ -79,7 +79,7 @@ impl Debug for UserVmFile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::None => write!(f, "None"),
-            Self::File(arg0) => f.debug_tuple("File").field(&(arg0.as_ref() as *const _)).finish(),
+            Self::File(arg0) => f.debug_tuple("File").field(&(arg0.dentry().unwrap().name())).finish(),
             Self::Shm(arg0) => f.debug_tuple("Shm").field(&arg0.get_id()).finish(),
         }
     }
@@ -150,7 +150,6 @@ impl From<Option<Arc<sysv::ShmObj>>> for UserVmFile {
 }
 
 #[allow(missing_docs, unused)]
-#[derive(Debug)]
 pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
@@ -163,6 +162,12 @@ pub struct UserVmArea {
     pub offset: usize,
     /// length of file
     pub len: usize,
+}
+
+impl Debug for UserVmArea {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("UserVmArea").field("range_va", &self.range_va).field("vma_type", &self.vma_type).field("map_perm", &self.map_perm).field("file", &self.file).field("map_flags", &self.map_flags).field("offset", &self.offset).field("len", &self.len).finish()
+    }
 }
 
 #[allow(missing_docs, unused)]

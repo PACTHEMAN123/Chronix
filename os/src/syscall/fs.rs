@@ -23,7 +23,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
-            .ensure_read(&mut task.vm_space.lock())
+            .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
     let buf = user_buf.to_ref();
     let ret = file.write(buf).await?;
@@ -53,7 +53,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
     let buf = user_buf.to_mut();
     let ret = file.read(buf).await?;
@@ -134,7 +134,7 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
         } else {
             //info!("copying path: {}, len: {}", path, path.len());
             let new_buf = UserSliceRaw::new(buf as *mut u8, len)
-                .ensure_write(&mut task.vm_space.lock())
+                .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?;
             new_buf.to_mut()[path.len()..].fill(0 as u8);
             new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
@@ -177,7 +177,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let task = current_task().unwrap().clone();
     let opt_path = user_path_to_string(
             UserPtrRaw::new(pathname), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         );
     if let Some(path) = opt_path {
         // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
@@ -231,7 +231,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
     let task = current_task().unwrap();
     let opt_path = user_path_to_string(
             UserPtrRaw::new(pathname), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         );
     if let Some(path) = opt_path {
         let task = current_task().unwrap().clone();
@@ -281,7 +281,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(
             UserPtrRaw::new(path), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         ).ok_or(SysError::EINVAL)?;
     info!("try to switch to path {}", path);
     let old_dentry = task.cwd();
@@ -432,7 +432,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     const LEN_BEFORE_NAME: usize = 19;
     let task = current_task().unwrap().clone();
     let user_buf = UserSliceRaw::new(buf as *mut u8, len)
-        .ensure_write(&mut task.vm_space.lock())
+        .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let buf_slice = user_buf.to_mut();
     assert!(buf_slice.len() == len);
@@ -489,7 +489,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     let task = current_task().unwrap().clone();
     let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         ).ok_or(SysError::EINVAL)?;
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
     let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
@@ -526,10 +526,10 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
     let task = current_task().unwrap().clone();
     let old_path = user_path_to_string(
         UserPtrRaw::new(old_path_ptr), 
-        &mut task.vm_space.lock()).expect("failed to get old path");
+        &mut task.get_vm_space().lock()).expect("failed to get old path");
     let new_path = user_path_to_string(
         UserPtrRaw::new(new_path_ptr), 
-        &mut task.vm_space.lock()).expect("failed to get new path");
+        &mut task.get_vm_space().lock()).expect("failed to get new path");
     log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
     let dentry = at_helper(task, new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     let new_inode = dentry.inode().unwrap().symlink(&new_path)?;
@@ -556,7 +556,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     
     let path = inode.readlink()?;
     let new_buf = UserSliceRaw::new(buf as *mut u8, len)
-        .ensure_write(&mut task.vm_space.lock())
+        .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     new_buf.to_mut()[path.len()..].fill(0u8);
     new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
@@ -605,7 +605,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
     } else {
         let times_ptr =
             UserSliceRaw::new(times as *mut TimeSpec, 2)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
         let times = times_ptr.to_mut();
         log::info!("[sys_utimensat] times {:?}", times);
@@ -739,7 +739,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
-        .ensure_read(&mut task.vm_space.lock())
+        .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let mut totol_len = 0usize;
     let mut offset = file.pos();
@@ -751,7 +751,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         
         let iov_buf =
             UserSliceRaw::new(iov.base as *mut u8, iov.len)
-                .ensure_write(&mut task.vm_space.lock())
+                .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?;
         let ret = file.read(iov_buf.to_mut()).await?;
 
@@ -790,7 +790,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
-        .ensure_read(&mut task.vm_space.lock())
+        .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let mut totol_len = 0usize;
     for (i, iov) in iovs.to_ref().iter().enumerate() {
@@ -801,7 +801,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
 
         let iov_buf =
             UserSliceRaw::new(iov.base as *mut u8, iov.len)
-                .ensure_read(&mut task.vm_space.lock())
+                .ensure_read(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?;
         let ret = file.write(iov_buf.to_ref()).await?;
 
@@ -837,7 +837,7 @@ pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> Sy
     file.seek(SeekFrom::Start(offset as u64))?;
     let user_buf =
         UserSliceRaw::new(buf as *mut u8, count)
-                .ensure_write(&mut task.vm_space.lock())
+                .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?;
     let ret = file.read(user_buf.to_mut()).await?;
     // let start = buf & !(Constant::PAGE_SIZE - 1);
@@ -874,7 +874,7 @@ pub async fn sys_pwrite(fd: usize, buf: usize, count: usize, offset: usize) -> S
     file.seek(SeekFrom::Start(offset as u64))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, count)
-            .ensure_read(&mut task.vm_space.lock())
+            .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
     let ret = file.write(user_buf.to_ref()).await?;
     // let start = buf & !(Constant::PAGE_SIZE - 1);
@@ -915,7 +915,7 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut buf = vec![0u8; count];
     let off_ptr = {
         UserPtrRaw::new(offset as *mut usize)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?
     };
     let len;
@@ -1030,7 +1030,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
     }
     let opt_path = user_path_to_string(
             UserPtrRaw::new(pathname), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         );
     let dentry = match opt_path {
         Some(path) => {

@@ -186,7 +186,7 @@ pub fn sys_mprotect(addr: VirtAddr, mut length: usize, prot: i32) -> SysResult {
     }
     let prot = MmapProt::from_bits_truncate(prot);
     let perm = MapPerm::from(prot);
-    // log::info!("[mprotect] {:#x} {:#x} {:?}", addr.0, len, prot);
+    // println!("[mprotect] {:#x} {:#x} {:?}", addr.0, length, prot);
     let task = current_task().unwrap().clone();
     task.with_mut_vm_space(|vm| -> SysResult {
         let end_vpn = (addr + length).ceil();
@@ -222,7 +222,7 @@ pub fn sys_mremap(
     }
     
     let task = current_task().unwrap().clone();
-    let vm_space = task.vm_space.clone();
+    let vm_space = task.vm_space.clone().unwrap();
     let mut vm = vm_space.lock();
     let old_area = vm.get_area_view(old_addr).ok_or(SysError::EINVAL)?;
     if old_area.range_va.end.0 - old_addr.0 < old_size {

@@ -13,7 +13,7 @@ use super::{SysError, SysResult};
 /// get current time of day
 pub fn sys_gettimeofday(tv: usize) -> SysResult {
     let task = current_task().unwrap();
-    let mut vm = task.vm_space.lock();
+    let mut vm = task.get_vm_space().lock();
     let tv_ptr = UserPtrRaw::new(tv as *mut TimeVal)
         .ensure_write(&mut vm)
         .ok_or(SysError::EINVAL)?;
@@ -30,7 +30,7 @@ use crate::timer::ffi::Tms;
 pub fn sys_times(tms: usize) -> SysResult {
     let task = current_task().unwrap();
     let tms_ptr = UserPtrRaw::new(tms as *mut Tms)
-        .ensure_write(&mut task.vm_space.lock())
+        .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let current_task = current_task().unwrap();
     let tms_val = Tms::from_time_recorder(current_task.time_recorder());
@@ -42,12 +42,12 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
     let task = current_task().unwrap();
     let time_val_ptr = 
         UserPtrRaw::new(time_ptr as *const TimeSpec)
-            .ensure_read(&mut task.vm_space.lock())
+            .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
     let time_val = *time_val_ptr.to_ref();
     let time_out_ptr = 
         UserPtrRaw::new(time_out_ptr as *const TimeSpec)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
     let time_out = time_out_ptr.to_mut();
     let sleep_time_duration = time_val.into();
@@ -118,7 +118,7 @@ pub fn sys_clock_getres(_clockid: usize, res_ptr: usize) -> SysResult {
     }
     let task = current_task().unwrap().clone();
     let res_ptr = UserPtrRaw::new(res_ptr as *const TimeSpec)
-        .ensure_write(&mut task.vm_space.lock())
+        .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let res = res_ptr.to_mut();
     *res = Duration::from_nanos(1).into();

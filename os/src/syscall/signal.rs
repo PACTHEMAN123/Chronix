@@ -179,7 +179,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
     let mut sig_manager = task.sig_manager.lock();
     if old_set as usize != 0 {
         UserPtrRaw::new(old_set)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?
             .write(sig_manager.blocked_sigs);
         debug!("[sys_rt_sigprocmask] old set: {:?}", sig_manager.blocked_sigs);
@@ -191,7 +191,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
     
     let new_sig_mask = SigSet::from_bits(
         *UserPtrRaw::new(set)
-            .ensure_read(&mut task.vm_space.lock())
+            .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?
             .to_ref() as usize
     ).ok_or(SysError::EINVAL)?;

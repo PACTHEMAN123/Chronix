@@ -123,11 +123,10 @@ impl TaskControlBlock {
                     let sp = *trap_cx.sp();
                     let mut new_sp = sp - size_of::<UContext>();
                     let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
-                    let mut vm = self.vm_space.lock();
                     let dst = 
-                        UserPtrRaw::new(new_sp as *mut UContext).ensure_write(&mut vm).unwrap();
+                        UserPtrRaw::new(new_sp as *mut UContext).ensure_write(&mut self.get_vm_space().lock()).unwrap();
                     // println!("copy_out to {:#x}", new_sp);
-                    // copy_out(&mut self.vm_space.lock(), VirtAddr(new_sp), ucontext_bytes);
+                    // copy_out(&mut self.get_vm_space().lock(), VirtAddr(new_sp), ucontext_bytes);
                     dst.write(ucontext);
                     self.set_sig_ucontext_ptr(new_sp);
                     
@@ -147,7 +146,7 @@ impl TaskControlBlock {
                         siginfo_v._pad[1] = sig.si_pid.unwrap_or(0) as i32;
                         new_sp -= size_of::<LinuxSigInfo>();
                         let dst = 
-                            UserPtrRaw::new(new_sp as *mut LinuxSigInfo).ensure_write(&mut vm).unwrap();
+                            UserPtrRaw::new(new_sp as *mut LinuxSigInfo).ensure_write(&mut self.get_vm_space().lock()).unwrap();
                         dst.write(siginfo_v);
                         trap_cx.set_arg_nth(1, new_sp);
                     }

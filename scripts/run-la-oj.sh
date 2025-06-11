@@ -32,6 +32,7 @@ cd /loongarch/musl
 ./iperf_testcode.sh
 ./libcbench_testcode.sh
 cd ..
+echo "finish to run musl"
 
 echo "start to run iz"
 cd /loongarch/glibc

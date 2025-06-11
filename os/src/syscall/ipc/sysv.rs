@@ -79,7 +79,7 @@ pub fn sys_shmat(shmid: i32, mut shmaddr: VirtAddr, shmflg: i32) -> SysResult {
     }
     if let Some(shm) = sysv::SHM_MANAGER.get(shmid as usize) {
         let task = current_task().unwrap();
-        let mut vm = task.vm_space.lock();
+        let mut vm = task.get_vm_space().lock();
         let ret = vm.alloc_anon_area(
             shmaddr, shm.shmid_ds.lock().segsz, perm, 
             MmapFlags::MAP_SHARED, 
@@ -100,7 +100,7 @@ pub fn sys_shmdt(shmaddr: VirtAddr) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let task = current_task().unwrap();
-    let mut vm_space = task.vm_space.lock();
+    let mut vm_space = task.get_vm_space().lock();
     if let Some(vma) = vm_space.get_area_ref(shmaddr) {
         if let UserVmFile::Shm(shm) = vma.file.clone() {
             assert!(vma.map_flags.contains(MapFlags::SHARED));
@@ -123,7 +123,7 @@ pub fn sys_shmctl(shmid: i32, op: i32, shmid_ds: UserPtrRaw<ShmIdDs>) -> SysResu
             let task = current_task().unwrap();
             let shm = sysv::SHM_MANAGER.get(shmid as usize).ok_or(SysError::ENOENT)?;
             shmid_ds
-                .ensure_write(&mut task.vm_space.lock())
+                .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?
                 .write(*shm.shmid_ds.lock());
             Ok(0)

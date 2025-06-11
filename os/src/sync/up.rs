@@ -50,3 +50,17 @@ impl<T> UPSafeCell<T> {
         }
     }
 }
+
+impl<T> Deref for UPSafeCell<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.get_ref()
+    }
+}
+
+impl<T> DerefMut for UPSafeCell<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.exclusive_access()
+    }
+}

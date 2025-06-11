@@ -104,6 +104,28 @@ macro_rules! generate_with_methods {
 }
 
 #[macro_export]
+macro_rules! generate_option_with_methods {
+    ($($name:ident : $ty:ty),+) => {
+        paste::paste! {
+            $(
+                #[allow(unused)]
+                /// with method for Shared<$ty>, takes a closure and returns a reference to the inner value
+                pub fn [<with_ $name>]<T>(&self, f: impl FnOnce(&$ty) -> T) -> T {
+                    log::trace!("with_{}", stringify!($name));
+                    f(&self.$name.as_ref().unwrap().lock())
+                }
+                #[allow(unused)]
+                /// with  mut method for Shared<$ty>, takes a closure and returns a mutable reference to the inner value
+                pub fn [<with_mut_ $name>]<T>(&self, f: impl FnOnce(&mut $ty) -> T) -> T {
+                    log::trace!("with_mut_{}", stringify!($name));
+                    f(&mut self.$name.as_ref().unwrap().lock())
+                }
+            )+
+        }
+    };
+}
+
+#[macro_export]
 /// quick macro to generate xxx & set_xxx for SpinNoIrqLock<T>
 /// T should be able to Copy, Clone
 macro_rules! generate_lock_accessors {

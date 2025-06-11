@@ -5,8 +5,8 @@ use log::info;
 
 use super::{ffi::TimeVal, get_current_time_duration};
 use spin::Lazy;
-use crate::{signal::{SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
-use hal::instruction::{Instruction, InstructionHal};
+use crate::{processor::processor::current_processor, signal::{SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
+use hal::{board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}};
 /// A trait that defines the event to be triggered when a timer expires.
 /// The TimerEvent trait requires a callback method to be implemented,
 /// which will be called when the timer expires.
@@ -104,23 +104,26 @@ impl TimerManager {
     }
     /// check for the manager
     pub fn check(&self) {
-        let mut timers = self.timers.lock();
-
-        while let Some(timer) = timers.peek() {
-            let current_time = get_current_time_duration();
-            if current_time >= timer.0.expire {
-                log::trace!("timers len {}", timers.len());
-                
-                
-                // info!(
-                //     "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
-                //     current_time,
-                //     timer.0.expire
-                // );
-                  
-                let timer = timers.pop().unwrap().0;
-                if let Some(new_timer) = timer.callback() {
-                    timers.push(Reverse(new_timer));
+        loop {
+            let mut timers = self.timers.lock();
+            if let Some(timer) = timers.peek() {
+                let current_time = get_current_time_duration();
+                if current_time >= timer.0.expire {
+                    log::trace!("timers len {}", timers.len());
+                    
+                    // info!(
+                    //     "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
+                    //     current_time,
+                    //     timer.0.expire
+                    // );
+                    
+                    let timer = timers.pop().unwrap().0;
+                    drop(timers);
+                    if let Some(new_timer) = timer.callback() {
+                        self.timers.lock().push(Reverse(new_timer));
+                    }
+                } else {
+                    break;
                 }
             } else {
                 break;

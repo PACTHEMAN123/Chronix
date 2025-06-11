@@ -55,7 +55,7 @@ use core::{
     cell::RefMut,
     task::Waker,
 };
-use crate::{generate_atomic_accessors, generate_state_methods, generate_upsafecell_accessors, generate_with_methods};
+use crate::{generate_atomic_accessors, generate_option_with_methods, generate_state_methods, generate_upsafecell_accessors, generate_with_methods};
 use log::*;
 use super::tid::{PGid, Pid, Tid, TidAddress, TidHandle};
 /// pack Arc<Spin> into a struct
@@ -94,6 +94,8 @@ pub struct TaskControlBlock {
     pub tid_address: UPSafeCell<TidAddress>,
     /// time recorder for a task
     pub time_recorder: UPSafeCell<TimeRecorder>,
+    /// Futexes used by the task.
+    pub robust: UPSafeCell<UserPtrRaw<RobustListHead>>,
     // ! mutable only in self context, can be accessed by other tasks
     /// exit code of the task
     pub exit_code: AtomicUsize,
@@ -106,7 +108,7 @@ pub struct TaskControlBlock {
     pub task_status: SpinNoIrqLock<TaskStatus>,
     // ! mutable in self and other tasks
     /// virtual memory space of the task
-    pub vm_space: Shared<UserVmSpace>,
+    pub vm_space: UPSafeCell<Option<Shared<UserVmSpace>>>,
     /// parent task
     pub parent: Shared<Option<Weak<TaskControlBlock>>>,
     /// child tasks
@@ -125,8 +127,6 @@ pub struct TaskControlBlock {
     pub cwd: Shared<Arc<dyn Dentry>>,
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
-    /// Futexes used by the task.
-    pub robust: UPSafeCell<UserPtrRaw<RobustListHead>>,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -219,12 +219,14 @@ impl TaskControlBlock {
     generate_with_methods!(
         fd_table: FdTable,
         children: BTreeMap<Pid, Arc<TaskControlBlock>>,
-        vm_space: UserVmSpace,
         thread_group: ThreadGroup,
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
         itimers: [ITimer;3]
+    );
+    generate_option_with_methods!(
+        vm_space: UserVmSpace
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -275,7 +277,7 @@ impl TaskControlBlock {
     }
     /// get vm_space of the task
     pub fn get_user_token(&self) -> usize {
-        self.vm_space.lock().get_page_table().get_token()
+        self.vm_space.as_ref().unwrap().lock().get_page_table().get_token()
     }
     /// get task_status of the task
     pub fn get_status(&self) -> TaskStatus {
@@ -283,7 +285,11 @@ impl TaskControlBlock {
     }
     /// switch to the task's page table
     pub unsafe fn switch_page_table(&self) {
-        self.vm_space.lock().enable();
+        self.vm_space.as_ref().unwrap().lock().enable();
+    }
+    /// get memory space
+    pub fn get_vm_space(&self) -> &Shared<UserVmSpace> {
+        self.vm_space.as_ref().unwrap()
     }
     /// get parent task
     pub fn parent(&self) -> Option<Weak<Self>> {
@@ -372,7 +378,7 @@ impl TaskControlBlock {
             exit_code: AtomicUsize::new(0),
             base_size: AtomicUsize::new(user_sp),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            vm_space: new_shared(vm_space),
+            vm_space: UPSafeCell::new(Some(new_shared(vm_space))),
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
@@ -443,8 +449,8 @@ impl TaskControlBlock {
         user_sp = new_user_sp;
 
         // substitute memory_set
-        self.with_mut_vm_space(|m| *m = vm_space);
-
+        // self.with_mut_vm_space(|m| *m = vm_space);
+        *self.vm_space.exclusive_access() = Some(new_shared(vm_space));
         // close fd on exec
         self.with_mut_fd_table(|fd_table|fd_table.do_close_on_exec());
 
@@ -508,15 +514,15 @@ impl TaskControlBlock {
         }
         let vm_space;
         if flag.contains(CloneFlags::VM){
-            info!("task {} cloning a vm", self.tid());
-            vm_space = self.vm_space.clone();
+            // println!("task {} cloning a vm", self.tid());
+            vm_space = UPSafeCell::new(self.vm_space.clone());
         } else {
-            vm_space = new_shared(
+            vm_space = UPSafeCell::new(Some(new_shared(
                 self.with_mut_vm_space(
                     |vm| 
                         UserVmSpace::from_existed(vm)
-                )
-            );
+                ))
+            ));
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
             //info!("cloning a file descriptor table");
@@ -556,9 +562,9 @@ impl TaskControlBlock {
         if !flag.contains(CloneFlags::THREAD) {
             //info!("fork should in this ");
             self.add_child(task_control_block.clone());
-            log::info!("[fork] new process pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
+            // println!("[fork] new process pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
         } else {
-            log::info!("[fork] new thread pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
+            // println!("[fork] new thread pid: {} tid: {}", task_control_block.pid(), task_control_block.tid());
         }
         // update user start 
         task_control_block.time_recorder().update_user_start(get_current_time_duration());
@@ -572,13 +578,16 @@ impl TaskControlBlock {
 
     fn futex_wake(&self, addr: usize, shared: bool, vm: &mut UserVmSpace) {
         let key = if shared {
-            let paddr = 
+            if let Some(paddr) = 
                 translate_uva_checked(
                     vm, 
                     VirtAddr::from(addr), 
                     PageFaultAccessType::WRITE
-                ).unwrap();
-            FutexHashKey::Shared { paddr }
+                ) {
+                FutexHashKey::Shared { paddr }
+            } else {
+                return;
+            }
         } else {
             FutexHashKey::Private {
                 mm: self.get_raw_vm_ptr(),
@@ -632,18 +641,18 @@ impl TaskControlBlock {
             );
             return Some(ret);
         }
-        let head = self.robust.exclusive_access().clone().ensure_read(&mut self.vm_space.lock()).ok_or(())?;
+        let head = self.robust.clone().ensure_read(&mut self.get_vm_space().lock()).ok_or(())?;
         self.robust.exclusive_access().reset(null_mut());
         
         info!("[exit_robust_list] task: {} robust list head: {:#x}", self.tid(), head.to_ref() as *const _ as usize);
         let (mut entry, mut pi) = fetch_robust_entry(
-            UserPtrRaw::new(&head.to_ref().list.next as *const _), &mut self.vm_space.lock()
+            UserPtrRaw::new(&head.to_ref().list.next as *const _), &mut self.get_vm_space().lock()
         ).ok_or(())?;
 
         let futex_offset = head.to_ref().futex_offset;
 
         let (pending, pip) = fetch_robust_entry(
-            UserPtrRaw::new(&head.to_ref().list_op_pending as *const _), &mut self.vm_space.lock()
+            UserPtrRaw::new(&head.to_ref().list_op_pending as *const _), &mut self.get_vm_space().lock()
         ).ok_or(())?;
         
         let mut next_entry: UserPtrRaw<RobustList>;
@@ -652,7 +661,7 @@ impl TaskControlBlock {
         while entry != &(head.to_ref().list) {
 
             (next_entry, next_pi) = fetch_robust_entry(
-                UserPtrRaw::new(unsafe { &entry.to_ref_unchecked().next } as *const _), &mut self.vm_space.lock())
+                UserPtrRaw::new(unsafe { &entry.to_ref_unchecked().next } as *const _), &mut self.get_vm_space().lock())
             .ok_or(())?;
             info!(
                 "[exit_robust_list] task: {} entry: {:?} futex: {:?}", 
@@ -660,7 +669,7 @@ impl TaskControlBlock {
                 (entry.clone().cast::<u8>() + futex_offset).cast::<AtomicU32>()
             );
             if entry != pending {
-                if self.handle_futex_death((entry.cast::<u8>() + futex_offset).cast(), pi, false, &mut self.vm_space.lock()).is_err() {
+                if self.handle_futex_death((entry.cast::<u8>() + futex_offset).cast(), pi, false, &mut self.get_vm_space().lock()).is_err() {
                     return Err(());
                 }
             }
@@ -673,8 +682,8 @@ impl TaskControlBlock {
             }
         }
         if !pending.is_null() {
-            let _ = pending.clone().ensure_read(&mut self.vm_space.lock()).ok_or(())?;
-            self.handle_futex_death((pending.cast::<u8>() + futex_offset).cast(), pip, true, &mut self.vm_space.lock())?;
+            let _ = pending.clone().ensure_read(&mut self.get_vm_space().lock()).ok_or(())?;
+            self.handle_futex_death((pending.cast::<u8>() + futex_offset).cast(), pip, true, &mut self.get_vm_space().lock())?;
         }
         Ok(())
     }
@@ -683,11 +692,11 @@ impl TaskControlBlock {
         match self.tid_address_ref().clear_child_tid {
             Some(addr) if addr != 0 && (addr & 3) == 0 => {
                 let child_tid_ptr = UserPtrRaw::new(addr as *mut AtomicU32);
-                if let Some(child_tid) = child_tid_ptr.ensure_write(&mut self.vm_space.lock()) {
+                if let Some(child_tid) = child_tid_ptr.ensure_write(&mut self.get_vm_space().lock()) {
                     child_tid.to_mut().store(0, Ordering::Release);
                 }
-                self.futex_wake(addr, false, &mut self.vm_space.lock());
-                self.futex_wake(addr, true, &mut self.vm_space.lock());
+                self.futex_wake(addr, false, &mut self.get_vm_space().lock());
+                self.futex_wake(addr, true, &mut self.get_vm_space().lock());
                 self.tid_address().clear_child_tid = None;
             }
             _ => {}
@@ -712,9 +721,10 @@ impl TaskControlBlock {
             tg.group_exit_code = code;
         }
         drop(tg);
-        // will not release memory space
         self.mm_release();
+        *self.vm_space.exclusive_access() = None;
         self.set_zombie();
+        
         if is_last {
             self.with_mut_children(|children|{
                 if children.is_empty() {
@@ -732,7 +742,6 @@ impl TaskControlBlock {
                 initproc.children.lock().extend(children.clone()); 
                 children.clear();
             });
-            self.vm_space.lock().clear();
             self.with_mut_fd_table(|table|table.fd_table.clear());
             self.notify_parent();
         }
@@ -820,7 +829,7 @@ impl TaskControlBlock {
     }
 
     pub fn get_raw_vm_ptr(&self) -> usize {
-        Arc::as_ptr(&self.vm_space) as usize
+        Arc::as_ptr(&self.vm_space.as_ref().unwrap()) as usize
     }
 }
 

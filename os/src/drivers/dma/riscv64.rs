@@ -9,10 +9,6 @@ use crate::{mm::{allocator::{frames_alloc, frames_alloc_clean, frames_dealloc}, 
 
 use super::VirtioHal;
 
-lazy_static::lazy_static! {
-    static ref QUEUE_FRAMES: UPSafeCell<Vec<FrameTracker>> = UPSafeCell::new(Vec::new());
-}
-
 unsafe impl virtio_drivers::Hal for VirtioHal {
     fn dma_alloc(pages: usize, _direction: BufferDirection,) -> (virtio_drivers::PhysAddr, NonNull<u8>) {
         info!("dma_alloc");

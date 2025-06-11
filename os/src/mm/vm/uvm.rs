@@ -172,6 +172,7 @@ impl UserVmSpace {
     pub fn push_area(&mut self, area: UserVmArea, data: Option<&[u8]>) -> &mut UserVmArea{
         match self.areas.try_insert(area.range_vpn(), area) {
             Ok(area) => {
+                // println!("[push_area] {:?}", area);
                 if let Some(data) = data{
                     area.copy_data(&mut self.page_table, data, 0);
                 }
@@ -395,7 +396,7 @@ impl UserVmSpace {
         if let Some(area) = self.areas.get_mut(va.floor()) {
             area.handle_page_fault(&mut self.page_table, vpn, access_type)
         } else {
-            log::debug!("[handle_page_fault] no matched vma");
+            // log::error!("[handle_page_fault] va: {va:?}, no matched vma");
             return Err(());
         }
     }
@@ -511,7 +512,7 @@ impl UserVmSpace {
         let interp_file;
         let dentry = global_find_dentry(&interp).expect("cannot find interp dentry");
         if dentry.state() == DentryState::NEGATIVE {
-            log::warn!("dentry path {}, failed to find interp file", dentry.path());
+            log::warn!("[load_dl] missing dl {}", interp);
             return Err(SysError::ENOENT);
         }
         // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inode_inner().mode);
@@ -660,7 +661,7 @@ impl UserVmArea {
         access_type: PageFaultAccessType
     ) -> Result<(), ()> {
         if !access_type.can_access(self.map_perm) {
-            log::warn!(
+            log::error!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.map_perm
             );
@@ -797,22 +798,19 @@ trait UserLazyFaultHandler {
     }
 }
 
-#[repr(C)]
-#[repr(align(4096))]
+#[repr(C, align(4096))]
 struct ZeroPage([u8; 4096]);
 
 const ZERO_PAGE: ZeroPage = ZeroPage([0u8; 4096]);
 
 lazy_static::lazy_static!{
-    static ref ZERO_PAGE_ARC: StrongArc<FrameTracker, SlabAllocator> = 
+    static ref ZERO_PAGE_ARC: StrongArc<FrameTracker, SlabAllocator> = {
+        let ppn = PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor();
         StrongArc::new_in(
-            FrameTracker::new_in(
-                PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor()..
-                PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor()+1, 
-                FrameAllocator
-            ), 
+            FrameTracker::new_in(ppn..ppn+1, FrameAllocator), 
             SlabAllocator
-        );
+        )
+    };
 }
 
 /// tool structure

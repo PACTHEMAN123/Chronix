@@ -19,9 +19,10 @@ use hal::instruction::{self, Instruction, InstructionHal};
 use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
+use hal::util::backtrace;
 use crate::mm::vm::{KernVmSpaceHal, PageFaultAccessType, UserVmSpaceHal};
 use crate::mm::KVMSPACE;
-use crate::signal::{SigInfo, SIGILL, SIGSEGV, SIGTRAP};
+use crate::signal::{SigInfo, SIGILL, SIGKILL, SIGSEGV, SIGTRAP};
 use crate::utils::timer::TimerGuard;
 use hal::addr::VirtAddr;
 
@@ -104,7 +105,8 @@ pub async fn user_trap_handler() -> bool {
                 Ok(()) => {}
                 Err(()) => {
                     log::warn!(
-                        "[user_trap_handler] cannot handle page fault, addr {stval:#x} access_type: {access_type:?} epc: {epc:#x}",
+                        "[user_trap_handler] task pid {}, tid {}, cannot handle page fault, addr {stval:#x} access_type: {access_type:?} epc: {epc:#x}",
+                        task.pid(), task.tid()
                     );
                     task.recv_sigs(SigInfo { si_signo: SIGSEGV, si_code: SigInfo::KERNEL, si_pid: None });
                 }
@@ -182,6 +184,7 @@ fn kernel_trap_handler() {
             log::warn!(
                 "[kernel_trap_handler] encounter page fault, addr {stval:#x} epc {epc:#x}",
             );
+            // backtrace();
 
             let access_type = match trap_type {
                 TrapType::StorePageFault(_) => PageFaultAccessType::WRITE,
@@ -211,7 +214,7 @@ fn kernel_trap_handler() {
             };
         }
         TrapType::Timer => {
-            // info!("interrupt: supervisor timer");
+            // println!("interrupt: supervisor timer");
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
         }

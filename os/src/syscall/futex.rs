@@ -632,7 +632,7 @@ pub fn sys_set_robust_list(head: *mut RobustListHead, len: usize) -> SysResult {
         return Err(SysError::EINVAL);
     }
     let task = current_task().cloned().unwrap();
-    // task.vm_space.lock().get_area_mut(VirtAddr::from(head as usize)).ok_or(SysError::EINVAL)?;
+    // task.get_vm_space().lock().get_area_mut(VirtAddr::from(head as usize)).ok_or(SysError::EINVAL)?;
     info!("[sys_set_robust_list] set task {} robust to {:#x}", task.tid(), head as usize);
     task.robust.exclusive_access().reset(head);
     Ok(0)

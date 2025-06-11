@@ -31,7 +31,7 @@ pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask_ptr: usize) -> 
     }
     // todo: handle when pid is 0 , which means calling processor is used but now we have opened all the processors
     let mask_ptr = UserPtrRaw::new(mask_ptr as *const CpuMask)
-        .ensure_read(&mut cur_task.vm_space.lock())
+        .ensure_read(&mut cur_task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
     let mask = *mask_ptr.to_ref();
     let task_cpu_mask = match mask {
@@ -71,7 +71,7 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetusize: usize, mask_ptr: usize) ->
     log::info!("sys_sched_getaffinity pid {pid} cpusetsize {cpusetusize} mask {:#x}", mask_ptr);
     let cur_task = current_task().unwrap().clone();
     let mask_ptr = UserPtrRaw::new(mask_ptr as *const CpuMask)
-        .ensure_write(&mut cur_task.vm_space.lock())
+        .ensure_write(&mut cur_task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
     let mask = mask_ptr.to_mut();
     if cpusetusize < size_of::<CpuMask>() {

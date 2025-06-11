@@ -161,10 +161,9 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
     }
 
     // set parent tid and child tid
-    let _sum_guard = SumGuard::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
         let user_ptr = UserPtrRaw::new(parent_tid.0 as *mut u32)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
         user_ptr.write(new_tid as u32);
     }
@@ -176,7 +175,7 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
         // When set_child_tid is set, the very first thing the new
         // thread does is to write its thread ID at this address.
         let user_ptr = UserPtrRaw::new(child_tid.0 as *mut u32)
-            .ensure_write(&mut task.vm_space.lock())
+            .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
         user_ptr.write(new_tid as u32);
     }
@@ -207,11 +206,11 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
     }
 
     // set parent tid and child tid
-    let _sum_guard = SumGuard::new();
     if flags.contains(CloneFlags::PARENT_SETTID) {
-        unsafe {
-            (parent_tid.0 as *mut u32).write_volatile(new_tid as u32);
-        }
+        let user_ptr = UserPtrRaw::new(parent_tid.0 as *mut u32)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EINVAL)?;
+        user_ptr.write(new_tid as u32);
     }
     if flags.contains(CloneFlags::CHILD_SETTID) {
         // If a thread is started using clone(2) with the
@@ -220,9 +219,10 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
         new_task.tid_address().set_child_tid = Some(child_tid.0);
         // When set_child_tid is set, the very first thing the new
         // thread does is to write its thread ID at this address.
-        unsafe {
-            (child_tid.0 as *mut u32).write_volatile(new_tid as u32);
-        }
+        let user_ptr = UserPtrRaw::new(child_tid.0 as *mut u32)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EINVAL)?;
+        user_ptr.write(new_tid as u32);
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {
         new_task.tid_address().clear_child_tid = Some(child_tid.0);
@@ -244,7 +244,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     let task = current_task().unwrap();
     let path = user_path_to_string(
             UserPtrRaw::new(pathname as *const u8), 
-            &mut task.vm_space.lock()
+            &mut task.get_vm_space().lock()
         ).unwrap();
     let mut argv = UserPtrRaw::new(argv as *const UserPtrRaw<u8>);
     let mut envp = UserPtrRaw::new(envp as *const UserPtrRaw<u8>);
@@ -252,7 +252,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     // parse argv
     let mut argv_vec: Vec<String> = Vec::new();
     loop {
-        let mut vm = task.vm_space.lock();
+        let mut vm = task.get_vm_space().lock();
         // argv can be specified as null
         if argv.is_null() {
             break;
@@ -276,7 +276,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     // parse envp
     let mut envp_vec: Vec<String> = Vec::new();
     loop {
-        let mut vm = task.vm_space.lock();
+        let mut vm = task.get_vm_space().lock();
         // envp can be specified as null
         if envp.is_null() {
             break;
@@ -384,7 +384,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
 
         if exit_code_ptr != 0 {
-            let mut vm = task.vm_space.lock();
+            let mut vm = task.get_vm_space().lock();
             let exit_code_ptr = UserPtrRaw::new(exit_code_ptr as *mut i32)
                 .ensure_write(vm.deref_mut())
                 .ok_or(SysError::EINVAL)?;
@@ -462,7 +462,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
         res_task.time_recorder().update_child_time(res_task.time_recorder().time_pair());
         
         if exit_code_ptr != 0 {
-            let mut vm: crate::sync::mutex::spin_mutex::MutexGuard<'_, crate::mm::vm::UserVmSpace, crate::sync::mutex::SpinNoIrq> = task.vm_space.lock();
+            let mut vm: crate::sync::mutex::spin_mutex::MutexGuard<'_, crate::mm::vm::UserVmSpace, crate::sync::mutex::SpinNoIrq> = task.get_vm_space().lock();
             let exit_code_ptr = UserPtrRaw::new(exit_code_ptr as *mut i32)
                 .ensure_write(vm.deref_mut())
                 .ok_or(SysError::EINVAL)?;
