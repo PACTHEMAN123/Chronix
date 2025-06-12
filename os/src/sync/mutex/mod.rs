@@ -1,13 +1,22 @@
+use crate::sync::mutex::spin_rw_mutex::SpinRwMutex;
+
 use self::spin_mutex::SpinMutex;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::util::sie_guard::SieGuard;
 /// spin_mutex
 pub mod spin_mutex;
+pub mod spin_rw_mutex;
 
 /// SpinLock
 pub type SpinLock<T> = SpinMutex<T, Spin>;
 /// SpinNoIrqLock(Cannot be interrupted)
 pub type SpinNoIrqLock<T> = SpinMutex<T, SpinNoIrq>;
+
+/// SpinLock
+pub type SpinRwLock<T> = SpinRwMutex<T, Spin>;
+/// SpinNoIrqLock(Cannot be interrupted)
+pub type SpinNoIrqRwLock<T> = SpinRwMutex<T, SpinNoIrq>;
+
 
 /// Low-level support for mutex(spinlock, sleeplock, etc)
 pub trait MutexSupport: {
@@ -17,6 +26,8 @@ pub trait MutexSupport: {
     fn before_lock() -> Self::GuardData;
     /// Called when MutexGuard dropping
     fn after_unlock(_: &mut Self::GuardData);
+    /// Clone 
+    fn clone(_: &Self::GuardData) -> Self::GuardData;
 }
 
 /// Spin MutexSupport
@@ -28,6 +39,8 @@ impl MutexSupport for Spin {
     fn before_lock() -> Self::GuardData {}
     #[inline(always)]
     fn after_unlock(_: &mut Self::GuardData) {}
+    #[inline(always)]
+    fn clone(_: &Self::GuardData) -> Self::GuardData {}
 }
 
 /// SpinNoIrq MutexSupport
@@ -41,4 +54,8 @@ impl MutexSupport for SpinNoIrq {
     }
     #[inline(always)]
     fn after_unlock(_: &mut Self::GuardData) {}
+    #[inline(always)]
+    fn clone(a: &Self::GuardData) -> Self::GuardData {
+        unsafe { core::mem::transmute_copy(a) }
+    }
 }

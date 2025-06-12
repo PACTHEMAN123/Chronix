@@ -267,7 +267,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     }
     let stat = inode.unwrap().getattr();
     let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
-        .ensure_write(&mut task.vm_space.lock())
+        .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
     stat_ptr.write(stat);
     Ok(0)

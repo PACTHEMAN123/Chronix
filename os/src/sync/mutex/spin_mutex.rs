@@ -55,20 +55,19 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
     /// i.e. cannot be sent between thread.
     #[inline(always)]
     pub fn lock(&self) -> MutexGuard<T, S> {
-        let support_guard = S::before_lock();
         loop {
             self.wait_unlock();
+            let support_guard = S::before_lock();
             if self
                 .lock
                 .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
                 .is_ok()
             {
-                break;
+                return MutexGuard {
+                    mutex: self,
+                    support_guard,
+                }
             }
-        }
-        MutexGuard {
-            mutex: self,
-            support_guard,
         }
     }
 

@@ -1,4 +1,4 @@
-use core::ops::{Deref, Range};
+use core::ops::{Deref, DerefMut, Range};
 
 use alloc::{collections::btree_map::BTreeMap, format, string::{String, ToString}, sync::Arc, vec::Vec};
 use hal::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddr, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{FrameAllocatorHal, FrameAllocatorTrackerExt}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PageLevel, PageTableEntry, PageTableEntryHal, PageTableHal, VpnPageRangeIter}, println, util::smart_point::StrongArc};
@@ -6,7 +6,7 @@ use log::info;
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv::{self, ShmObj}, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, sync::mutex::SpinNoIrqLock, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv::{self, ShmObj}, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, FrameTracker, PageTable, KVMSPACE}, sync::mutex::{spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrqLock}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
 
 use super::{KernVmArea, KernVmAreaType, KernVmSpaceHal, MapFlags, MaxEndVpn, PageFaultAccessType, StartPoint, UserVmArea, UserVmAreaType, UserVmAreaView, UserVmFile, UserVmSpaceHal};
 
@@ -450,6 +450,64 @@ impl UserVmSpace {
                     }
                 }
                 vpn = area.range_vpn().end;
+            } else {
+                return Err(())
+            }
+        }
+        return Ok(());
+    }
+
+    pub fn ensure_access_in_lock(mutex: &SpinRwMutex<Self, impl MutexSupport>, va: VirtAddr, len: usize, access_type: PageFaultAccessType) -> Result<(), ()> {
+        if va.0 >= Constant::USER_ADDR_SPACE.end {
+            return Err(());
+        }
+        let mut vpn = va.floor();
+        let end = (va+len).ceil();
+        while vpn < end {
+            if access_type.contains(PageFaultAccessType::WRITE) {
+                let ret = unsafe { 
+                    hal::trap::try_write_user(vpn.start_addr().0 as *mut u8)
+                };
+                if ret.is_ok() {
+                    vpn += 1;
+                    continue;
+                }
+            } else if access_type.contains(PageFaultAccessType::READ) {
+                let ret = unsafe { 
+                    hal::trap::try_read_user(vpn.start_addr().0 as *mut u8)
+                };
+                if ret.is_ok() {
+                    vpn += 1;
+                    continue;
+                }
+            }
+            let rself = mutex.rlock();
+            if let Some(area) = rself.areas.get(vpn) {
+                let mut fault = false;
+                for vpn in vpn..end.min(area.range_vpn().end) {
+                    if !area.access_no_fault(vpn, access_type) {
+                        fault = true;
+                        break;
+                    }
+                }
+                if !fault {
+                    vpn = area.range_vpn().end;
+                    continue;
+                }
+            } else {
+                return Err(())
+            }
+            let mut wself = match rself.upgrade() {
+                Some(v) => v,
+                None => mutex.wlock()
+            };
+            let vm = &mut wself.deref_mut();
+            if let Some(area) = vm.areas.get_mut(vpn) {
+                for vpn in vpn..end.min(area.range_vpn().end) {
+                    if !area.access_no_fault(vpn, access_type) {
+                        area.handle_page_fault(&mut vm.page_table, vpn, access_type)?;
+                    }
+                }
             } else {
                 return Err(())
             }

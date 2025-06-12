@@ -3,7 +3,7 @@ use core::{fmt::Debug, marker::PhantomData, ops::{Add, Deref, DerefMut, Sub}, pt
 use alloc::sync::Arc;
 use hal::{addr::{VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm};
 
-use crate::{mm::vm::UserVmPagesLocker, processor::context::SumGuard, sync::mutex::{spin_mutex::MutexGuard, SpinNoIrq}};
+use crate::{mm::vm::UserVmPagesLocker, processor::context::SumGuard, sync::mutex::{spin_mutex::MutexGuard, spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrq, SpinRwLock}};
 
 use super::{vm::{PageFaultAccessType, UserVmSpaceHal}, UserVmSpace};
 
@@ -66,11 +66,24 @@ impl<T> UserPtrRaw<T> {
         Some(UserPtr { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
     }
 
+    pub fn ensure_read_with_lock(self, vm: &SpinRwMutex<UserVmSpace, impl MutexSupport>) -> Option<UserPtr<T, ReadMark>> {
+        let va = VirtAddr(self.ptr as usize);
+        UserVmSpace::ensure_access_in_lock(vm, va, size_of::<T>(), PageFaultAccessType::READ).ok()?;
+        Some(UserPtr { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
+    }
+
     pub fn ensure_write(self, vm: &mut UserVmSpace) -> Option<UserPtr<T, WriteMark>> {
         let va = VirtAddr(self.ptr as usize);
         vm.ensure_access(va, size_of::<T>(), PageFaultAccessType::WRITE).ok()?;
         Some(UserPtr { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  }  })
     }
+
+    pub fn ensure_write_with_lock(self, vm: &SpinRwMutex<UserVmSpace, impl MutexSupport>) -> Option<UserPtr<T, WriteMark>> {
+        let va = VirtAddr(self.ptr as usize);
+        UserVmSpace::ensure_access_in_lock(vm, va, size_of::<T>(), PageFaultAccessType::WRITE).ok()?;
+        Some(UserPtr { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
+    }
+
 
     pub fn reset(&mut self, ptr: *mut T) {
         self.ptr = ptr;
@@ -292,10 +305,22 @@ impl<T> UserSliceRaw<T> {
         Some(UserSlice { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
     }
 
+    pub fn ensure_read_with_lock(self, vm: &SpinRwMutex<UserVmSpace, impl MutexSupport>) -> Option<UserSlice<T, ReadMark>> {
+        let va = VirtAddr(self.ptr as usize);
+        UserVmSpace::ensure_access_in_lock(vm, va, size_of::<T>()*self.len, PageFaultAccessType::READ).ok()?;
+        Some(UserSlice { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
+    }
+
     pub fn ensure_write(self, vm: &mut UserVmSpace) -> Option<UserSlice<T, WriteMark>> {
         let va = VirtAddr(self.ptr as usize);
         vm.ensure_access(va, size_of::<T>()*self.len, PageFaultAccessType::WRITE).ok()?;
         Some(UserSlice { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  }  })
+    }
+
+    pub fn ensure_write_with_lock(self, vm: &SpinRwMutex<UserVmSpace, impl MutexSupport>) -> Option<UserSlice<T, WriteMark>> {
+        let va = VirtAddr(self.ptr as usize);
+        UserVmSpace::ensure_access_in_lock(vm, va, size_of::<T>()*self.len, PageFaultAccessType::WRITE).ok()?;
+        Some(UserSlice { raw: self, _mark: PhantomData, _sum_guard: SumGuard::new(), locker: UserVmPagesLocker {  } })
     }
 }
 
