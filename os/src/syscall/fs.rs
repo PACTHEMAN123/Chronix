@@ -510,6 +510,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     }
     // should clear inode first to drop inode (flush datas to disk)
     dentry.clear_inode();
+    inode.clean_cached();
     drop(inode);
     // use parent inode to remove the inode in the fs
     let name = abs_path_to_name(&path).unwrap();

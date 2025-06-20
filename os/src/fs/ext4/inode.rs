@@ -576,6 +576,14 @@ impl Inode for Ext4Inode {
         };
         Ok(())
     }
+
+    fn clean_cached(&self) {
+        let cache = self.cache.clone();
+        let mut pages = cache.get_pages().lock();
+        for (_, page) in pages.iter_mut() {
+            page.set_clean();
+        }
+    }
 }
 
 impl Drop for Ext4Inode {

@@ -138,6 +138,10 @@ pub trait Inode {
     fn rename(&self, _target: &str, _new_inode: Option<Arc<dyn Inode>>) -> Result<(), SysError> {
         Err(SysError::EINVAL)
     }
+    /// set all cached pages clean when unlink
+    fn clean_cached(&self) {
+        // do nothing
+    }
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);

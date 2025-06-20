@@ -91,6 +91,10 @@ impl Page {
     pub fn set_dirty(&self) {
         self.is_dirty.store(true, Ordering::Release);
     }
+    /// set the page clean
+    pub fn set_clean(&self) {
+        self.is_dirty.store(false, Ordering::Release);
+    }
     /// is the page dirty
     pub fn is_dirty(&self) -> bool {
         self.is_dirty.load(Ordering::Acquire)

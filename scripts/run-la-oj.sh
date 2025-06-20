@@ -42,4 +42,12 @@ cd /loongarch/musl
 ./iozone_testcode.sh
 cd ..
 
+echo "start to run lm"
+cd /loongarch/glibc
+./lmbench_testcode.sh
+cd ..
+cd /loongarch/musl
+./lmbench_testcode.sh
+cd ..
+
 exit

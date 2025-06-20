@@ -42,4 +42,12 @@ cd /riscv/musl
 ./iozone_testcode.sh
 cd ..
 
+echo "start to run lm"
+cd /riscv/glibc
+./lmbench_testcode.sh
+cd ..
+cd /riscv/musl
+./lmbench_testcode.sh
+cd ..
+
 exit
