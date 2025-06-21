@@ -25,6 +25,7 @@ pub fn term_sig_handler(signo: i32){
 
     // exit all the members of a thread group (process)
     task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
+    // task.do_group_exit(0);
 }
 
 /// handlers for Ign
@@ -46,6 +47,7 @@ pub fn core_sig_handler(signo: i32) {
 
     // exit all the members of a thread group (process)
     task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
+    // task.do_group_exit(0);
     // todo: produce a core dump file?
 }
 

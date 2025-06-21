@@ -154,7 +154,7 @@ pub struct UserVmArea {
     pub range_va: Range<VirtAddr>,
     pub vma_type: UserVmAreaType,
     pub map_perm: MapPerm,
-    frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+    frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     /// for mmap usage
     pub file: UserVmFile,
     pub map_flags: MapFlags,
@@ -272,7 +272,7 @@ pub struct KernVmArea {
     range_va: Range<VirtAddr>,
     pub vma_type: KernVmAreaType,
     pub map_perm: MapPerm,
-    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+    pub frames: BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     /// for mmap usage
     pub file: Option<Arc<dyn File>>,
 }

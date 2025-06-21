@@ -11,7 +11,7 @@ pub trait InstructionHal {
     /// shutdown is unsafe, because it will not trigger drop
     unsafe fn shutdown(failure: bool) -> !;
     fn hart_start(hartid: usize, opaque: usize);
-    fn set_tp(processor_addr: usize);
+    fn set_tp(hartid: usize);
     fn get_tp() -> usize;
     fn set_float_status_clean();
 }

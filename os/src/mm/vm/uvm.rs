@@ -586,6 +586,15 @@ impl UserVmSpace {
     }
 }
 
+impl Drop for UserVmSpace {
+    fn drop(&mut self) {
+        // if this page table is using, switch to KVMSPACE
+        if self.page_table.enabled() {
+            KVMSPACE.lock().enable();
+        }
+    }
+}
+
 #[allow(missing_docs, unused)]
 impl UserVmArea {
 
@@ -603,7 +612,7 @@ impl UserVmArea {
             } else {
                 let frame = FrameAllocator.alloc_tracker(1).unwrap();
                 ppn = frame.range_ppn.start;
-                self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+                self.frames.insert(vpn, StrongArc::new(frame));
             }
             let dst = &mut ppn
                     .start_addr()
@@ -640,7 +649,7 @@ impl UserVmArea {
     fn alloc_frames(&mut self) {
         for vpn in self.range_vpn() {
             let frame = FrameAllocator.alloc_tracker(1).unwrap();
-            self.frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+            self.frames.insert(vpn, StrongArc::new(frame));
         }
     }
 
@@ -719,7 +728,7 @@ impl UserVmArea {
         access_type: PageFaultAccessType
     ) -> Result<(), ()> {
         if !access_type.can_access(self.map_perm) {
-            log::error!(
+            log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.map_perm
             );
@@ -825,7 +834,7 @@ impl Clone for UserVmArea {
             for (&vpn, frame) in self.frames.iter() {
                 let new_frame = FrameAllocator.alloc_tracker(frame.range_ppn.clone().count()).unwrap();
                 new_frame.range_ppn.get_slice_mut::<usize>().copy_from_slice(frame.range_ppn.get_slice());
-                new_frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                new_frames.insert(vpn, StrongArc::new(new_frame));
             }
             frames = new_frames;
         } else {
@@ -862,11 +871,10 @@ struct ZeroPage([u8; 4096]);
 const ZERO_PAGE: ZeroPage = ZeroPage([0u8; 4096]);
 
 lazy_static::lazy_static!{
-    static ref ZERO_PAGE_ARC: StrongArc<FrameTracker, SlabAllocator> = {
+    static ref ZERO_PAGE_ARC: StrongArc<FrameTracker> = {
         let ppn = PhysAddr(&ZERO_PAGE as *const _ as usize & !Constant::KERNEL_ADDR_SPACE.start).floor();
-        StrongArc::new_in(
-            FrameTracker::new_in(ppn..ppn+1, FrameAllocator), 
-            SlabAllocator
+        StrongArc::new(
+            FrameTracker::new_in(ppn..ppn+1, FrameAllocator)
         )
     };
 }
@@ -882,7 +890,7 @@ impl PageFaultProcessor {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
         perm: MapPerm,
-        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     ) -> Result<(), ()> {
         if access_type.contains(PageFaultAccessType::WRITE) {
             let frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
@@ -891,7 +899,7 @@ impl PageFaultProcessor {
                     .map(vpn, frame.range_ppn.start, perm, PageLevel::Small)
                     .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
             pte.set_dirty(true);
-            frames.insert(vpn, StrongArc::new_in(frame, SlabAllocator));
+            frames.insert(vpn, StrongArc::new(frame));
         } else { // zero page optimize
             let mut new_perm = perm;
             new_perm.remove(MapPerm::W);
@@ -913,7 +921,7 @@ impl PageFaultProcessor {
         offset: usize,
         len: usize,
         perm: MapPerm,
-        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     ) -> Result<(), ()> {
         let inode = file.inode().unwrap().clone();
         if len < Constant::PAGE_SIZE {
@@ -928,7 +936,7 @@ impl PageFaultProcessor {
             if access_type.contains(PageFaultAccessType::WRITE) {
                 pte.set_dirty(true);
             }
-            frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+            frames.insert(vpn, StrongArc::new(new_frame));
         } else {
             if access_type.contains(PageFaultAccessType::WRITE) {
                 let new_frame = FrameAllocator.alloc_tracker(1).ok_or(())?;
@@ -939,7 +947,7 @@ impl PageFaultProcessor {
                     .map(vpn, new_frame.range_ppn.start, perm, PageLevel::Small)
                     .expect(format!("vpn: {:#x} is mapped", vpn.0).as_str());
                 pte.set_dirty(true);
-                frames.insert(vpn, StrongArc::new_in(new_frame, SlabAllocator));
+                frames.insert(vpn, StrongArc::new(new_frame));
             } else {
                 let page = inode.read_page_at(offset).ok_or(())?;
                 let mut new_perm = perm;
@@ -962,7 +970,7 @@ impl PageFaultProcessor {
         file: Arc<dyn File>,
         offset: usize,
         perm: MapPerm,
-        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>,
+        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     ) -> Result<(), ()> {
         let inode = file.inode().ok_or(())?.clone();
         // share file mapping
@@ -987,7 +995,7 @@ impl PageFaultProcessor {
         shm: Arc<sysv::ShmObj>,
         offset: usize,
         perm: MapPerm,
-        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker, SlabAllocator>>
+        frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker>>
     ) -> Result<(), ()> {
         // share file mapping
         let page = shm.read_page_at(offset).ok_or(())?;

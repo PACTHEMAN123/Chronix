@@ -222,7 +222,7 @@ pub fn sys_mremap(
     }
     
     let task = current_task().unwrap().clone();
-    let vm_space = task.vm_space.clone().unwrap();
+    let vm_space = task.vm_space.clone();
     let mut vm = vm_space.lock();
     let old_area = vm.get_area_view(old_addr).ok_or(SysError::EINVAL)?;
     if old_area.range_va.end.0 - old_addr.0 < old_size {

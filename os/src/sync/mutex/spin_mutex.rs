@@ -2,10 +2,12 @@ use core::{
     cell::UnsafeCell,
     marker::PhantomData,
     ops::{Deref, DerefMut},
-    sync::atomic::{AtomicBool, AtomicIsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering}, usize,
 };
 
-use crate::utils::async_utils::SendWrapper;
+use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, println};
+
+use crate::{processor::processor::current_processor, utils::async_utils::SendWrapper};
 use super::MutexSupport;
 
 /// A spin-lock based mutex.
@@ -16,7 +18,7 @@ pub struct MutexGuard<'a, T: ?Sized, S: MutexSupport> {
 
 /// `SpinMutex` can include different `MutexSupport` type
 pub struct SpinMutex<T: ?Sized, S: MutexSupport> {
-    lock: AtomicBool,
+    owner: AtomicUsize,
     _marker: PhantomData<S>,
     data: UnsafeCell<T>,
 }
@@ -32,7 +34,7 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
     /// Construct a SpinMutex
     pub const fn new(user_data: T) -> Self {
         SpinMutex {
-            lock: AtomicBool::new(false),
+            owner: AtomicUsize::new(usize::MAX),
             _marker: PhantomData,
             data: UnsafeCell::new(user_data),
         }
@@ -42,12 +44,21 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
     #[inline(always)]
     fn wait_unlock(&self) {
         let mut try_count = 0usize;
-        while self.lock.load(Ordering::Acquire) {
+        let mut cur_owner = self.owner.load(Ordering::Acquire);
+        while cur_owner != usize::MAX {
+            if cur_owner >= Constant::MAX_PROCESSORS {
+                panic!("owner {:#x} {} > MAX_PROCESSORS", &self.owner as *const _ as usize, cur_owner);
+            }
             core::hint::spin_loop();
             try_count += 1;
             if try_count == 0x1000000 {
-                panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
+                panic!("Mutex: deadlock detected! {} try_count > {:#x}, {} is holding lock\n", 
+                    Instruction::get_tp(),
+                    try_count, 
+                    cur_owner, 
+                );
             }
+            cur_owner = self.owner.load(Ordering::Acquire);
         }
     }
 
@@ -55,14 +66,20 @@ impl<T, S: MutexSupport> SpinMutex<T, S> {
     /// i.e. cannot be sent between thread.
     #[inline(always)]
     pub fn lock(&self) -> MutexGuard<T, S> {
+        let support_guard = S::before_lock();
         loop {
+            let old_owner = self.owner.load(Ordering::Acquire);
+            let new_owner = Instruction::get_tp();
+            if old_owner == new_owner {
+                panic!("[dead lock] hart {} is trying to get the lock, which is already hold by itself", new_owner);
+            }
             self.wait_unlock();
-            let support_guard = S::before_lock();
             if self
-                .lock
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+                .owner
+                .compare_exchange(usize::MAX, new_owner, Ordering::Release, Ordering::Relaxed)
                 .is_ok()
             {
+                assert!(new_owner < Constant::MAX_PROCESSORS);
                 return MutexGuard {
                     mutex: self,
                     support_guard,
@@ -108,7 +125,7 @@ impl<'a, T: ?Sized, S: MutexSupport> Drop for MutexGuard<'a, T, S> {
     /// from.
     #[inline(always)]
     fn drop(&mut self) {
-        self.mutex.lock.store(false, Ordering::Release);
+        self.mutex.owner.store(usize::MAX, Ordering::Release);
         S::after_unlock(&mut self.support_guard);
     }
 }

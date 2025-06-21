@@ -108,7 +108,7 @@ pub struct TaskControlBlock {
     pub task_status: SpinNoIrqLock<TaskStatus>,
     // ! mutable in self and other tasks
     /// virtual memory space of the task
-    pub vm_space: UPSafeCell<Option<Shared<UserVmSpace>>>,
+    pub vm_space: UPSafeCell<Shared<UserVmSpace>>,
     /// parent task
     pub parent: Shared<Option<Weak<TaskControlBlock>>>,
     /// child tasks
@@ -223,10 +223,8 @@ impl TaskControlBlock {
         task_status: TaskStatus,
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
+        vm_space: UserVmSpace,
         itimers: [ITimer;3]
-    );
-    generate_option_with_methods!(
-        vm_space: UserVmSpace
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -277,7 +275,7 @@ impl TaskControlBlock {
     }
     /// get vm_space of the task
     pub fn get_user_token(&self) -> usize {
-        self.vm_space.as_ref().unwrap().lock().get_page_table().get_token()
+        self.vm_space.as_ref().lock().get_page_table().get_token()
     }
     /// get task_status of the task
     pub fn get_status(&self) -> TaskStatus {
@@ -285,11 +283,11 @@ impl TaskControlBlock {
     }
     /// switch to the task's page table
     pub unsafe fn switch_page_table(&self) {
-        self.vm_space.as_ref().unwrap().lock().enable();
+        self.vm_space.as_ref().lock().enable();
     }
     /// get memory space
     pub fn get_vm_space(&self) -> &Shared<UserVmSpace> {
-        self.vm_space.as_ref().unwrap()
+        &self.vm_space
     }
     /// get parent task
     pub fn parent(&self) -> Option<Weak<Self>> {
@@ -378,7 +376,7 @@ impl TaskControlBlock {
             exit_code: AtomicUsize::new(0),
             base_size: AtomicUsize::new(user_sp),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            vm_space: UPSafeCell::new(Some(new_shared(vm_space))),
+            vm_space: UPSafeCell::new(new_shared(vm_space)),
             parent: new_shared(None),
             children:new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
@@ -450,7 +448,7 @@ impl TaskControlBlock {
 
         // substitute memory_set
         // self.with_mut_vm_space(|m| *m = vm_space);
-        *self.vm_space.exclusive_access() = Some(new_shared(vm_space));
+        *self.vm_space.exclusive_access() = new_shared(vm_space);
         // close fd on exec
         self.with_mut_fd_table(|fd_table|fd_table.do_close_on_exec());
 
@@ -517,11 +515,11 @@ impl TaskControlBlock {
             // println!("task {} cloning a vm", self.tid());
             vm_space = UPSafeCell::new(self.vm_space.clone());
         } else {
-            vm_space = UPSafeCell::new(Some(new_shared(
+            vm_space = UPSafeCell::new(new_shared(
                 self.with_mut_vm_space(
                     |vm| 
                         UserVmSpace::from_existed(vm)
-                ))
+                )
             ));
         }
         let fd_table = if flag.contains(CloneFlags::FILES) {
@@ -722,7 +720,6 @@ impl TaskControlBlock {
         }
         drop(tg);
         self.mm_release();
-        *self.vm_space.exclusive_access() = None;
         self.set_zombie();
         
         if is_last {
@@ -829,7 +826,7 @@ impl TaskControlBlock {
     }
 
     pub fn get_raw_vm_ptr(&self) -> usize {
-        Arc::as_ptr(&self.vm_space.as_ref().unwrap()) as usize
+        Arc::as_ptr(&self.vm_space) as usize
     }
 }
 

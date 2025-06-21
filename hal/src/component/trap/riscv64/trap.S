@@ -14,7 +14,7 @@
     .align 2
 __trap_from_user:
     csrrw sp, sscratch, sp
-    # now sp->*TrapContext in user space, sscratch->user stack
+    # now sp->TrapContext, sscratch->user stack
     # save other general purpose registers
     sd x1, 1*8(sp)
     # skipp /x $ sp(x2), we will save it later
@@ -94,60 +94,59 @@ __restore:
 
 __trap_from_kernel:
     # need to save caller-saved regs
-    addi sp, sp, -18*8
-    sd  tp,  0*8(sp)
-    sd  t0,  1*8(sp)
-    sd  t1,  2*8(sp)
-    sd  t2,  3*8(sp)
-    sd  t3,  4*8(sp)
-    sd  t4,  5*8(sp)
-    sd  t5,  6*8(sp)
-    sd  t6,  7*8(sp)
-    sd  a0,  8*8(sp)
-    sd  a1,  9*8(sp)
-    sd  a2, 10*8(sp)
-    sd  a3, 11*8(sp)
-    sd  a4, 12*8(sp)
-    sd  a5, 13*8(sp)
-    sd  a6, 14*8(sp)
-    sd  a7, 15*8(sp)
+    sd  t0, -17*8(sp)
+    sd  t1, -16*8(sp)
+    csrr t0, sepc
+    csrr t1, sstatus
+    sd  t0, -19*8(sp)
+    sd  t1, -18*8(sp)
+    sd  t2, -15*8(sp)
+    sd  t3, -14*8(sp)
+    sd  t4, -13*8(sp)
+    sd  t5, -12*8(sp)
+    sd  t6, -11*8(sp)
+    sd  a0, -10*8(sp)
+    sd  a1, -9*8(sp)
+    sd  a2, -8*8(sp)
+    sd  a3, -7*8(sp)
+    sd  a4, -6*8(sp)
+    sd  a5, -5*8(sp)
+    sd  a6, -4*8(sp)
+    sd  a7, -3*8(sp)
     # save fp for backtrace
-    sd  fp, 16*8(sp)
-    sd  ra, 17*8(sp)
-    addi fp, sp, 18*8
+    sd  fp, -2*8(sp)
+    sd  ra, -1*8(sp)
+    mv  fp, sp
+    # sp must align to 16
+    addi sp, sp, -20*8
     call kernel_trap_handler
-    ld  tp,  0*8(sp)
     ld  t0,  1*8(sp)
     ld  t1,  2*8(sp)
-    ld  t2,  3*8(sp)
-    ld  t3,  4*8(sp)
-    ld  t4,  5*8(sp)
-    ld  t5,  6*8(sp)
-    ld  t6,  7*8(sp)
-    ld  a0,  8*8(sp)
-    ld  a1,  9*8(sp)
-    ld  a2, 10*8(sp)
-    ld  a3, 11*8(sp)
-    ld  a4, 12*8(sp)
-    ld  a5, 13*8(sp)
-    ld  a6, 14*8(sp)
-    ld  a7, 15*8(sp)
-    ld  fp, 16*8(sp)
-    ld  ra, 17*8(sp)
-    addi sp, sp, 18*8
+    csrw sepc,    t0
+    csrw sstatus, t1
+    ld  t0,  3*8(sp)
+    ld  t1,  4*8(sp)
+    ld  t2,  5*8(sp)
+    ld  t3,  6*8(sp)
+    ld  t4,  7*8(sp)
+    ld  t5,  8*8(sp)
+    ld  t6,  9*8(sp)
+    ld  a0, 10*8(sp)
+    ld  a1, 11*8(sp)
+    ld  a2, 12*8(sp)
+    ld  a3, 13*8(sp)
+    ld  a4, 14*8(sp)
+    ld  a5, 15*8(sp)
+    ld  a6, 16*8(sp)
+    ld  a7, 17*8(sp)
+    ld  fp, 18*8(sp)
+    ld  ra, 19*8(sp)
+    addi sp, sp, 20*8
     sret
 
 __user_rw_exception_entry:
     csrr a0, sepc
-    lbu  a1, 0(a0)
-    andi a1, a1, 0x3
-    addi a1, a1, -0x3
-    bnez a1, _l1 # is compressed instruction?
     addi a0, a0, 4
-    j    _l2
-_l1:
-    addi a0, a0, 2
-_l2:
     csrw sepc, a0
     mv   a0, zero
     csrr a1, scause

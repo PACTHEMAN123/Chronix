@@ -36,8 +36,8 @@ unsafe impl virtio_drivers::Hal for VirtioHal {
         direction: BufferDirection,
     ) -> virtio_drivers::PhysAddr {
         let buffer = buffer.as_ref();
-        let pages = (buffer.len() - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS;
-        let frames = frames_alloc(pages).unwrap();
+        let cnt = (buffer.len() - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS;
+        let frames = frames_alloc(cnt).unwrap();
         match direction {
             BufferDirection::DriverToDevice |
             BufferDirection::Both => {

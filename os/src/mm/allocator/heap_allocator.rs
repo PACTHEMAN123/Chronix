@@ -1,5 +1,5 @@
 //! The global allocator
-const KERNEL_HEAP_SIZE: usize = 64*1024*1024; // 64 MiB reserved for operating system
+const KERNEL_HEAP_SIZE: usize = 256*1024*1024; // 64 MiB reserved for operating system
 use core::{alloc::{GlobalAlloc, Layout}, ptr::NonNull};
 
 use alloc::alloc::Allocator;
@@ -12,6 +12,7 @@ use crate::sync::mutex::SpinNoIrqLock;
 static HEAP_INSTANCE: SpinNoIrqLock<Heap> = SpinNoIrqLock::new(Heap::empty());
 
 #[allow(unused)]
+#[global_allocator]
 static HEAP_ALLOCATOR: HeapAllocator = HeapAllocator;
 
 #[alloc_error_handler]

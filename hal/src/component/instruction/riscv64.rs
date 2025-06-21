@@ -57,11 +57,11 @@ impl InstructionHal for Instruction {
     }
     
     #[inline(always)]
-    fn set_tp(processor_addr: usize) {
+    fn set_tp(hartid: usize) {
         unsafe {
             asm!(
                 "mv tp, {}",
-                in(reg) processor_addr,
+                in(reg) hartid,
              )
         }
     }

@@ -1,4 +1,4 @@
-use crate::util::mutex::Mutex;
+use core::cell::SyncUnsafeCell;
 
 #[cfg(target_arch="loongarch64")]
 const UART_ADDR: usize = 0x8000_0000_1fe0_01e0;
@@ -7,7 +7,7 @@ const UART_ADDR: usize = 0x8000_0000_1fe0_01e0;
 #[cfg(target_arch="riscv64")]
 const UART_ADDR: usize = 0xffff_ffc0_1000_0000;
 
-static COM1: Mutex<Uart> = Mutex::new(Uart::new(UART_ADDR));
+static COM1: SyncUnsafeCell<Uart> = SyncUnsafeCell::new(Uart::new(UART_ADDR));
 
 pub struct Uart {
     base_address: usize,
@@ -48,7 +48,7 @@ impl Uart {
 
 pub fn console_putchar(c: usize) {
     let c = c as u8;
-    let mut locked = COM1.lock();
+    let locked = unsafe { &mut *COM1.get() };
     if c == b'\n' {
         locked.putchar(b'\r');
     }
@@ -56,7 +56,7 @@ pub fn console_putchar(c: usize) {
 }
 
 pub fn console_getchar() -> usize {
-    let mut locked = COM1.lock();
+    let locked = unsafe { &mut *COM1.get() };
     loop { 
         if let Some(c) = locked.getchar() {
             break c as usize;

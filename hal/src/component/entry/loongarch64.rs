@@ -13,6 +13,7 @@ unsafe extern "C" fn _start() -> ! {
     core::arch::naked_asm!(
         r"
         csrrd        $a0, 0x20                    # cpuid
+        move         $tp, $a0
         addi.d       $t0, $a0, 1                  # t0 = hart_id + 1
         la.global    $sp, {boot_stack}
         li.d         $t1, {boot_stack_size}
@@ -49,6 +50,7 @@ unsafe extern "C" fn _start() -> ! {
 
 pub(crate) fn rust_main(id: usize) {
     let is_first = RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0;
+    Instruction::set_tp(id);
     tlb_init();
     if is_first {
         super::clear_bss();

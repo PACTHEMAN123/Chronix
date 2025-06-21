@@ -68,11 +68,11 @@ __trap_from_user:
     ld.d $sp, $sp, 34*8
     # jump to trap_handler
     ret
-    nop
 
 __restore:
     # a0: *TrapContext in user space(Constant); a1: user space token
     csrwr $a0, KSAVE_CTX
+    # csrwr will exchange $a0 and KSAVE_CTX, need to read back
     csrrd $a0, KSAVE_CTX
     # save kernel callee-saved regs
     st.d $sp, $a0, 34*8
@@ -116,53 +116,61 @@ __restore:
     .align 12
 __trap_from_kernel:
     # need to save caller-saved regs
-    addi.d $sp, $sp, -21*8
-    st.d $r21, $sp, 0*8
-    st.d $tp, $sp, 1*8
-    st.d $a0, $sp, 2*8
-    st.d $a1, $sp, 3*8
-    st.d $a2, $sp, 4*8
-    st.d $a3, $sp, 5*8
-    st.d $a4, $sp, 6*8
-    st.d $a5, $sp, 7*8
-    st.d $a6, $sp, 8*8
-    st.d $a7, $sp, 9*8
-    st.d $t0, $sp, 10*8
-    st.d $t1, $sp, 11*8
-    st.d $t2, $sp, 12*8
-    st.d $t3, $sp, 13*8
-    st.d $t4, $sp, 14*8
-    st.d $t5, $sp, 15*8
-    st.d $t6, $sp, 16*8
-    st.d $t7, $sp, 17*8
-    st.d $t8, $sp, 18*8
+    st.d $t0, $sp, -11*8
+    st.d $t1, $sp, -10*8
+    csrrd $t0, PRMD
+    csrrd $t1, ERA
+    st.d $t0, $sp, -23*8
+    st.d $t1, $sp, -22*8
+    st.d $r21, $sp, -21*8
+    st.d $tp, $sp, -20*8
+    st.d $a0, $sp, -19*8
+    st.d $a1, $sp, -18*8
+    st.d $a2, $sp, -17*8
+    st.d $a3, $sp, -16*8
+    st.d $a4, $sp, -15*8
+    st.d $a5, $sp, -14*8
+    st.d $a6, $sp, -13*8
+    st.d $a7, $sp, -12*8
+    st.d $t2, $sp, -9*8
+    st.d $t3, $sp, -8*8
+    st.d $t4, $sp, -7*8
+    st.d $t5, $sp, -6*8
+    st.d $t6, $sp, -5*8
+    st.d $t7, $sp, -4*8
+    st.d $t8, $sp, -3*8
     # save fp for backtrace
-    st.d $fp, $sp, 19*8
-    st.d $ra, $sp, 20*8
-    addi.d $fp, $sp, 21*8
+    st.d $fp, $sp, -2*8
+    st.d $ra, $sp, -1*8
+    move $fp, $sp
+    addi.d $sp, $sp, -24*8
     bl kernel_trap_handler
-    ld.d $r21, $sp, 0*8
-    ld.d $tp, $sp, 1*8
-    ld.d $a0, $sp, 2*8
-    ld.d $a1, $sp, 3*8
-    ld.d $a2, $sp, 4*8
-    ld.d $a3, $sp, 5*8
-    ld.d $a4, $sp, 6*8
-    ld.d $a5, $sp, 7*8
-    ld.d $a6, $sp, 8*8
-    ld.d $a7, $sp, 9*8
-    ld.d $t0, $sp, 10*8
-    ld.d $t1, $sp, 11*8
-    ld.d $t2, $sp, 12*8
-    ld.d $t3, $sp, 13*8
-    ld.d $t4, $sp, 14*8
-    ld.d $t5, $sp, 15*8
-    ld.d $t6, $sp, 16*8
-    ld.d $t7, $sp, 17*8
-    ld.d $t8, $sp, 18*8
-    ld.d $fp, $sp, 19*8
-    ld.d $ra, $sp, 20*8
-    addi.d $sp, $sp, 21*8
+    ld.d $t0, $sp, 1*8
+    ld.d $t1, $sp, 2*8
+    csrwr $t0, PRMD
+    csrwr $t1, ERA
+    ld.d $r21, $sp, 3*8
+    ld.d $tp, $sp, 4*8
+    ld.d $a0, $sp, 5*8
+    ld.d $a1, $sp, 6*8
+    ld.d $a2, $sp, 7*8
+    ld.d $a3, $sp, 8*8
+    ld.d $a4, $sp, 9*8
+    ld.d $a5, $sp, 10*8
+    ld.d $a6, $sp, 11*8
+    ld.d $a7, $sp, 12*8
+    ld.d $t0, $sp, 13*8
+    ld.d $t1, $sp, 14*8
+    ld.d $t2, $sp, 15*8
+    ld.d $t3, $sp, 16*8
+    ld.d $t4, $sp, 17*8
+    ld.d $t5, $sp, 18*8
+    ld.d $t6, $sp, 19*8
+    ld.d $t7, $sp, 20*8
+    ld.d $t8, $sp, 21*8
+    ld.d $fp, $sp, 22*8
+    ld.d $ra, $sp, 23*8
+    addi.d $sp, $sp, 24*8
     ertn
 
 

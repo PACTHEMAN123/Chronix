@@ -66,11 +66,11 @@ impl InstructionHal for Instruction {
         loongArch64::ipi::send_ipi_single(hartid, 1);
     }
     
-    fn set_tp(processor_addr: usize) {
+    fn set_tp(hartid: usize) {
         unsafe {
             core::arch::asm!(
                 "move $tp, {}",
-                in(reg) processor_addr,
+                in(reg) hartid,
             );
         }
     }

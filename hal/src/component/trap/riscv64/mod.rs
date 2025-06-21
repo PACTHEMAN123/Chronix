@@ -1,9 +1,9 @@
-use core::arch::{asm, naked_asm};
+use core::arch::asm;
 
 use log::info;
 use riscv::register::{scause::{self, Exception, Interrupt, Trap}, sepc, sstatus::{self, Sstatus, FS, SPP}, stval, stvec::{self, TrapMode}};
 
-use crate::{instruction::{Instruction, InstructionHal}, println};
+use crate::instruction::{Instruction, InstructionHal};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
 

@@ -17,8 +17,7 @@ use lazy_static::*;
 use log::*;
 use crate::mm::{self, KVMSPACE};
 use hal::board::MAX_PROCESSORS;
-const PROCESSOR_OBJECT: Processor = Processor::new();
-pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [PROCESSOR_OBJECT  ; MAX_PROCESSORS]; 
+pub static mut PROCESSORS: [Processor; MAX_PROCESSORS] = [const { Processor::new() }; MAX_PROCESSORS]; 
 #[cfg(feature = "smp")]
 use super::schedule::TaskLoadTracker;
 #[cfg(feature = "smp")]
@@ -264,15 +263,12 @@ pub fn set_processor(id:usize) {
     processor.initial_sche_entity();
     #[cfg(feature = "smp")]
     processor.set_need_migrate(id);
-    let processor_addr = processor as *const _ as usize;
-    Instruction::set_tp(processor_addr);
+    processor as *const _ as usize;
 }
 
 /// get current processor
 pub fn current_processor() -> &'static mut Processor {
-    unsafe {
-        &mut *(Instruction::get_tp() as *mut Processor)
-    }
+    get_processor(Instruction::get_tp())
 } 
 
 pub fn init(id: usize){

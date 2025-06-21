@@ -8,7 +8,7 @@ use alloc::collections::{btree_map::BTreeMap, vec_deque::VecDeque};
 use hal::{addr::VirtAddr, signal::*};
 use crate::mm::vm::{KernVmSpaceHal, UserVmSpaceHal};
 use log::*;
-use crate::{mm::copy_out, processor::processor::{current_task,current_trap_cx}};
+use crate::processor::processor::{current_task,current_trap_cx};
 
 use super::{action::KSigAction, get_default_handler, ign_sig_handler, SigInfo, SigSet, SIGKILL, SIGRTMAX, SIGRTMIN, SIGSTOP};
 

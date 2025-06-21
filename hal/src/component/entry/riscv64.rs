@@ -26,6 +26,7 @@ unsafe extern "C" fn _start(id: usize) -> ! {
         // sp = boot_stack + (hartid + 1) * 64KB
         "
             .attribute arch, \"rv64gc\"
+            mv      tp, a0
             addi    t0, a0, 1
             li      t1, {boot_stack_size}
             mul     t0, t0, t1                // t0 = (hart_id + 1) * boot_stack_size
@@ -65,9 +66,8 @@ unsafe extern "C" fn _start(id: usize) -> ! {
 }
 
 pub(crate) fn rust_main(id: usize) {
-    let is_first = RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0;
-
-    if is_first {
+    Instruction::set_tp(id);
+    if RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0 {
         super::clear_bss();
         crate::console::init();
         print_info();

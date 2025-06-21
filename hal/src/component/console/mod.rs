@@ -31,10 +31,10 @@ static STDOUT_MUTEX: AtomicBool = AtomicBool::new(false);
 pub fn _print(args: core::fmt::Arguments) {
     loop {
         let _sie_guard = SieGuard::new();
-        if STDOUT_MUTEX.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+        if STDOUT_MUTEX.compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
             core::fmt::Write::write_fmt(&mut Stdout, args).unwrap();
             STDOUT_MUTEX.store(false, Ordering::Release);
-            break;
+            return;
         }
     }
 }

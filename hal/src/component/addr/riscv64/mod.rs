@@ -40,7 +40,7 @@ impl VirtPageNumHal for VirtPageNum {
 
 impl PhysAddrHal for PhysAddr {
     fn get_ptr<T>(&self) -> *mut T {
-        (self.0 + 0xffff_ffc0_0000_0000) as *mut T
+        (self.0 + Constant::KERNEL_ADDR_SPACE.start) as *mut T
     }
 
     fn floor(&self) -> PhysPageNum {

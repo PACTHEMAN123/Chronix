@@ -9,11 +9,10 @@ use crate::{mm::allocator::next_power_of_two, sync::mutex::{spin_mutex::SpinMute
 
 use super::{FrameAllocator, HeapAllocator};
 
-#[global_allocator]
+// #[global_allocator]
 static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator;
 
 /// slab allocator
-#[allow(unused)]
 pub static SLAB_ALLOCATOR_INNER: SlabAllocatorInner = SlabAllocatorInner::new();
 
 /// Slab Allocator
@@ -61,10 +60,7 @@ unsafe impl GlobalAlloc for SlabAllocator {
                 break;
             }
         }
-        // SLAB_ALLOCATOR_INNER.info();
-        // println!("slab block slab cache:");
-        // SLAB_BLOCK_SLAB_CACHE.lock().info();
-        return 0 as *mut u8;
+        return core::ptr::null_mut();
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
@@ -581,12 +577,12 @@ impl<const S: usize> SmallSlabBlock<S> {
 
     pub unsafe fn free_nodes_ptr(&self) -> *mut FreeNode<S> {
         let blk_ptr = self as *const Self;
-        let free_nodes_ptr = blk_ptr.byte_add(core::cmp::max(size_of::<SmallSlabBlock<S>>(), next_power_of_two(S))) as *mut FreeNode<S>;
+        let free_nodes_ptr = blk_ptr.byte_add(next_power_of_two(size_of::<SmallSlabBlock<S>>().max(S))) as *mut FreeNode<S>;
         free_nodes_ptr
     }
 
     pub fn cap() -> usize {
-        (Constant::PAGE_SIZE - core::cmp::max(size_of::<SmallSlabBlock<S>>(), next_power_of_two(S))) / S
+        (Constant::PAGE_SIZE - next_power_of_two(size_of::<SmallSlabBlock<S>>().max(S))) / S
     }
 
     pub fn floor(mut addr: usize) -> PhysPageNum {
@@ -641,7 +637,7 @@ impl<const S: usize> SmallSlabCache<S> {
             } else {
                 let frames = FrameAllocator.alloc_with_align(
                     SlabBlock::<S>::page_cnt(), 
-                    0
+                    0  
                 )?;
                 let blk_ptr = frames.start.start_addr().get_ptr::<SmallSlabBlock<S>>();
                 let blk = unsafe { &mut *blk_ptr };

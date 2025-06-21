@@ -1,6 +1,7 @@
 use core::ops::Range;
 
 pub trait ConstantsHal {
+    const MAX_PROCESSORS: usize = 4;
     const KERNEL_ENTRY_PA: usize;
 
     const KERNEL_ADDR_SPACE: Range<usize>;
@@ -26,7 +27,7 @@ pub trait ConstantsHal {
     const SIGRET_TRAMPOLINE_TOP: usize; 
 
     const KERNEL_STACK_SIZE: usize;
-    const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE;
+    const KERNEL_STACK_BOTTOM: usize = Self::KERNEL_STACK_TOP - Self::KERNEL_STACK_SIZE * Self::MAX_PROCESSORS;
     const KERNEL_STACK_TOP: usize;
 
     const KERNEL_VM_SIZE: usize;

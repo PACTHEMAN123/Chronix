@@ -1,7 +1,7 @@
 use core::ops::Range;
 use alloc::vec::Vec;
 use fdt::Fdt;
-use hal::{constant::{Constant, ConstantsHal}, pagetable::MapPerm};
+use hal::{constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::mmio::{MmioError, MmioTransport, VirtIOHeader};
 
 use crate::mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, KVMSPACE};

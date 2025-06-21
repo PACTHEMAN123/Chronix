@@ -410,4 +410,11 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
         self.frames.clear();
         self.frames.push(root);
     }
+    
+    fn enabled(&self) -> bool {
+        let pgdl = loongArch64::register::pgdl::read().base();
+        let pgdh = loongArch64::register::pgdh::read().base();
+        let token = self.get_token();
+        token == pgdl || token == pgdh
+    }
 }

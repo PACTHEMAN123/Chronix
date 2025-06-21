@@ -101,10 +101,7 @@ impl File for UrandomFile {
     }
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        unsafe {
-            Instruction::set_sum();
-            RNG.lock().fill_buf(buf);
-        }
+        RNG.lock().fill_buf(buf);
         Ok(buf.len())
     }
 

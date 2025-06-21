@@ -2,6 +2,7 @@ use core::{arch::asm, ops::Range};
 
 use alloc::vec::Vec;
 use bitflags::bitflags;
+use riscv::register;
 
 use crate::{addr::{PhysAddr, PhysAddrHal, PhysPageNum, PhysPageNumHal, RangePPNHal, VirtAddrHal, VirtPageNum, VirtPageNumHal}, allocator::{DynamicFrameAllocator, FrameAllocatorHal, FrameAllocatorTrackerExt}, common::FrameTracker, constant::{Constant, ConstantsHal}};
 
@@ -389,5 +390,9 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
         let root = self.frames.swap_remove(0);
         self.frames.clear();
         self.frames.push(root);
+    }
+    
+    fn enabled(&self) -> bool {
+        self.get_token() == register::satp::read().bits()
     }
 }

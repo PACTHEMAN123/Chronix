@@ -102,6 +102,7 @@ pub trait PageTableHal<PTE: PageTableEntryHal, A: FrameAllocatorHal> {
     fn clear(&mut self);
     unsafe fn enable_high(&self);
     unsafe fn enable_low(&self);
+    fn enabled(&self) -> bool;
 }
 
 #[cfg(target_arch = "riscv64")]
