@@ -180,7 +180,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             &mut task.get_vm_space().lock()
         );
     if let Some(path) = opt_path {
-        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
+        log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -301,6 +301,22 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
         task.set_cwd(new_dentry);
         return Ok(0);
     }
+}
+
+/// The fchdir() function shall be equivalent to chdir() except that
+/// the directory that is to be the new current working directory is
+/// specified by the file descriptor fildes.
+pub fn sys_fchdir(fd: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let dir = task.with_fd_table(|t| t.get_file(fd))?;
+    let dentry = dir.dentry().unwrap();
+    let inode = dentry.inode().unwrap();
+    if inode.inode_type() != InodeMode::DIR {
+        return Err(SysError::ENOTDIR);
+    }
+    log::info!("[fchdir]: task {} change cwd to {}", task.tid(), dentry.path());
+    task.set_cwd(dentry);
+    Ok(0)
 }
 
 
@@ -538,7 +554,8 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
     }
     let new_dentry = at_helper(task, new_dirfd, new_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     let new_path = new_dentry.path();
-    let new_inode = old_dentry.inode().unwrap().symlink(&new_path)?;
+    let old_path = old_dentry.path();
+    let new_inode = old_dentry.inode().unwrap().symlink(&new_path, &old_path)?;
     global_update_dentry(&new_path, new_inode)?;
     Ok(0)
 }
@@ -549,16 +566,32 @@ pub fn sys_fchmodat(dirfd: isize, pathname: *const u8, mode: u32, flags: i32) ->
     let task = current_task().unwrap().clone();
     let mode = InodeMode::from_bits_truncate(mode);
     let at_flags = AtFlags::from_bits_truncate(flags);
-    let path = user_path_to_string(
-        UserPtrRaw::new(pathname), 
-        &mut task.get_vm_space().lock()).expect("failed to get path");
+    let path = UserPtrRaw::new(pathname)
+        .cstr_slice(&mut task.vm_space.lock())
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     log::info!("[sys_fchmodat] task {} change {} mode to {:?}, flags", task.tid(), path, mode);
     let dentry = at_helper(task, dirfd, pathname, at_flags)?;
     if dentry.is_negative() && dentry.inode().is_none() {
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let inode_type = inode.inode_inner().mode().get_type();
+    let inode_type = inode.inode_type();
+    inode.inode_inner().set_mode(mode | inode_type);
+    Ok(0)
+}
+
+/// The fchmod() function shall be equivalent to chmod() except that
+/// the file whose permissions are changed is specified by the file
+/// descriptor fildes.
+pub fn sys_fchmod(fd: isize, mode: u32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd as usize))?;
+    let mode = InodeMode::from_bits_truncate(mode);
+    let inode = file.inode().unwrap();
+    let inode_type = inode.inode_type();
     inode.inode_inner().set_mode(mode | inode_type);
     Ok(0)
 }
@@ -567,6 +600,11 @@ pub fn sys_fchmodat(dirfd: isize, pathname: *const u8, mode: u32, flags: i32) ->
 pub fn sys_fchownat(dirfd: isize, pathname: *const u8, uid: i32, gid: i32, flags: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let at_flags = AtFlags::from_bits_truncate(flags);
+    log::info!("[fchownat] at_flags {:?} flags {:#x}", at_flags, flags);
+    if flags != 0 && !at_flags
+    .intersection(!(AtFlags::AT_EMPTY_PATH | AtFlags::AT_SYMLINK_NOFOLLOW)).is_empty() {
+        return Err(SysError::EINVAL);
+    }
     let path = user_path_to_string(
         UserPtrRaw::new(pathname), 
         &mut task.get_vm_space().lock()).expect("failed to get path");
@@ -576,6 +614,28 @@ pub fn sys_fchownat(dirfd: isize, pathname: *const u8, uid: i32, gid: i32, flags
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
+    if gid != -1 {
+        inode.inode_inner().set_gid(gid as u32);
+    }
+    if uid != -1 {
+        inode.inode_inner().set_uid(uid as u32);
+    }
+    let old_mode = inode.inode_inner().mode();
+    let inode_type = old_mode.get_type();
+    let new_mode = if !old_mode.contains(InodeMode::GROUP_EXEC) {
+        old_mode.intersection(!InodeMode::SET_UID)
+    } else {
+        old_mode.intersection(!(InodeMode::SET_GID | InodeMode::SET_UID))
+    };
+    inode.inode_inner().set_mode(new_mode | inode_type);
+    Ok(0)
+}
+
+
+pub fn sys_fchown(fd: isize, uid: i32, gid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd as usize))?;
+    let inode = file.inode().unwrap();
     if gid != -1 {
         inode.inode_inner().set_gid(gid as u32);
     }
@@ -716,6 +776,7 @@ pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
     file.ioctl(cmd, arg)
 }
 
+/* torvalds/linux/include/uapi/asm-generic/fcntl.h */
 #[derive(FromRepr, Debug, Eq, PartialEq, Clone, Copy, Default)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
@@ -727,6 +788,19 @@ pub enum FcntlOp {
     F_SETFD = 2,
     F_GETFL = 3,
     F_SETFL = 4,
+    F_GETLK	= 5,
+    F_SETLK	= 6,
+    F_SETLKW = 7,
+    F_SETOWN = 8,	/* for sockets. */
+    F_GETOWN = 9,	/* for sockets. */
+    F_SETSIG = 10,	/* for sockets. */
+    F_GETSIG = 11,	/* for sockets. */
+    F_GETLK64 = 12,	/*  using 'struct flock64' */
+    F_SETLK64 = 13,
+    F_SETLKW64 = 14,
+    F_SETOWN_EX = 15,
+    F_GETOWN_EX	= 16,
+    F_GETOWNER_UIDS	= 17,
     #[default]
     F_UNIMPL,
 }
@@ -735,6 +809,7 @@ pub enum FcntlOp {
 pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
     let op = FcntlOp::from_repr(op).unwrap_or_default();
     let task = current_task().unwrap().clone();
+    log::info!("[fcntl] op {:?}", op);
     match op {
         FcntlOp::F_DUPFD => {
             // Duplicate the file descriptor fd using the lowest-numbered
@@ -755,8 +830,7 @@ pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
             Ok(fd_info.flags().bits() as isize)
         }
         FcntlOp::F_SETFD => {
-            let arg = OpenFlags::from_bits_truncate(arg as i32);
-            let fd_flags = FdFlags::from(arg);
+            let fd_flags = FdFlags::from_bits_truncate(arg as u8);
             task.with_mut_fd_table(|table| {
                 let fd_info = table.get_mut_fd_info(fd)?;
                 fd_info.set_flags(fd_flags);
@@ -769,8 +843,12 @@ pub fn sys_fnctl(fd: usize, op: isize, arg: usize) -> SysResult {
         }
         FcntlOp::F_SETFL => {
             let flags = OpenFlags::from_bits_truncate(arg as _);
+            let mask = OpenFlags::O_APPEND | OpenFlags::O_ASYNC | 
+                OpenFlags::O_DIRECT | OpenFlags::O_NOATIME | OpenFlags::O_NONBLOCK;
+            log::info!("set flags {:?}, {:#x} ,raw flags {:#x}", flags, flags.bits(), arg);
             let file = task.with_fd_table(|table| table.get_file(fd))?;
-            file.set_flags(flags.status());
+            let old_flags = file.flags();
+            file.set_flags(old_flags.masked_set_flags(flags, mask));
             Ok(0)
         }
         _ => {
@@ -1093,6 +1171,13 @@ pub fn sys_ftruncate(fildes: usize, length: usize) -> SysResult {
     let file = task.with_fd_table(|f| f.get_file(fildes))?;
     log::info!("[sys_ftruncate] fd {} truncate size to {}", fildes, length);
     file.inode().unwrap().truncate(length)?;
+    Ok(0)
+}
+
+/// fake async
+pub fn sys_fdatasync(fd: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let _ = task.with_fd_table(|t| t.get_file(fd))?;
     Ok(0)
 }
 

@@ -472,14 +472,14 @@ impl Inode for Ext4Inode {
         }
     }
 
-    fn symlink(&self, target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
+    fn symlink(&self, link_path: &str, _target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         let file = self.file.lock();
         // create symlink
-        file.symlink_create(target_path).expect("symlink create failed");
+        file.symlink_create(link_path).expect("symlink create failed");
         // get the symlink Inode
         Ok(Arc::new(Ext4Inode::new(
             self.inode_inner().super_block.clone().unwrap(),
-            target_path,
+            link_path,
             InodeTypes::EXT4_DE_SYMLINK
         )))
     }

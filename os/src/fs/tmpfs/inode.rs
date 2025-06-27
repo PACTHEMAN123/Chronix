@@ -236,10 +236,10 @@ impl Inode for TmpInode {
         }
     }
 
-    fn symlink(&self, target: &str) -> Result<Arc<dyn Inode>, SysError> {
+    fn symlink(&self, _link_path: &str, target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         let sb = self.inode_inner().super_block.clone().unwrap();
         let inode = TmpInode::new(sb, InodeMode::LINK);
-        inode.symlink_path.lock().push_str(target);
+        inode.symlink_path.lock().push_str(target_path);
         Ok(inode)
     }
 

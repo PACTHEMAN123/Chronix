@@ -1,3 +1,8 @@
+
+[x] 为通过的测例或者部分通过
+
+需要标注出哪些可以通过，但是没有 Summary
+
 - [ ] abort01
 - [ ] abs01
 - [x] accept01
@@ -87,8 +92,8 @@
 - [ ] cgroup_regression_fork_processes
 - [ ] cgroup_regression_getdelays
 - [ ] cgroup_xattr
-- [ ] chdir01
-- [ ] chdir04
+- [ ] chdir01: no device
+- [ ] chdir04: kernel trap when read path
 - [ ] check_envval
 - [ ] check_icmpv4_connectivity
 - [ ] check_icmpv6_connectivity
@@ -144,9 +149,9 @@
 - [ ] confstr01
 - [ ] connect01
 - [ ] connect02
-- [ ] copy_file_range01
-- [ ] copy_file_range02
-- [ ] copy_file_range03
+- [ ] copy_file_range01: no device
+- [ ] copy_file_range02: no device
+- [ ] copy_file_range03: failed
 - [ ] cpio_tests.sh
 - [ ] cp_tests.sh
 - [ ] cpuacct.sh
@@ -180,17 +185,15 @@
 - [ ] cpuset01
 - [ ] crash01
 - [ ] crash02
-- [ ] creat01
+- [x] creat01: pass 4 failed 2
 - [x] creat03
-- [ ] creat04
+- [ ] creat04: getpwnam
 - [x] creat05
-- [ ] creat06
-- [ ] creat07
-- [ ] creat07_child
-- [ ] creat08
-- [ ] creat09
-- [ ] create_datafile
-- [ ] create_file
+- [ ] creat06: getpwnam
+- [ ] creat07: failed to copy
+- [ ] creat07_child: failed
+- [ ] creat08: getpwnam
+- [ ] creat09: no device
 - [ ] crypto_user01
 - [ ] crypto_user02
 - [ ] cve-2014-0196
@@ -233,14 +236,14 @@
 - [x] dup02
 - [x] dup03
 - [x] dup04
-- [ ] dup05
+- [ ] dup05: no mknod
 - [x] dup06
 - [x] dup07
-- [ ] dup201
+- [x] dup201: failed 2 pass 2
 - [x] dup202
 - [x] dup203
 - [x] dup204
-- [ ] dup205
+- [ ] dup205: fail
 - [x] dup206
 - [x] dup207
 - [x] dup3_01
@@ -321,136 +324,117 @@
 - [ ] fallocate04：似乎需要 /dev/ 支持？
 - [ ] fallocate05：同上
 - [ ] fallocate06：同上
-- [ ] fanotify01
+- [ ] fanotify01：需要设备
 - [ ] fanotify02：卡死
-- [ ] fanotify03：/dev/loop
-- [x] fanotify04
+- [ ] fanotify03：需要设备
+- [x] fanotify04：有概率卡住
 - [ ] fanotify05：需要设备
 - [ ] fanotify06：需要设备
 - [ ] fanotify07：可能需要正确实现该系统调用
-- [ ] fanotify08
-- [ ] fanotify09
-- [ ] fanotify10
-- [ ] fanotify11
-- [ ] fanotify12
-- [ ] fanotify13
-- [ ] fanotify14
-- [ ] fanotify15
-- [ ] fanotify16
-- [ ] fanotify17
-- [ ] fanotify18
-- [ ] fanotify19
-- [ ] fanotify20
-- [ ] fanotify21
-- [ ] fanotify22
-- [ ] fanotify23
-- [ ] fanotify_child
+- [x] fanotify08：试图关闭 fd0
+- [ ] fanotify09-23：需要设备/关闭fd0/管道问题？
 - [ ] fanout01
-- [ ] fchdir01
-- [ ] fchdir02
-- [ ] fchdir03
-- [ ] fchmod01
-- [ ] fchmod02
-- [ ] fchmod03
-- [ ] fchmod04
-- [ ] fchmod05
-- [ ] fchmod06
-- [ ] fchmodat01
-- [ ] fchmodat02
-- [ ] fchown01
-- [ ] fchown01_16
-- [ ] fchown02
-- [ ] fchown02_16
-- [ ] fchown03
-- [ ] fchown03_16
-- [ ] fchown04
-- [ ] fchown04_16
-- [ ] fchown05
-- [ ] fchown05_16
-- [ ] fchownat01
-- [ ] fchownat02
-- [ ] fcntl01
+- [x] fchdir01
+- [x] fchdir02
+- [ ] fchdir03：getpwnam
+- [x] fchmod01
+- [ ] fchmod02：getpwnam
+- [ ] fchmod03：getpwnam
+- [ ] fchmod04：getpwnam
+- [ ] fchmod05：getpwnam
+- [ ] fchmod06：getpwnam
+- [x] fchmodat01
+- [ ] fchmodat02：读cstr vmspace 死锁
+- [x] fchown01
+- [x] fchown02
+- [ ] fchown03：getpwnam
+- [ ] fchown04：getpwnam
+- [x] fchown05
+- [x] fchownat01
+- [x] fchownat02
+
+======= fcntl ========
+- [ ] fcntl01：没有输出
 - [ ] fcntl01_64
-- [ ] fcntl02
-- [ ] fcntl02_64
-- [ ] fcntl03
-- [ ] fcntl03_64
-- [ ] fcntl04
-- [ ] fcntl04_64
-- [ ] fcntl05
-- [ ] fcntl05_64
-- [ ] fcntl07
+- [x] fcntl02：
+- [x] fcntl02_64
+- [x] fcntl03
+- [x] fcntl03_64
+- [x] fcntl04
+- [x] fcntl04_64
+- [x] fcntl05：需要支持 flock,faild 1 pass 5
+- [x] fcntl05_64
+- [ ] fcntl07：需要支持用户 mknod
 - [ ] fcntl07_64
-- [ ] fcntl08
-- [ ] fcntl08_64
-- [ ] fcntl09
-- [ ] fcntl09_64
-- [ ] fcntl10
-- [ ] fcntl10_64
-- [ ] fcntl11
-- [ ] fcntl11_64
-- [ ] fcntl12
-- [ ] fcntl12_64
-- [ ] fcntl13
-- [ ] fcntl13_64
-- [ ] fcntl14
-- [ ] fcntl14_64
-- [ ] fcntl15
-- [ ] fcntl15_64
-- [ ] fcntl16
-- [ ] fcntl16_64
-- [ ] fcntl17
-- [ ] fcntl17_64
-- [ ] fcntl18
-- [ ] fcntl18_64
-- [ ] fcntl19
-- [ ] fcntl19_64
-- [ ] fcntl20
-- [ ] fcntl20_64
-- [ ] fcntl21
-- [ ] fcntl21_64
-- [ ] fcntl22
-- [ ] fcntl22_64
-- [ ] fcntl23
-- [ ] fcntl23_64
-- [ ] fcntl24
-- [ ] fcntl24_64
-- [ ] fcntl25
-- [ ] fcntl25_64
-- [ ] fcntl26
-- [ ] fcntl26_64
-- [ ] fcntl27
-- [ ] fcntl27_64
-- [ ] fcntl29
-- [ ] fcntl29_64
-- [ ] fcntl30
-- [ ] fcntl30_64
-- [ ] fcntl31
+- [x] fcntl08
+- [x] fcntl08_64
+- [x] fcntl09: no summary
+- [x] fcntl09_64: no summary
+- [x] fcntl10: no summary
+- [x] fcntl10_64: no summary
+- [ ] fcntl11：需要支持 flock
+- [ ] fcntl11_64：需要支持 flock
+- [x] fcntl12
+- [x] fcntl12_64
+- [ ] fcntl13：需要支持 flock
+- [ ] fcntl13_64：需要支持 flock
+- [ ] fcntl14：需要支持 flock
+- [ ] fcntl14_64：需要支持 flock
+- [ ] fcntl15：需要支持 flock failed 7 pass 5
+- [ ] fcntl15_64：需要支持 flock failed 7 pass 5
+- [x] fcntl16: no summary
+- [x] fcntl16_64: no summary
+- [ ] fcntl17：需要支持 flock
+- [ ] fcntl17_64：需要支持 flock
+- [ ] fcntl18：需要支持 flock
+- [ ] fcntl18_64：需要支持 flock
+- [ ] fcntl19：需要支持 flock
+- [ ] fcntl19_64：需要支持 flock
+- [ ] fcntl20：需要支持 flock
+- [ ] fcntl20_64：需要支持 flock
+- [ ] fcntl21：需要支持 flock
+- [ ] fcntl21_64：需要支持 flock
+- [ ] fcntl22: missing fcntlop
+- [ ] fcntl22_64: missing fcntlop
+- [x] fcntl23: no sum
+- [x] fcntl23_64: no sum
+- [ ] fcntl24: flock
+- [ ] fcntl24_64: flock
+- [ ] fcntl25: flock
+- [ ] fcntl25_64: flock
+- [ ] fcntl26: flock
+- [ ] fcntl26_64: flock
+- [ ] fcntl27: flock
+- [ ] fcntl27_64: flock
+- [x] fcntl29
+- [x] fcntl29_64
+- [ ] fcntl30: /proc/sys/fs/pipe-max-size
+- [ ] fcntl30_64: /proc/sys/fs/pipe-max-size
+- [ ] fcntl31: missing fcntlop
 - [ ] fcntl31_64
-- [ ] fcntl32
+- [ ] fcntl32: missing fcntlop
 - [ ] fcntl32_64
-- [ ] fcntl33
+- [ ] fcntl33: /proc/sys/fs/lease-break-time
 - [ ] fcntl33_64
-- [ ] fcntl34
-- [ ] fcntl34_64
-- [ ] fcntl35
+- [x] fcntl34
+- [x] fcntl34_64
+- [ ] fcntl35: tconf
 - [ ] fcntl35_64
-- [ ] fcntl36
-- [ ] fcntl36_64
-- [ ] fcntl37
+- [x] fcntl36
+- [x] fcntl36_64
+- [ ] fcntl37: /proc/sys/fs/pipe-max-size
 - [ ] fcntl37_64
-- [ ] fcntl38
+- [ ] fcntl38: Cannot parse kernel .config
 - [ ] fcntl38_64
-- [ ] fcntl39
+- [ ] fcntl39: Cannot parse kernel .config
 - [ ] fcntl39_64
-- [ ] fdatasync01
-- [ ] fdatasync02
-- [ ] fdatasync03
-- [ ] fgetxattr01
-- [ ] fgetxattr02
-- [ ] fgetxattr03
-- [ ] file01.sh
-- [ ] filecapstest.sh
+===================
+- [x] fdatasync01: no sum
+- [ ] fdatasync02: no sum
+- [ ] fdatasync03: no device
+- [ ] fgetxattr01: no device
+- [ ] fgetxattr02: mountpoint?
+- [ ] fgetxattr03: ?
 - [ ] find_portbundle
 - [ ] finit_module01
 - [ ] finit_module02
@@ -558,8 +542,8 @@
 - [ ] ftruncate04_64
 - [ ] futex_cmp_requeue01
 - [ ] futex_cmp_requeue02
-- [ ] futex_wait01
-- [ ] futex_wait02
+- [x] futex_wait01
+- [ ] futex_wait02: 卡住
 - [ ] futex_wait03
 - [ ] futex_wait04
 - [ ] futex_wait05
@@ -2641,17 +2625,16 @@
 - [ ] wqueue07
 - [ ] wqueue08
 - [ ] wqueue09
-- [ ] write01
-- [ ] write02
-- [ ] write03
-- [ ] write04
-- [ ] write05
-- [ ] write06
-- [ ] writetest
-- [ ] writev01
-- [ ] writev02
-- [ ] writev03
-- [ ] writev05
-- [ ] writev06
-- [ ] writev07
-- [ ] zram03
+- [x] write01
+- [x] write02
+- [ ] write03: kernel trap
+- [ ] write04: open .4
+- [ ] write05: kernel trap
+- [x] write06: wrong size
+- [x] writetest: no sum
+- [ ] writev01: kernel trap
+- [ ] writev02: efault
+- [ ] writev03: no device
+- [ ] writev05: efault
+- [x] writev06: no sum
+- [ ] writev07: kernel trap

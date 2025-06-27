@@ -15,11 +15,13 @@
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum SyscallId {
+    SYSCALL_FSETXATTR = 7,
     SYSCALL_GETCWD = 17,
     SYSCALL_DUP = 23,
     SYSCALL_DUP3 = 24,
     SYSCALL_FCNTL = 25,
     SYSCALL_IOCTL = 29,
+    SYSCALL_MKNODAT = 33,
     SYSCALL_MKDIR = 34,
     SYSCALL_UNLINKAT = 35,
     SYSCALL_SYMLINKAT = 36,
@@ -31,8 +33,11 @@ pub enum SyscallId {
     SYSCALL_FALLOCATE = 47,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR = 49,
+    SYSCALL_FCHDIR = 50,
+    SYSCALL_FCHMOD = 52,
     SYSCALL_FCHMODAT = 53,
     SYSCALL_FCHOWNAT = 54,
+    SYSCALL_FCHOWN = 55,
     SYSCALL_OPENAT = 56,
     SYSCALL_CLOSE = 57,
     SYSCALL_PIPE = 59,
@@ -52,6 +57,7 @@ pub enum SyscallId {
     SYSCALL_FSTAT = 80,
     SYSCALL_SYNC = 81,
     SYSCALL_FSYNC = 82,
+    SYSCALL_FDATASYNC = 83,
     SYSCALL_UTIMENSAT = 88,
     SYSCALL_CAPGET = 90,
     SYSCALL_EXIT = 93,
@@ -137,6 +143,7 @@ pub enum SyscallId {
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_GETRANDOM = 278,
     SYSCALL_MEMBARRIER = 283,
+    SYSCALL_COPY_FILE_RANGE = 285,
     SYSCALL_STATX = 291,
     SYSCALL_CLONE3 = 435,
     SYSCALL_FACCESSAT2 = 439,
@@ -189,14 +196,16 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    // log::info!("task {}, syscall: {:?}", current_task().unwrap().tid() , syscall_id);
+    log::info!("task {}, syscall: {:?}", current_task().unwrap().tid() , syscall_id);
 
     let result = match syscall_id { 
+        SYSCALL_FSETXATTR => sys_temp(syscall_id),
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_FCNTL => sys_fnctl(args[0], args[1] as isize, args[2]),
         SYSCALL_IOCTL => sys_ioctl(args[0], args[1], args[2]),
+        SYSCALL_MKNODAT => sys_temp(syscall_id),
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
@@ -209,8 +218,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
+        SYSCALL_FCHDIR => sys_fchdir(args[0]),
+        SYSCALL_FCHMOD => sys_fchmod(args[0] as isize, args[1] as u32),
         SYSCALL_FCHMODAT => sys_fchmodat(args[0] as isize, args[1] as *const u8, args[2] as u32, args[3] as i32),
         SYSCALL_FCHOWNAT => sys_fchownat(args[0] as isize, args[1] as *const u8, args[2] as i32, args[3] as i32, args[4] as i32),
+        SYSCALL_FCHOWN => sys_fchown(args[0] as isize, args[1] as i32, args[2] as i32),
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe2(args[0] as *mut i32, args[1] as u32),
         SYSCALL_GETDENTS => sys_getdents64(args[0], args[1], args[2]),
@@ -313,9 +325,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GET_MEMPOLICY => sys_temp(syscall_id),
         SYSCALL_SYNC => sys_temp(syscall_id),
         SYSCALL_FSYNC => sys_temp(syscall_id),
+        SYSCALL_FDATASYNC => sys_fdatasync(args[0]),
         SYSCALL_MSYNC => sys_temp(syscall_id),
         SYSCALL_MLOCK => sys_temp(syscall_id),
         SYSCALL_MEMBARRIER => sys_temp(syscall_id),
+        SYSCALL_COPY_FILE_RANGE => sys_temp(syscall_id),
         SYSCALL_FACCESSAT2 => sys_faccessat2(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         /* 
         _ => { 

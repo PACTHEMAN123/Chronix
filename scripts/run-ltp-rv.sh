@@ -15,7 +15,12 @@ creat03 creat05
 dup01 dup02 dup03 dup04 dup06 dup07 dup202 dup203 dup204 dup206 dup207 dup3_01 dup3_02
 faccessat01 faccessat02 faccessat201
 fallocate03
-fanotify04
+fanotify08
+fchdir01 fchdir02
+fchmod01 
+fchmodat01
+fchown01 fchown02 fchown05
+fchownat01 fchownat02
 "
 set -- $file_list
 

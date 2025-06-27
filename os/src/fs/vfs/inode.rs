@@ -127,7 +127,8 @@ pub trait Inode {
         todo!()
     }
     /// create a symlink of this inode and return the symlink inode
-    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, SysError> {
+    /// create a inode in link path [link_path]--->[target_path]
+    fn symlink(&self, _target_path: &str, _link_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         todo!()
     }
     /// create a hard link using this inode path and the target path

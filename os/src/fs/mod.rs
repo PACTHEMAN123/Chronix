@@ -256,6 +256,11 @@ impl OpenFlags {
         ret.remove(Self::CREATION_FLAGS);
         ret
     }
+
+    /// only update the flags in mask, while other remains unchange
+    pub fn masked_set_flags(&self, new_flags: OpenFlags, mask: OpenFlags) -> Self {
+        (*self & !mask) | (new_flags & mask)
+    }
 }
 
 bitflags! {

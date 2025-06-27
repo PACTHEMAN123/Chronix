@@ -195,42 +195,6 @@ impl Inode for FatFileInode {
             stx_dio_read_offset_align: 0,
         }
     }
-
-    fn lookup(&self, _name: &str) -> Option<Arc<dyn Inode>> {
-        panic!("fat32 file inode dont support lookup!")
-    }
-
-    fn ls(&self) -> Vec<String> {
-        panic!("fat32 file inode dont support ls!")
-    }
-
-    fn unlink(&self) -> Result<usize, i32> {
-        panic!("fat32 file can only be unlink by parent dir")
-    }
-
-    fn create(&self, _path: &str, _mode: InodeMode) -> Option<Arc<dyn Inode>> {
-        panic!("fat32 file can not create file!")
-    }
-
-    fn cache_read_at(self: Arc<Self>, _offset: usize, _buf: &mut [u8]) -> Result<usize, i32> {
-        panic!("not support cached read")
-    }
-
-    fn cache_write_at(self: Arc<Self>, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
-        panic!("not support cached write")
-    }
-
-    fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
-        panic!()
-    }
-
-    fn symlink(&self, _target: &str) -> Result<Arc<dyn Inode>, super::SysError> {
-        panic!()
-    }
-
-    fn readlink(&self) -> Result<String, super::SysError> {
-        panic!()
-    }
 }
 
 impl Inode for FatDirInode {
