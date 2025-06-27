@@ -1,9 +1,9 @@
 - [ ] abort01
 - [ ] abs01
 - [x] accept01
-- [ ] accept02
-- [ ] accept03
-- [ ] accept4_01
+- [ ] accept02 ：要添加socket选项（set_sockopts）
+- [ ] accept03 : 在openat直接寄掉
+- [x] accept4_01 :2 pass 2 fail 2 skip
 - [ ] access01
 - [ ] access02
 - [ ] access03

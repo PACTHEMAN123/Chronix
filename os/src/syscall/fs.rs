@@ -81,9 +81,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
 
 /// syscall: close
 pub fn sys_close(fd: usize) -> SysResult {
-    if (fd as isize) < 0 {
-        return Err(SysError::EBADF);
-    }
     log::info!("[sys_close]: close on fd: {}", fd);
     let task = current_task().unwrap();
     task.with_mut_fd_table(|table| table.remove(fd))?;

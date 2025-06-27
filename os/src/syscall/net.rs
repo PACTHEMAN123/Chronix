@@ -145,17 +145,17 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     }
     let task = current_task().unwrap().clone();
     let remote_addr = sockaddr_reader(addr, addr_len)?;
-    // log::info!("[sys_connect] remote_addr is: {}",
-    //     unsafe {
-    //         remote_addr.ipv4
-    // });
+    log::info!("[sys_connect] remote_addr is: {}",
+        unsafe {
+            remote_addr.ipv4
+    });
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .unwrap_or_else(|_| {
             panic!("Failed to downcast to socket::Socket")
         });
-    // log::info!("[sys_connect] socket_file_type {:#?}", socket_file.sk_type);
+    log::info!("[sys_connect] socket_file_type {:#?}", socket_file.sk_type);
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
     // yield_now().await;
     Ok(0)
@@ -802,6 +802,7 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize) -> Result<SockAddr, SysErro
         Instruction::set_sum();
         *(addr as *const u16)
     })?;
+    log::info!("[sockaddr_reader] family: {:?}, addr_len: {}", family, addr_len);
     match family {
         SaFamily::AfInet => {
             if addr_len < size_of::<SockAddrIn4>() {
@@ -823,6 +824,7 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize) -> Result<SockAddr, SysErro
         },
         SaFamily::AfUnix => {
             if addr_len < size_of::<SockAddrUn>() {
+                log::info!("in this, size of SockAddrUn: {}",size_of::<SockAddrUn>());
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
