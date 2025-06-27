@@ -226,7 +226,7 @@ impl File for TtyFile {
         use TtyIoctlCmd::*;
         let Some(cmd) = TtyIoctlCmd::from_repr(cmd) else {
             log::error!("[TtyFile::ioctl] cmd {cmd} not included");
-            unimplemented!()
+            return Err(SysError::EINVAL);
         };
         log::debug!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
         match cmd {

@@ -150,6 +150,7 @@ impl Inode for TmpInode {
             return Ok(size)
         } else {
             log::warn!("not support reduce size for tmp file");
+            self.inner.set_size(size);
             return Ok(size)
         }
     }
@@ -246,5 +247,12 @@ impl Inode for TmpInode {
     fn readlink(&self) -> Result<String, SysError> {
         assert_eq!(self.inode_type(), InodeMode::LINK);
         Ok(self.symlink_path.lock().to_string())
+    }
+
+    fn link(&self, _target: &str) -> Result<usize, SysError> {
+        // link at dentry layer
+        let old_link_nums = self.inode_inner().nlink();
+        self.inode_inner().set_nlink(old_link_nums + 1);
+        Ok(0)
     }
 }

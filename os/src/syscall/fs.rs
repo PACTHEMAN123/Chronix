@@ -132,7 +132,7 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
             //info!("copying path: {}, len: {}", path, path.len());
             let new_buf = UserSliceRaw::new(buf as *mut u8, len)
                 .ensure_write(&mut task.get_vm_space().lock())
-                .ok_or(SysError::EINVAL)?;
+                .ok_or(SysError::EFAULT)?;
             new_buf.to_mut()[path.len()..].fill(0 as u8);
             new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
             return Ok(buf as isize);
@@ -564,8 +564,7 @@ pub fn sys_fchmodat(dirfd: isize, pathname: *const u8, mode: u32, flags: i32) ->
     let mode = InodeMode::from_bits_truncate(mode);
     let at_flags = AtFlags::from_bits_truncate(flags);
     let path = UserPtrRaw::new(pathname)
-        .cstr_slice(&mut task.vm_space.lock())
-        .unwrap()
+        .cstr_slice(&mut task.vm_space.lock())?
         .to_str()
         .unwrap()
         .to_string();
@@ -1087,6 +1086,11 @@ pub const R_OK: i32 = 4;
 /// TODO: now do nothing
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
     let at_flags = AtFlags::from_bits_truncate(flags);
+    let task = current_task().unwrap().clone();
+    let _ = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.get_vm_space().lock()
+    )?;
 
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task, dirfd, pathname, at_flags)?;
@@ -1099,15 +1103,23 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32
 // Test access permitted for effective IDs, not real IDs.
 pub const AT_EACCESS: i32 = 0x200;
 /// 
-pub fn sys_faccessat2(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
-    if flags == 0x1000 {
-        log::warn!("not support flags");
+pub fn sys_faccessat2(dirfd: isize, pathname: *const u8, mode: i32, flags: i32) -> SysResult {
+    if flags != 0 && flags & !(AT_EACCESS | (AtFlags::AT_EMPTY_PATH | AtFlags::AT_SYMLINK_NOFOLLOW).bits()) != 0 
+    {
+        return Err(SysError::EINVAL);
     }
-    if flags == AT_EACCESS {
+    if mode != F_OK && mode & !(X_OK | W_OK | R_OK) != 0
+    {
+        return Err(SysError::EINVAL);
+    }
+    let task = current_task().unwrap().clone();
+    let path = user_path_to_string(
+            UserPtrRaw::new(pathname), 
+            &mut task.get_vm_space().lock()
+    )?;
 
-    }
     let at_flags = AtFlags::from_bits_truncate(flags);
-    log::info!("at_flags: {:?}", at_flags);
+    log::info!("path {} at_flags: {:?}", path, at_flags);
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task, dirfd, pathname, at_flags)?;
     if dentry.is_negative() {

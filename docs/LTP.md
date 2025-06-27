@@ -10,8 +10,8 @@
 - [ ] accept03 : 在openat直接寄掉
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
-- [x] access02: 6 pass failed 10
-- [ ] access03: all faied: invalid address as root expected EFAULT: ENOENT (2)
+- [x] access02: 12 pass failed 4
+- [x] access03
 - [ ] access04 : symlink broken
 - [ ] acct01 : symlink broken
 - [ ] acct02
@@ -187,12 +187,12 @@
 - [ ] crash02
 - [x] creat01: pass 4 failed 2
 - [x] creat03
-- [ ] creat04: getpwnam
+- [ ] creat04: should not remove when unlink a inode ref by sth
 - [x] creat05
-- [ ] creat06: getpwnam
+- [ ] creat06: 悬垂引用
 - [ ] creat07: failed to copy
 - [ ] creat07_child: failed
-- [ ] creat08: getpwnam
+- [x] creat08: pass 2 faild 7 
 - [ ] creat09: no device
 - [ ] crypto_user01
 - [ ] crypto_user02
@@ -317,7 +317,7 @@
 - [x] faccessat01
 - [x] faccessat02
 - [x] faccessat201
-- [ ] faccessat202: 同上：getpwnam
+- [x] faccessat202: pass 5 failed 1
 - [ ] fallocate01：需要支持 fallocate: 调整文件在内存分布？且没有 summary
 - [ ] fallocate02：没有 summary
 - [x] fallocate03
@@ -336,19 +336,19 @@
 - [ ] fanout01
 - [x] fchdir01
 - [x] fchdir02
-- [ ] fchdir03：getpwnam
+- [ ] fchdir03：permission?
 - [x] fchmod01
-- [ ] fchmod02：getpwnam
-- [ ] fchmod03：getpwnam
-- [ ] fchmod04：getpwnam
-- [ ] fchmod05：getpwnam
-- [ ] fchmod06：getpwnam
+- [ ] fchmod02：etgrnam(daemon) failed: ENOENT (2)
+- [x] fchmod03
+- [x] fchmod04
+- [ ] fchmod05：Couldn't change supplementary group Id
+- [x] fchmod06：类似上面的错误 pass 1 failed 2
 - [x] fchmodat01
-- [ ] fchmodat02：读cstr vmspace 死锁
+- [x] fchmodat02
 - [x] fchown01
 - [x] fchown02
-- [ ] fchown03：getpwnam
-- [ ] fchown04：getpwnam
+- [x] fchown03
+- [x] fchown04: should failed on some points pass 1 failed 2
 - [x] fchown05
 - [x] fchownat01
 - [x] fchownat02
@@ -429,6 +429,7 @@
 - [ ] fcntl39: Cannot parse kernel .config
 - [ ] fcntl39_64
 ===================
+
 - [x] fdatasync01: no sum
 - [ ] fdatasync02: no sum
 - [ ] fdatasync03: no device
@@ -451,95 +452,68 @@
 - [ ] flock03
 - [ ] flock04
 - [ ] flock06
-- [ ] fork01
-- [ ] fork03
-- [ ] fork04
-- [ ] fork05
-- [ ] fork07
-- [ ] fork08
-- [ ] fork09
-- [ ] fork10
-- [ ] fork13
-- [ ] fork14
-- [ ] fork_exec_loop
-- [ ] fork_freeze.sh
-- [ ] fork_procs
-- [ ] fou01.sh
-- [ ] fpathconf01
-- [ ] fptest01
+
+===== fork ==========
+- [x] fork01
+- [x] fork03
+- [x] fork04
+- [x] fork07
+- [x] fork08
+- [ ] fork09 : no output?
+- [ ] fork10 : read(3,0x3fffffe860,1024) failed
+- [ ] fork13 : /proc/sys/kernel/pid_max: ENOENT (2)
+- [ ] fork14 : skip
+- [ ] fork_exec_loop : 压测
+- [x] fork_procs : 压测 1000 个进程
+- [x] fpathconf01
+
+===== fsxxx ==========
+- [ ] fptest01 : failed without reason?
 - [ ] fptest02
-- [ ] frag
-- [ ] freeze_thaw.sh
-- [ ] freeze_write_freezing.sh
-- [ ] fremovexattr01
-- [ ] fremovexattr02
-- [ ] fsconfig01
-- [ ] fsconfig02
-- [ ] fsconfig03
-- [ ] fs_di
-- [ ] fsetxattr01
-- [ ] fsetxattr02
-- [ ] fs_fill
-- [ ] fs_inod
-- [ ] fsmount01
-- [ ] fsmount02
-- [ ] fsopen01
-- [ ] fsopen02
-- [ ] fs_perms
-- [ ] fspick01
-- [ ] fspick02
-- [ ] fs_racer_dir_create.sh
-- [ ] fs_racer_dir_test.sh
-- [ ] fs_racer_file_concat.sh
-- [ ] fs_racer_file_create.sh
-- [ ] fs_racer_file_link.sh
-- [ ] fs_racer_file_list.sh
-- [ ] fs_racer_file_rename.sh
-- [ ] fs_racer_file_rm.sh
-- [ ] fs_racer_file_symlink.sh
-- [ ] fs_racer.sh
-- [ ] fsstress
-- [ ] fstat02
-- [ ] fstat02_64
-- [ ] fstat03
-- [ ] fstat03_64
-- [ ] fstatat01
-- [ ] fstatfs01
+- [ ] fremovexattr01 : no device
+- [ ] fremovexattr02 : no device
+- [ ] fsconfig01 : no device
+- [ ] fsconfig02 : no device
+- [ ] fsconfig03 : no device
+- [ ] fsetxattr01 : no device
+- [ ] fsetxattr02 : no device
+- [ ] fs_fill : no device
+- [ ] fsmount01 : no device
+- [ ] fsmount02 : no device
+- [ ] fsopen01 : no device
+- [ ] fsopen02 : no device
+- [ ] fspick01 : no device
+- [ ] fspick02 : no device
+- [x] fstat02 : st_mode != 420
+- [x] fstat02_64
+- [x] fstat03
+- [x] fstat03_64
+- [x] fstatat01 : no sum
+- [ ] fstatfs01 : no dev
 - [ ] fstatfs01_64
-- [ ] fstatfs02
-- [ ] fstatfs02_64
-- [ ] fsx-linux
-- [ ] fsx.sh
-- [ ] fsync01
-- [ ] fsync02
-- [ ] fsync03
-- [ ] fsync04
-- [ ] ftest01
-- [ ] ftest02
-- [ ] ftest03
-- [ ] ftest04
-- [ ] ftest05
-- [ ] ftest06
-- [ ] ftest07
-- [ ] ftest08
-- [ ] ftp01.sh
-- [ ] ftp-download-stress01-rmt.sh
-- [ ] ftp-download-stress02-rmt.sh
-- [ ] ftp-download-stress.sh
-- [ ] ftp-upload-stress01-rmt.sh
-- [ ] ftp-upload-stress02-rmt.sh
-- [ ] ftp-upload-stress.sh
-- [ ] ftrace_lib.sh
-- [ ] ftrace_regression01.sh
-- [ ] ftrace_regression02.sh
-- [ ] ftrace_stress
-- [ ] ftrace_stress_test.sh
-- [ ] ftruncate01
-- [ ] ftruncate01_64
-- [ ] ftruncate03
+- [x] fstatfs02 : pass 1 failed 1
+- [x] fstatfs02_64
+- [ ] fsx-linux : not support tmp file truncate
+- [ ] fsync01 : no dev
+- [ ] fsync02 : /proc/cpuinfo
+- [ ] fsync03 : no mknod
+- [ ] fsync04 : no dev
+- [ ] ftest01 : failed, no sum
+- [ ] ftest02 : failed
+- [ ] ftest03 : failed
+- [ ] ftest04 : failed
+- [ ] ftest05 : failed
+- [ ] ftest06 : failed
+- [ ] ftest07 : failed
+- [ ] ftest08 : failed
+- [x] ftruncate01
+- [x] ftruncate01_64
+- [ ] ftruncate03 : fruncate use a wired dentry?
 - [ ] ftruncate03_64
-- [ ] ftruncate04
+- [ ] ftruncate04 : no .config
 - [ ] ftruncate04_64
+
+======= futex =========
 - [ ] futex_cmp_requeue01
 - [ ] futex_cmp_requeue02
 - [x] futex_wait01
@@ -555,9 +529,9 @@
 - [ ] futex_wake02
 - [ ] futex_wake03
 - [ ] futex_wake04
-- [ ] futimesat01
+
+- [ ] futimesat01 : tconf
 - [ ] fw_load
-- [ ] gdb01.sh
 - [ ] genacos
 - [ ] genasin
 - [ ] genatan
@@ -566,9 +540,6 @@
 - [ ] genceil
 - [ ] gencos
 - [ ] gencosh
-- [ ] generate_lvm_runfile.sh
-- [ ] geneve01.sh
-- [ ] geneve02.sh
 - [ ] genexp
 - [ ] genexp_log
 - [ ] genfabs
@@ -598,29 +569,23 @@
 - [ ] getaddrinfo_01
 - [ ] getcontext01
 - [ ] getcpu01
-- [ ] getcwd01
-- [ ] getcwd02
-- [ ] getcwd03
-- [ ] getcwd04
-- [ ] getdents01
-- [ ] getdents02
-- [ ] getdomainname01
-- [ ] getegid01
-- [ ] getegid01_16
-- [ ] getegid02
-- [ ] getegid02_16
-- [ ] geteuid01
-- [ ] geteuid01_16
-- [ ] geteuid02
-- [ ] geteuid02_16
-- [ ] getgid01
-- [ ] getgid01_16
-- [ ] getgid03
-- [ ] getgid03_16
+- [ ] getcwd01 : kernel trap
+- [ ] getcwd02 : failed
+- [ ] getcwd03 : failed
+- [x] getcwd04 : 压测
+- [ ] getdents01 : no dangle symlink
+- [ ] getdents02 : failed
+- [x] getdomainname01
+
+======== gid & uid ========
+- [ ] getegid01 : /proc/self/status
+- [ ] getegid02 : f
+- [x] geteuid01
+- [x] geteuid02 : /proc/self/status pass1 failed 1
+- [ ] getgid01 : f
+- [ ] getgid03 : f
 - [ ] getgroups01
-- [ ] getgroups01_16
 - [ ] getgroups03
-- [ ] getgroups03_16
 - [ ] gethostbyname_r01
 - [ ] gethostid01
 - [ ] gethostname01
@@ -1061,15 +1026,17 @@
 - [ ] mincore03
 - [ ] mincore04
 - [ ] min_free_kbytes
+
+===== mkdir =====
 - [ ] mkdir02
 - [ ] mkdir03
 - [ ] mkdir04
-- [ ] mkdir05
-- [ ] mkdir09
-- [ ] mkdirat01
-- [ ] mkdirat02
-- [ ] mkdir_tests.sh
-- [ ] mkfs01.sh
+- [x] mkdir05 : failed unlink pass1 failed1
+- [ ] mkdir09 : no dev
+- [x] mkdirat01
+- [ ] mkdirat02 : failed symlink
+
+===== mknod =======
 - [ ] mknod01
 - [ ] mknod02
 - [ ] mknod03
@@ -1081,6 +1048,7 @@
 - [ ] mknod09
 - [ ] mknodat01
 - [ ] mknodat02
+
 - [ ] mkswap01.sh
 - [ ] mlock01
 - [ ] mlock02
@@ -1976,319 +1944,6 @@
 - [ ] tbio
 - [ ] tc01.sh
 - [ ] tcindex01
-- [ ] tcp4-multi-diffip01
-- [ ] tcp4-multi-diffip02
-- [ ] tcp4-multi-diffip03
-- [ ] tcp4-multi-diffip04
-- [ ] tcp4-multi-diffip05
-- [ ] tcp4-multi-diffip06
-- [ ] tcp4-multi-diffip07
-- [ ] tcp4-multi-diffip08
-- [ ] tcp4-multi-diffip09
-- [ ] tcp4-multi-diffip10
-- [ ] tcp4-multi-diffip11
-- [ ] tcp4-multi-diffip12
-- [ ] tcp4-multi-diffip13
-- [ ] tcp4-multi-diffip14
-- [ ] tcp4-multi-diffnic01
-- [ ] tcp4-multi-diffnic02
-- [ ] tcp4-multi-diffnic03
-- [ ] tcp4-multi-diffnic04
-- [ ] tcp4-multi-diffnic05
-- [ ] tcp4-multi-diffnic06
-- [ ] tcp4-multi-diffnic07
-- [ ] tcp4-multi-diffnic08
-- [ ] tcp4-multi-diffnic09
-- [ ] tcp4-multi-diffnic10
-- [ ] tcp4-multi-diffnic11
-- [ ] tcp4-multi-diffnic12
-- [ ] tcp4-multi-diffnic13
-- [ ] tcp4-multi-diffnic14
-- [ ] tcp4-multi-diffport01
-- [ ] tcp4-multi-diffport02
-- [ ] tcp4-multi-diffport03
-- [ ] tcp4-multi-diffport04
-- [ ] tcp4-multi-diffport05
-- [ ] tcp4-multi-diffport06
-- [ ] tcp4-multi-diffport07
-- [ ] tcp4-multi-diffport08
-- [ ] tcp4-multi-diffport09
-- [ ] tcp4-multi-diffport10
-- [ ] tcp4-multi-diffport11
-- [ ] tcp4-multi-diffport12
-- [ ] tcp4-multi-diffport13
-- [ ] tcp4-multi-diffport14
-- [ ] tcp4-multi-sameport01
-- [ ] tcp4-multi-sameport02
-- [ ] tcp4-multi-sameport03
-- [ ] tcp4-multi-sameport04
-- [ ] tcp4-multi-sameport05
-- [ ] tcp4-multi-sameport06
-- [ ] tcp4-multi-sameport07
-- [ ] tcp4-multi-sameport08
-- [ ] tcp4-multi-sameport09
-- [ ] tcp4-multi-sameport10
-- [ ] tcp4-multi-sameport11
-- [ ] tcp4-multi-sameport12
-- [ ] tcp4-multi-sameport13
-- [ ] tcp4-multi-sameport14
-- [ ] tcp4-uni-basic01
-- [ ] tcp4-uni-basic02
-- [ ] tcp4-uni-basic03
-- [ ] tcp4-uni-basic04
-- [ ] tcp4-uni-basic05
-- [ ] tcp4-uni-basic06
-- [ ] tcp4-uni-basic07
-- [ ] tcp4-uni-basic08
-- [ ] tcp4-uni-basic09
-- [ ] tcp4-uni-basic10
-- [ ] tcp4-uni-basic11
-- [ ] tcp4-uni-basic12
-- [ ] tcp4-uni-basic13
-- [ ] tcp4-uni-basic14
-- [ ] tcp4-uni-dsackoff01
-- [ ] tcp4-uni-dsackoff02
-- [ ] tcp4-uni-dsackoff03
-- [ ] tcp4-uni-dsackoff04
-- [ ] tcp4-uni-dsackoff05
-- [ ] tcp4-uni-dsackoff06
-- [ ] tcp4-uni-dsackoff07
-- [ ] tcp4-uni-dsackoff08
-- [ ] tcp4-uni-dsackoff09
-- [ ] tcp4-uni-dsackoff10
-- [ ] tcp4-uni-dsackoff11
-- [ ] tcp4-uni-dsackoff12
-- [ ] tcp4-uni-dsackoff13
-- [ ] tcp4-uni-dsackoff14
-- [ ] tcp4-uni-pktlossdup01
-- [ ] tcp4-uni-pktlossdup02
-- [ ] tcp4-uni-pktlossdup03
-- [ ] tcp4-uni-pktlossdup04
-- [ ] tcp4-uni-pktlossdup05
-- [ ] tcp4-uni-pktlossdup06
-- [ ] tcp4-uni-pktlossdup07
-- [ ] tcp4-uni-pktlossdup08
-- [ ] tcp4-uni-pktlossdup09
-- [ ] tcp4-uni-pktlossdup10
-- [ ] tcp4-uni-pktlossdup11
-- [ ] tcp4-uni-pktlossdup12
-- [ ] tcp4-uni-pktlossdup13
-- [ ] tcp4-uni-pktlossdup14
-- [ ] tcp4-uni-sackoff01
-- [ ] tcp4-uni-sackoff02
-- [ ] tcp4-uni-sackoff03
-- [ ] tcp4-uni-sackoff04
-- [ ] tcp4-uni-sackoff05
-- [ ] tcp4-uni-sackoff06
-- [ ] tcp4-uni-sackoff07
-- [ ] tcp4-uni-sackoff08
-- [ ] tcp4-uni-sackoff09
-- [ ] tcp4-uni-sackoff10
-- [ ] tcp4-uni-sackoff11
-- [ ] tcp4-uni-sackoff12
-- [ ] tcp4-uni-sackoff13
-- [ ] tcp4-uni-sackoff14
-- [ ] tcp4-uni-smallsend01
-- [ ] tcp4-uni-smallsend02
-- [ ] tcp4-uni-smallsend03
-- [ ] tcp4-uni-smallsend04
-- [ ] tcp4-uni-smallsend05
-- [ ] tcp4-uni-smallsend06
-- [ ] tcp4-uni-smallsend07
-- [ ] tcp4-uni-smallsend08
-- [ ] tcp4-uni-smallsend09
-- [ ] tcp4-uni-smallsend10
-- [ ] tcp4-uni-smallsend11
-- [ ] tcp4-uni-smallsend12
-- [ ] tcp4-uni-smallsend13
-- [ ] tcp4-uni-smallsend14
-- [ ] tcp4-uni-tso01
-- [ ] tcp4-uni-tso02
-- [ ] tcp4-uni-tso03
-- [ ] tcp4-uni-tso04
-- [ ] tcp4-uni-tso05
-- [ ] tcp4-uni-tso06
-- [ ] tcp4-uni-tso07
-- [ ] tcp4-uni-tso08
-- [ ] tcp4-uni-tso09
-- [ ] tcp4-uni-tso10
-- [ ] tcp4-uni-tso11
-- [ ] tcp4-uni-tso12
-- [ ] tcp4-uni-tso13
-- [ ] tcp4-uni-tso14
-- [ ] tcp4-uni-winscale01
-- [ ] tcp4-uni-winscale02
-- [ ] tcp4-uni-winscale03
-- [ ] tcp4-uni-winscale04
-- [ ] tcp4-uni-winscale05
-- [ ] tcp4-uni-winscale06
-- [ ] tcp4-uni-winscale07
-- [ ] tcp4-uni-winscale08
-- [ ] tcp4-uni-winscale09
-- [ ] tcp4-uni-winscale10
-- [ ] tcp4-uni-winscale11
-- [ ] tcp4-uni-winscale12
-- [ ] tcp4-uni-winscale13
-- [ ] tcp4-uni-winscale14
-- [ ] tcp6-multi-diffip01
-- [ ] tcp6-multi-diffip02
-- [ ] tcp6-multi-diffip03
-- [ ] tcp6-multi-diffip04
-- [ ] tcp6-multi-diffip05
-- [ ] tcp6-multi-diffip06
-- [ ] tcp6-multi-diffip07
-- [ ] tcp6-multi-diffip08
-- [ ] tcp6-multi-diffip09
-- [ ] tcp6-multi-diffip10
-- [ ] tcp6-multi-diffip11
-- [ ] tcp6-multi-diffip12
-- [ ] tcp6-multi-diffip13
-- [ ] tcp6-multi-diffip14
-- [ ] tcp6-multi-diffnic01
-- [ ] tcp6-multi-diffnic02
-- [ ] tcp6-multi-diffnic03
-- [ ] tcp6-multi-diffnic04
-- [ ] tcp6-multi-diffnic05
-- [ ] tcp6-multi-diffnic06
-- [ ] tcp6-multi-diffnic07
-- [ ] tcp6-multi-diffnic08
-- [ ] tcp6-multi-diffnic09
-- [ ] tcp6-multi-diffnic10
-- [ ] tcp6-multi-diffnic11
-- [ ] tcp6-multi-diffnic12
-- [ ] tcp6-multi-diffnic13
-- [ ] tcp6-multi-diffnic14
-- [ ] tcp6-multi-diffport01
-- [ ] tcp6-multi-diffport02
-- [ ] tcp6-multi-diffport03
-- [ ] tcp6-multi-diffport04
-- [ ] tcp6-multi-diffport05
-- [ ] tcp6-multi-diffport06
-- [ ] tcp6-multi-diffport07
-- [ ] tcp6-multi-diffport08
-- [ ] tcp6-multi-diffport09
-- [ ] tcp6-multi-diffport10
-- [ ] tcp6-multi-diffport11
-- [ ] tcp6-multi-diffport12
-- [ ] tcp6-multi-diffport13
-- [ ] tcp6-multi-diffport14
-- [ ] tcp6-multi-sameport01
-- [ ] tcp6-multi-sameport02
-- [ ] tcp6-multi-sameport03
-- [ ] tcp6-multi-sameport04
-- [ ] tcp6-multi-sameport05
-- [ ] tcp6-multi-sameport06
-- [ ] tcp6-multi-sameport07
-- [ ] tcp6-multi-sameport08
-- [ ] tcp6-multi-sameport09
-- [ ] tcp6-multi-sameport10
-- [ ] tcp6-multi-sameport11
-- [ ] tcp6-multi-sameport12
-- [ ] tcp6-multi-sameport13
-- [ ] tcp6-multi-sameport14
-- [ ] tcp6-uni-basic01
-- [ ] tcp6-uni-basic02
-- [ ] tcp6-uni-basic03
-- [ ] tcp6-uni-basic04
-- [ ] tcp6-uni-basic05
-- [ ] tcp6-uni-basic06
-- [ ] tcp6-uni-basic07
-- [ ] tcp6-uni-basic08
-- [ ] tcp6-uni-basic09
-- [ ] tcp6-uni-basic10
-- [ ] tcp6-uni-basic11
-- [ ] tcp6-uni-basic12
-- [ ] tcp6-uni-basic13
-- [ ] tcp6-uni-basic14
-- [ ] tcp6-uni-dsackoff01
-- [ ] tcp6-uni-dsackoff02
-- [ ] tcp6-uni-dsackoff03
-- [ ] tcp6-uni-dsackoff04
-- [ ] tcp6-uni-dsackoff05
-- [ ] tcp6-uni-dsackoff06
-- [ ] tcp6-uni-dsackoff07
-- [ ] tcp6-uni-dsackoff08
-- [ ] tcp6-uni-dsackoff09
-- [ ] tcp6-uni-dsackoff10
-- [ ] tcp6-uni-dsackoff11
-- [ ] tcp6-uni-dsackoff12
-- [ ] tcp6-uni-dsackoff13
-- [ ] tcp6-uni-dsackoff14
-- [ ] tcp6-uni-pktlossdup01
-- [ ] tcp6-uni-pktlossdup02
-- [ ] tcp6-uni-pktlossdup03
-- [ ] tcp6-uni-pktlossdup04
-- [ ] tcp6-uni-pktlossdup05
-- [ ] tcp6-uni-pktlossdup06
-- [ ] tcp6-uni-pktlossdup07
-- [ ] tcp6-uni-pktlossdup08
-- [ ] tcp6-uni-pktlossdup09
-- [ ] tcp6-uni-pktlossdup10
-- [ ] tcp6-uni-pktlossdup11
-- [ ] tcp6-uni-pktlossdup12
-- [ ] tcp6-uni-pktlossdup13
-- [ ] tcp6-uni-pktlossdup14
-- [ ] tcp6-uni-sackoff01
-- [ ] tcp6-uni-sackoff02
-- [ ] tcp6-uni-sackoff03
-- [ ] tcp6-uni-sackoff04
-- [ ] tcp6-uni-sackoff05
-- [ ] tcp6-uni-sackoff06
-- [ ] tcp6-uni-sackoff07
-- [ ] tcp6-uni-sackoff08
-- [ ] tcp6-uni-sackoff09
-- [ ] tcp6-uni-sackoff10
-- [ ] tcp6-uni-sackoff11
-- [ ] tcp6-uni-sackoff12
-- [ ] tcp6-uni-sackoff13
-- [ ] tcp6-uni-sackoff14
-- [ ] tcp6-uni-smallsend01
-- [ ] tcp6-uni-smallsend02
-- [ ] tcp6-uni-smallsend03
-- [ ] tcp6-uni-smallsend04
-- [ ] tcp6-uni-smallsend05
-- [ ] tcp6-uni-smallsend06
-- [ ] tcp6-uni-smallsend07
-- [ ] tcp6-uni-smallsend08
-- [ ] tcp6-uni-smallsend09
-- [ ] tcp6-uni-smallsend10
-- [ ] tcp6-uni-smallsend11
-- [ ] tcp6-uni-smallsend12
-- [ ] tcp6-uni-smallsend13
-- [ ] tcp6-uni-smallsend14
-- [ ] tcp6-uni-tso01
-- [ ] tcp6-uni-tso02
-- [ ] tcp6-uni-tso03
-- [ ] tcp6-uni-tso04
-- [ ] tcp6-uni-tso05
-- [ ] tcp6-uni-tso06
-- [ ] tcp6-uni-tso07
-- [ ] tcp6-uni-tso08
-- [ ] tcp6-uni-tso09
-- [ ] tcp6-uni-tso10
-- [ ] tcp6-uni-tso11
-- [ ] tcp6-uni-tso12
-- [ ] tcp6-uni-tso13
-- [ ] tcp6-uni-tso14
-- [ ] tcp6-uni-winscale01
-- [ ] tcp6-uni-winscale02
-- [ ] tcp6-uni-winscale03
-- [ ] tcp6-uni-winscale04
-- [ ] tcp6-uni-winscale05
-- [ ] tcp6-uni-winscale06
-- [ ] tcp6-uni-winscale07
-- [ ] tcp6-uni-winscale08
-- [ ] tcp6-uni-winscale09
-- [ ] tcp6-uni-winscale10
-- [ ] tcp6-uni-winscale11
-- [ ] tcp6-uni-winscale12
-- [ ] tcp6-uni-winscale13
-- [ ] tcp6-uni-winscale14
-- [ ] tcp_cc_lib.sh
-- [ ] tcpdump01.sh
-- [ ] tcp_fastopen_run.sh
-- [ ] tcp_ipsec.sh
-- [ ] tcp_ipsec_vti.sh
 - [ ] tee01
 - [ ] tee02
 - [ ] test_1_to_1_accept_close
@@ -2340,260 +1995,105 @@
 - [ ] test_tcp_style_v6
 - [ ] test_timetolive
 - [ ] test_timetolive_v6
-- [ ] tgkill01
-- [ ] tgkill02
-- [ ] tgkill03
-- [ ] thp01
-- [ ] thp02
-- [ ] thp03
-- [ ] thp04
-- [ ] time01
-- [ ] timed_forkbomb
-- [ ] timens01
-- [ ] timer_delete01
-- [ ] timer_delete02
-- [ ] timerfd01
-- [ ] timerfd02
-- [ ] timerfd04
-- [ ] timerfd_create01
-- [ ] timerfd_gettime01
-- [ ] timerfd_settime01
-- [ ] timerfd_settime02
-- [ ] timer_getoverrun01
-- [ ] timer_gettime01
-- [ ] timer_settime01
-- [ ] timer_settime02
-- [ ] timer_settime03
-- [ ] times01
-- [ ] times03
-- [ ] time-schedule
-- [ ] tkill01
-- [ ] tkill02
-- [ ] tpci
-- [ ] tpm_changeauth_tests_exp01.sh
-- [ ] tpm_changeauth_tests_exp02.sh
-- [ ] tpm_changeauth_tests_exp03.sh
-- [ ] tpm_changeauth_tests.sh
-- [ ] tpm_clear_tests_exp01.sh
-- [ ] tpm_clear_tests.sh
-- [ ] tpm_getpubek_tests_exp01.sh
-- [ ] tpm_getpubek_tests.sh
-- [ ] tpm_restrictpubek_tests_exp01.sh
-- [ ] tpm_restrictpubek_tests_exp02.sh
-- [ ] tpm_restrictpubek_tests_exp03.sh
-- [ ] tpm_restrictpubek_tests.sh
-- [ ] tpm_selftest_tests.sh
-- [ ] tpm_takeownership_tests_exp01.sh
-- [ ] tpm_takeownership_tests.sh
-- [ ] tpmtoken_import_tests_exp01.sh
-- [ ] tpmtoken_import_tests_exp02.sh
-- [ ] tpmtoken_import_tests_exp03.sh
-- [ ] tpmtoken_import_tests_exp04.sh
-- [ ] tpmtoken_import_tests_exp05.sh
-- [ ] tpmtoken_import_tests_exp06.sh
-- [ ] tpmtoken_import_tests_exp07.sh
-- [ ] tpmtoken_import_tests_exp08.sh
-- [ ] tpmtoken_import_tests.sh
-- [ ] tpmtoken_init_tests_exp00.sh
-- [ ] tpmtoken_init_tests_exp01.sh
-- [ ] tpmtoken_init_tests_exp02.sh
-- [ ] tpmtoken_init_tests_exp03.sh
-- [ ] tpmtoken_init_tests.sh
-- [ ] tpmtoken_objects_tests_exp01.sh
-- [ ] tpmtoken_objects_tests.sh
-- [ ] tpmtoken_protect_tests_exp01.sh
-- [ ] tpmtoken_protect_tests_exp02.sh
-- [ ] tpmtoken_protect_tests.sh
-- [ ] tpmtoken_setpasswd_tests_exp01.sh
-- [ ] tpmtoken_setpasswd_tests_exp02.sh
-- [ ] tpmtoken_setpasswd_tests_exp03.sh
-- [ ] tpmtoken_setpasswd_tests_exp04.sh
-- [ ] tpmtoken_setpasswd_tests.sh
-- [ ] tpm_version_tests.sh
-- [ ] tracepath01.sh
-- [ ] traceroute01.sh
-- [ ] trace_sched
-- [ ] truncate02
+- [x] tgkill01
+- [ ] tgkill02 : tgkill() should have failed with EAGAIN: SUCCESS (0)
+- [x] tgkill03 : pass 5 failed 1
+
+======== time ========
+- [x] time01
+- [ ] timens01 : .config
+- [ ] timer_delete01 : 107 syscall
+- [ ] timer_delete02 : 111
+- [ ] timerfd01 : 85
+- [ ] timerfd02 : 85
+- [ ] timerfd04 : .config
+- [ ] timerfd_create01 : 85
+- [ ] timerfd_gettime01 : 85
+- [ ] timerfd_settime01 : 85
+- [ ] timerfd_settime02 : /proc/sys/kernel/tainted
+- [ ] timer_getoverrun01 : 107
+- [ ] timer_gettime01 : 107
+- [ ] timer_settime01 : 107
+- [ ] timer_settime02 : 107
+- [ ] timer_settime03 : 107
+- [x] times01
+- [ ] times03 : tms_time wrong
+- [ ] time-schedule : 230 syscall
+- [x] tkill01
+- [ ] tkill02 : /proc/sys/kernel/pid_max
+- [ ] truncate02 : not support truncate
 - [ ] truncate02_64
-- [ ] truncate03
+- [ ] truncate03 : symlink
 - [ ] truncate03_64
-- [ ] tst_ansi_color.sh
-- [ ] tst_brk
-- [ ] tst_brkm
-- [ ] tst_cgctl
-- [ ] tst_check_drivers
-- [ ] tst_check_kconfigs
-- [ ] tst_checkpoint
-- [ ] tst_device
-- [ ] tst_exit
-- [ ] tst_fsfreeze
-- [ ] tst_fs_has_free
-- [ ] tst_getconf
-- [ ] tst_get_free_pids
-- [ ] tst_get_median
-- [ ] tst_get_unused_port
-- [ ] tst_hexdump
-- [ ] tst_kvcmp
-- [ ] tst_lockdown_enabled
-- [ ] tst_ncpus
-- [ ] tst_ncpus_conf
-- [ ] tst_ncpus_max
-- [ ] tst_net_iface_prefix
-- [ ] tst_net_ip_prefix
-- [ ] tst_net.sh
-- [ ] tst_net_stress.sh
-- [ ] tst_net_vars
-- [ ] tst_ns_create
-- [ ] tst_ns_exec
-- [ ] tst_ns_ifmove
-- [ ] tst_random
-- [ ] tst_res
-- [ ] tst_resm
-- [ ] tst_rod
-- [ ] tst_secureboot_enabled
-- [ ] tst_security.sh
-- [ ] tst_sleep
-- [ ] tst_supported_fs
-- [ ] tst_test.sh
-- [ ] tst_timeout_kill
-- [ ] uaccess
-- [ ] udp4-multi-diffip01
-- [ ] udp4-multi-diffip02
-- [ ] udp4-multi-diffip03
-- [ ] udp4-multi-diffip04
-- [ ] udp4-multi-diffip05
-- [ ] udp4-multi-diffip06
-- [ ] udp4-multi-diffip07
-- [ ] udp4-multi-diffnic01
-- [ ] udp4-multi-diffnic02
-- [ ] udp4-multi-diffnic03
-- [ ] udp4-multi-diffnic04
-- [ ] udp4-multi-diffnic05
-- [ ] udp4-multi-diffnic06
-- [ ] udp4-multi-diffnic07
-- [ ] udp4-multi-diffport01
-- [ ] udp4-multi-diffport02
-- [ ] udp4-multi-diffport03
-- [ ] udp4-multi-diffport04
-- [ ] udp4-multi-diffport05
-- [ ] udp4-multi-diffport06
-- [ ] udp4-multi-diffport07
-- [ ] udp4-uni-basic01
-- [ ] udp4-uni-basic02
-- [ ] udp4-uni-basic03
-- [ ] udp4-uni-basic04
-- [ ] udp4-uni-basic05
-- [ ] udp4-uni-basic06
-- [ ] udp4-uni-basic07
-- [ ] udp6-multi-diffip01
-- [ ] udp6-multi-diffip02
-- [ ] udp6-multi-diffip03
-- [ ] udp6-multi-diffip04
-- [ ] udp6-multi-diffip05
-- [ ] udp6-multi-diffip06
-- [ ] udp6-multi-diffip07
-- [ ] udp6-multi-diffnic01
-- [ ] udp6-multi-diffnic02
-- [ ] udp6-multi-diffnic03
-- [ ] udp6-multi-diffnic04
-- [ ] udp6-multi-diffnic05
-- [ ] udp6-multi-diffnic06
-- [ ] udp6-multi-diffnic07
-- [ ] udp6-multi-diffport01
-- [ ] udp6-multi-diffport02
-- [ ] udp6-multi-diffport03
-- [ ] udp6-multi-diffport04
-- [ ] udp6-multi-diffport05
-- [ ] udp6-multi-diffport06
-- [ ] udp6-multi-diffport07
-- [ ] udp6-uni-basic01
-- [ ] udp6-uni-basic02
-- [ ] udp6-uni-basic03
-- [ ] udp6-uni-basic04
-- [ ] udp6-uni-basic05
-- [ ] udp6-uni-basic06
-- [ ] udp6-uni-basic07
-- [ ] udp_ipsec.sh
-- [ ] udp_ipsec_vti.sh
-- [ ] uevent01
-- [ ] uevent02
-- [ ] uevent03
-- [ ] ulimit01
-- [ ] umask01
-- [ ] umip_basic_test
-- [ ] umount01
-- [ ] umount02
-- [ ] umount03
-- [ ] umount2_01
-- [ ] umount2_02
-- [ ] uname01
-- [ ] uname02
+
+- [ ] uaccess : tconf
+- [ ] uevent01 : tconf
+- [ ] uevent02 : tconf
+- [ ] uevent03 : tconf
+- [x] ulimit01 : no sum
+- [ ] umask01 : not support umask
+- [ ] umount01 : no dev
+- [ ] umount02 : no dev
+- [ ] umount03 : no dev
+- [ ] umount2_01 : no dev
+- [ ] umount2_02 : no dev
+- [x] uname01
+- [ ] uname02 : panic
 - [ ] uname04
-- [ ] unlink05
-- [ ] unlink07
-- [ ] unlink08
-- [ ] unlink09
-- [ ] unlinkat01
-- [ ] unshare01
-- [ ] unshare01.sh
-- [ ] unshare02
-- [ ] unzip01.sh
-- [ ] userfaultfd01
-- [ ] userns01
-- [ ] userns02
-- [ ] userns03
-- [ ] userns04
-- [ ] userns05
-- [ ] userns06
-- [ ] userns06_capcheck
-- [ ] userns07
-- [ ] userns08
-- [ ] ustat01
-- [ ] ustat02
-- [ ] utime01
-- [ ] utime02
-- [ ] utime03
-- [ ] utime04
-- [ ] utime05
-- [ ] utime06
-- [ ] utime07
-- [ ] utimensat01
-- [ ] utimes01
-- [ ] utsname01
-- [ ] utsname02
-- [ ] utsname03
-- [ ] utsname04
+- [x] unlink05 : pass 1 failed 1
+- [x] unlink07 : pass 5 failed 1
+- [ ] unlink08 : failed
+- [ ] unlink09 : ioctl failed
+- [x] unlinkat01 : pass 5 failed 2
+- [ ] unshare01 : no share syscall
+- [ ] unshare02 : no share syscall
+- [ ] userfaultfd01: failed on ioctl
+- [ ] userns01 : libcap
+- [ ] userns02 : .config
+- [ ] userns03 : .config
+- [ ] userns04 : .config
+- [ ] userns05 : .config
+- [ ] userns06 : tconf
+- [ ] userns06_capcheck : LTP_IPC_PATH is not defined
+- [ ] userns07 : .config
+- [ ] userns08 : .config
+- [ ] ustat01 : tconf
+- [ ] ustat02 : tconf
+- [ ] utime01 : no dev
+- [ ] utime02 : no dev
+- [ ] utime03 : no dev
+- [ ] utime04 : no dev
+- [ ] utime05 : no dev
+- [x] utime06 : pass 1 failed 3
+- [x] utime07 : pass 3 failed 1
+- [ ] utimensat01 : no dev
+- [x] utimes01: pass 2 failed 1
+- [x] utsname01
+- [ ] utsname02 : failed
+- [ ] utsname03 : not support
+- [x] utsname04
 - [ ] verify_caps_exec
 - [ ] vfork
 - [ ] vfork01
 - [ ] vfork02
-- [ ] vfork_freeze.sh
 - [ ] vhangup01
 - [ ] vhangup02
-- [ ] virt_lib.sh
-- [ ] vlan01.sh
-- [ ] vlan02.sh
-- [ ] vlan03.sh
 - [ ] vma01
 - [ ] vma02
 - [ ] vma03
-- [ ] vma04
-- [ ] vma05.sh
-- [ ] vma05_vdso
-- [ ] vmsplice01
-- [ ] vmsplice02
-- [ ] vmsplice03
-- [ ] vmsplice04
-- [ ] vsock01
-- [ ] vxlan01.sh
-- [ ] vxlan02.sh
-- [ ] vxlan03.sh
-- [ ] vxlan04.sh
-- [ ] wait01
-- [ ] wait02
-- [ ] wait401
-- [ ] wait402
-- [ ] wait403
+- [ ] vma04 : 
+- [ ] vmsplice01: read failed
+- [ ] vmsplice02: should failed
+- [ ] vmsplice03: vmsplice() didn't write anything
+- [ ] vmsplice04: not support
+- [ ] vsock01 : .config
+
+====== wait ============
+- [x] wait01
+- [x] wait02
+- [x] wait401 : pass 2 failed 1
+- [ ] wait402 : /proc/...
+- [ ] wait403 : /proc/...
 - [ ] waitid01
 - [ ] waitid02
 - [ ] waitid03
@@ -2605,17 +2105,19 @@
 - [ ] waitid09
 - [ ] waitid10
 - [ ] waitid11
-- [ ] waitpid01
-- [ ] waitpid03
-- [ ] waitpid04
-- [ ] waitpid06
-- [ ] waitpid07
-- [ ] waitpid08
-- [ ] waitpid09
-- [ ] waitpid10
-- [ ] waitpid11
-- [ ] waitpid12
-- [ ] waitpid13
+- [x] waitpid01
+- [x] waitpid03
+- [ ] waitpid04 : wrong error code
+- [ ] waitpid06 : loop or stuck, failed the check
+- [ ] waitpid07 : same
+- [ ] waitpid08 : same
+- [ ] waitpid09 : same
+- [ ] waitpid10 : same
+- [ ] waitpid11 : same
+- [ ] waitpid12 : [sys_waitpid]: not implement
+- [ ] waitpid13 : [sys_waitpid]: not implement
+
+===== wqueue (failed all) =====
 - [ ] wqueue01
 - [ ] wqueue02
 - [ ] wqueue03
@@ -2625,6 +2127,8 @@
 - [ ] wqueue07
 - [ ] wqueue08
 - [ ] wqueue09
+
+====== write =========
 - [x] write01
 - [x] write02
 - [ ] write03: kernel trap
