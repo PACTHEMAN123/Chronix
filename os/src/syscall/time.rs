@@ -31,7 +31,7 @@ pub fn sys_times(tms: usize) -> SysResult {
     let task = current_task().unwrap();
     let tms_ptr = UserPtrRaw::new(tms as *mut Tms)
         .ensure_write(&mut task.get_vm_space().lock())
-        .ok_or(SysError::EINVAL)?;
+        .ok_or(SysError::EFAULT)?;
     let current_task = current_task().unwrap();
     let tms_val = Tms::from_time_recorder(current_task.time_recorder());
     tms_ptr.write(tms_val);
@@ -43,12 +43,12 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
     let time_val_ptr = 
         UserPtrRaw::new(time_ptr as *const TimeSpec)
             .ensure_read(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
     let time_val = *time_val_ptr.to_ref();
     let time_out_ptr = 
         UserPtrRaw::new(time_out_ptr as *const TimeSpec)
             .ensure_write(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
     let time_out = time_out_ptr.to_mut();
     let sleep_time_duration = time_val.into();
     let remain = suspend_timeout(current_task().unwrap(), sleep_time_duration).await;
