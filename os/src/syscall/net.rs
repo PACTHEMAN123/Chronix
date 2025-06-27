@@ -109,9 +109,8 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     });
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
-        .downcast_arc::<socket::Socket>().unwrap_or_else(|_| {
-        panic!("Failed to downcast to socket::Socket")
-    });
+        .downcast_arc::<socket::Socket>()
+        .map_err(|_| SysError::ENOTSOCK)?;
     log::info!("[sys_bind] socket_file_type {:#?}, fd_type {:#?}", socket_file.sk_type, fd);
     socket_file.sk.bind(fd, local_addr)?;
     Ok(0)
@@ -128,9 +127,7 @@ pub fn sys_listen(fd: usize, _backlog: usize) -> SysResult {
     let socket_file = current_task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     socket_file.sk.listen()?;
     Ok(0)
 }
@@ -152,9 +149,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     log::info!("[sys_connect] socket_file_type {:#?}", socket_file.sk_type);
     socket_file.sk.connect(remote_addr.into_endpoint()).await?;
     // yield_now().await;
@@ -184,9 +179,7 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     // moniter accept, allow sig_kill and sig_stop to interrupt
     task.set_interruptable();
     let old_mask = task.sig_manager.lock().blocked_sigs;
@@ -233,9 +226,7 @@ pub async fn sys_sendto(
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     task.set_interruptable();
     let bytes = match socket_file.sk_type {
         SocketType::DGRAM => {
@@ -277,9 +268,7 @@ pub async fn sys_recvfrom(
     let socket_file = task.with_fd_table(|table| {
         table.get_file(sockfd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     let mut inner_vec = Vec::with_capacity(len);
     unsafe {
         inner_vec.set_len(len);
@@ -311,10 +300,10 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     }
     log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
-    let socket_file = task.with_fd_table(|table| -> Result<Arc<socket::Socket>, SysError> {
-        let arc = table.get_file(fd).clone()?;
-        arc.downcast_arc::<socket::Socket>().map_err(|_| panic!("Failed to downcast to socket::Socket"))
-    })?;
+    let socket_file = task.with_fd_table(|table| {
+        table.get_file(fd)})?
+        .downcast_arc::<socket::Socket>()
+        .map_err(|_| SysError::ENOTSOCK)?;
     let local_addr = socket_file.sk.local_addr()?;
     // log::info!("Get local address of socket: {:?}", local_addr);
     // write to pointer
@@ -331,9 +320,7 @@ pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     let peer_addr = socket_file.sk.peer_addr().unwrap();
     log::info!("Get peer address of socket: {:?}", peer_addr);
     // write to pointer
@@ -580,9 +567,7 @@ pub fn sys_shutdown(fd: usize, how: usize) -> SysResult {
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     socket_file.sk.shutdown(how as u8)?;
     log::info!("shutdown: fd: {}, how: {}", fd, how);
     Ok(0)
@@ -660,9 +645,7 @@ pub async fn sys_sendmsg(
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     let msg_ptr = msg as *const MsgHdr;
     let msg = unsafe { msg_ptr.read() };
     if msg.msg_controllen != 0 {
@@ -702,7 +685,8 @@ pub async fn sys_sendmsg(
                     *(msg.msg_name as *const _)
                 }
             }.into_endpoint())
-        }
+        },
+        _ => todo!()
     }?;
     let iovs = unsafe {
         Instruction::set_sum();
@@ -740,9 +724,7 @@ pub async fn sys_recvmsg(
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
-        .unwrap_or_else(|_| {
-            panic!("Failed to downcast to socket::Socket")
-        });
+        .map_err(|_| SysError::ENOTSOCK)?;
     let msg_ptr = msg as *mut MsgHdr;
     let inner_msg = unsafe { msg_ptr.read() };
     if inner_msg.msg_controllen != 0 {
@@ -789,7 +771,8 @@ pub async fn sys_recvmsg(
                     addr_ptr.write_volatile(addr.unix);
                     let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
                     addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
-                }
+                },
+                _ => todo!()
             }
         }
     }
@@ -831,7 +814,8 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize) -> Result<SockAddr, SysErro
                 //todo : temp measure for unix socket
                 ipv6: unsafe { *(addr as *const _) },
             })
-        }
+        },
+        _ => todo!()
     }
 }
 
@@ -855,7 +839,8 @@ pub fn sockaddr_writer(addr: usize, addr_len: usize, sock_addr: &SockAddr) {
                 addr_ptr.write_volatile(sock_addr.unix);
                 let addr_len_ptr = addr_len as *mut u32;
                 addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
-            }
+            },
+            _ => todo!()
         }
     }
 }

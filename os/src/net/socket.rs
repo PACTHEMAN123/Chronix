@@ -3,8 +3,8 @@ use core::{sync::atomic::AtomicUsize, task::Poll};
 use alloc::{boxed::Box, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
-use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
+use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::LOCAL_IPS, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -30,23 +30,29 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.connect(addr).await,
             Sock::UDP(udp) => udp.connect(addr),
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
     pub fn bind(&self, sock_fd: usize, local_addr: SockAddr) -> SockResult<()>{
         match self {
             Sock::TCP(tcp) => {
-                let local_addr = local_addr.into_listen_endpoint();
+                // let family = unsafe {
+                //     SaFamily::try_from(local_addr.family)?
+                // };
+                let local_addr = local_addr.into_listen_endpoint()?;
                 let addr = if local_addr.addr.is_none(){
-                    ZERO_IPV4_ADDR
+                   ZERO_IPV4_ADDR
                 }else{
                     local_addr.addr.unwrap()
                 };
+                if !LOCAL_IPS.contains(&addr) {
+                    return Err(SysError::EADDRNOTAVAIL);
+                }
                 tcp.bind(IpEndpoint::new(addr, local_addr.port))
             }
             Sock::UDP(udp) => {
-                let local_endpoint = local_addr.into_listen_endpoint();
+                let local_endpoint = local_addr.into_listen_endpoint()?;
                 log::info!("[udp::bind] local_endpoint:{:?}", local_endpoint);
                 if let Some(used_fd) = udp.bind_check(sock_fd, local_endpoint) {
                     current_task().unwrap()
@@ -56,7 +62,8 @@ impl Sock {
                     udp.bind(local_endpoint)
                 }
             }
-            Sock::Unix(_) => todo!(),
+            // todo: suit for most cases
+            Sock::Unix(_) => Err(SysError::ENOTDIR)
         }
     }
     /// listen method for socket to listen for incoming connections, for server socket
@@ -64,7 +71,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.listen(),
             Sock::UDP(udp) => Err(SysError::EOPNOTSUPP),
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) => Err(SysError::EAFNOSUPPORT),
         }
     }
     /// set socket non-blocking, 
@@ -86,7 +93,7 @@ impl Sock {
                 let peer_addr = udp_socket.peer_addr()?;
                 Ok(SockAddr::from_endpoint(peer_addr))
             },
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// get the local_addr of the socket
@@ -100,7 +107,7 @@ impl Sock {
                 let local_addr = udp_socket.local_addr()?;
                 Ok(SockAddr::from_endpoint(local_addr))
             },
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// send data to the socket
@@ -113,7 +120,7 @@ impl Sock {
                     None => udp_socket.send(data).await,
                 }
             },
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// recv data from the socket
@@ -121,7 +128,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.recv(data).await,
             Sock::UDP(udp_socket) => udp_socket.recv(data).await,
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// shutdown a connection
@@ -129,7 +136,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.shutdown(how),
             Sock::UDP(udp_socket) => udp_socket.shutdown(),
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// poll the socket for events
@@ -148,7 +155,7 @@ impl Sock {
                         Ok(new)
                     }
             Sock::UDP(udp_socket) => Err(SysError::EOPNOTSUPP),
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
 }
