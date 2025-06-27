@@ -5,6 +5,8 @@ use meminfo::{MemInfoDentry, MemInfoInode};
 use mounts::{MountsDentry, MountsInode};
 use self_::{ExeDentry, ExeInode};
 
+use crate::fs::{tmpfs::{dentry::TmpDentry, inode::TmpInode}, vfs::inode::InodeMode};
+
 use super::{simplefs::{dentry::SpDentry, inode::SpInode}, vfs::{Dentry, DCACHE}};
 
 pub mod fstype;
@@ -18,8 +20,8 @@ pub fn init_procfs(root_dentry: Arc<dyn Dentry>) {
     let sb = root_dentry.inode().unwrap().inode_inner().super_block.clone();
 
     // mkdir /proc/self
-    let self_dentry = SpDentry::new("self", Some(root_dentry.clone()));
-    let self_inode = SpInode::new(sb.clone().unwrap());
+    let self_dentry = TmpDentry::new("self", Some(root_dentry.clone()));
+    let self_inode = TmpInode::new(sb.clone().unwrap(), InodeMode::DIR);
     self_dentry.set_inode(self_inode);
     root_dentry.add_child(self_dentry.clone());
     DCACHE.lock().insert(self_dentry.path(), self_dentry.clone());

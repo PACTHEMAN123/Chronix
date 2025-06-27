@@ -384,7 +384,7 @@ impl Inode for Ext4Inode {
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
-            st_mode: inner.mode.bits() as _,
+            st_mode: inner.mode().bits() as _,
             st_nlink: inner.nlink() as u32,
             st_uid: 0,
             st_gid: 0,
@@ -436,7 +436,7 @@ impl Inode for Ext4Inode {
             stx_nlink: inner.nlink() as u32,
             stx_uid: 0,
             stx_gid: 0,
-            stx_mode: inner.mode.bits() as _,
+            stx_mode: inner.mode().bits() as _,
             stx_ino: inner.ino as u64,
             stx_size: size as _,
             stx_blocks: (size / BLOCK_SIZE) as _,
@@ -555,7 +555,7 @@ impl Inode for Ext4Inode {
         let old_mode = InodeMode::from_inode_type(ty).get_type();
         log::debug!("old mode: {:x}", old_mode.bits());
         if let Some(new) = new_inode {
-            let new_mode = new.inode_inner().mode;
+            let new_mode = new.inode_inner().mode();
             if new_mode != old_mode {
                 return match (old_mode, new_mode) {
                     (InodeMode::FILE, InodeMode::DIR) => Err(SysError::EISDIR),

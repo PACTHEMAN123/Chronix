@@ -138,7 +138,8 @@ pub trait Dentry: Send + Sync {
         Err(SysError::ENOTDIR)
     }
     /// create a negative child which share the same type with self
-    fn new_neg_dentry(self: Arc<Self>, _name: &str) -> Arc<dyn Dentry> {
+    /// if self is a directory, return error
+    fn new_neg_dentry(self: Arc<Self>, _name: &str) -> Result<Arc<dyn Dentry>, SysError> {
         todo!()
     }
 }
@@ -236,7 +237,8 @@ impl dyn Dentry {
                     //     Some(current_dentry)
                     // );
                     // neg_dentry.set_state(DentryState::NEGATIVE);
-                    let neg_dentry = current_dentry.new_neg_dentry(name);
+                    // log::info!("current dentry path {}", current_dentry.path());
+                    let neg_dentry = current_dentry.new_neg_dentry(name)?;
                     // info!("[DCACHE]: insert key: {}", neg_dentry.path());
                     DCACHE.lock().insert(neg_dentry.path(), neg_dentry.clone());
                     return Ok(neg_dentry);
@@ -257,7 +259,7 @@ impl dyn Dentry {
                 return Ok(current)
             }
 
-            let mode = current.inode().unwrap().inode_inner().mode;
+            let mode = current.inode().unwrap().inode_inner().mode();
             // log::info!("[walk] mode {:?}", mode);
             if mode.contains(InodeMode::LINK) {
                 // follow to the next

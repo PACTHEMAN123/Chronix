@@ -1,4 +1,4 @@
-use crate::fs::{fat32::file::FatFile, vfs::{Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock};
+use crate::{fs::{fat32::file::FatFile, vfs::{Dentry, DentryInner, DentryState, File, DCACHE}, OpenFlags, SuperBlock}, syscall::SysError};
 use alloc::{sync::Arc, vec::Vec};
 
 
@@ -41,11 +41,11 @@ impl Dentry for FatDentry {
         let (readable, writable) = flags.read_write();
         Some(Arc::new(FatFile::new(readable, writable, self.clone())))
     }
-    fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
+    fn new_neg_dentry(self: Arc<Self>, name: &str) -> Result<Arc<dyn Dentry>, SysError> {
         let neg_dentry = Arc::new(Self {
             inner: DentryInner::new(name, Some(self.clone()))
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
-        neg_dentry
+        Ok(neg_dentry)
     }
 }

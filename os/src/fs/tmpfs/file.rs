@@ -25,6 +25,16 @@ impl TmpFile {
             }),
         }
     }
+
+    pub fn new_arc(dentry: Arc<dyn Dentry>) -> Arc<Self> {
+        Arc::new(Self {
+            inner: UPSafeCell::new(FileInner { 
+                offset: AtomicUsize::new(0), 
+                dentry, 
+                flags: SpinNoIrqLock::new(OpenFlags::empty()), 
+            }),
+        })
+    }
 }
 
 #[async_trait]
