@@ -90,6 +90,8 @@ pub enum SysError {
     ENOTSOCK = 88,
     /// Unsupported
     EOPNOTSUPP = 95,
+    /// unsupported protocol
+    EAFNOSUPPORT = 97,
     /// Socket address is already in use
     EADDRINUSE = 98,
     /// Address not available

@@ -3,6 +3,8 @@ use core::{fmt::Display, panic};
 use alloc::{fmt, format};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint,Ipv4Address, Ipv6Address};
 
+use crate::syscall::SysError;
+
 use super::SaFamily;
 
 
@@ -183,17 +185,17 @@ impl SockAddr {
                     IpAddress::Ipv6(self.ipv6.sin_addr), 
                     self.ipv6.sin_port
                 ),
-                SaFamily::AfUnix => todo!(),
+                _ => todo!(),
             }
         }   
     }
     /// SockAddr -> IpListenEndpoint
-    pub fn into_listen_endpoint(&self) -> IpListenEndpoint {
+    pub fn into_listen_endpoint(&self) -> Result<IpListenEndpoint,SysError> {
         unsafe {
             match SaFamily::try_from(self.family).unwrap() {
-                SaFamily::AfInet => self.ipv4.into(),
-                SaFamily::AfInet6 => self.ipv6.into(),
-                SaFamily::AfUnix => todo!(),
+                SaFamily::AfInet => Ok(self.ipv4.into()),
+                SaFamily::AfInet6 => Ok(self.ipv6.into()),
+                _ => Err(SysError::EAFNOSUPPORT),
             }
         }
     }
@@ -245,3 +247,4 @@ pub struct SockAddrUn {
     ///
     pub path: [u8; 108],
 }
+

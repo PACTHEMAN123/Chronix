@@ -6,44 +6,44 @@
 - [ ] abort01
 - [ ] abs01
 - [x] accept01
-- [ ] accept02
-- [ ] accept03
-- [ ] accept4_01
-- [ ] access01
-- [ ] access02
-- [ ] access03
-- [ ] access04
-- [ ] acct01
+- [ ] accept02 ：要添加socket选项（set_sockopts）
+- [ ] accept03 : 在openat直接寄掉
+- [x] accept4_01 :2 pass 2 fail 2 skip
+- [x] access01: 107 pass failed 92
+- [x] access02: 6 pass failed 10
+- [ ] access03: all faied: invalid address as root expected EFAULT: ENOENT (2)
+- [ ] access04 : symlink broken
+- [ ] acct01 : symlink broken
 - [ ] acct02
 - [ ] acct02_helper
 - [ ] acl1
 - [ ] add_ipv6addr
-- [ ] add_key01
-- [ ] add_key02
+- [x] add_key01 : 4 pass 4 fail
+- [ ] add_key02 : all failed
 - [ ] add_key03
-- [ ] add_key04
+- [x] add_key04
 - [ ] add_key05
-- [ ] adjtimex01
+- [x] adjtimex01
 - [ ] adjtimex02
 - [ ] adjtimex03
-- [ ] af_alg01
+- [ ] af_alg01   af_log: unimplemented safamily
 - [ ] af_alg02
 - [ ] af_alg03
 - [ ] af_alg04
 - [ ] af_alg05
 - [ ] af_alg06
 - [ ] af_alg07
-- [ ] aio01
+- [ ] aio01: no summary
 - [ ] aio02
 - [ ] aiocp
 - [ ] aiodio_append
 - [ ] aiodio_sparse
 - [ ] aio-stress
-- [ ] alarm02
-- [ ] alarm03
-- [ ] alarm05
-- [ ] alarm06
-- [ ] alarm07
+- [x] alarm02
+- [x] alarm03
+- [x] alarm05
+- [x] alarm06
+- [x] alarm07
 - [ ] ar01.sh
 - [ ] arch_prctl01
 - [ ] arping01.sh
@@ -55,14 +55,14 @@
 - [ ] autogroup01
 - [ ] bbr01.sh
 - [ ] bbr02.sh
-- [ ] bind01
-- [ ] bind02
-- [ ] bind03
-- [ ] bind04
-- [ ] bind05
+- [x] bind01
+- [ ] bind02: /etc/group not exist
+- [ ] bind03: /unix broken
+- [x] bind04: pass 9 failed 7 , failed ipv6 handle
+- [ ] bind05: still broken in ipv6
 - [ ] bind06
 - [ ] block_dev
-- [ ] bpf_map01
+- [x] bpf_map01: pass 5 faile 4 broken 1
 - [ ] bpf_prog01
 - [ ] bpf_prog02
 - [ ] bpf_prog03
@@ -70,7 +70,7 @@
 - [ ] bpf_prog05
 - [ ] bpf_prog06
 - [ ] bpf_prog07
-- [ ] brk01
+- [ ] brk01     TFAIL: brk() failed to set address have 0x45fff expected 0x44000
 - [ ] brk02
 - [ ] cacheflush01
 - [ ] can_bcm01
@@ -92,8 +92,8 @@
 - [ ] cgroup_regression_fork_processes
 - [ ] cgroup_regression_getdelays
 - [ ] cgroup_xattr
-- [ ] chdir01: no device
-- [ ] chdir04: kernel trap when read path
+- [ ] chdir01: TBROK: Failed to acquire device
+- [x] chdir04
 - [ ] check_envval
 - [ ] check_icmpv4_connectivity
 - [ ] check_icmpv6_connectivity
@@ -103,13 +103,13 @@
 - [ ] check_setkey
 - [ ] check_simple_capset
 - [x] chmod01
-- [ ] chmod03：在 socket 的 syscall 处返回了错误值
-- [ ] chmod05：在 socket 的 syscall 处返回了错误值
+- [x] chmod03：
+- [ ] chmod05：cannot open /etc/group, not exist,Syscall number not included: 159
 - [ ] chmod06：在 socket 的 syscall 处返回了错误值
 - [ ] chmod07：在 socket 的 syscall 处返回了错误值
 - [x] chown01
 - [x] chown02
-- [ ] chown03：在 socket 的 syscall 处返回了错误值
+- [x] chown03
 - [ ] chown04：需要实现链接悬垂引用
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
@@ -2638,3 +2638,7 @@
 - [ ] writev05: efault
 - [x] writev06: no sum
 - [ ] writev07: kernel trap
+
+./attach/env-rv.sh
+cd sdcard/musl/ltp/testcases/bin
+

@@ -265,8 +265,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         argv_vec.push(
             argv_str_ptr
                 .to_ref()
-                .cstr_slice(vm.deref_mut())
-                .ok_or(SysError::EINVAL)?
+                .cstr_slice(vm.deref_mut())?
                 .to_str()
                 .map_err(|_| SysError::EINVAL)?
                 .to_string()
@@ -289,8 +288,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
         envp_vec.push(
             envp_str_ptr
                 .to_ref()
-                .cstr_slice(vm.deref_mut())
-                .ok_or(SysError::EINVAL)?
+                .cstr_slice(vm.deref_mut())?
                 .to_str()
                 .map_err(|_| SysError::EINVAL)?
                 .to_string()

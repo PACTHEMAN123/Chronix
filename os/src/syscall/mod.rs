@@ -59,6 +59,7 @@ pub enum SyscallId {
     SYSCALL_FSYNC = 82,
     SYSCALL_FDATASYNC = 83,
     SYSCALL_UTIMENSAT = 88,
+    SYSCALL_ACCT = 89,
     SYSCALL_CAPGET = 90,
     SYSCALL_EXIT = 93,
     SYSCALL_EXIT_GROUP = 94,
@@ -88,6 +89,7 @@ pub enum SyscallId {
     SYSCALL_RT_SIGTIMEDWAIT = 137,
     SYSCALL_RT_SIGRETURN = 139,
     SYSCALL_REBOOT = 142,
+    SYSCALL_SETUID = 146,
     SYSCALL_SETRESUID = 147,
     SYSCALL_SETRESGID = 149,
     SYSCALL_TIMES = 153,
@@ -98,6 +100,7 @@ pub enum SyscallId {
     SYSCALL_GETRUSAGE = 165,
     SYSCALL_UMASK = 166,
     SYSCALL_GETTIMEOFDAY = 169,
+    SYSCALL_ADJTIMEX = 171,
     SYSCALL_GETPID = 172,
     SYSCALL_GETPPID = 173,
     SYSCALL_GETUID = 174,
@@ -128,6 +131,8 @@ pub enum SyscallId {
     SYSCALL_BRK = 214,
     SYSCALL_MUNMAP = 215,
     SYSCALL_MREMAP = 216,
+    SYSCALL_ADDKEY = 217,
+    SYSCALL_KEYCTL = 219,
     SYSCALL_CLONE = 220,
     SYSCALL_EXEC = 221,
     SYSCALL_MMAP = 222,
@@ -142,6 +147,7 @@ pub enum SyscallId {
     SYSCALL_FANOTIFY_MARK = 263,
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_GETRANDOM = 278,
+    SYSCALL_BPF = 280,
     SYSCALL_MEMBARRIER = 283,
     SYSCALL_COPY_FILE_RANGE = 285,
     SYSCALL_STATX = 291,
@@ -196,7 +202,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    log::info!("task {}, syscall: {:?}", current_task().unwrap().tid() , syscall_id);
+    if syscall_id != SYSCALL_READ || syscall_id != SYSCALL_PPOLL{
+        log::info!("task {}, syscall: {:?}", current_task().unwrap().tid() , syscall_id);
+    }
 
     let result = match syscall_id { 
         SYSCALL_FSETXATTR => sys_temp(syscall_id),
@@ -330,6 +338,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MLOCK => sys_temp(syscall_id),
         SYSCALL_MEMBARRIER => sys_temp(syscall_id),
         SYSCALL_COPY_FILE_RANGE => sys_temp(syscall_id),
+        SYSCALL_SETUID => sys_temp(syscall_id),
+        SYSCALL_ADDKEY => sys_temp(syscall_id),
+        SYSCALL_KEYCTL => sys_temp(syscall_id),
+        SYSCALL_ACCT => sys_temp(syscall_id),
+        SYSCALL_ADJTIMEX => sys_temp(syscall_id),
+        SYSCALL_BPF => sys_temp(syscall_id),
         SYSCALL_FACCESSAT2 => sys_faccessat2(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         /* 
         _ => { 
