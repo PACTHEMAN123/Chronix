@@ -5,21 +5,22 @@ use alloc::vec::Vec;
 use log::{info, warn};
 
 use crate::mm::UserPtrRaw;
+use crate::syscall::SysError;
 use crate::utils::string;
 
 use super::c_str_to_string;
 
 /// translate a user space string to path
-pub fn user_path_to_string(cpath: UserPtrRaw<u8>, vm: &mut crate::mm::vm::UserVmSpace ) -> Option<String> {
+pub fn user_path_to_string(cpath: UserPtrRaw<u8>, vm: &mut crate::mm::vm::UserVmSpace ) -> Result<String, SysError> {
     if cpath.is_null() {
-        return None;
+        return Err(SysError::EINVAL);
     }
     let slice = cpath.cstr_slice(vm)?;
-    let path = slice.to_str().ok()?;
+    let path = slice.to_str().map_err(|_| SysError::EINVAL)?;
     if path.eq("") {
-        None
+        Err(SysError::EINVAL)
     } else {
-        Some(path.to_string())
+        Ok(path.to_string())
     }
 }
 

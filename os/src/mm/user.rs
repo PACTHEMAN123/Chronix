@@ -1,9 +1,9 @@
 use core::{fmt::Debug, marker::PhantomData, ops::{Add, Deref, DerefMut, Sub}, ptr::null_mut, slice, str};
 
 use alloc::sync::Arc;
-use hal::{addr::{VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm};
+use hal::{addr::{VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, pagetable::MapPerm, println};
 
-use crate::{mm::vm::UserVmPagesLocker, processor::context::SumGuard, sync::mutex::{spin_mutex::MutexGuard, spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrq, SpinRwLock}};
+use crate::{mm::vm::UserVmPagesLocker, processor::context::SumGuard, sync::mutex::{spin_mutex::MutexGuard, spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrq, SpinRwLock}, syscall::SysError};
 
 use super::{vm::{PageFaultAccessType, UserVmSpaceHal}, UserVmSpace};
 
@@ -110,23 +110,28 @@ impl<T> UserPtrRaw<T> {
 }
 
 impl UserPtrRaw<u8> {
-    pub fn cstr_slice(self, vm: &mut UserVmSpace) -> Option<UserSlice<u8, ReadMark>> {
+    pub fn cstr_slice(self, vm: &mut UserVmSpace) -> Result<UserSlice<u8, ReadMark>, SysError> {
+        const MAX_LEN: usize = 256;
         let sum_guard = SumGuard::new();
         let mut cur = self.ptr;
         let mut len = 0;
         loop {
-            vm.ensure_access((cur as usize).into(), 1, PageFaultAccessType::READ).ok()?;
+            vm.ensure_access((cur as usize).into(), 1, PageFaultAccessType::READ)
+                .map_err(|_| SysError::EFAULT)?;
             let pg_end = ((cur as usize + Constant::PAGE_SIZE) & !(Constant::PAGE_SIZE - 1)) as *mut u8;
             while cur != pg_end {
                 if unsafe { *cur != 0u8 } {
                     len += 1;
                 } else {
-                    return Some(UserSlice {
+                    return Ok(UserSlice {
                         raw: UserSliceRaw { len, ptr: self.ptr },
                         _mark: PhantomData,
                         _sum_guard: sum_guard,
                         locker: UserVmPagesLocker { },
                     });
+                }
+                if len > MAX_LEN {
+                    return Err(SysError::ENAMETOOLONG)
                 }
                 cur = unsafe { cur.add(1) };
             }

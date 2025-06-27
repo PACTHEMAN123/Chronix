@@ -176,7 +176,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
         );
-    if let Some(path) = opt_path {
+    if let Ok(path) = opt_path {
         // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
@@ -230,7 +230,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
         );
-    if let Some(path) = opt_path {
+    if let Ok(path) = opt_path {
         let task = current_task().unwrap().clone();
         let dentry = at_helper(task, dirfd, pathname, AtFlags::empty())?;
         if dentry.state() != DentryState::NEGATIVE {
@@ -279,7 +279,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
     let path = user_path_to_string(
             UserPtrRaw::new(path), 
             &mut task.get_vm_space().lock()
-        ).ok_or(SysError::EINVAL)?;
+        )?;
     info!("try to switch to path {}", path);
     let old_dentry = task.cwd();
     let new_dentry = if path.starts_with("/") {
@@ -487,7 +487,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
-        ).ok_or(SysError::EINVAL)?;
+        )?;
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
     let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if dentry.parent().is_none() {
@@ -1109,7 +1109,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
             &mut task.get_vm_space().lock()
         );
     let dentry = match opt_path {
-        Some(path) => {
+        Ok(path) => {
             if path.starts_with("/") {
                 global_find_dentry(&path)?
             } else {
@@ -1129,7 +1129,7 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
                 global_find_dentry(&fpath)?
             }
         }
-        None => {
+        Err(_) => {
             if !flags.contains(AtFlags::AT_EMPTY_PATH) {
                 return Err(SysError::ENOENT);
             }

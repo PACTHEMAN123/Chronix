@@ -311,6 +311,9 @@ bitflags! {
 #[allow(missing_docs, unused)]
 impl PageFaultAccessType {
     pub fn can_access(self, flag: MapPerm) -> bool {
+        if !flag.contains(MapPerm::R) {
+            return false;
+        }
         if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
             return false;
         }

@@ -763,7 +763,7 @@ impl UserVmArea {
                 Ok(())
             }
             _ => {
-                match self.vma_type {
+                let ret = match self.vma_type {
                     UserVmAreaType::Data =>
                         UserDataHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Stack =>
@@ -772,7 +772,8 @@ impl UserVmArea {
                         UserHeapHandler::handle_lazy_page_fault(self, page_table, vpn, access_type),
                     UserVmAreaType::Mmap =>
                         UserMmapHandler::handle_lazy_page_fault(self, page_table, vpn, access_type)
-                }
+                };
+                ret
             }
         }
     }
