@@ -72,16 +72,16 @@
 - [ ] bpf_prog07
 - [ ] brk01     TFAIL: brk() failed to set address have 0x45fff expected 0x44000
 - [ ] brk02
-- [ ] cacheflush01
+- [ ] cacheflush01: no summary
 - [ ] can_bcm01
 - [ ] can_filter
 - [ ] can_rcv_own_msgs
 - [ ] cap_bounds_r
 - [ ] cap_bounds_rw
 - [ ] cap_bset_inh_bounds
-- [ ] capget01
-- [ ] capget02
-- [ ] capset01
+- [x] capget01
+- [ ] capget02:  /proc/sys/kernel/pid_max, not exist
+- [x] capset01
 - [ ] capset02
 - [ ] capset03
 - [ ] capset04
@@ -105,8 +105,8 @@
 - [x] chmod01
 - [x] chmod03：
 - [ ] chmod05：cannot open /etc/group, not exist,Syscall number not included: 159
-- [ ] chmod06：在 socket 的 syscall 处返回了错误值
-- [ ] chmod07：在 socket 的 syscall 处返回了错误值
+- [ ] chmod06：symlink(test_file4,test_file5) failed: ENOENT (2)
+- [ ] chmod07：getgrnam(users) failed - try fallback daemon
 - [x] chown01
 - [x] chown02
 - [x] chown03
@@ -116,29 +116,29 @@
 - [ ] cleanup_lvm.sh
 - [ ] clock_adjtime01
 - [ ] clock_adjtime02
-- [ ] clock_getres01
-- [ ] clock_gettime01
-- [ ] clock_gettime02
+- [x] clock_getres01: pass 40 failed 4 
+- [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
+- [ ] clock_gettime02: could not handle page fault
 - [ ] clock_gettime03
-- [ ] clock_gettime04
-- [ ] clock_nanosleep01
+- [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
+- [ ] clock_nanosleep01: failed page fault
 - [ ] clock_nanosleep02
 - [ ] clock_nanosleep03
 - [ ] clock_nanosleep04
-- [ ] clock_settime01
+- [ ] clock_settime01: skip
 - [ ] clock_settime02
 - [ ] clock_settime03
-- [ ] clone01
-- [ ] clone02
-- [ ] clone03
-- [ ] clone04
-- [ ] clone05
-- [ ] clone06
+- [x] clone01
+- [ ] clone02: no summary
+- [x] clone03
+- [ ] clone04: tst_test.c:1677: TBROK: Test killed by SIGSEGV
+- [ ] clone05: exit_code 0 expected 1
+- [x] clone06
 - [ ] clone07
 - [ ] clone08
 - [ ] clone09
-- [ ] clone301
-- [ ] clone302
+- [ ] clone301: todo! pidfd support 
+- [ ] clone302: can't handle page fault
 - [ ] clone303
 - [x] close01
 - [x] close02
@@ -146,17 +146,17 @@
 - [ ] close_range02：TCONF
 - [ ] cmdlib.sh
 - [ ] cn_pec.sh
-- [ ] confstr01
-- [ ] connect01
-- [ ] connect02
-- [ ] copy_file_range01: no device
-- [ ] copy_file_range02: no device
-- [ ] copy_file_range03: failed
+- [x] confstr01
+- [ ] connect01: no_summary
+- [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
+- [ ] copy_file_range01
+- [ ] copy_file_range02
+- [ ] copy_file_range03
 - [ ] cpio_tests.sh
 - [ ] cp_tests.sh
 - [ ] cpuacct.sh
 - [ ] cpuacct_task
-- [ ] cpuctl_def_task01
+- [ ] cpuctl_def_task01: panic
 - [ ] cpuctl_def_task02
 - [ ] cpuctl_def_task03
 - [ ] cpuctl_def_task04
@@ -164,7 +164,7 @@
 - [ ] cpuctl_fj_simple_echo
 - [ ] cpuctl_latency_check_task
 - [ ] cpuctl_latency_test
-- [ ] cpuctl_test01
+- [ ] cpuctl_test01: panic
 - [ ] cpuctl_test02
 - [ ] cpuctl_test03
 - [ ] cpuctl_test04
@@ -175,16 +175,16 @@
 - [ ] cpuhotplug04.sh
 - [ ] cpuhotplug05.sh
 - [ ] cpuhotplug06.sh
-- [ ] cpuhotplug07.sh
+- [ ] cpuhotplug07.shlt
 - [ ] cpuhotplug_do_disk_write_loop
 - [ ] cpuhotplug_do_kcompile_loop
 - [ ] cpuhotplug_do_spin_loop
 - [ ] cpuhotplug_hotplug.sh
 - [ ] cpuhotplug_report_proc_interrupts
 - [ ] cpuhotplug_testsuite.sh
-- [ ] cpuset01
-- [ ] crash01
-- [ ] crash02
+- [ ] cpuset01: no summary
+- [ ] crash01: no summary, pass
+- [ ] crash02: many syscall lack
 - [x] creat01: pass 4 failed 2
 - [x] creat03
 - [ ] creat04: should not remove when unlink a inode ref by sth
@@ -194,7 +194,7 @@
 - [ ] creat07_child: failed
 - [x] creat08: pass 2 faild 7 
 - [ ] creat09: no device
-- [ ] crypto_user01
+- [ ] crypto_user01: socket(16, 524290, 21) failed: EINVAL (22)
 - [ ] crypto_user02
 - [ ] cve-2014-0196
 - [ ] cve-2015-3290
@@ -209,13 +209,13 @@
 - [ ] cve-2022-4378
 - [ ] data
 - [ ] datafiles
-- [ ] data_space
+- [ ] data_space: pass,no summary
 - [ ] delete_module01
 - [ ] delete_module02
 - [ ] delete_module03
 - [ ] dio_append
 - [ ] dio_read
-- [ ] dio_sparse
+- [x] dio_sparse
 - [ ] diotest1
 - [ ] diotest2
 - [ ] diotest3
@@ -2142,7 +2142,4 @@
 - [ ] writev05: efault
 - [x] writev06: no sum
 - [ ] writev07: kernel trap
-
-./attach/env-rv.sh
-cd sdcard/musl/ltp/testcases/bin
 

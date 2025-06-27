@@ -15,12 +15,14 @@
 #[repr(usize)]
 #[allow(non_camel_case_types)]
 pub enum SyscallId {
+    SYSCALL_IO_GETEVENTS = 4,
     SYSCALL_FSETXATTR = 7,
     SYSCALL_GETCWD = 17,
     SYSCALL_DUP = 23,
     SYSCALL_DUP3 = 24,
     SYSCALL_FCNTL = 25,
     SYSCALL_IOCTL = 29,
+    SYSCALL_FLOCK = 32,
     SYSCALL_MKNODAT = 33,
     SYSCALL_MKDIR = 34,
     SYSCALL_UNLINKAT = 35,
@@ -64,6 +66,7 @@ pub enum SyscallId {
     SYSCALL_UTIMENSAT = 88,
     SYSCALL_ACCT = 89,
     SYSCALL_CAPGET = 90,
+    SYSCALL_CAPSET = 91,
     SYSCALL_EXIT = 93,
     SYSCALL_EXIT_GROUP = 94,
     SYSCALL_SET_TID_ADDRESS = 96,
@@ -73,6 +76,7 @@ pub enum SyscallId {
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_GETITIMER = 102,
     SYSCALL_SETITIMER = 103,
+    SYSCALL_DELETE_MODULE = 106,
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_GETRES = 114,
     SYSCALL_CLOCK_NANOSLEEP = 115,
@@ -209,18 +213,18 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    if syscall_id != SYSCALL_READ || syscall_id != SYSCALL_PPOLL{
-        log::info!("task {}, syscall: {:?}", current_task().unwrap().tid() , syscall_id);
-    }
+    // log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_FSETXATTR => sys_temp(syscall_id),
+        SYSCALL_IO_GETEVENTS => sys_temp(syscall_id),
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_FCNTL => sys_fnctl(args[0], args[1] as isize, args[2]),
         SYSCALL_IOCTL => sys_ioctl(args[0], args[1], args[2]),
         SYSCALL_MKNODAT => sys_temp(syscall_id),
+        SYSCALL_FLOCK => sys_temp(syscall_id),
         SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
@@ -259,12 +263,14 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),
         SYSCALL_CAPGET => sys_temp(syscall_id),
+        SYSCALL_CAPSET => sys_temp(syscall_id),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SYSCALL_FUTEX => sys_futex(args[0], args[1] as _, args[2] as _, SendWrapper(args[3] as _), args[4], args[5] as _).await,
         SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as _, args[1]),
         SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as _, args[1] as _, args[2] as _),
+        SYSCALL_DELETE_MODULE => sys_temp(syscall_id),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,
         SYSCALL_GETITIMER => sys_getitimer(args[0], args[1]),
         SYSCALL_SETITIMER => sys_setitimer(args[0],args[1],args[2]),
