@@ -6,7 +6,7 @@ use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpEndpoint, IpListenEndpoint}};
 use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
 use crate::syscall::net::SocketType;
-use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily};
+use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
 /// a trait for differnt socket types
 /// net poll results.
@@ -21,14 +21,16 @@ pub struct PollState {
 }
 pub enum Sock {
     TCP(TcpSocket),
-    UDP(UdpSocket)
+    UDP(UdpSocket),
+    Unix(UnixSocket),
 }
 impl Sock {
     /// connect method for socket connect to remote socket, for user socket
     pub async fn connect(&self, addr: IpEndpoint) -> SockResult<()>{
         match self {
             Sock::TCP(tcp) => tcp.connect(addr).await,
-            Sock::UDP(udp) => udp.connect(addr)
+            Sock::UDP(udp) => udp.connect(addr),
+            Sock::Unix(_) => todo!(),
         }
     }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
@@ -54,13 +56,15 @@ impl Sock {
                     udp.bind(local_endpoint)
                 }
             }
+            Sock::Unix(_) => todo!(),
         }
     }
     /// listen method for socket to listen for incoming connections, for server socket
     pub fn listen(&self) -> SockResult<()>{
         match self {
             Sock::TCP(tcp) => tcp.listen(),
-            Sock::UDP(udp) => Err(SysError::EOPNOTSUPP)
+            Sock::UDP(udp) => Err(SysError::EOPNOTSUPP),
+            Sock::Unix(_) => todo!(),
         }
     }
     /// set socket non-blocking, 
@@ -68,6 +72,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.set_nonblocking(),
             Sock::UDP(udp) => udp.set_nonblocking(),
+            Sock::Unix(_) => todo!(),
         }
     }
     /// get the peer_addr of the socket
@@ -81,6 +86,7 @@ impl Sock {
                 let peer_addr = udp_socket.peer_addr()?;
                 Ok(SockAddr::from_endpoint(peer_addr))
             },
+            Sock::Unix(_) => todo!(),
         }
     }
     /// get the local_addr of the socket
@@ -94,6 +100,7 @@ impl Sock {
                 let local_addr = udp_socket.local_addr()?;
                 Ok(SockAddr::from_endpoint(local_addr))
             },
+            Sock::Unix(_) => todo!(),
         }
     }
     /// send data to the socket
@@ -106,6 +113,7 @@ impl Sock {
                     None => udp_socket.send(data).await,
                 }
             },
+            Sock::Unix(_) => todo!(),
         }
     }
     /// recv data from the socket
@@ -113,6 +121,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.recv(data).await,
             Sock::UDP(udp_socket) => udp_socket.recv(data).await,
+            Sock::Unix(_) => todo!(),
         }
     }
     /// shutdown a connection
@@ -120,6 +129,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.shutdown(how),
             Sock::UDP(udp_socket) => udp_socket.shutdown(),
+            Sock::Unix(_) => todo!(),
         }
     }
     /// poll the socket for events
@@ -127,6 +137,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.poll().await,
             Sock::UDP(udp_socket) => udp_socket.poll().await,
+            Sock::Unix(_) => todo!(),
         }
     }
     /// for tcp socket listener, accept a connection
@@ -137,6 +148,7 @@ impl Sock {
                         Ok(new)
                     }
             Sock::UDP(udp_socket) => Err(SysError::EOPNOTSUPP),
+            Sock::Unix(_) => todo!(),
         }
     }
 }
@@ -159,7 +171,8 @@ impl Socket {
                     SocketType::DGRAM => Sock::UDP(UdpSocket::new()),
                     _ => unimplemented!(),
                 }
-            }
+            },
+            SaFamily::AfUnix => Sock::Unix(UnixSocket {  }),
         };
         let fd_flags = if non_block {
             sk.set_nonblocking();

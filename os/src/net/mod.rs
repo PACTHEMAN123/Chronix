@@ -23,6 +23,8 @@ pub mod listen_table;
 #[derive(Debug, Clone, Copy)]
 /// socket address family, used for syscalls
 pub enum SaFamily {
+    /// unix
+    AfUnix = 1,
     /// ipv4
     AfInet = 2,
     /// ipv6
@@ -33,6 +35,7 @@ impl TryFrom<u16> for SaFamily {
     type Error = crate::syscall::sys_error::SysError;
     fn try_from(value: u16) -> Result<Self,Self::Error> {
         match value {
+            1 => Ok(Self::AfUnix),
             2 => Ok(Self::AfInet),
             10 => Ok(Self::AfInet6),
             _ => Err(Self::Error::EINVAL),
@@ -349,3 +352,7 @@ pub fn init_network() {
     info!("  gateway:  {}", gateway);
     
 }
+
+
+/// Unix Sock
+pub struct UnixSocket {}

@@ -5,7 +5,7 @@ use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6}, socket::{self, Sock}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -126,6 +126,15 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 }
             })
         },
+        SaFamily::AfUnix => {
+            if addr_len < size_of::<SockAddrUn>() {
+                return Err(SysError::EINVAL);
+            }
+            Ok(SockAddr{
+                //todo : temp measure for unix socket
+                ipv6: unsafe { *(addr as *const _) },
+            })
+        }
     }?;
     log::info!("[sys_bind] local_addr's port is: {}",unsafe {
         local_addr.ipv4
@@ -178,13 +187,21 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
             Ok(SockAddr{
                 ipv4: unsafe { *(addr as *const SockAddrIn4) },
             })
-        }
+        },
         SaFamily::AfInet6 => {
             if addr_len < size_of::<SockAddrIn6>() {
                 return Err(SysError::EINVAL);
             }
             Ok(SockAddr{
                 ipv6: unsafe { *(addr as *const SockAddrIn6) },
+            })
+        },
+        SaFamily::AfUnix => {
+            if addr_len < size_of::<SockAddrUn>() {
+                return Err(SysError::EINVAL);
+            }
+            Ok(SockAddr{
+                ipv6: unsafe { *(addr as *const _) },
             })
         }
     }?;
@@ -255,6 +272,12 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 let addr_len_ptr = addr_len as *mut u32;
                 addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
             },
+            SaFamily::AfUnix => {
+                let addr_ptr = addr as *mut SockAddrUn;
+                addr_ptr.write_volatile(peer_addr.unix);
+                let addr_len_ptr = addr_len as *mut u32;
+                addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+            }
         }
     }
 
@@ -317,6 +340,14 @@ pub async fn sys_sendto(
                         }
                         Ok(SockAddr{
                             ipv6: unsafe { *(addr as *const SockAddrIn6) },
+                        })
+                    },
+                    SaFamily::AfUnix => {
+                        if addr_len < size_of::<SockAddrUn>() {
+                            return Err(SysError::EINVAL);
+                        }
+                        Ok(SockAddr{
+                            ipv6: unsafe { *(addr as *const _) },
                         })
                     }
                 }?
@@ -393,6 +424,12 @@ pub async fn sys_recvfrom(
                 let addr_len_ptr = addrlen as *mut u32;
                 addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
             },
+            SaFamily::AfUnix => {
+                let addr_ptr = addr as *mut SockAddrUn;
+                addr_ptr.write_volatile(remote_addr.unix);
+                let addr_len_ptr = addrlen as *mut u32; 
+                addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+            }
         }
     }
     // log::info!("now return bytes: {}",bytes);
@@ -426,6 +463,12 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 let addr_len_ptr = addr_len as *mut u32;
                 addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
             },
+            SaFamily::AfUnix => {
+                let addr_ptr = addr as *mut SockAddrUn;
+                addr_ptr.write_volatile(local_addr.unix);
+                let addr_len_ptr = addr_len as *mut u32;
+                addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+            }
         }
     }
     Ok(0)
@@ -460,6 +503,12 @@ pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
                 let addr_len_ptr = addr_len as *mut u32;
                 addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
             },
+            SaFamily::AfUnix => {
+                let addr_ptr = addr as *mut SockAddrUn;
+                addr_ptr.write_volatile(peer_addr.unix);
+                let addr_len_ptr = addr_len as *mut u32;
+                addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+            }
         }
     }
     Ok(0)
@@ -816,6 +865,17 @@ pub async fn sys_sendmsg(
                 }
             }.into_endpoint())
         },
+        SaFamily::AfUnix => {
+            if msg.msg_namelen < mem::size_of::<SockAddrUn>() as u32 {
+                log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
+                return Err(SysError::EINVAL);
+            }
+            Ok(SockAddr{
+                ipv6: unsafe {
+                    *(msg.msg_name as *const _)
+                }
+            }.into_endpoint())
+        }
     }?;
     let iovs = unsafe {
         Instruction::set_sum();
@@ -897,6 +957,12 @@ pub async fn sys_recvmsg(
                     let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
                     addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
                 },
+                SaFamily::AfUnix => {
+                    let addr_ptr = inner_msg.msg_name as *mut SockAddrUn;
+                    addr_ptr.write_volatile(addr.unix);
+                    let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
+                    addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+                }
             }
         }
     }

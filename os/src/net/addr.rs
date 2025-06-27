@@ -167,6 +167,7 @@ pub union SockAddr {
     pub family: u16,
     pub ipv4: SockAddrIn4,
     pub ipv6: SockAddrIn6,
+    pub unix: SockAddrUn,
 }
 
 impl SockAddr {
@@ -182,6 +183,7 @@ impl SockAddr {
                     IpAddress::Ipv6(self.ipv6.sin_addr), 
                     self.ipv6.sin_port
                 ),
+                SaFamily::AfUnix => todo!(),
             }
         }   
     }
@@ -191,6 +193,7 @@ impl SockAddr {
             match SaFamily::try_from(self.family).unwrap() {
                 SaFamily::AfInet => self.ipv4.into(),
                 SaFamily::AfInet6 => self.ipv6.into(),
+                SaFamily::AfUnix => todo!(),
             }
         }
     }
@@ -231,4 +234,14 @@ pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
 
 pub fn is_unspecified(ip: IpAddress) -> bool {
     ip.as_bytes() == [0, 0, 0, 0] || ip.as_bytes() == [0, 0, 0, 0, 0, 0]
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+///
+pub struct SockAddrUn {
+    ///
+    pub family: u16,
+    ///
+    pub path: [u8; 108],
 }
