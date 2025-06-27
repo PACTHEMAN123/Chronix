@@ -1,12 +1,13 @@
 //! inode in memory
 
-use alloc::sync::{Arc, Weak};
+use alloc::{string::{String, ToString}, sync::{Arc, Weak}};
 
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError};
+use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
 pub struct TmpInode {
     inner: InodeInner,
     cache: Arc<PageCache>,
+    symlink_path: SpinNoIrqLock<String>,
 }
 
 unsafe impl Send for TmpInode {}
@@ -17,7 +18,8 @@ impl TmpInode {
     pub fn new(super_block: Weak<dyn SuperBlock>, mode: InodeMode) -> Arc<Self> {
         let inner = InodeInner::new(Some(super_block), mode, 0);
         let cache = Arc::new(PageCache::new());
-        Arc::new(Self { inner, cache })
+        let symlink_path = SpinNoIrqLock::new(String::new());
+        Arc::new(Self { inner, cache, symlink_path })
     }
 }
 
@@ -158,10 +160,10 @@ impl Inode for TmpInode {
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
-            st_mode: inner.mode.bits() as _,
+            st_mode: inner.mode().bits() as _,
             st_nlink: inner.nlink() as u32,
-            st_uid: 0,
-            st_gid: 0,
+            st_uid: inner.uid(),
+            st_gid: inner.gid(),
             st_rdev: 0,
             _pad0: 0,
             st_size: size as _,
@@ -196,9 +198,9 @@ impl Inode for TmpInode {
             stx_blksize: BLOCK_SIZE as _,
             stx_attributes: 0,
             stx_nlink: inner.nlink() as u32,
-            stx_uid: 0,
-            stx_gid: 0,
-            stx_mode: inner.mode.bits() as _,
+            stx_uid: inner.uid(),
+            stx_gid: inner.gid(),
+            stx_mode: inner.mode().bits() as _,
             stx_ino: inner.ino as u64,
             stx_size: size as _,
             stx_blocks: (size / BLOCK_SIZE) as _,
@@ -232,5 +234,17 @@ impl Inode for TmpInode {
             stx_atomic_write_segments_max: 0,
             stx_dio_read_offset_align: 0,
         }
+    }
+
+    fn symlink(&self, target: &str) -> Result<Arc<dyn Inode>, SysError> {
+        let sb = self.inode_inner().super_block.clone().unwrap();
+        let inode = TmpInode::new(sb, InodeMode::LINK);
+        inode.symlink_path.lock().push_str(target);
+        Ok(inode)
+    }
+
+    fn readlink(&self) -> Result<String, SysError> {
+        assert_eq!(self.inode_type(), InodeMode::LINK);
+        Ok(self.symlink_path.lock().to_string())
     }
 }

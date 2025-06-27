@@ -1,6 +1,6 @@
 //! VFS Inode
 
-use core::{ops::Range, sync::atomic::{AtomicUsize, Ordering}};
+use core::{ops::Range, sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering}};
 
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
@@ -18,8 +18,12 @@ pub struct InodeInner {
     pub size: AtomicUsize,
     /// link count
     pub nlink: AtomicUsize,
+    /// owner
+    pub uid: AtomicU32,
+    /// group
+    pub gid: AtomicU32,
     /// mode of inode
-    pub mode: InodeMode,
+    pub mode: SpinNoIrqLock<InodeMode>,
     /// last access time
     pub atime: SpinNoIrqLock<TimeSpec>,
     /// last modification time
@@ -37,17 +41,22 @@ impl InodeInner {
             super_block: super_block,
             size: AtomicUsize::new(size),
             nlink: AtomicUsize::new(1),
-            mode: mode,
+            uid: AtomicU32::new(0),
+            gid: AtomicU32::new(0),
+            mode: SpinNoIrqLock::new(mode),
             atime: SpinNoIrqLock::new(TimeSpec::default()),
             mtime: SpinNoIrqLock::new(TimeSpec::default()),
             ctime: SpinNoIrqLock::new(TimeSpec::default()),
         }
     }
     generate_atomic_accessors!(
+        uid: u32,
+        gid: u32,
         size: usize,
         nlink: usize
     );
     generate_lock_accessors!(
+        mode: InodeMode,
         atime: TimeSpec,
         mtime: TimeSpec,
         ctime: TimeSpec
@@ -59,6 +68,10 @@ pub trait Inode {
     /// return inner
     fn inode_inner(&self) -> &InodeInner {
         todo!()
+    }
+    /// return Inode type
+    fn inode_type(&self) -> InodeMode {
+        self.inode_inner().mode().get_type()
     }
     /// use name to lookup under the current inode
     fn lookup(&self, _name: &str) -> Option<Arc<dyn Inode>> {

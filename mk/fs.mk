@@ -31,6 +31,7 @@ disk-img: user
 	$(call building, "copying auto test scripts")
 	sudo cp ./scripts/run-rv-oj.sh mnt/riscv/run-oj.sh
 	sudo cp ./scripts/run-la-oj.sh mnt/loongarch/run-oj.sh
+	sudo cp ./scripts/run-ltp-rv.sh mnt/riscv/run-ltp-rv.sh
 
 	$(call building, "create bin/ lib/ dir")
 	sudo mkdir mnt/bin

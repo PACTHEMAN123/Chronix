@@ -53,6 +53,9 @@ fn init_env() {
     run_cmd("echo 'networks: files' >> /etc/nsswitch.conf");
     run_cmd("echo 'protocols: files' >> /etc/nsswitch.conf");
     run_cmd("echo 'services: files' >> /etc/nsswitch.conf");
+
+    // /etc/passwd
+    run_cmd("echo 'root:x:0:0:root:/root:/bin/bash' > /etc/passwd");
 }
 
 fn term_sig_handler(_signo: i32) {

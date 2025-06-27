@@ -69,12 +69,16 @@ impl Dentry for TmpDentry {
         }
         Ok(child_dentrys)
     }
-    fn new_neg_dentry(self: Arc<Self>, name: &str) -> Arc<dyn Dentry> {
+    fn new_neg_dentry(self: Arc<Self>, name: &str) -> Result<Arc<dyn Dentry>, SysError> {
+        let inode = self.inode().unwrap();
+        if !inode.inode_type().contains(InodeMode::DIR) {
+            return Err(SysError::ENOTDIR)
+        }
         let neg_dentry = Arc::new(Self {
             inner: DentryInner::new(name, Some(self.clone()))
         });
         neg_dentry.set_state(DentryState::NEGATIVE);
-        neg_dentry
+        Ok(neg_dentry)
     }
     fn clear_inode(&self) {
         // like tmpfile(), its ok to read / write the file

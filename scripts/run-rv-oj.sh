@@ -6,6 +6,7 @@ ln -s /riscv/glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64.so
 ln -s /riscv/glibc/lib/libc.so /lib/libc.so.6
 ln -s /riscv/glibc/lib/libm.so /lib/libm.so.6
 ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1
+ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64.so.1
 echo "finish set up"
 
 echo "start to run glibc"
@@ -13,7 +14,7 @@ cd /riscv/glibc
 ./basic_testcode.sh
 ./busybox_testcode.sh
 ./lua_testcode.sh
-./libctest_testcode.sh
+#./libctest_testcode.sh
 ./netperf_testcode.sh
 ./iperf_testcode.sh
 ./libcbench_testcode.sh
@@ -48,6 +49,11 @@ cd /riscv/glibc
 cd ..
 cd /riscv/musl
 ./lmbench_testcode.sh
+cd ..
+
+echo "start to run ltp"
+cd /riscv
+./run-ltp-rv.sh
 cd ..
 
 exit

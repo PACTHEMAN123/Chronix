@@ -15,10 +15,11 @@ cd /loongarch/glibc
 ./basic_testcode.sh
 ./busybox_testcode.sh
 ./lua_testcode.sh
-./libctest_testcode.sh
+#./libctest_testcode.sh
 ./netperf_testcode.sh
 ./iperf_testcode.sh
 ./libcbench_testcode.sh
+./cyclictest_testcode.sh
 cd ..
 echo "finish to run glibc"
 

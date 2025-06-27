@@ -180,7 +180,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             &mut task.get_vm_space().lock()
         );
     if let Some(path) = opt_path {
-        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}", task.tid(), path, open_flags, at_flags);
+        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
         let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
         if open_flags.contains(OpenFlags::O_CREAT) {
             // the dir may not exist
@@ -203,7 +203,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             return Err(SysError::ENOENT);
         }
         let inode = dentry.inode().unwrap();
-        if open_flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_inner().mode.get_type() != InodeMode::DIR {
+        if open_flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_type() != InodeMode::DIR {
             return Err(SysError::ENOTDIR);
         }
         let file = dentry.open(open_flags).unwrap();
@@ -244,6 +244,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult
         let new_inode = parent.inode().unwrap().create(&name, InodeMode::DIR).unwrap();
         dentry.set_inode(new_inode);
         dentry.set_state(DentryState::USED);
+        parent.add_child(dentry);
     } else {
         warn!("[sys_mkdirat]: pathname is empty!");
         return Err(SysError::ENOENT);
@@ -262,7 +263,6 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
     let inode = dentry.inode();
     if inode.is_none() {
-        log::warn!("no inode");
         return Err(SysError::ENOENT)
     }
     let stat = inode.unwrap().getattr();
@@ -293,7 +293,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
     if new_dentry.state() == DentryState::NEGATIVE {
         log::warn!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);
-    } else if !new_dentry.inode().unwrap().inode_inner().mode.contains(InodeMode::DIR) {
+    } else if !new_dentry.inode().unwrap().inode_type().contains(InodeMode::DIR) {
         log::warn!("[sys_chdir]: path is not dir");
         return Err(SysError::ENOTDIR);
     } else {
@@ -450,7 +450,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         let linux_dirent = LinuxDirent64 {
             d_ino: inode.inode_inner().ino as u64,
             d_off: file.pos() as u64,
-            d_type: inode.inode_inner().mode.bits() as u8,
+            d_type: inode.inode_inner().mode().bits() as u8,
             d_reclen: rec_len as u16,
         };
 
@@ -501,7 +501,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
-    let inode_mode = inode.inode_inner().mode;
+    let inode_mode = inode.inode_inner().mode();
     let is_dir = inode_mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {
         return Err(SysError::ENOTDIR);
@@ -532,9 +532,64 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
         UserPtrRaw::new(new_path_ptr), 
         &mut task.get_vm_space().lock()).expect("failed to get new path");
     log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
-    let dentry = at_helper(task, new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
-    let new_inode = dentry.inode().unwrap().symlink(&new_path)?;
+    let old_dentry = at_helper(task.clone(), new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    if old_dentry.inode().is_none() {
+        return Err(SysError::ENOENT);
+    }
+    let new_dentry = at_helper(task, new_dirfd, new_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    let new_path = new_dentry.path();
+    let new_inode = old_dentry.inode().unwrap().symlink(&new_path)?;
     global_update_dentry(&new_path, new_inode)?;
+    Ok(0)
+}
+
+/// Modify the permissions of a file or directory relative to a certain
+/// directory or location
+pub fn sys_fchmodat(dirfd: isize, pathname: *const u8, mode: u32, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let mode = InodeMode::from_bits_truncate(mode);
+    let at_flags = AtFlags::from_bits_truncate(flags);
+    let path = user_path_to_string(
+        UserPtrRaw::new(pathname), 
+        &mut task.get_vm_space().lock()).expect("failed to get path");
+    log::info!("[sys_fchmodat] task {} change {} mode to {:?}, flags", task.tid(), path, mode);
+    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    if dentry.is_negative() && dentry.inode().is_none() {
+        return Err(SysError::ENOENT);
+    }
+    let inode = dentry.inode().unwrap();
+    let inode_type = inode.inode_inner().mode().get_type();
+    inode.inode_inner().set_mode(mode | inode_type);
+    Ok(0)
+}
+
+/// change the owner and group of a file
+pub fn sys_fchownat(dirfd: isize, pathname: *const u8, uid: i32, gid: i32, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let at_flags = AtFlags::from_bits_truncate(flags);
+    let path = user_path_to_string(
+        UserPtrRaw::new(pathname), 
+        &mut task.get_vm_space().lock()).expect("failed to get path");
+    log::info!("[sys_fchownat] path {} owner {}, gid {}", path, uid, gid);
+    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    if dentry.is_negative() && dentry.inode().is_none() {
+        return Err(SysError::ENOENT);
+    }
+    let inode = dentry.inode().unwrap();
+    if gid != -1 {
+        inode.inode_inner().set_gid(gid as u32);
+    }
+    if uid != -1 {
+        inode.inode_inner().set_uid(uid as u32);
+    }
+    let old_mode = inode.inode_inner().mode();
+    let inode_type = old_mode.get_type();
+    let new_mode = if !old_mode.contains(InodeMode::GROUP_EXEC) {
+        old_mode.intersection(!InodeMode::SET_UID)
+    } else {
+        old_mode.intersection(!(InodeMode::SET_GID | InodeMode::SET_UID))
+    };
+    inode.inode_inner().set_mode(new_mode | inode_type);
     Ok(0)
 }
 
@@ -551,7 +606,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
         return Err(SysError::EBADF);
     }
     let inode = dentry.inode().unwrap();
-    if inode.inode_inner().mode != InodeMode::LINK {
+    if inode.inode_inner().mode() != InodeMode::LINK {
         return Err(SysError::EINVAL);
     }
     
@@ -743,7 +798,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
     let mut totol_len = 0usize;
-    let mut offset = file.pos();
+    // let mut offset = file.pos();
     for (i, iov) in iovs.to_ref().iter().enumerate() {
         if iov.len == 0 {
             continue;
@@ -777,7 +832,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         // }
 
         totol_len += ret;
-        offset += ret;
+        // offset += ret;
     }
     // assert!(offset == file.pos());
     Ok(totol_len as isize)
@@ -947,21 +1002,44 @@ pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, n
     Ok(0)
 }
 
+pub const F_OK: i32 = 0;
+pub const X_OK: i32 = 1;
+pub const W_OK: i32 = 2;
+pub const R_OK: i32 = 4;
 /// syscall: faccessat
 /// access() checks whether the calling process can access the file
 /// pathname.  If pathname is a symbolic link, it is dereferenced.
 /// TODO: now do nothing
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
-    if flags == 0x200 || flags == 0x1000 {
-        log::warn!("not support flags");
-    }
     let at_flags = AtFlags::from_bits_truncate(flags);
 
     let task = current_task().unwrap().clone();
-    let _dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT);
+    }
     Ok(0)
 }
 
+// Test access permitted for effective IDs, not real IDs.
+pub const AT_EACCESS: i32 = 0x200;
+/// 
+pub fn sys_faccessat2(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
+    if flags == 0x1000 {
+        log::warn!("not support flags");
+    }
+    if flags == AT_EACCESS {
+
+    }
+    let at_flags = AtFlags::from_bits_truncate(flags);
+    log::info!("at_flags: {:?}", at_flags);
+    let task = current_task().unwrap().clone();
+    let dentry = at_helper(task, dirfd, pathname, at_flags)?;
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT);
+    }
+    Ok(0)
+}
 
 /// rename() renames a file, moving it between directories if
 /// required.  Any other hard links to the file (as created using
@@ -1042,7 +1120,8 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
                 let fpath = if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
                     // look up in the current dentry
                     let cw_dentry = task.with_cwd(|d| d.clone());
-                    rel_path_to_abs(&cw_dentry.path(), &path).unwrap()
+                    let ret = rel_path_to_abs(&cw_dentry.path(), &path).unwrap();
+                    ret
                 } else {
                     // look up in the current task's fd table
                     // which the inode fd points to should be a dir
@@ -1074,11 +1153,6 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
     }
 }
 
-/// Modify the permissions of a file or directory relative to a certain
-/// directory or location
-pub fn sys_fchmodat() -> SysResult {
-    Ok(0)
-}
 
 /// umask() sets the calling process's file mode creation mask (umask) to
 /// mask & 0777 

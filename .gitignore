@@ -27,3 +27,5 @@ kernel-rv
 testcase/
 
 log.txt
+log-rv.txt
+log-la.txt
