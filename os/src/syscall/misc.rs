@@ -5,6 +5,7 @@ use hal::constant::ConstantsHal;
 use hal::instruction::{Instruction, InstructionHal};
 use strum::FromRepr;
 
+use crate::mm::{UserPtrRaw, UserSliceRaw};
 use crate::syscall::SysError;
 use crate::{fs::devfs::urandom::RNG, task::{current_task, manager::TASK_MANAGER}, timer::{get_current_time,ffi::TimeVal}};
 
@@ -67,21 +68,32 @@ pub fn sys_sysinfo(info: usize) -> SysResult {
         mem_uint: 0,
         _f: [0; _F_SIZE],
     };
-    unsafe {
-        Instruction::set_sum();
-        (info as *mut Sysinfo).write_volatile(sysinfo);
-    }
+    // unsafe {
+    //     Instruction::set_sum();
+    //     (info as *mut Sysinfo).write_volatile(sysinfo);
+    // }
+    let task = current_task().unwrap();
+    let info = UserPtrRaw::new(info as *mut Sysinfo)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    info.write(sysinfo);
     Ok(0)
 }
 
 /// syscall: get random
 pub fn sys_getrandom(buf: usize, len: usize, _flags: usize) -> SysResult {
-    let mut buf_slice = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts_mut(buf as *mut u8, len)
-    };
-
-    RNG.lock().fill_buf(&mut buf_slice);
+    // let mut buf_slice = unsafe {
+    //     Instruction::set_sum();
+    //     core::slice::from_raw_parts_mut(buf as *mut u8, len)
+    // };
+    log::info!("getrandom: buf: {:?}, len: {:?}, flags: {:?}", buf, len, _flags);
+    let task = current_task().unwrap();
+    let buf = UserSliceRaw::new(buf as *mut u8, len)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    
+    let buf_slice = buf.to_mut();
+    RNG.lock().fill_buf(buf_slice);
     Ok(buf_slice.len() as isize)
 }
 
@@ -181,16 +193,24 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
                 }
             }
         };
-        unsafe {
-            Instruction::set_sum();
-            (old_limit as *mut RLimit).write(limit);
-        }
+        // unsafe {
+        //     Instruction::set_sum();
+        //     (old_limit as *mut RLimit).write(limit);
+        // }
+        let old_limit = UserPtrRaw::new(old_limit as *mut RLimit)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        old_limit.write(limit);
     }
     if new_limit != 0 {
-        let limit = unsafe {
-            Instruction::set_sum();
-            (new_limit as *const RLimit).read()
-        };
+        // let limit = unsafe {
+        //     Instruction::set_sum();
+        //     (new_limit as *const RLimit).read()
+        // };
+        let limit = *UserPtrRaw::new(new_limit as *const RLimit)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref();
         match resource {
             Resource::NOFILE => {
                 log::debug!("[sys_prlimit64] new_limit: {limit:?}");
@@ -275,28 +295,40 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SysResult {
             let (utime, stime) = task.time_recorder().time_pair();
             res.ru_utime = utime.into();
             res.ru_stime = stime.into();
-            unsafe {
-                let usage_ptr = usage as *mut Rusage;
-                usage_ptr.write(res);
-            }
+            // unsafe {
+            //     let usage_ptr = usage as *mut Rusage;
+            //     usage_ptr.write(res);
+            // }
+            let usage_ptr = UserPtrRaw::new(usage as *mut Rusage)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            usage_ptr.write(res);
         }
         RUSAGE_CHILDREN => {
             let (c_utime, c_stime) = task.time_recorder().child_time_pair();
             res.ru_utime = c_utime.into();
             res.ru_stime = c_stime.into();
-            unsafe {
-                let usage_ptr = usage as *mut Rusage;
-                usage_ptr.write(res);
-            }
+            // unsafe {
+            //     let usage_ptr = usage as *mut Rusage;
+            //     usage_ptr.write(res);
+            // }
+            let usage_ptr = UserPtrRaw::new(usage as *mut Rusage)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            usage_ptr.write(res);
         }
         RUSAGE_THREAD => {
             let (utime, stime) = task.time_recorder().time_pair();
             res.ru_utime = utime.into();
             res.ru_stime = stime.into();
-            unsafe {
-                let usage_ptr = usage as *mut Rusage;
-                usage_ptr.write(res);
-            }
+            // unsafe {
+            //     let usage_ptr = usage as *mut Rusage;
+            //     usage_ptr.write(res);
+            // }
+            let usage_ptr = UserPtrRaw::new(usage as *mut Rusage)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            usage_ptr.write(res);
         }
         _ => {
             return Err(SysError::EINVAL);

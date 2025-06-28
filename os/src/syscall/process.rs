@@ -245,7 +245,7 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
     let path = user_path_to_string(
             UserPtrRaw::new(pathname as *const u8), 
             &mut task.get_vm_space().lock()
-        ).unwrap();
+        )?;
     let mut argv = UserPtrRaw::new(argv as *const UserPtrRaw<u8>);
     let mut envp = UserPtrRaw::new(envp as *const UserPtrRaw<u8>);
 

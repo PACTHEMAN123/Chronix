@@ -111,13 +111,13 @@
 - [ ] clock_adjtime02
 - [x] clock_getres01: pass 40 failed 4 
 - [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
-- [ ] clock_gettime02: could not handle page fault
-- [ ] clock_gettime03
+- [x] clock_gettime02: 
+- [ ] clock_gettime03: TBROK: Cannot parse kernel .config
 - [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
-- [ ] clock_nanosleep01: failed page fault
-- [ ] clock_nanosleep02
+- [x] clock_nanosleep01: failed 8 
+- [ ] clock_nanosleep02: TBROK: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
 - [ ] clock_nanosleep03
-- [ ] clock_nanosleep04
+- [x] clock_nanosleep04
 - [ ] clock_settime01: skip
 - [ ] clock_settime02
 - [ ] clock_settime03
@@ -195,19 +195,19 @@
 - [ ] dio_append
 - [ ] dio_read
 - [x] dio_sparse
-- [ ] diotest1
+- [ ] diotest1: no summary pass, same as follows
 - [ ] diotest2
 - [ ] diotest3
 - [ ] diotest4
 - [ ] diotest5
 - [ ] diotest6
-- [ ] dio_truncate
-- [ ] dirty
-- [ ] dirtyc0w
+- [ ] dio_truncate: broken
+- [ ] dirty: no summary
+- [x] dirtyc0w: cannot open /proc/self/mem, not exist,same flaw as follows
 - [ ] dirtyc0w_child
 - [ ] dirtyc0w_shmem
 - [ ] dirtyc0w_shmem_child
-- [ ] dirtypipe
+- [ ] dirtypipe: failed
 - [ ] dma_thread_diotest
 - [ ] doio
 - [x] dup01
@@ -226,21 +226,21 @@
 - [x] dup207
 - [x] dup3_01
 - [x] dup3_02
-- [ ] ebizzy
+- [ ] ebizzy: no summary, 性能测试
 - [ ] eject_check_tray
 - [ ] endian_switch01
-- [ ] epoll_create01
-- [ ] epoll_create02
-- [ ] epoll_create1_01
-- [ ] epoll_create1_02
-- [ ] epoll_ctl01
-- [ ] epoll_ctl02
-- [ ] epoll_ctl03
-- [ ] epoll_ctl04
-- [ ] epoll_ctl05
+- [x] epoll_create01: no syscall, p 2 b 2 skip 1
+- [ ] epoll_create02: failed
+- [x] epoll_create1_01: p1 failed 1
+- [ ] epoll_create1_02: failed
+- [ ] epoll_ctl01: failed
+- [ ] epoll_ctl02: failed
+- [x] epoll_ctl03: do nothing but pass 256 :(
+- [ ] epoll_ctl04： failed
+- [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
-- [ ] epoll_pwait01
-- [ ] epoll_pwait02
+- [ ] epoll_pwait01: panic
+- [ ] epoll_pwait02: faild ,441, same sa follows
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
@@ -251,7 +251,7 @@
 - [ ] epoll_wait05
 - [ ] epoll_wait06
 - [ ] epoll_wait07
-- [ ] eventfd01
+- [ ] eventfd01: can't locate kernel config
 - [ ] eventfd02
 - [ ] eventfd03
 - [ ] eventfd04
@@ -261,35 +261,40 @@
 - [ ] eventfd2_02
 - [ ] eventfd2_03
 - [ ] event_generator
-- [ ] execl01
-- [ ] execl01_child
-- [ ] execle01
+- [ ] evm_overlay.sh
+
+=========exec============
+- [x] execl01
+- [ ] execl01_child: LTP_IPC_PATH is not defined
+- [x] execle01
 - [ ] execle01_child
-- [ ] execlp01
+- [x] execlp01
 - [ ] execlp01_child
-- [ ] execv01
+- [x] execv01
 - [ ] execv01_child
-- [ ] execve01
+- [x] execve01
 - [ ] execve01_child
-- [ ] execve02
-- [ ] execve03
-- [ ] execve04
-- [ ] execve05
-- [ ] execve06
+- [ ] execve02: failed to copy
+- [x] execve03: pass 3 failed 3, 似乎是错误判断位置的问题
+- [ ] execve04: failed to copy
+- [ ] execve05 : failed to copy
+- [ ] execve06: Child (5) killed by signal SIGSEGV
 - [ ] execve06_child
-- [ ] execveat01
-- [ ] execveat02
-- [ ] execveat03
+- [ ] execveat01: failed to copy
+- [ ] execveat02: failed to copy
+- [ ] execveat03: /dev/loop-control, not exist
 - [ ] execveat_child
 - [ ] execveat_errno
 - [ ] execve_child
-- [ ] execvp01
+- [x] execvp01
 - [ ] execvp01_child
 - [ ] exec_with_inh
 - [ ] exec_without_inh
-- [ ] exit01
-- [ ] exit02
-- [ ] exit_group01
+- [x] exit01: no summary pass
+- [x] exit02
+- [x] exit_group01
+==============================
+
 - [ ] f00f
 - [x] faccessat01
 - [x] faccessat02
@@ -414,21 +419,21 @@
 - [ ] fgetxattr02: mountpoint?
 - [ ] fgetxattr03: ?
 - [ ] find_portbundle
-- [ ] finit_module01
-- [ ] finit_module02
-- [ ] flistxattr01
-- [ ] flistxattr02
-- [ ] flistxattr03
+- [ ] finit_module01: broke
+- [ ] finit_module02: failed
+- [ ] flistxattr01: failed
+- [ ] flistxattr02: failed
+- [x] flistxattr03
 - [ ] float_bessel
 - [ ] float_exp_log
 - [ ] float_iperb
 - [ ] float_power
 - [ ] float_trigo
-- [ ] flock01
-- [ ] flock02
-- [ ] flock03
-- [ ] flock04
-- [ ] flock06
+- [x] flock01
+- [ ] flock02: all faild
+- [x] flock03: pass 1 broken 1
+- [x] flock04: pass 3 failed 3
+- [x] flock06: pass 3 failed 1
 
 ===== fork ==========
 - [x] fork01
@@ -502,14 +507,14 @@
 - [ ] futex_waitv01
 - [ ] futex_waitv02
 - [ ] futex_waitv03
-- [ ] futex_wake01
+- [ ] futex_wake01: failed&broke same as follows
 - [ ] futex_wake02
 - [ ] futex_wake03
 - [ ] futex_wake04
 
 - [ ] futimesat01 : tconf
 - [ ] fw_load
-- [ ] genacos
+- [ ] genacos: [ERROR] parent path should be absolute path!
 - [ ] genasin
 - [ ] genatan
 - [ ] genatan2
@@ -561,68 +566,68 @@
 - [x] geteuid02 : /proc/self/status pass1 failed 1
 - [ ] getgid01 : f
 - [ ] getgid03 : f
-- [ ] getgroups01
+- [ ] getgroups01: f no summary
 - [ ] getgroups03
-- [ ] gethostbyname_r01
+- [ ] gethostbyname_r01:faild
 - [ ] gethostid01
-- [ ] gethostname01
-- [ ] gethostname02
+- [x] gethostname01
+- [ ] gethostname02: len is smaller than the actual size succeeded
 - [ ] get_ifname
-- [ ] getitimer01
-- [ ] getitimer02
-- [ ] get_mempolicy01
+- [x] getitimer01
+- [x] getitimer02
+- [ ] get_mempolicy01:  test requires libnuma development packages with LIBNUMA_API_VERSION >= 2
 - [ ] get_mempolicy02
-- [ ] getpagesize01
-- [ ] getpeername01
-- [ ] getpgid01
-- [ ] getpgid02
-- [ ] getpgrp01
-- [ ] getpid01
-- [ ] getpid02
-- [ ] getppid01
-- [ ] getppid02
+- [x] getpagesize01
+- [x] getpeername01
+- [x] getpgid01 1failed : Failed to open FILE '/proc/1/stat' for reading: ENOENT (2)
+- [ ] getpgid02 :Failed to open FILE '/proc/sys/kernel/pid_max'
+- [x] getpgrp01
+- [ ] getpid01: /proc/sys/kernel/pid_max'
+- [x] getpid02
+- [ ] getppid01: /proc/sys/kernel/pid_max'
+- [x] getppid02
 - [ ] getpriority01
 - [ ] getpriority02
-- [ ] getrandom01
-- [ ] getrandom02
-- [ ] getrandom03
-- [ ] getrandom04
-- [ ] getrandom05
-- [ ] getresgid01
+- [x] getrandom01
+- [x] getrandom02
+- [x] getrandom03
+- [x] getrandom04
+- [x] getrandom05: failed 1:  flag is invalid succeeded
+- [ ] getresgid01: fail no summary 150
 - [ ] getresgid01_16
 - [ ] getresgid02
 - [ ] getresgid02_16
 - [ ] getresgid03
 - [ ] getresgid03_16
 - [ ] getresuid01
-- [ ] getresuid01_16
+- [ ] getresuid01_16 fail no 148
 - [ ] getresuid02
 - [ ] getresuid02_16
 - [ ] getresuid03
 - [ ] getresuid03_16
-- [ ] getrlimit01
-- [ ] getrlimit02
-- [ ] getrlimit03
-- [ ] get_robust_list01
-- [ ] getrusage01
-- [ ] getrusage02
-- [ ] getrusage03
+- [x] getrlimit01
+- [x] getrlimit02
+- [ ] getrlimit03: all failed
+- [ ] get_robust_list01: Failed to open FILE '/proc/sys/kernel/pid_max'
+- [x] getrusage01
+- [x] getrusage02: 1skip
+- [ ] getrusage03: Failed to copy
 - [ ] getrusage03_child
-- [ ] getrusage04
-- [ ] getsid01
-- [ ] getsid02
-- [ ] getsockname01
-- [ ] getsockopt01
-- [ ] getsockopt02
-- [ ] gettid01
-- [ ] gettid02
-- [ ] gettimeofday01
-- [ ] gettimeofday02
-- [ ] getuid01
-- [ ] getuid01_16
-- [ ] getuid03
-- [ ] getuid03_16
-- [ ] getxattr01
+- [ ] getrusage04: cannot open /proc/cpuinfo, not exist
+- [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
+- [ ] getsid02: failed to open FILE '/proc/sys/kernel/pid_max'
+- [ ] getsockname01: skip 
+- [ ] getsockopt01: skip
+- [ ] getsockopt02: skip
+- [ ] gettid01: Failed to open FILE '/proc/self/status' for reading: ENOENT (2)
+- [x] gettid02
+- [x] gettimeofday01: pass2 failed 1
+- [x] gettimeofday02
+- [x] getuid01
+- [ ] getuid01_16: skip
+- [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
+- [ ] getuid03_16  skip
+- [ ] getxattr01: failed
 - [ ] getxattr02
 - [ ] getxattr03
 - [ ] getxattr04
@@ -632,11 +637,11 @@
 - [ ] hangup01
 - [ ] ht_affinity
 - [ ] ht_enabled
-- [ ] hugefallocate01
+- [ ] hugefallocate01: hugetlbfs is not supported
 - [ ] hugefallocate02
-- [ ] hugefork01
+- [ ] hugefork01: TCONF: hugetlbfs is not supported
 - [ ] hugefork02
-- [ ] hugemmap01
+- [ ] hugemmap01:  Not enough hugepages for testing.
 - [ ] hugemmap02
 - [ ] hugemmap04
 - [ ] hugemmap05
@@ -683,16 +688,17 @@
 - [ ] hugeshmget03
 - [ ] hugeshmget05
 
-- [ ] in6_01
+- [ ] icmp_rate_limit01
+- [x] in6_01: 1skip
 - [ ] in6_02
 - [ ] inh_capped
 - [ ] initialize_if
 - [ ] init_module01
 - [ ] init_module02
 - [ ] inode01
-- [ ] inode02
-- [ ] inotify01
-- [ ] inotify02
+- [ ] inode02: TBROK: fopen(/proc/cmdline,r) failed: ENOENT (2)
+- [ ] inotify01: 26,27,28, seem stuck?
+- [ ] inotify02: broke
 - [ ] inotify03
 - [ ] inotify04
 - [ ] inotify05
@@ -703,17 +709,17 @@
 - [ ] inotify10
 - [ ] inotify11
 - [ ] inotify12
-- [ ] inotify_init1_01
-- [ ] inotify_init1_02
-- [ ] input01
+- [x] inotify_init1_01: fialed 1, TBROK: fcntl(0,F_GETFD,...) failed: EBADF (9)
+- [x] inotify_init1_02: like upper
+- [ ] input01: no summary
 - [ ] input02
 - [ ] input03
 - [ ] input04
 - [ ] input05
 - [ ] input06
-- [ ] io_cancel01
+- [ ] io_cancel01: no summary
 - [ ] io_cancel02
-- [ ] io_control01
+- [ ] io_control01: Failed to acquire device
 - [ ] ioctl01
 - [ ] ioctl02
 - [ ] ioctl03
@@ -1312,8 +1318,8 @@
 - [ ] readlink03
 - [ ] readlinkat01
 - [ ] readlinkat02
-- [ ] readv01
-- [ ] readv02
+- [x] readv01: pass 10
+- [x] readv02
 - [ ] realpath01
 - [ ] reboot01
 - [ ] reboot02
@@ -1548,7 +1554,9 @@
 - [ ] setrlimit06
 - [ ] set_robust_list01
 - [ ] setsid01
-- [ ] setsockopt01
+
+======sockopts======
+- [ ] setsockopt01: now not supported,the follows the follows
 - [ ] setsockopt02
 - [ ] setsockopt03
 - [ ] setsockopt04
@@ -1558,6 +1566,7 @@
 - [ ] setsockopt08
 - [ ] setsockopt09
 - [ ] setsockopt10
+
 - [ ] set_thread_area01
 - [ ] set_tid_address01
 - [ ] settimeofday01
@@ -1633,12 +1642,12 @@
 - [ ] snd_timer01 : /proc/sys
 
 ======= socket ======= (not tested)
-- [ ] socket01
+- [x] socket01 : pass 6 failed 3
 - [ ] socket02
 - [ ] socketcall01
 - [ ] socketcall02
 - [ ] socketcall03
-- [ ] socketpair01
+- [x] socketpair01 : pass 3 failed 7
 - [x] socketpair02 : pass 2 failed 2
 - [ ] sockioctl01: f
 
