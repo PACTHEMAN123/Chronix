@@ -72,9 +72,9 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
             let inner_pid = -pid as usize;
             for task in PROCESS_GROUP_MANAGER
                 .get_group(pgid)
-                .unwrap()
+                .ok_or_else(|| SysError::ESRCH)?
                 .into_iter()
-                .map(|t| t.upgrade().unwrap())
+                .filter_map(|t| t.upgrade())
             {
                 if task.tid() == inner_pid {
                     task.recv_sigs_process_level(SigInfo { si_signo: signo as usize, si_code: SigInfo::USER, si_pid: Some(cur_task.pgid()) });

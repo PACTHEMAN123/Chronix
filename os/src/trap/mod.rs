@@ -25,7 +25,7 @@ use crate::mm::KVMSPACE;
 use crate::signal::{SigInfo, SIGILL, SIGKILL, SIGSEGV, SIGTRAP};
 use crate::utils::timer::TimerGuard;
 use hal::addr::VirtAddr;
-
+use crate::syscall::SyscallId::SYSCALL_GETPRIORITY;
 use crate::utils::async_utils::yield_now;
 use crate::executor;
 use crate::processor::context::SumGuard;
@@ -63,6 +63,7 @@ pub async fn user_trap_handler() -> bool {
         TrapType::Syscall => {
             let _sum = SumGuard::new();
             let cx = current_task().unwrap().get_trap_cx();
+            let syscall_id = cx.syscall_id();
             *cx.sepc() += 4;
             // get system call return value
             let result = syscall(
@@ -80,7 +81,7 @@ pub async fn user_trap_handler() -> bool {
             // cx.save_to(0, cx.ret_nth(0));
             // report that the syscall is interrupt
             cx.set_ret_nth(0, result as usize);
-            if result == -(SysError::EINTR as isize) {
+            if result == -(SysError::EINTR as isize) && syscall_id != SYSCALL_GETPRIORITY as usize {
                 log::warn!("[user_trap_handler] task {} syscall is interrupted", cx.syscall_id());
                 return true;
             }

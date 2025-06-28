@@ -586,8 +586,8 @@
 - [x] getpid02
 - [ ] getppid01: /proc/sys/kernel/pid_max'
 - [x] getppid02
-- [ ] getpriority01
-- [ ] getpriority02
+- [ ] getpriority01: p2 failed 2
+- [x] getpriority02: p2 failed 2
 - [x] getrandom01
 - [x] getrandom02
 - [x] getrandom03
@@ -1057,7 +1057,7 @@
 - [ ] msync02
 - [ ] msync03
 - [ ] msync04
-- [ ] mtest01
+- [x] mtest01
 
 - [x] munlock01
 - [ ] munlock02 : f
@@ -1085,11 +1085,11 @@
 - [ ] nft02
 - [ ] nftw01
 - [ ] nftw6401
-- [ ] nice01
-- [ ] nice02
-- [ ] nice03
-- [ ] nice04
-- [ ] nice05
+- [x] nice01
+- [x] nice02
+- [x] nice03
+- [ ] nice04: failed
+- [ ] nice05: broke
 - [ ] nptl01
 - [ ] ns-echoclient
 - [ ] ns-icmp_redirector
@@ -1138,20 +1138,20 @@
 
 - [ ] output_ipsec_conf
 - [ ] overcommit_memory
-- [ ] page01
-- [ ] page02
-- [ ] pathconf01
-- [ ] pathconf02
-- [ ] pause01
+- [x] page01: pass no sum
+- [x] page02: pass no sum
+- [x] pathconf01
+- [ ] pathconf02: b 1
+- [ ] pause01: '/proc/37/stat'
 - [ ] pause02
 - [ ] pause03
-- [ ] pcrypt_aead01
+- [ ] pcrypt_aead01: broke
 - [ ] pec_listener
 - [ ] perf_event_open01
-- [ ] perf_event_open02
-- [ ] perf_event_open03
+- [ ] perf_event_open02: skip
+- [ ] perf_event_open03: skip
 - [ ] personality01
-- [ ] personality02
+- [x] personality02
 - [ ] pidfd_getfd01
 - [ ] pidfd_getfd02
 - [ ] pidfd_open01
@@ -1175,7 +1175,7 @@
 - [ ] pidns20
 - [ ] pidns30
 - [ ] pidns31
-- [ ] pidns32
+- [x] pidns32
 - [ ] pids_task1
 - [ ] pids_task2
 
@@ -1445,14 +1445,14 @@
 - [ ] semtest_2ns
 
 ====== send =======
-- [ ] send01
-- [ ] send02
+- [ ] send01: panic
+- [ ] send02: skip
 - [x] sendfile02
 - [x] sendfile02_64
 - [x] sendfile03 : p2 f2
 - [x] sendfile03_64
-- [ ] sendfile04 : f
-- [ ] sendfile04_64
+- [x] sendfile04 
+- [x] sendfile04_64
 - [x] sendfile05
 - [x] sendfile05_64
 - [ ] sendfile06 : f
@@ -1463,16 +1463,17 @@
 - [ ] sendfile08_64
 - [ ] sendfile09 : tconf
 - [ ] sendfile09_64
-- [ ] sendmmsg01 : f
-- [ ] sendmmsg02
-- [ ] sendmsg01
+- [ ] sendmmsg01 : skip
+- [ ] sendmmsg02: skip
+- [ ] sendmsg01: no summary
 - [ ] sendmsg02
 - [ ] sendmsg03
-- [ ] sendto01
+- [ ] sendto01: panic
 - [ ] sendto02
 - [ ] sendto03
-- [ ] setdomainname01
-- [ ] setdomainname02
+
+- [ ] setdomainname01: 162
+- [ ] setdomainname02: 
 - [ ] setdomainname03
 - [ ] setegid01
 - [ ] setegid02
@@ -1483,41 +1484,41 @@
 - [ ] setfsuid02
 - [ ] setfsuid03
 - [ ] setfsuid04
-- [ ] setgid01
-- [ ] setgid02
-- [ ] setgid03
-- [ ] setgroups01
-- [ ] setgroups02
+- [x] setgid01
+- [ ] setgid02： broken
+- [x] setgid03: 1p 1f
+- [x] setgroups01
+- [x] setgroups02: 2fail
 - [ ] setgroups03
 - [ ] setgroups04
-- [ ] sethostname01
+- [ ] sethostname01: 161 ,fail
 - [ ] sethostname02
 - [ ] sethostname03
 - [ ] set_ipv4addr
-- [ ] setitimer01
-- [ ] setitimer02
+- [x] setitimer01: 1 broken timedout
+- [x] setitimer02
 - [ ] set_mempolicy01
 - [ ] set_mempolicy02
 - [ ] set_mempolicy03
 - [ ] set_mempolicy04
 - [ ] set_mempolicy05
-- [ ] setns01
+- [ ] setns01: 268
 - [ ] setns02
-- [ ] setpgid01
-- [ ] setpgid02
-- [ ] setpgid03
+- [x] setpgid01: no sum
+- [ ] setpgid02: '/proc/sys/kernel/pid_max
+- [ ] setpgid03 failed
 - [ ] setpgid03_child
-- [ ] setpgrp01
-- [ ] setpgrp02
-- [ ] setpriority01
-- [ ] setpriority02
-- [ ] setregid01
+- [x] setpgrp01: no sum
+- [x] setpgrp02
+- [x] setpriority01: 2
+- [x] setpriority02: 2
+- [x] setregid01
 - [ ] setregid01_16
-- [ ] setregid02
+- [ ] setregid02: failed 12
 - [ ] setregid02_16
-- [ ] setregid03
+- [x] setregid03: p 8 failed 14
 - [ ] setregid03_16
-- [ ] setregid04
+- [x] setregid04: p 5 failed 4
 - [ ] setregid04_16
 - [ ] setresgid01
 - [ ] setresgid01_16
@@ -1526,30 +1527,30 @@
 - [ ] setresgid03
 - [ ] setresgid03_16
 - [ ] setresgid04
-- [ ] setresgid04_16
+- [ ] setresgid04_16: above all broke & failed
 - [ ] setresuid01
 - [ ] setresuid01_16
 - [ ] setresuid02
 - [ ] setresuid02_16
 - [ ] setresuid03
 - [ ] setresuid03_16
-- [ ] setresuid04
+- [x] setresuid04: p1 fail 2
 - [ ] setresuid04_16
-- [ ] setresuid05
+- [x] setresuid05: p 1 f 1
 - [ ] setresuid05_16
-- [ ] setreuid01
+- [x] setreuid01
 - [ ] setreuid01_16
-- [ ] setreuid02
+- [ ] setreuid02: f
 - [ ] setreuid02_16
-- [ ] setreuid03
+- [x] setreuid03: 1 b
 - [ ] setreuid03_16
-- [ ] setreuid04
+- [x] setreuid04: 2 fail
 - [ ] setreuid04_16
-- [ ] setreuid05
+- [x] setreuid05: 1 b
 - [ ] setreuid05_16
-- [ ] setreuid06
+- [ ] setreuid06: 3 failed
 - [ ] setreuid06_16
-- [ ] setreuid07
+- [x] setreuid07: 1 p 2 f
 - [ ] setreuid07_16
 
 ====== rlimit ======
