@@ -326,6 +326,7 @@ impl Inode for Ext4Inode {
         let ty: InodeTypes = mode.into();
         let mut file = self.file.lock();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
+        warn!("parent path {parent_path}");
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
         info!("create {:?} on Ext4fs: {}", ty, fpath);
         //let fpath = self.path_deal_with(&fpath);

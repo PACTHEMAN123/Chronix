@@ -123,6 +123,39 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
     Ok(0)
 }
 
+pub fn sys_clock_settime(clock_id: usize, ts_ptr: usize) -> SysResult {
+    if clock_id == CLOCK_PROCESS_CPUTIME_ID
+            || clock_id == CLOCK_THREAD_CPUTIME_ID
+            || clock_id == CLOCK_MONOTONIC
+    {
+        return Err(SysError::EINVAL);
+    }
+    let task = current_task().unwrap().clone();
+    let tp = *UserPtrRaw::new(ts_ptr as *const TimeSpec)
+        .ensure_read(&mut task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?
+        .to_ref();
+    let duration: Duration = tp.into();
+    if !tp.is_valid() {
+        return Err(SysError::EINVAL);
+    }
+    match clock_id {
+        CLOCK_REALTIME => {
+            if tp.into_ms() < get_current_time_ms() {
+                return Err(SysError::EINVAL);
+            }
+            unsafe {
+                CLOCK_DEVIATION[clock_id] = duration - get_current_time_duration();
+            }
+        }
+        _ => {
+            log::warn!("[clock_settime] unsupport clock {clock_id}");
+            return Err(SysError::EINVAL);
+        }
+    }
+    Ok(0)
+}
+
 /// syscall: sys clock getres
 /// clock_getres() finds the resolution (precision) of
 /// the specified clock clockid, and, if res is non-NULL, stores it in

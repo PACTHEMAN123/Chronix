@@ -58,7 +58,7 @@ pub fn abs_path_to_parent(path: &str) -> Option<String> {
 pub fn rel_path_to_abs(parent_path: &str, rel_path: &str) -> Option<String> {
     if !parent_path.starts_with('/') {
         log::error!("parent path should be absolute path!");
-        return None;
+        // return None;
     }
     // parent path
     let mut abs_path = String::new();

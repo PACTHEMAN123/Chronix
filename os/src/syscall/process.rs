@@ -149,7 +149,7 @@ pub fn sys_fork() -> isize {
 #[cfg(target_arch="riscv64")]
 pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
     // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
-    let flags = CloneFlags::from_bits(flags & !0xff).unwrap();
+    let flags = CloneFlags::from_bits(flags & !0xff).ok_or(SysError::EINVAL)?;
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
     new_task.get_trap_cx().set_ret_nth(0, 0);
@@ -194,7 +194,7 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
 #[cfg(target_arch="loongarch64")]
 pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: VirtAddr, tls: VirtAddr) -> SysResult {
     // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
-    let flags = CloneFlags::from_bits(flags & !0xff).unwrap();
+    let flags = CloneFlags::from_bits(flags & !0xff).ok_or(SysError::EINVAL)?;
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
     new_task.get_trap_cx().set_ret_nth(0, 0);

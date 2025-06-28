@@ -515,7 +515,7 @@
 - [ ] futimesat01 : tconf
 - [ ] fw_load
 - [ ] genacos: [ERROR] parent path should be absolute path!
-- [ ] genasin
+- [ ] genasin: no ouput
 - [ ] genatan
 - [ ] genatan2
 - [ ] genbessel
@@ -628,10 +628,10 @@
 - [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
 - [ ] getuid03_16  skip
 - [ ] getxattr01: failed
-- [ ] getxattr02
-- [ ] getxattr03
-- [ ] getxattr04
-- [ ] getxattr05
+- [ ] getxattr02 : no dev
+- [ ] getxattr03 : no dev
+- [ ] getxattr04 : no dev
+- [ ] getxattr05 : tconf
 - [ ] growfiles
 - [ ] hackbench
 - [ ] hangup01
@@ -720,66 +720,68 @@
 - [ ] io_cancel01: no summary
 - [ ] io_cancel02
 - [ ] io_control01: Failed to acquire device
-- [ ] ioctl01
-- [ ] ioctl02
-- [ ] ioctl03
-- [ ] ioctl04
-- [ ] ioctl05
-- [ ] ioctl06
-- [ ] ioctl07
-- [ ] ioctl08
-- [ ] ioctl09
-- [ ] ioctl_loop01
-- [ ] ioctl_loop02
-- [ ] ioctl_loop03
-- [ ] ioctl_loop04
-- [ ] ioctl_loop05
-- [ ] ioctl_loop06
-- [ ] ioctl_loop07
-- [ ] ioctl_ns01
-- [ ] ioctl_ns02
-- [ ] ioctl_ns03
-- [ ] ioctl_ns04
-- [ ] ioctl_ns05
-- [ ] ioctl_ns06
-- [ ] ioctl_ns07
-- [ ] ioctl_sg01
-- [ ] io_destroy01
-- [ ] io_destroy02
-- [ ] iogen
-- [ ] io_getevents01
-- [ ] io_getevents02
-- [ ] ioperm01
-- [ ] ioperm02
-- [ ] io_pgetevents01
-- [ ] io_pgetevents02
-- [ ] iopl01
-- [ ] iopl02
-- [ ] ioprio_get01
-- [ ] ioprio_set01
-- [ ] ioprio_set02
-- [ ] ioprio_set03
-- [ ] io_setup01
-- [ ] io_setup02
-- [ ] io_submit01
-- [ ] io_submit02
-- [ ] io_submit03
-- [ ] io_uring01
-- [ ] io_uring02
-- [ ] kallsyms
-- [ ] kcmp01
-- [ ] kcmp02
-- [ ] kcmp03
-- [ ] kernbench
-- [ ] keyctl01
-- [ ] keyctl02
+
+======= ioctl =========
+- [ ] ioctl01 : no dev
+- [ ] ioctl02 : f
+- [ ] ioctl03 : tun
+- [ ] ioctl04 : no dev
+- [ ] ioctl05 : no dev
+- [ ] ioctl06 : no dev
+- [ ] ioctl07 : f
+- [ ] ioctl08 : tconf
+- [ ] ioctl09 : tconf
+- [ ] ioctl_loop01 : no dev
+- [ ] ioctl_loop02 : no dev
+- [ ] ioctl_loop03 : no dev
+- [ ] ioctl_loop04 : no dev
+- [ ] ioctl_loop05 : no dev
+- [ ] ioctl_loop06 : no dev
+- [ ] ioctl_loop07 : no dev
+- [ ] ioctl_ns01 : /proc
+- [ ] ioctl_ns02 : /proc
+- [ ] ioctl_ns03 : /proc
+- [ ] ioctl_ns04 : /proc
+- [ ] ioctl_ns05 : /proc
+- [ ] ioctl_ns06 : /proc
+- [ ] ioctl_ns07 : /proc
+- [ ] ioctl_sg01 : tconf
+- [ ] io_destroy01 : tconf
+- [ ] io_destroy02 : .config
+- [ ] io_getevents01 : .config
+- [ ] io_getevents02 : .config
+- [ ] ioperm01 : .config
+- [ ] ioperm02 : .config
+- [ ] io_pgetevents01 : tconf
+- [ ] io_pgetevents02 : tconf
+- [ ] iopl01 : tconf
+- [ ] iopl02 : tconf
+- [ ] ioprio_get01 : tconf
+- [ ] ioprio_set01 : f
+- [x] ioprio_set02
+- [ ] ioprio_set03 : f
+- [ ] io_setup01 : tconf
+- [ ] io_setup02 : .config
+- [ ] io_submit01 : tconf
+- [ ] io_submit02 : tconf
+- [ ] io_submit03 : tconf
+- [x] io_uring01 : p1 f1
+- [ ] io_uring02 : tconf
+- [ ] kallsyms : /proc
+- [x] kcmp01 : p4 f1
+- [ ] kcmp02 : /proc
+- [x] kcmp03 : p3 f1
+
+====== keyctl ======
+- [ ] keyctl01 : dead loop
+- [ ] keyctl02 : /proc
 - [ ] keyctl03
-- [ ] keyctl04
-- [ ] keyctl05
-- [ ] keyctl06
-- [ ] keyctl07
-- [ ] keyctl08
-- [ ] keyctl09
+- [x] keyctl04
+- [ ] keyctl05 : /lib/module
+- [ ] keyctl06 : f
+- [ ] keyctl07 : 218
+- [ ] keyctl08 : f
+- [ ] keyctl09 : .config
 
 ===== kill =======
 - [ ] kill02 : hang
@@ -845,21 +847,23 @@
 - [ ] lstat02 : f
 - [ ] lstat02_64 : f
 
+======= madvise ========
+- [x] madvise01 : p 20
+- [ ] madvise02 : hang
+- [ ] madvise03 : f
+- [x] madvise05
+- [ ] madvise06 : /proc
+- [ ] madvise07 : f
+- [ ] madvise08 : tconf
+- [ ] madvise09 : tconf
+- [x] madvise10 : p 12 f 2
+- [ ] madvise11 : .config
 
-- [ ] madvise01
-- [ ] madvise02
-- [ ] madvise03
-- [ ] madvise05
-- [ ] madvise06
-- [ ] madvise07
-- [ ] madvise08
-- [ ] madvise09
-- [ ] madvise10
-- [ ] madvise11
-- [ ] mallinfo01
-- [ ] mallinfo02
-- [ ] mallinfo2_01
-- [ ] mallocstress
+- [ ] mallinfo01 : tconf
+- [ ] mallinfo02 : tconf
+- [ ] mallinfo2_01 : tconf
+
+- [ ] mallocstress : stress
 - [ ] mallopt01
 - [ ] max_map_count
 - [ ] mbind01
@@ -886,23 +890,18 @@
 - [ ] memcontrol03
 - [ ] memcontrol04
 - [ ] memcpy01
-- [ ] memctl_test01
-- [ ] memfd_create01
-- [ ] memfd_create02
-- [ ] memfd_create03
-- [ ] memfd_create04
-- [ ] mem_process
-- [ ] memset01
-- [ ] memtoy
-- [ ] mesgq_nstest
-- [ ] migrate_pages01
-- [ ] migrate_pages02
-- [ ] migrate_pages03
-- [ ] mincore01
-- [ ] mincore02
-- [ ] mincore03
-- [ ] mincore04
-- [ ] min_free_kbytes
+- [ ] memctl_test01 : panic in sys_kill
+- [ ] memfd_create01 : tconf
+- [ ] memfd_create02 : tconf
+- [ ] memfd_create03 : tconf
+- [ ] memfd_create04 : tconf
+- [x] memset01
+- [x] mesgq_nstest : p1 f1
+- [ ] mincore01 : f
+- [x] mincore02 : p1 f1
+- [x] mincore03 : p1 f1
+- [ ] mincore04 : f
+- [ ] min_free_kbytes : f
 
 ===== mkdir =====
 - [ ] mkdir02
@@ -975,42 +974,40 @@
 - [ ] mmapstress10
 
 
-- [ ] mmstress
-- [ ] mmstress_dummy
-- [ ] modify_ldt01
-- [ ] modify_ldt02
-- [ ] modify_ldt03
-- [ ] mount01
-- [ ] mount02
-- [ ] mount03
+- [ ] mmstress : no sum
+- [ ] mount01 : no dev
+- [ ] mount02 : no dev
+- [ ] mount03 : no dev
 - [ ] mount03_suid_child
-- [ ] mount04
-- [ ] mount05
-- [ ] mount06
-- [ ] mount07
-- [ ] mountns01
-- [ ] mountns02
-- [ ] mountns03
-- [ ] mountns04
-- [ ] mount_setattr01
-- [ ] move_mount01
-- [ ] move_mount02
-- [ ] move_pages01
-- [ ] move_pages02
-- [ ] move_pages03
-- [ ] move_pages04
-- [ ] move_pages05
-- [ ] move_pages06
-- [ ] move_pages07
-- [ ] move_pages09
-- [ ] move_pages10
-- [ ] move_pages11
-- [ ] move_pages12
-- [ ] mprotect01
-- [ ] mprotect02
-- [ ] mprotect03
-- [ ] mprotect04
-- [ ] mprotect05
+- [ ] mount04 : no dev
+- [ ] mount05 : no dev
+- [ ] mount06 : no dev
+- [ ] mount07 : no dev
+- [ ] mountns01 : .config
+- [ ] mountns02 : .config
+- [ ] mountns03 : .config
+- [ ] mountns04 : .config
+- [ ] mount_setattr01 : no dev
+- [ ] move_mount01 : no dev
+- [ ] move_mount02 : no dev
+- [ ] move_pages01 : tconf
+- [ ] move_pages02 : tconf
+- [ ] move_pages03 : tconf
+- [ ] move_pages04 : tconf
+- [ ] move_pages05 : tconf
+- [ ] move_pages06 : tconf
+- [ ] move_pages07 : tconf
+- [ ] move_pages09 : tconf
+- [ ] move_pages10 : tconf
+- [ ] move_pages11 : tconf
+- [ ] move_pages12 : tconf
+
+- [ ] mprotect01 : p1 f2 no sum
+- [ ] mprotect02 : f
+- [x] mprotect03 : no sum
+- [x] mprotect04 : no sum
+- [x] mprotect05
+
 - [ ] mq_notify01
 - [ ] mq_notify02
 - [ ] mq_notify03
@@ -1022,12 +1019,14 @@
 - [ ] mq_timedreceive01
 - [ ] mq_timedsend01
 - [ ] mq_unlink01
-- [ ] mremap01
-- [ ] mremap02
-- [ ] mremap03
-- [ ] mremap04
-- [ ] mremap05
-- [ ] mremap06
+
+- [ ] mremap01 : f
+- [x] mremap02 : no sum
+- [ ] mremap03 : f
+- [ ] mremap04 : dead lock
+- [ ] mremap05 : p2 f3 no sum
+- [ ] mremap06 : f
+
 - [ ] msg_comm
 - [ ] msgctl01
 - [ ] msgctl02
@@ -1053,22 +1052,28 @@
 - [ ] msgsnd05
 - [ ] msgsnd06
 - [ ] msgstress01
+
 - [ ] msync01
 - [ ] msync02
 - [ ] msync03
 - [ ] msync04
 - [ ] mtest01
-- [ ] munlock01
-- [ ] munlock02
-- [ ] munlockall01
-- [ ] munmap01
-- [ ] munmap02
-- [ ] munmap03
-- [ ] name_to_handle_at01
-- [ ] name_to_handle_at02
-- [ ] nanosleep01
-- [ ] nanosleep02
-- [ ] nanosleep04
+
+- [x] munlock01
+- [ ] munlock02 : f
+- [ ] munlockall01 : /proc
+
+- [x] munmap01 : no sum
+- [ ] munmap02 : no sum
+- [ ] munmap03 : hang
+
+- [x] name_to_handle_at01 : p1 f1
+- [ ] name_to_handle_at02 : f
+
+- [ ] nanosleep01 : /proc
+- [ ] nanosleep02 : f
+- [ ] nanosleep04 : time overflow
+
 - [ ] netstress
 - [ ] newuname01
 - [ ] nextafter01
@@ -1199,19 +1204,22 @@
 - [ ] pivot_root01
 - [ ] pkey01
 - [ ] pm_get_sched_values
-- [ ] poll01
-- [ ] poll02
-- [ ] posix_fadvise01
-- [ ] posix_fadvise01_64
-- [ ] posix_fadvise02
+- [x] poll01
+- [ ] poll02 : /proc
+
+======= fadvise =======
+- [x] posix_fadvise01
+- [x] posix_fadvise01_64
+- [ ] posix_fadvise02 : f
 - [ ] posix_fadvise02_64
-- [ ] posix_fadvise03
+- [ ] posix_fadvise03 : p6 f26
 - [ ] posix_fadvise03_64
-- [ ] posix_fadvise04
+- [ ] posix_fadvise04 : f
 - [ ] posix_fadvise04_64
-- [ ] ppoll01
-- [ ] prctl01
-- [ ] prctl02
+
+- [ ] ppoll01 : panic
+- [x] prctl01 : p1 f1
+- [ ] prctl02 : f
 - [ ] prctl03
 - [ ] prctl04
 - [ ] prctl05
@@ -1221,9 +1229,11 @@
 - [ ] prctl08
 - [ ] prctl09
 - [ ] prctl10
-- [ ] pread01
+
+======== pread ======= failed all
+- [ ] pread01 : f
 - [ ] pread01_64
-- [ ] pread02
+- [ ] pread02 : f
 - [ ] pread02_64
 - [ ] preadv01
 - [ ] preadv01_64
@@ -1237,7 +1247,7 @@
 - [ ] preadv202_64
 - [ ] preadv203
 - [ ] preadv203_64
-- [ ] print_caps
+
 - [ ] proc01
 - [ ] process_madvise01
 - [ ] process_vm01
@@ -1247,18 +1257,20 @@
 - [ ] proc_sched_rt01
 - [ ] profil01
 - [ ] prot_hsymlinks
-- [ ] pselect01
+
+======= pselect ======
+- [ ] pselect01 : /proc
 - [ ] pselect01_64
-- [ ] pselect02
+- [ ] pselect02 : time overflow
 - [ ] pselect02_64
-- [ ] pselect03
-- [ ] pselect03_64
-- [ ] ptem01
-- [ ] pthcli
-- [ ] pthserv
-- [ ] pth_str01
-- [ ] pth_str02
-- [ ] pth_str03
+- [x] pselect03
+- [x] pselect03_64
+
+
+- [ ] ptem01 : no dev
+- [x] pth_str01 : no sum
+- [x] pth_str02 : no sum
+- [x] pth_str03 : no sum
 - [ ] ptrace01
 - [ ] ptrace02
 - [ ] ptrace03
@@ -1278,14 +1290,16 @@
 - [ ] pty05
 - [ ] pty06
 - [ ] pty07
-- [ ] pwrite01
+
+======= pwrite ====== (we can support pwritev)
+- [ ] pwrite01 : f
 - [ ] pwrite01_64
-- [ ] pwrite02
-- [ ] pwrite02_64
-- [ ] pwrite03
-- [ ] pwrite03_64
-- [ ] pwrite04
-- [ ] pwrite04_64
+- [x] pwrite02 : p1 f4
+- [x] pwrite02_64
+- [x] pwrite03
+- [x] pwrite03_64
+- [x] pwrite04 : p1 f1
+- [x] pwrite04_64
 - [ ] pwritev01
 - [ ] pwritev01_64
 - [ ] pwritev02
@@ -1296,43 +1310,38 @@
 - [ ] pwritev201_64
 - [ ] pwritev202
 - [ ] pwritev202_64
-- [ ] quotactl01
-- [ ] quotactl02
-- [ ] quotactl03
-- [ ] quotactl04
-- [ ] quotactl05
-- [ ] quotactl06
-- [ ] quotactl07
-- [ ] quotactl08
-- [ ] quotactl09
-- [ ] read01
-- [ ] read02
-- [ ] read03
-- [ ] read04
+
+======== read ======== (support more read syscall)
+- [x] read01
+- [x] read02 : p5 f1
+- [ ] read03 : mknodat
+- [x] read04
 - [ ] readahead01
 - [ ] readahead02
-- [ ] read_all
-- [ ] readdir01
-- [ ] readdir21
-- [ ] readlink01
-- [ ] readlink03
-- [ ] readlinkat01
-- [ ] readlinkat02
+- [ ] read_all : f
+- [x] readdir01
+- [ ] readdir21 : f
+- [ ] readlink01 : f
+- [ ] readlink03 : f
+- [x] readlinkat01 : p5 f7
+- [x] readlinkat02 : p5 f1
 - [x] readv01: pass 10
-- [x] readv02
-- [ ] realpath01
-- [ ] reboot01
-- [ ] reboot02
-- [ ] recv01
-- [ ] recvfrom01
-- [ ] recvmmsg01
-- [ ] recvmsg01
-- [ ] recvmsg02
-- [ ] recvmsg03
-- [ ] remap_file_pages01
+- [x] readv02: p3 f2
+
+
+- [ ] realpath01 : f
+- [ ] reboot01 : shutdown
+- [ ] reboot02 : shutdown
+- [ ] recv01 : panic in sys_kill
+- [ ] recvfrom01 : panic in sys_kill
+- [ ] recvmmsg01 : tconf (socket)
+- [ ] recvmsg01 : tconf (socket)
+- [ ] recvmsg02 : tconf
+- [ ] recvmsg03 : socket EINVAL
+- [ ] remap_file_pages01 : f
 - [ ] remap_file_pages02
-- [ ] removexattr01
-- [ ] removexattr02
+- [ ] removexattr01 : f
+- [ ] removexattr02 : f
 
 ====== rename ======
 - [ ] rename01 : no dev
@@ -1374,17 +1383,16 @@
 - [ ] rt_sigqueueinfo01 : missing syscall
 - [x] rt_sigsuspend01
 
-- [ ] rwtest
-- [ ] sbrk01
-- [ ] sbrk02
-- [ ] sbrk03
-- [ ] sched_datafile
-- [ ] sched_driver
-- [ ] sched_getaffinity01
-- [ ] sched_getattr01
-- [ ] sched_getattr02
-- [ ] sched_getparam01
-- [ ] sched_getparam03
+- [x] sbrk01 : p1 f1
+- [x] sbrk02
+- [ ] sbrk03 : tconf
+
+======== sched =======
+- [x] sched_getaffinity01 : p3 f1
+- [ ] sched_getattr01 : f
+- [ ] sched_getattr02 : f
+- [ ] sched_getparam01 : f
+- [ ] sched_getparam03 : f
 - [ ] sched_get_priority_max01
 - [ ] sched_get_priority_max02
 - [ ] sched_get_priority_min01
@@ -1394,30 +1402,27 @@
 - [ ] sched_rr_get_interval01
 - [ ] sched_rr_get_interval02
 - [ ] sched_rr_get_interval03
-- [ ] sched_setaffinity01
-- [ ] sched_setattr01
+- [ ] sched_setaffinity01 : f
+- [ ] sched_setattr01 : f
 - [ ] sched_setparam01
 - [ ] sched_setparam02
 - [ ] sched_setparam03
 - [ ] sched_setparam04
 - [ ] sched_setparam05
-- [ ] sched_setscheduler01
-- [ ] sched_setscheduler02
-- [ ] sched_setscheduler03
-- [ ] sched_setscheduler04
-- [ ] sched_tc0
-- [ ] sched_tc1
-- [ ] sched_tc2
-- [ ] sched_tc3
-- [ ] sched_tc4
-- [ ] sched_tc5
-- [ ] sched_tc6
-- [ ] sched_yield01
-- [ ] sctp_big_chunk
-- [ ] select01
-- [ ] select02
-- [ ] select03
+- [ ] sched_setscheduler01 : /proc
+- [ ] sched_setscheduler02 : f
+- [ ] sched_setscheduler03 : f
+- [ ] sched_setscheduler04 : tconf
+- [x] sched_yield01 : no sum
+- [ ] sctp_big_chunk : /sys/
+
+====== select ======
+- [ ] select01 : mknodat
+- [ ] select02 : /proc
+- [ ] select03 : user ptr?
 - [ ] select04
+
+======= sem ========
 - [ ] sem_comm
 - [ ] semctl01
 - [ ] semctl02
@@ -1546,14 +1551,16 @@
 - [ ] setreuid06_16
 - [ ] setreuid07
 - [ ] setreuid07_16
-- [ ] setrlimit01
-- [ ] setrlimit02
-- [ ] setrlimit03
-- [ ] setrlimit04
-- [ ] setrlimit05
-- [ ] setrlimit06
-- [ ] set_robust_list01
-- [ ] setsid01
+
+====== rlimit ======
+- [ ] setrlimit01 : p2 f2 no sum
+- [x] setrlimit02 : p1 f1
+- [ ] setrlimit03 : f
+- [x] setrlimit04
+- [x] setrlimit05
+- [ ] setrlimit06 : hang
+- [x] set_robust_list01 : p2 no sum
+- [ ] setsid01 : p1 f2 no sum
 
 ======sockopts======
 - [ ] setsockopt01: now not supported,the follows the follows
@@ -1567,20 +1574,17 @@
 - [ ] setsockopt09
 - [ ] setsockopt10
 
-- [ ] set_thread_area01
-- [ ] set_tid_address01
-- [ ] settimeofday01
-- [ ] settimeofday02
-- [ ] setuid01
-- [ ] setuid01_16
-- [ ] setuid03
-- [ ] setuid03_16
-- [ ] setuid04
-- [ ] setuid04_16
-- [ ] setxattr01
-- [ ] setxattr02
-- [ ] setxattr03
-- [ ] sgetmask01
+- [ ] set_thread_area01 : tconf
+- [x] set_tid_address01 : no sum
+- [x] settimeofday01 : p1 f1
+- [x] settimeofday02 : p2 f1
+- [x] setuid01
+- [ ] setuid03 : f
+- [ ] setuid04 : f
+- [ ] setxattr01 : no dev
+- [x] setxattr02 : p2 f5
+- [ ] setxattr03 : f
+- [ ] sgetmask01 : tconf
 
 ======= shm ========
 - [ ] shmat01 : panic

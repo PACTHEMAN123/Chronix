@@ -54,7 +54,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
             .ensure_write(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_mut();
     let ret = file.read(buf).await?;
 
@@ -675,6 +675,9 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     }
     
     let path = inode.readlink()?;
+    if len as isize <= 0 {
+        return Err(SysError::EINVAL);
+    }
     let new_buf = UserSliceRaw::new(buf as *mut u8, len)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
@@ -876,6 +879,9 @@ pub struct IoVec {
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
+    if (iovcnt as isize) < 0 {
+        return Err(SysError::EINVAL);
+    }
     let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
@@ -976,7 +982,7 @@ pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> Sy
     let user_buf =
         UserSliceRaw::new(buf as *mut u8, count)
                 .ensure_write(&mut task.get_vm_space().lock())
-                .ok_or(SysError::EINVAL)?;
+                .ok_or(SysError::EFAULT)?;
     let ret = file.read(user_buf.to_mut()).await?;
     // let start = buf & !(Constant::PAGE_SIZE - 1);
     // let end = buf + count;
