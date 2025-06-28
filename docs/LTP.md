@@ -846,7 +846,7 @@
 - [ ] lstat02_64 : f
 
 
-- [ ] madvise01
+- [x] madvise01
 - [ ] madvise02
 - [ ] madvise03
 - [ ] madvise05
@@ -1057,8 +1057,8 @@
 - [ ] msync02
 - [ ] msync03
 - [ ] msync04
-- [ ] mtest01
-- [ ] munlock01
+- [x] mtest01
+- [x] munlock01
 - [ ] munlock02
 - [ ] munlockall01
 - [ ] munmap01
@@ -1133,20 +1133,20 @@
 
 - [ ] output_ipsec_conf
 - [ ] overcommit_memory
-- [ ] page01
-- [ ] page02
-- [ ] pathconf01
-- [ ] pathconf02
-- [ ] pause01
+- [x] page01: pass no sum
+- [x] page02: pass no sum
+- [x] pathconf01
+- [ ] pathconf02: b 1
+- [ ] pause01: '/proc/37/stat'
 - [ ] pause02
 - [ ] pause03
-- [ ] pcrypt_aead01
+- [ ] pcrypt_aead01: broke
 - [ ] pec_listener
 - [ ] perf_event_open01
-- [ ] perf_event_open02
-- [ ] perf_event_open03
+- [ ] perf_event_open02: skip
+- [ ] perf_event_open03: skip
 - [ ] personality01
-- [ ] personality02
+- [x] personality02
 - [ ] pidfd_getfd01
 - [ ] pidfd_getfd02
 - [ ] pidfd_open01
@@ -1170,7 +1170,7 @@
 - [ ] pidns20
 - [ ] pidns30
 - [ ] pidns31
-- [ ] pidns32
+- [x] pidns32
 - [ ] pids_task1
 - [ ] pids_task2
 
