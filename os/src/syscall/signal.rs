@@ -123,21 +123,29 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
     log::debug!("[sys_rt_sigaction]: writing old action");
     if !old_action.is_null() {
         let k_sig_hand = &sig_manager.sig_handler[signo as usize];
-        unsafe {
-            if k_sig_hand.is_user {
-                old_action.copy_from(&k_sig_hand.sa, 1);
-            } else {
-                let mut sig_hand = k_sig_hand.sa;
-                sig_hand.sa_handler = SIG_DFL;
-                old_action.copy_from(&sig_hand as *const SigAction, 1);
-            }
-        }
+        let t = if k_sig_hand.is_user {
+            k_sig_hand.sa
+        } else {
+            let mut sig_hand = k_sig_hand.sa;
+            sig_hand.sa_handler = SIG_DFL;
+            sig_hand
+        };
+        UserPtrRaw::new(old_action)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EFAULT)?
+            .write(t);
     }
     drop(sig_manager);
 
     log::debug!("[sys_rt_sigaction]: reading new action");
     if !action.is_null() {
-        let mut sig_action = unsafe { *action };
+        let mut sig_action = {
+            *UserPtrRaw::new(action)
+            .ensure_read(&mut task.vm_space.lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref()
+        };
+
         let new_sigaction = match sig_action.sa_handler as usize {
             SIG_DFL => KSigAction::new(signo as usize, false),
             SIG_IGN => {
@@ -235,6 +243,20 @@ pub fn sys_rt_sigreturn() -> SysResult {
     let cx = current_trap_cx(current_processor());
     ucontext.restore_old_context(cx);
     Ok(cx.arg_nth(0) as isize)
+}
+
+/// sigpending() returns the set of signals that are pending for
+/// delivery to the calling thread (i.e., the signals which have been
+/// raised while blocked).  The mask of pending signals is returned in
+/// set.
+pub fn sys_rt_sigpending(set_ptr: *mut SigSet) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let sets = task.sig_manager.lock().pending_sigs();
+    UserPtrRaw::new(set_ptr)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?
+        .write(sets);
+    Ok(0)
 }
 
 /// suspends execution of the calling thread until one

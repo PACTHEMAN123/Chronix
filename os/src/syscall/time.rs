@@ -7,7 +7,7 @@ use fatfs::info;
 use hal::instruction::{Instruction, InstructionHal};
 use xmas_elf::program::Flags;
 
-use crate::{mm::UserPtrRaw, processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, get_current_time_us, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
+use crate::{mm::UserPtrRaw, processor::context::SumGuard, task::current_task, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_MONOTONIC_RAW, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID}, ffi::{TimeSpec, TimeVal}, get_current_time_duration, get_current_time_ms, get_current_time_us, timed_task::{ksleep,suspend_timeout}, timer::{alloc_timer_id, ITimerVal, RealITimer, Timer, TIMER_MANAGER}}, utils::Select2Futures
 };
 use super::{SysError, SysResult};
 /// get current time of day
@@ -75,6 +75,12 @@ pub fn sys_clock_gettime(clock_id: usize, ts: usize) -> SysResult {
             let current = get_current_time_duration();
             unsafe {
                 ts_ptr.write((CLOCK_DEVIATION[clock_id] + current).into());
+            }
+        }
+        CLOCK_MONOTONIC_RAW => {
+            let current = get_current_time_duration();
+            unsafe {
+                ts_ptr.write((CLOCK_DEVIATION[CLOCK_MONOTONIC] + current).into());
             }
         }
         CLOCK_PROCESS_CPUTIME_ID => {

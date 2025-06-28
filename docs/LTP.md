@@ -44,17 +44,13 @@
 - [x] alarm05
 - [x] alarm06
 - [x] alarm07
-- [ ] ar01.sh
 - [ ] arch_prctl01
-- [ ] arping01.sh
 - [ ] asapi_01
 - [ ] asapi_02
 - [ ] asapi_03
 - [ ] aslr01
 - [ ] atof01
 - [ ] autogroup01
-- [ ] bbr01.sh
-- [ ] bbr02.sh
 - [x] bind01
 - [ ] bind02: /etc/group not exist
 - [ ] bind03: /unix broken
@@ -81,8 +77,6 @@
 - [ ] cap_bset_inh_bounds
 - [x] capget01
 - [ ] capget02:  /proc/sys/kernel/pid_max, not exist
-- [x] capset01
-- [ ] capset02
 - [ ] capset03
 - [ ] capset04
 - [ ] cfs_bandwidth01
@@ -113,7 +107,6 @@
 - [ ] chown04：需要实现链接悬垂引用
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
-- [ ] cleanup_lvm.sh
 - [ ] clock_adjtime01
 - [ ] clock_adjtime02
 - [x] clock_getres01: pass 40 failed 4 
@@ -144,17 +137,12 @@
 - [x] close02
 - [ ] close_range01：No Free Device
 - [ ] close_range02：TCONF
-- [ ] cmdlib.sh
-- [ ] cn_pec.sh
 - [x] confstr01
 - [ ] connect01: no_summary
 - [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
 - [ ] copy_file_range01
 - [ ] copy_file_range02
 - [ ] copy_file_range03
-- [ ] cpio_tests.sh
-- [ ] cp_tests.sh
-- [ ] cpuacct.sh
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
 - [ ] cpuctl_def_task02
@@ -169,19 +157,10 @@
 - [ ] cpuctl_test03
 - [ ] cpuctl_test04
 - [ ] cpufreq_boost
-- [ ] cpuhotplug01.sh
-- [ ] cpuhotplug02.sh
-- [ ] cpuhotplug03.sh
-- [ ] cpuhotplug04.sh
-- [ ] cpuhotplug05.sh
-- [ ] cpuhotplug06.sh
-- [ ] cpuhotplug07.shlt
 - [ ] cpuhotplug_do_disk_write_loop
 - [ ] cpuhotplug_do_kcompile_loop
 - [ ] cpuhotplug_do_spin_loop
-- [ ] cpuhotplug_hotplug.sh
 - [ ] cpuhotplug_report_proc_interrupts
-- [ ] cpuhotplug_testsuite.sh
 - [ ] cpuset01: no summary
 - [ ] crash01: no summary, pass
 - [ ] crash02: many syscall lack
@@ -231,7 +210,6 @@
 - [ ] dirtypipe
 - [ ] dma_thread_diotest
 - [ ] doio
-- [ ] du01.sh
 - [x] dup01
 - [x] dup02
 - [x] dup03
@@ -283,7 +261,6 @@
 - [ ] eventfd2_02
 - [ ] eventfd2_03
 - [ ] event_generator
-- [ ] evm_overlay.sh
 - [ ] execl01
 - [ ] execl01_child
 - [ ] execle01
@@ -650,17 +627,11 @@
 - [ ] getxattr03
 - [ ] getxattr04
 - [ ] getxattr05
-- [ ] gre01.sh
-- [ ] gre02.sh
 - [ ] growfiles
-- [ ] gzip_tests.sh
 - [ ] hackbench
 - [ ] hangup01
 - [ ] ht_affinity
 - [ ] ht_enabled
-- [ ] http-stress01-rmt.sh
-- [ ] http-stress02-rmt.sh
-- [ ] http-stress.sh
 - [ ] hugefallocate01
 - [ ] hugefallocate02
 - [ ] hugefork01
@@ -696,6 +667,8 @@
 - [ ] hugemmap30
 - [ ] hugemmap31
 - [ ] hugemmap32
+
+====== shm =======
 - [ ] hugeshmat01
 - [ ] hugeshmat02
 - [ ] hugeshmat03
@@ -709,56 +682,7 @@
 - [ ] hugeshmget02
 - [ ] hugeshmget03
 - [ ] hugeshmget05
-- [ ] icmp4-multi-diffip01
-- [ ] icmp4-multi-diffip02
-- [ ] icmp4-multi-diffip03
-- [ ] icmp4-multi-diffip04
-- [ ] icmp4-multi-diffip05
-- [ ] icmp4-multi-diffip06
-- [ ] icmp4-multi-diffip07
-- [ ] icmp4-multi-diffnic01
-- [ ] icmp4-multi-diffnic02
-- [ ] icmp4-multi-diffnic03
-- [ ] icmp4-multi-diffnic04
-- [ ] icmp4-multi-diffnic05
-- [ ] icmp4-multi-diffnic06
-- [ ] icmp4-multi-diffnic07
-- [ ] icmp6-multi-diffip01
-- [ ] icmp6-multi-diffip02
-- [ ] icmp6-multi-diffip03
-- [ ] icmp6-multi-diffip04
-- [ ] icmp6-multi-diffip05
-- [ ] icmp6-multi-diffip06
-- [ ] icmp6-multi-diffip07
-- [ ] icmp6-multi-diffnic01
-- [ ] icmp6-multi-diffnic02
-- [ ] icmp6-multi-diffnic03
-- [ ] icmp6-multi-diffnic04
-- [ ] icmp6-multi-diffnic05
-- [ ] icmp6-multi-diffnic06
-- [ ] icmp6-multi-diffnic07
-- [ ] icmp_rate_limit01
-- [ ] icmp-uni-basic.sh
-- [ ] icmp-uni-vti.sh
-- [ ] if4-addr-change.sh
-- [ ] if-addr-adddel.sh
-- [ ] if-addr-addlarge.sh
-- [ ] if-lib.sh
-- [ ] if-mtu-change.sh
-- [ ] if-route-adddel.sh
-- [ ] if-route-addlarge.sh
-- [ ] if-updown.sh
-- [ ] ima_boot_aggregate
-- [ ] ima_conditionals.sh
-- [ ] ima_kexec.sh
-- [ ] ima_keys.sh
-- [ ] ima_measurements.sh
-- [ ] ima_mmap
-- [ ] ima_policy.sh
-- [ ] ima_selinux.sh
-- [ ] ima_setup.sh
-- [ ] ima_tpm.sh
-- [ ] ima_violations.sh
+
 - [ ] in6_01
 - [ ] in6_02
 - [ ] inh_capped
@@ -787,7 +711,6 @@
 - [ ] input04
 - [ ] input05
 - [ ] input06
-- [ ] insmod01.sh
 - [ ] io_cancel01
 - [ ] io_cancel02
 - [ ] io_control01
@@ -837,21 +760,12 @@
 - [ ] io_submit03
 - [ ] io_uring01
 - [ ] io_uring02
-- [ ] ipneigh01.sh
-- [ ] ipsec_lib.sh
-- [ ] iptables01.sh
-- [ ] iptables_lib.sh
-- [ ] ip_tests.sh
-- [ ] ipvlan01.sh
-- [ ] irqbalance01
-- [ ] isofs.sh
 - [ ] kallsyms
 - [ ] kcmp01
 - [ ] kcmp02
 - [ ] kcmp03
 - [ ] kernbench
 - [ ] keyctl01
-- [ ] keyctl01.sh
 - [ ] keyctl02
 - [ ] keyctl03
 - [ ] keyctl04
@@ -860,7 +774,9 @@
 - [ ] keyctl07
 - [ ] keyctl08
 - [ ] keyctl09
-- [ ] kill02
+
+===== kill =======
+- [ ] kill02 : hang
 - [ ] kill03
 - [ ] kill05
 - [ ] kill06
@@ -882,60 +798,48 @@
 - [ ] ksm05
 - [ ] ksm06
 - [ ] ksm07
-- [ ] lchown01
-- [ ] lchown01_16
-- [ ] lchown02
-- [ ] lchown02_16
-- [ ] lchown03
-- [ ] lchown03_16
-- [ ] ld01.sh
-- [ ] ldd01.sh
-- [ ] leapsec01
-- [ ] lftest
-- [ ] lgetxattr01
-- [ ] lgetxattr02
-- [ ] libcgroup_freezer
-- [ ] link02
-- [ ] link04
-- [ ] link05
-- [ ] link08
-- [ ] linkat01
-- [ ] linkat02
-- [ ] linktest.sh
-- [ ] listen01
-- [ ] listxattr01
-- [ ] listxattr02
-- [ ] listxattr03
-- [ ] llistxattr01
-- [ ] llistxattr02
-- [ ] llistxattr03
-- [ ] llseek01
-- [ ] llseek02
-- [ ] llseek03
-- [ ] ln_tests.sh
-- [ ] locktests
-- [ ] lock_torture.sh
-- [ ] logrotate_tests.sh
-- [ ] lremovexattr01
-- [ ] lseek01
-- [ ] lseek02
-- [ ] lseek07
-- [ ] lseek11
-- [ ] lsmod01.sh
-- [ ] lstat01
-- [ ] lstat01_64
-- [ ] lstat02
-- [ ] lstat02_64
-- [ ] ltp_acpi
-- [ ] ltpClient
-- [ ] ltpServer
-- [ ] ltpSockets.sh
-- [ ] macsec01.sh
-- [ ] macsec02.sh
-- [ ] macsec03.sh
-- [ ] macsec_lib.sh
-- [ ] macvlan01.sh
-- [ ] macvtap01.sh
+
+====== lxxx =======
+- [x] lchown01 : no sum
+- [x] lchown02 : no sum
+- [ ] lchown03 : no dev
+
+- [ ] leapsec01 : syscall 112 we can support
+- [x] lftest
+- [ ] lgetxattr01 : f
+- [ ] lgetxattr02 : f
+
+===== link ========
+- [x] link02
+- [x] link04 : p 5 f 9
+- [x] link05
+- [ ] link08 : f
+- [ ] linkat01 : f
+- [ ] linkat02 : no dev
+
+- [x] listen01 : no sum
+- [ ] listxattr01 : f
+- [ ] listxattr02 : f
+- [x] listxattr03
+- [ ] llistxattr01 : f
+- [ ] llistxattr02 : f
+- [x] llistxattr03
+
+====== lseek =======
+- [x] llseek01 : pass 1 f 1
+- [x] llseek02
+- [x] llseek03
+- [ ] lremovexattr01 : no dev
+- [x] lseek01
+- [ ] lseek02 : mknodat
+- [ ] lseek07 : no dev
+- [ ] lseek11 : seek hole .. we can support
+- [ ] lstat01 : f
+- [ ] lstat01_64 : f
+- [ ] lstat02 : f
+- [ ] lstat02_64 : f
+
+
 - [ ] madvise01
 - [ ] madvise02
 - [ ] madvise03
@@ -956,24 +860,7 @@
 - [ ] mbind02
 - [ ] mbind03
 - [ ] mbind04
-- [ ] mcast-group-multiple-socket.sh
-- [ ] mcast-group-same-group.sh
-- [ ] mcast-group-single-socket.sh
-- [ ] mcast-group-source-filter.sh
-- [ ] mcast-lib.sh
-- [ ] mcast-pktfld01.sh
-- [ ] mcast-pktfld02.sh
-- [ ] mcast-queryfld01.sh
-- [ ] mcast-queryfld02.sh
-- [ ] mcast-queryfld03.sh
-- [ ] mcast-queryfld04.sh
-- [ ] mcast-queryfld05.sh
-- [ ] mcast-queryfld06.sh
-- [ ] mc_cmds.sh
-- [ ] mc_commo.sh
-- [ ] mc_member.sh
 - [ ] mc_member_test
-- [ ] mc_opts.sh
 - [ ] mc_recv
 - [ ] mc_send
 - [ ] mc_verify_opts
@@ -981,28 +868,12 @@
 - [ ] meltdown
 - [ ] mem02
 - [ ] membarrier01
-- [ ] memcg_control_test.sh
-- [ ] memcg_failcnt.sh
-- [ ] memcg_force_empty.sh
-- [ ] memcg_lib.sh
-- [ ] memcg_limit_in_bytes.sh
-- [ ] memcg_max_usage_in_bytes_test.sh
-- [ ] memcg_memsw_limit_in_bytes_test.sh
-- [ ] memcg_move_charge_at_immigrate_test.sh
 - [ ] memcg_process
 - [ ] memcg_process_stress
-- [ ] memcg_regression_test.sh
-- [ ] memcg_stat_rss.sh
-- [ ] memcg_stat_test.sh
-- [ ] memcg_stress_test.sh
-- [ ] memcg_subgroup_charge.sh
 - [ ] memcg_test_1
 - [ ] memcg_test_2
 - [ ] memcg_test_3
 - [ ] memcg_test_4
-- [ ] memcg_test_4.sh
-- [ ] memcg_usage_in_bytes_test.sh
-- [ ] memcg_use_hierarchy_test.sh
 - [ ] memcmp01
 - [ ] memcontrol01
 - [ ] memcontrol02
@@ -1049,41 +920,42 @@
 - [ ] mknodat01
 - [ ] mknodat02
 
-- [ ] mkswap01.sh
-- [ ] mlock01
-- [ ] mlock02
-- [ ] mlock03
-- [ ] mlock04
-- [ ] mlock05
-- [ ] mlock201
-- [ ] mlock202
-- [ ] mlock203
-- [ ] mlockall01
-- [ ] mlockall02
-- [ ] mlockall03
-- [ ] mmap001
-- [ ] mmap01
-- [ ] mmap02
-- [ ] mmap03
-- [ ] mmap04
-- [ ] mmap05
-- [ ] mmap06
-- [ ] mmap08
-- [ ] mmap09
-- [ ] mmap1
-- [ ] mmap10
-- [ ] mmap11
-- [ ] mmap12
-- [ ] mmap13
-- [ ] mmap14
-- [ ] mmap15
-- [ ] mmap16
-- [ ] mmap17
-- [ ] mmap18
-- [ ] mmap19
-- [ ] mmap2
-- [ ] mmap20
-- [ ] mmap3
+===== mlock ======
+- [x] mlock01
+- [ ] mlock02 : f
+- [ ] mlock03 : f
+- [x] mlock04
+- [ ] mlock05 : /proc
+- [ ] mlock201 : /proc
+- [ ] mlock202 : f
+- [ ] mlock203 : f
+- [x] mlockall01 : no sum
+- [ ] mlockall02 : f
+- [ ] mlockall03 : f
+
+===== mmap =======
+- [ ] mmap001 : no sum
+- [x] mmap01 : no sum
+- [x] mmap02 
+- [ ] mmap03 : page fault
+- [ ] mmap04 : /proc
+- [x] mmap05
+- [x] mmap06 : p 2 f 6
+- [ ] mmap08 : f
+- [x] mmap09
+- [ ] mmap1 : 压测?
+- [ ] mmap10 : /dev/zero panic
+- [x] mmap11 : no sum
+- [ ] mmap12 : /proc
+- [ ] mmap13 : f
+- [ ] mmap14 : f
+- [ ] mmap15 : panic
+- [ ] mmap16 : tconf
+- [ ] mmap17 : f
+- [ ] mmap18 : f
+- [x] mmap19
+- [ ] mmap20 : f
+- [ ] mmap3 : 压测
 - [ ] mmap-corruption01
 - [ ] mmapstress01
 - [ ] mmapstress02
@@ -1095,6 +967,8 @@
 - [ ] mmapstress08
 - [ ] mmapstress09
 - [ ] mmapstress10
+
+
 - [ ] mmstress
 - [ ] mmstress_dummy
 - [ ] modify_ldt01
@@ -1126,11 +1000,6 @@
 - [ ] move_pages10
 - [ ] move_pages11
 - [ ] move_pages12
-- [ ] mpls01.sh
-- [ ] mpls02.sh
-- [ ] mpls03.sh
-- [ ] mpls04.sh
-- [ ] mpls_lib.sh
 - [ ] mprotect01
 - [ ] mprotect02
 - [ ] mprotect03
@@ -1189,41 +1058,19 @@
 - [ ] munmap01
 - [ ] munmap02
 - [ ] munmap03
-- [ ] mv_tests.sh
-- [ ] myfunctions.sh
 - [ ] name_to_handle_at01
 - [ ] name_to_handle_at02
 - [ ] nanosleep01
 - [ ] nanosleep02
 - [ ] nanosleep04
-- [ ] net_cmdlib.sh
-- [ ] netns_breakns.sh
-- [ ] netns_comm.sh
-- [ ] netns_lib.sh
-- [ ] netns_netlink
-- [ ] netns_sysfs.sh
-- [ ] netstat01.sh
 - [ ] netstress
 - [ ] newuname01
 - [ ] nextafter01
 - [ ] nfs01_open_files
-- [ ] nfs01.sh
-- [ ] nfs02.sh
-- [ ] nfs03.sh
 - [ ] nfs04_create_file
-- [ ] nfs04.sh
 - [ ] nfs05_make_tree
-- [ ] nfs05.sh
-- [ ] nfs06.sh
-- [ ] nfs07.sh
-- [ ] nfs08.sh
-- [ ] nfs09.sh
 - [ ] nfs_flock
 - [ ] nfs_flock_dgen
-- [ ] nfs_lib.sh
-- [ ] nfslock01.sh
-- [ ] nfsstat01.sh
-- [ ] nft01.sh
 - [ ] nft02
 - [ ] nftw01
 - [ ] nftw6401
@@ -1232,7 +1079,6 @@
 - [ ] nice03
 - [ ] nice04
 - [ ] nice05
-- [ ] nm01.sh
 - [ ] nptl01
 - [ ] ns-echoclient
 - [ ] ns-icmp_redirector
@@ -1246,44 +1092,43 @@
 - [ ] ns-udpclient
 - [ ] ns-udpsender
 - [ ] ns-udpserver
-- [ ] numa01.sh
 - [ ] oom01
 - [ ] oom02
 - [ ] oom03
 - [ ] oom04
 - [ ] oom05
-- [ ] open01
-- [ ] open02
-- [ ] open03
-- [ ] open04
-- [ ] open06
-- [ ] open07
-- [ ] open08
-- [ ] open09
-- [ ] open10
-- [ ] open11
-- [ ] open12
-- [ ] open12_child
-- [ ] open13
-- [ ] open14
-- [ ] openat01
-- [ ] openat02
-- [ ] openat02_child
-- [ ] openat03
-- [ ] openat04
-- [ ] openat201
-- [ ] openat202
-- [ ] openat203
+
+======= open ========
+- [x] open01 : pass 1 failed 1
+- [x] open02 : pass 1 failed 1
+- [x] open03 : no sum
+- [ ] open04 : no sum
+- [ ] open06 : mknodat
+- [ ] open07 : f
+- [x] open08 : pass 3 failed 3
+- [ ] open09 : f 
+- [x] open10 : pass 2 failed 7
+- [x] open11 : pass 19 failed 9
+- [ ] open12 : no dev
+- [ ] open13 : f
+- [ ] open14 : f
+- [x] openat01
+- [ ] openat02 : no sum
+- [ ] openat03 : f
+- [ ] openat04 : no dev
+- [ ] openat201 : no openat2
+- [ ] openat202 : f
+- [ ] openat203 : no openat2
 - [ ] open_by_handle_at01
 - [ ] open_by_handle_at02
-- [ ] openfile
-- [ ] open_tree01
-- [ ] open_tree02
+- [ ] open_tree01 : no dev
+- [ ] open_tree02 : no dev
+
+
 - [ ] output_ipsec_conf
 - [ ] overcommit_memory
 - [ ] page01
 - [ ] page02
-- [ ] parameters.sh
 - [ ] pathconf01
 - [ ] pathconf02
 - [ ] pause01
@@ -1320,39 +1165,34 @@
 - [ ] pidns30
 - [ ] pidns31
 - [ ] pidns32
-- [ ] pids.sh
 - [ ] pids_task1
 - [ ] pids_task2
-- [ ] ping01.sh
-- [ ] ping02.sh
-- [ ] pipe01
-- [ ] pipe02
-- [ ] pipe03
-- [ ] pipe04
-- [ ] pipe05
-- [ ] pipe06
-- [ ] pipe07
-- [ ] pipe08
-- [ ] pipe09
-- [ ] pipe10
-- [ ] pipe11
-- [ ] pipe12
-- [ ] pipe13
-- [ ] pipe14
-- [ ] pipe15
-- [ ] pipe2_01
-- [ ] pipe2_02
-- [ ] pipe2_02_child
-- [ ] pipe2_04
-- [ ] pipeio
+
+======= pipe ======
+- [x] pipe01
+- [ ] pipe02 : f
+- [ ] pipe03 : f
+- [x] pipe04 : no sum
+- [x] pipe05 : no sum
+- [x] pipe06
+- [ ] pipe07 : proc/
+- [ ] pipe08 : f
+- [x] pipe09 : no sum 
+- [x] pipe10
+- [x] pipe11 : 70 pass!
+- [ ] pipe12 : ioctl
+- [ ] pipe13 : /proc
+- [x] pipe14
+- [ ] pipe15 : /proc
+- [x] pipe2_01 : pass 4 failed 3
+- [ ] pipe2_02 : copy failed
+- [ ] pipe2_04 : tconf
+- [ ] pipeio : need semget
+
+
 - [ ] pivot_root01
 - [ ] pkey01
-- [ ] pm_cpu_consolidation.py
 - [ ] pm_get_sched_values
-- [ ] pm_ilb_test.py
-- [ ] pm_include.sh
-- [ ] pm_sched_domain.py
-- [ ] pm_sched_mc.py
 - [ ] poll01
 - [ ] poll02
 - [ ] posix_fadvise01
@@ -1391,7 +1231,6 @@
 - [ ] preadv202_64
 - [ ] preadv203
 - [ ] preadv203_64
-- [ ] prepare_lvm.sh
 - [ ] print_caps
 - [ ] proc01
 - [ ] process_madvise01
@@ -1460,8 +1299,6 @@
 - [ ] quotactl07
 - [ ] quotactl08
 - [ ] quotactl09
-- [ ] quota_remount_test01.sh
-- [ ] rcu_torture.sh
 - [ ] read01
 - [ ] read02
 - [ ] read03
@@ -1488,72 +1325,49 @@
 - [ ] recvmsg03
 - [ ] remap_file_pages01
 - [ ] remap_file_pages02
-- [ ] remove_password.sh
 - [ ] removexattr01
 - [ ] removexattr02
-- [ ] rename01
-- [ ] rename03
-- [ ] rename04
-- [ ] rename05
-- [ ] rename06
-- [ ] rename07
-- [ ] rename08
-- [ ] rename09
-- [ ] rename10
-- [ ] rename11
-- [ ] rename12
-- [ ] rename13
-- [ ] rename14
-- [ ] renameat01
-- [ ] renameat201
-- [ ] renameat202
+
+====== rename ======
+- [ ] rename01 : no dev
+- [ ] rename03 : no dev
+- [ ] rename04 : no dev
+- [ ] rename05 : no dev
+- [ ] rename06 : no dev
+- [ ] rename07 : no dev
+- [ ] rename08 : no dev
+- [ ] rename09 : f
+- [ ] rename10 : f
+- [ ] rename11 : no dev
+- [ ] rename12 : no dev
+- [ ] rename13 : no dev
+- [x] rename14 : no sum
+- [ ] renameat01 : no dev
+- [x] renameat201 : no sum
+- [ ] renameat202 : f
+
 - [ ] request_key01
 - [ ] request_key02
 - [ ] request_key03
 - [ ] request_key04
 - [ ] request_key05
-- [ ] rmdir01
-- [ ] rmdir02
-- [ ] rmdir03
-- [ ] route4-rmmod
-- [ ] route6-rmmod
-- [ ] route-change-dst.sh
-- [ ] route-change-gw.sh
-- [ ] route-change-if.sh
-- [ ] route-change-netlink
-- [ ] route-change-netlink-dst.sh
-- [ ] route-change-netlink-gw.sh
-- [ ] route-change-netlink-if.sh
-- [ ] route-lib.sh
-- [ ] route-redirect.sh
-- [ ] rtc01
-- [ ] rtc02
-- [ ] rt_sigaction01
-- [ ] rt_sigaction02
-- [ ] rt_sigaction03
-- [ ] rt_sigprocmask01
-- [ ] rt_sigprocmask02
-- [ ] rt_sigqueueinfo01
-- [ ] rt_sigsuspend01
-- [ ] run_capbounds.sh
-- [ ] run_cpuctl_latency_test.sh
-- [ ] run_cpuctl_stress_test.sh
-- [ ] run_cpuctl_test_fj.sh
-- [ ] run_cpuctl_test.sh
-- [ ] run_freezer.sh
-- [ ] run_memctl_test.sh
-- [ ] runpwtests01.sh
-- [ ] runpwtests02.sh
-- [ ] runpwtests03.sh
-- [ ] runpwtests04.sh
-- [ ] runpwtests05.sh
-- [ ] runpwtests06.sh
-- [ ] runpwtests_exclusive01.sh
-- [ ] runpwtests_exclusive02.sh
-- [ ] runpwtests_exclusive03.sh
-- [ ] runpwtests_exclusive04.sh
-- [ ] runpwtests_exclusive05.sh
-- [ ] run_sched_cliserv.sh
+
+- [ ] rmdir01 : f
+- [ ] rmdir02 : f
+- [x] rmdir03 : p1 f1
+
+- [ ] rtc01 : no sum
+- [x] rtc02
+
+======== rt sig ========
+- [x] rt_sigaction01 : no sum
+- [x] rt_sigaction02 : no sum
+- [ ] rt_sigaction03 : f
+- [ ] rt_sigprocmask01 : f
+- [ ] rt_sigprocmask02 : f
+- [ ] rt_sigqueueinfo01 : missing syscall
+- [x] rt_sigsuspend01
+
 - [ ] rwtest
 - [ ] sbrk01
 - [ ] sbrk02
@@ -1585,7 +1399,6 @@
 - [ ] sched_setscheduler02
 - [ ] sched_setscheduler03
 - [ ] sched_setscheduler04
-- [ ] sched_stress.sh
 - [ ] sched_tc0
 - [ ] sched_tc1
 - [ ] sched_tc2
@@ -1594,10 +1407,7 @@
 - [ ] sched_tc5
 - [ ] sched_tc6
 - [ ] sched_yield01
-- [ ] sctp01.sh
 - [ ] sctp_big_chunk
-- [ ] sctp_ipsec.sh
-- [ ] sctp_ipsec_vti.sh
 - [ ] select01
 - [ ] select02
 - [ ] select03
@@ -1622,26 +1432,27 @@
 - [ ] semop04
 - [ ] semop05
 - [ ] semtest_2ns
+
+====== send =======
 - [ ] send01
 - [ ] send02
-- [ ] sendfile01.sh
-- [ ] sendfile02
-- [ ] sendfile02_64
-- [ ] sendfile03
-- [ ] sendfile03_64
-- [ ] sendfile04
+- [x] sendfile02
+- [x] sendfile02_64
+- [x] sendfile03 : p2 f2
+- [x] sendfile03_64
+- [ ] sendfile04 : f
 - [ ] sendfile04_64
-- [ ] sendfile05
-- [ ] sendfile05_64
-- [ ] sendfile06
+- [x] sendfile05
+- [x] sendfile05_64
+- [ ] sendfile06 : f
 - [ ] sendfile06_64
-- [ ] sendfile07
+- [ ] sendfile07 : hang
 - [ ] sendfile07_64
-- [ ] sendfile08
+- [ ] sendfile08 : f
 - [ ] sendfile08_64
-- [ ] sendfile09
+- [ ] sendfile09 : tconf
 - [ ] sendfile09_64
-- [ ] sendmmsg01
+- [ ] sendmmsg01 : f
 - [ ] sendmmsg02
 - [ ] sendmsg01
 - [ ] sendmsg02
@@ -1655,33 +1466,19 @@
 - [ ] setegid01
 - [ ] setegid02
 - [ ] setfsgid01
-- [ ] setfsgid01_16
 - [ ] setfsgid02
-- [ ] setfsgid02_16
 - [ ] setfsgid03
-- [ ] setfsgid03_16
 - [ ] setfsuid01
-- [ ] setfsuid01_16
 - [ ] setfsuid02
-- [ ] setfsuid02_16
 - [ ] setfsuid03
-- [ ] setfsuid03_16
 - [ ] setfsuid04
-- [ ] setfsuid04_16
 - [ ] setgid01
-- [ ] setgid01_16
 - [ ] setgid02
-- [ ] setgid02_16
 - [ ] setgid03
-- [ ] setgid03_16
 - [ ] setgroups01
-- [ ] setgroups01_16
 - [ ] setgroups02
-- [ ] setgroups02_16
 - [ ] setgroups03
-- [ ] setgroups03_16
 - [ ] setgroups04
-- [ ] setgroups04_16
 - [ ] sethostname01
 - [ ] sethostname02
 - [ ] sethostname03
@@ -1775,8 +1572,9 @@
 - [ ] setxattr02
 - [ ] setxattr03
 - [ ] sgetmask01
-- [ ] shell_pipe01.sh
-- [ ] shmat01
+
+======= shm ========
+- [ ] shmat01 : panic
 - [ ] shmat02
 - [ ] shmat03
 - [ ] shmat04
@@ -1808,193 +1606,118 @@
 - [ ] shmt08
 - [ ] shmt09
 - [ ] shmt10
-- [ ] shm_test
-- [ ] sigaction01
-- [ ] sigaction02
-- [ ] sigaltstack01
-- [ ] sigaltstack02
-- [ ] sighold02
-- [ ] signal01
-- [ ] signal02
-- [ ] signal03
-- [ ] signal04
-- [ ] signal05
-- [ ] signal06
-- [ ] signalfd01
-- [ ] signalfd4_01
-- [ ] signalfd4_02
-- [ ] sigpending02
-- [ ] sigprocmask01
-- [ ] sigrelse01
-- [ ] sigsuspend01
-- [ ] sigtimedwait01
-- [ ] sigwait01
-- [ ] sigwaitinfo01
-- [ ] sit01.sh
-- [ ] smack_common.sh
-- [ ] smack_file_access.sh
-- [ ] smack_notroot
-- [ ] smack_set_ambient.sh
-- [ ] smack_set_cipso.sh
-- [ ] smack_set_current.sh
-- [ ] smack_set_direct.sh
-- [ ] smack_set_doi.sh
-- [ ] smack_set_load.sh
-- [ ] smack_set_netlabel.sh
-- [ ] smack_set_onlycap.sh
-- [ ] smack_set_socket_labels
-- [ ] smt_smp_affinity.sh
-- [ ] smt_smp_enabled.sh
-- [ ] snd_seq01
-- [ ] snd_timer01
+- [ ] shm_test : panic
+
+======= signal ======= (we can use it to test our signal implement)
+- [x] sigaction01 : no sum
+- [x] sigaction02 : no sum pass 1 failed 5
+- [x] sigaltstack01 : no sum
+- [x] sigaltstack02 : no sum
+- [ ] sighold02 : f
+- [ ] signal01 : /proc/...
+- [x] signal02 : pass 1 failed 2 (long syscall?)
+- [x] signal03
+- [x] signal04
+- [x] signal05
+- [ ] signalfd01 : syscall 74
+- [ ] signalfd4_01 : we can support this
+- [ ] signalfd4_02 : we can support this
+- [x] sigpending02
+- [x] sigprocmask01 : no sum
+- [ ] sigrelse01 : f
+- [ ] sigsuspend01 : f
+- [ ] sigtimedwait01 : panic
+- [x] sigwait01
+- [ ] sigwaitinfo01 : panic
+- [ ] snd_seq01 : /proc/sys
+- [ ] snd_timer01 : /proc/sys
+
+======= socket ======= (not tested)
 - [ ] socket01
 - [ ] socket02
 - [ ] socketcall01
 - [ ] socketcall02
 - [ ] socketcall03
 - [ ] socketpair01
-- [ ] socketpair02
-- [ ] sockioctl01
-- [ ] splice01
-- [ ] splice02
-- [ ] splice03
-- [ ] splice04
-- [ ] splice05
-- [ ] splice06
-- [ ] splice07
-- [ ] splice08
-- [ ] splice09
-- [ ] squashfs01
-- [ ] ssetmask01
-- [ ] ssh-stress.sh
-- [ ] stack_clash
-- [ ] stack_space
-- [ ] starvation
-- [ ] stat01
-- [ ] stat01_64
-- [ ] stat02
-- [ ] stat02_64
-- [ ] stat03
-- [ ] stat03_64
-- [ ] statfs01
-- [ ] statfs01_64
-- [ ] statfs02
-- [ ] statfs02_64
-- [ ] statfs03
-- [ ] statfs03_64
-- [ ] statvfs01
-- [ ] statvfs02
-- [ ] statx01
-- [ ] statx02
-- [ ] statx03
-- [ ] statx04
-- [ ] statx05
-- [ ] statx06
-- [ ] statx07
-- [ ] statx08
-- [ ] statx09
-- [ ] statx10
-- [ ] statx11
-- [ ] statx12
-- [ ] stime01
-- [ ] stime02
-- [ ] stop_freeze_sleep_thaw_cont.sh
-- [ ] stop_freeze_thaw_cont.sh
-- [ ] stream01
-- [ ] stream02
-- [ ] stream03
-- [ ] stream04
-- [ ] stream05
-- [ ] stress
-- [ ] string01
-- [ ] support_numa
-- [ ] swapoff01
-- [ ] swapoff02
-- [ ] swapon01
-- [ ] swapon02
-- [ ] swapon03
-- [ ] swapping01
-- [ ] symlink01
-- [ ] symlink02
-- [ ] symlink03
-- [ ] symlink04
-- [ ] symlinkat01
-- [ ] sync01
+- [x] socketpair02 : pass 2 failed 2
+- [ ] sockioctl01: f
+
+======= splice =======
+- [ ] splice01 : read failed
+- [x] splice02
+- [ ] splice03 : we can support this
+- [ ] splice04 : hang
+- [ ] splice05 : f
+- [ ] splice06 : tconf
+- [ ] splice07 : panic
+- [ ] splice08 : tconf
+- [ ] splice09 : tconf
+
+- [ ] squashfs01 : tconf
+- [ ] ssetmask01 : tconf
+- [ ] stack_clash : /proc/cmdline
+- [x] stack_space : no sum
+- [ ] starvation : stress
+- [x] stat01: pass 10 failed 2
+- [x] stat01_64 : pass 10 failed 2
+- [x] stat02 : pass 1 failed 1
+- [x] stat02_64 : wrong size
+- [ ] stat03 : f
+- [ ] stat03_64 : f
+- [ ] statfs01 : dev
+- [ ] statfs01_64 : no dev
+- [ ] statfs02 : f
+- [ ] statfs02_64 : f
+- [ ] statfs03 : f
+- [ ] statfs03_64 : f
+- [ ] statvfs01 : no dev
+- [ ] statvfs02 : f
+- [x] statx01 : pass 6 failed 2
+- [x] statx02
+- [x] statx03 : pass 5 failed 2
+- [ ] statx04 : no dev
+- [ ] statx05 : tconf
+- [ ] statx06 : no dev
+- [ ] statx07 : tconf
+- [ ] statx08 : no dev
+- [ ] statx09 : .config
+- [ ] statx10 : no dev
+- [ ] statx11 : no dev
+- [ ] statx12 : no dev
+- [ ] stime01 : f
+- [ ] stime02 : should failed
+- [ ] stream01 : no sum
+- [ ] stream02 : no sum
+- [ ] stream03 : no sum
+- [ ] stream04 : no sum
+- [ ] stream05 : no sum
+- [x] string01 : no sum
+- [ ] symlink01 : f no sum
+- [ ] symlink02 : f
+- [ ] symlink03 : pass 2 failed 4 error code
+- [x] symlink04 : pass 1 failed 2
+- [ ] symlinkat01 : f
+- [ ] sync01 :  no dev
 - [ ] sync_file_range01
 - [ ] sync_file_range02
-- [ ] syncfs01
-- [ ] syscall01
-- [ ] sysconf01
-- [ ] sysctl01
-- [ ] sysctl01.sh
-- [ ] sysctl02.sh
-- [ ] sysctl03
-- [ ] sysctl04
-- [ ] sysfs01
-- [ ] sysfs02
-- [ ] sysfs03
-- [ ] sysfs04
-- [ ] sysfs05
-- [ ] sysinfo01
-- [ ] sysinfo02
-- [ ] sysinfo03
-- [ ] syslog11
-- [ ] syslog12
-- [ ] tar_tests.sh
-- [ ] tbio
-- [ ] tc01.sh
-- [ ] tcindex01
+- [ ] syncfs01 : no dev
+- [x] syscall01
+- [x] sysconf01 : no sum
+- [ ] sysctl01 : tconf
+- [ ] sysctl03 : tconf
+- [ ] sysctl04 : tconf
+- [ ] sysfs01 : tconf
+- [ ] sysfs02 : tconf
+- [ ] sysfs03 : tconf
+- [ ] sysfs04 : tconf
+- [ ] sysfs05 : tconf
+- [x] sysinfo01 : no sum
+- [ ] sysinfo02 : panic
+- [ ] sysinfo03 : .config
+- [ ] syslog11 : /proc/sys/kernel/printk:
+- [ ] syslog12 : failed
 - [ ] tee01
 - [ ] tee02
-- [ ] test_1_to_1_accept_close
-- [ ] test_1_to_1_addrs
-- [ ] test_1_to_1_connect
-- [ ] test_1_to_1_connectx
-- [ ] test_1_to_1_events
-- [ ] test_1_to_1_initmsg_connect
-- [ ] test_1_to_1_nonblock
-- [ ] test_1_to_1_recvfrom
-- [ ] test_1_to_1_recvmsg
-- [ ] test_1_to_1_rtoinfo
-- [ ] test_1_to_1_send
-- [ ] test_1_to_1_sendmsg
-- [ ] test_1_to_1_sendto
-- [ ] test_1_to_1_shutdown
-- [ ] test_1_to_1_socket_bind_listen
-- [ ] test_1_to_1_sockopt
-- [ ] test_1_to_1_threads
-- [ ] test_assoc_abort
-- [ ] test_assoc_shutdown
-- [ ] test_autoclose
-- [ ] test_basic
-- [ ] test_basic_v6
-- [ ] test_connect
-- [ ] test_connectx
-- [ ] test_controllers.sh
-- [ ] test_fragments
-- [ ] test_fragments_v6
-- [ ] test_getname
-- [ ] test_getname_v6
-- [ ] test_inaddr_any
-- [ ] test_inaddr_any_v6
-- [ ] test_ioctl
-- [ ] test_peeloff
-- [ ] test_peeloff_v6
-- [ ] test_recvmsg
-- [ ] test_robind.sh
-- [ ] test_sctp_sendrecvmsg
-- [ ] test_sctp_sendrecvmsg_v6
-- [ ] testsf_c
-- [ ] testsf_c6
-- [ ] testsf_s
-- [ ] testsf_s6
-- [ ] test.sh
-- [ ] test_sockopt
-- [ ] test_sockopt_v6
-- [ ] test_tcp_style
-- [ ] test_tcp_style_v6
-- [ ] test_timetolive
-- [ ] test_timetolive_v6
 - [x] tgkill01
 - [ ] tgkill02 : tgkill() should have failed with EAGAIN: SUCCESS (0)
 - [x] tgkill03 : pass 5 failed 1
