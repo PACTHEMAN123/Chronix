@@ -6,7 +6,7 @@ use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::socket::dns::Socket;
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, mm::{UserPtr, UserPtrRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -654,61 +654,75 @@ pub async fn sys_sendmsg(
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
-    let msg_ptr = msg as *const MsgHdr;
-    let msg = unsafe { msg_ptr.read() };
+    // let msg_ptr = msg as *const MsgHdr;
+    // let msg = unsafe { msg_ptr.read() };
+    let msg = *UserPtrRaw::new(msg as *const MsgHdr)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?
+        .to_ref();
     if msg.msg_controllen != 0 {
         log::warn!("unsupported control data");
     }
-    let addr = match SaFamily::try_from(unsafe {
-        Instruction::set_sum();
-        *(msg.msg_name as *const u16)
-    })? {
-        SaFamily::AfInet => {
-            if msg.msg_namelen < mem::size_of::<SockAddrIn4>() as u32 {
-                log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-                return Err(SysError::EINVAL);
-            }
-            Ok(SockAddr{
-                ipv4: unsafe { *(msg.msg_name as *const SockAddrIn4) },
-            }.into_endpoint())
-        },
-        SaFamily::AfInet6 => {
-            if msg.msg_namelen < mem::size_of::<SockAddrIn6>() as u32 {
-                log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-                return Err(SysError::EINVAL);
-            }
-            Ok(SockAddr{
-                ipv6: unsafe {
-                    *(msg.msg_name as *const SockAddrIn6)
-                }
-            }.into_endpoint())
-        },
-        SaFamily::AfUnix => {
-            if msg.msg_namelen < mem::size_of::<SockAddrUn>() as u32 {
-                log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-                return Err(SysError::EINVAL);
-            }
-            Ok(SockAddr{
-                ipv6: unsafe {
-                    *(msg.msg_name as *const _)
-                }
-            }.into_endpoint())
-        },
-        _ => todo!()
-    }?;
-    let iovs = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts(msg.msg_iov as *const IoVec, msg.msg_iovlen as usize)
-    };
+    let addr = sockaddr_reader(msg.msg_name, msg.msg_namelen as usize, task)?
+        .into_endpoint();
+    // let addr = match SaFamily::try_from(unsafe {
+    //     Instruction::set_sum();
+    //     *(msg.msg_name as *const u16)
+    // })? {
+    //     SaFamily::AfInet => {
+    //         if msg.msg_namelen < mem::size_of::<SockAddrIn4>() as u32 {
+    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
+    //             return Err(SysError::EINVAL);
+    //         }
+    //         Ok(SockAddr{
+    //             ipv4: unsafe { *(msg.msg_name as *const SockAddrIn4) },
+    //         }.into_endpoint())
+    //     },
+    //     SaFamily::AfInet6 => {
+    //         if msg.msg_namelen < mem::size_of::<SockAddrIn6>() as u32 {
+    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
+    //             return Err(SysError::EINVAL);
+    //         }
+    //         Ok(SockAddr{
+    //             ipv6: unsafe {
+    //                 *(msg.msg_name as *const SockAddrIn6)
+    //             }
+    //         }.into_endpoint())
+    //     },
+    //     SaFamily::AfUnix => {
+    //         if msg.msg_namelen < mem::size_of::<SockAddrUn>() as u32 {
+    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
+    //             return Err(SysError::EINVAL);
+    //         }
+    //         Ok(SockAddr{
+    //             ipv6: unsafe {
+    //                 *(msg.msg_name as *const _)
+    //             }
+    //         }.into_endpoint())
+    //     },
+    //     _ => todo!()
+    // }?;
+    // let iovs = unsafe {
+    //     Instruction::set_sum();
+    //     core::slice::from_raw_parts(msg.msg_iov as *const IoVec, msg.msg_iovlen as usize)
+    // };
+    let iovs_slice = UserSliceRaw::new(msg.msg_iov as *const IoVec, msg.msg_iovlen as usize)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let iovs = iovs_slice.to_ref();
     let mut total_len = 0;
     for (_i, iov) in iovs.iter().enumerate() {
         if iov.len == 0 {
             continue;
         }
         let ptr = iov.base as *const u8;
-        let buf_slice = unsafe {
-            core::slice::from_raw_parts(ptr, iov.len as usize)
-        };
+        // let buf_slice = unsafe {
+        //     core::slice::from_raw_parts(ptr, iov.len as usize)
+        // };
+        let buf_slice = UserSliceRaw::new(ptr, iov.len as usize)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let buf_slice = buf_slice.to_ref();
         let send_len = socket_file.sk.send(buf_slice, Some(addr)).await?;
         total_len += send_len;
     }
@@ -733,15 +747,21 @@ pub async fn sys_recvmsg(
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
-    let msg_ptr = msg as *mut MsgHdr;
-    let inner_msg = unsafe { msg_ptr.read() };
+    let inner_msg = *UserPtrRaw::new(msg as *const MsgHdr)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?
+        .to_ref();
     if inner_msg.msg_controllen != 0 {
         log::warn!("unsupported control data");
     }
-    let iovs = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts(inner_msg.msg_iov as *const IoVec, inner_msg.msg_iovlen as usize)
-    };
+    // let iovs = unsafe {
+    //     Instruction::set_sum();
+    //     core::slice::from_raw_parts(inner_msg.msg_iov as *const IoVec, inner_msg.msg_iovlen as usize)
+    // };
+    let iovs_slice = UserSliceRaw::new(inner_msg.msg_iov as *const IoVec, inner_msg.msg_iovlen as usize)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let iovs = iovs_slice.to_ref();
     let mut tmp_buf = vec![0u8; 64 * 1024];
     let (recv_len,src_addr) = socket_file.sk.recv(&mut tmp_buf).await?;
     let mut copied = 0;
@@ -760,31 +780,31 @@ pub async fn sys_recvmsg(
 
     if inner_msg.msg_name != 0 {
         let addr = SockAddr::from_endpoint(src_addr);
-        unsafe {
-            match SaFamily::try_from(addr.family)? {
-                SaFamily::AfInet => {
-                    let addr_ptr = inner_msg.msg_name as *mut SockAddrIn4;
-                    addr_ptr.write_volatile(addr.ipv4);
-                    let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
-                    addr_len_ptr.write_volatile(size_of::<SockAddrIn4>() as u32);
-                },
-                SaFamily::AfInet6 => {
-                    let addr_ptr = inner_msg.msg_name as *mut SockAddrIn6;
-                    addr_ptr.write_volatile(addr.ipv6);
-                    let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
-                    addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
-                },
-                SaFamily::AfUnix => {
-                    let addr_ptr = inner_msg.msg_name as *mut SockAddrUn;
-                    addr_ptr.write_volatile(addr.unix);
-                    let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
-                    addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
-                },
-                _ => todo!()
-            }
-        }
-    }
-                    
+        // unsafe {
+        //     match SaFamily::try_from(addr.family)? {
+        //         SaFamily::AfInet => {
+        //             let addr_ptr = inner_msg.msg_name as *mut SockAddrIn4;
+        //             addr_ptr.write_volatile(addr.ipv4);
+        //             let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
+        //             addr_len_ptr.write_volatile(size_of::<SockAddrIn4>() as u32);
+        //         },
+        //         SaFamily::AfInet6 => {
+        //             let addr_ptr = inner_msg.msg_name as *mut SockAddrIn6;
+        //             addr_ptr.write_volatile(addr.ipv6);
+        //             let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
+        //             addr_len_ptr.write_volatile(size_of::<SockAddrIn6>() as u32);
+        //         },
+        //         SaFamily::AfUnix => {
+        //             let addr_ptr = inner_msg.msg_name as *mut SockAddrUn;
+        //             addr_ptr.write_volatile(addr.unix);
+        //             let addr_len_ptr = inner_msg.msg_namelen as *mut u32;
+        //             addr_len_ptr.write_volatile(size_of::<SockAddrUn>() as u32);
+        //         },
+        //         _ => todo!()
+        //     }
+        // }
+        sockaddr_writer(task, inner_msg.msg_name, inner_msg.msg_namelen as usize, addr)?;
+    }      
     Ok(copied as isize)
 }
 
