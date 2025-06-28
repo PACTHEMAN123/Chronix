@@ -1,7 +1,9 @@
-use super::{SysError,SysResult};
-use core::sync::atomic::AtomicUsize;
+use alloc::task;
 
-use crate::{mm::UserPtrRaw, task::{current_task, manager::TASK_MANAGER, task::CpuMask}}; 
+use super::{SysError,SysResult};
+use core::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
+
+use crate::{mm::UserPtrRaw, syscall::process, task::{current_task, manager::{PROCESS_GROUP_MANAGER, TASK_MANAGER}, task::CpuMask}}; 
 
 /// syscall: 
 /// sets the CPU affinity mask of the thread whose ID is pid to the value specified by mask.
@@ -128,5 +130,94 @@ pub fn sys_sched_getscheduler() -> SysResult {
 /// 
 pub fn sys_sched_getparam() -> SysResult {
     log::warn!("[sys_sched_getparam] unimplemented");
+    Ok(0)
+}
+
+const PRIO_PROCESS: usize = 0;
+const PRIO_PGRP: usize = 1;
+const PRIO_USER: usize = 2;
+const MIN_PRIORITY: i32 = 0;
+const MAX_PRIORITY: i32 = 39;
+const NZERO : i32 = 20;
+///
+pub fn sys_set_priority(which: usize, who: usize, process_priority: i32) -> SysResult {
+    let task= current_task().unwrap();
+    match which {
+        PRIO_PROCESS => {
+            if who == 0 || who == task.pid() {
+                task.with_thread_group(|tg| {
+                    for thread in tg.iter() {
+                    let new_priority = (NZERO+ process_priority).max(MIN_PRIORITY as i32).min(MAX_PRIORITY as i32);
+                        log::info!("now new priority is {}", new_priority);
+                        thread.set_priority(new_priority);
+                    }
+                });
+            }else {
+                let target_task = TASK_MANAGER.get_task(who).ok_or(SysError::ESRCH)?;
+                target_task.with_thread_group(|tg| {
+                    for thread in tg.iter() {
+                        let new_priority = (NZERO+ process_priority).max(MIN_PRIORITY as i32).min(MAX_PRIORITY as i32);
+                        log::info!("now new priority is {}", new_priority);
+                        thread.set_priority(new_priority);
+                    }
+                });
+            }
+            return Ok(0);
+        }
+
+        PRIO_PGRP => {
+            let target_pg = PROCESS_GROUP_MANAGER.get_group(which)
+               .ok_or(SysError::ESRCH)?;
+            for task in target_pg.iter().filter_map(|t| t.upgrade()) {
+                let new_priority = (NZERO+ process_priority).max(MIN_PRIORITY as i32).min(MAX_PRIORITY as i32);
+                task.set_priority(new_priority);
+            }
+            return Ok(0);
+        }
+        PRIO_USER => {
+            log::warn!("[sys_set_priority] unimplemented for PRIO_USER");
+        }
+        _ => {
+            log::warn!("[sys_set_priority] invalid which value");
+            return Err(SysError::EINVAL);
+        }
+    }
+    Ok(0)
+}
+
+/// 
+pub fn sys_get_priority(which: usize, who: usize) -> SysResult {
+    let task= current_task().unwrap();
+    match which {
+        PRIO_PROCESS => {
+            if who == 0 || who == task.pid() {
+                let priority = task.priority().load(Ordering::SeqCst);
+                return Ok((2*NZERO - priority) as isize);
+            }else {
+                let target_task = TASK_MANAGER.get_task(who).ok_or(SysError::ESRCH)?;
+                let priority = target_task.priority().load(Ordering::SeqCst);
+                return Ok((2*NZERO - priority) as isize);
+            }
+        }
+        PRIO_PGRP => {
+            let target_pg = PROCESS_GROUP_MANAGER.get_group(which)
+               .ok_or(SysError::ESRCH)?;
+            let mut min_priority =  MAX_PRIORITY;
+            for task in target_pg.iter().filter_map(|t| t.upgrade()) {
+                let priority = task.priority().load(Ordering::SeqCst); 
+                log::info!("priority is {}", priority);
+                min_priority = min_priority.min(priority);
+                log::info!("min_priority is {}", min_priority);
+            }
+            return Ok((2*NZERO - min_priority) as isize);
+        }
+        PRIO_USER => {
+            log::warn!("[sys_get_priority] unimplemented for PRIO_USER");
+        }
+        _ => {
+            log::warn!("[sys_set_priority] invalid which value");
+            return Err(SysError::EINVAL);
+        }
+    }
     Ok(0)
 }

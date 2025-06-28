@@ -1054,7 +1054,7 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let off_ptr = {
         UserPtrRaw::new(offset as *mut usize)
             .ensure_write(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?
+            .ok_or(SysError::EFAULT)?
     };
     let len;
     if off_ptr.raw == core::ptr::null() {
