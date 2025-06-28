@@ -48,6 +48,16 @@ impl File for TmpFile {
     fn writable(&self) -> bool {
         true
     }
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, SysError> {
+        let inode = self.dentry().unwrap().inode().unwrap();
+        let size = inode.cache_read_at(offset, buf).unwrap();
+        Ok(size)
+    }
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, SysError> {
+        let inode = self.dentry().unwrap().inode().unwrap();
+        let size = inode.cache_write_at(offset, buf).unwrap();
+        Ok(size)
+    }
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
         log::debug!("[Tmp file] read start from pos {}", self.pos());

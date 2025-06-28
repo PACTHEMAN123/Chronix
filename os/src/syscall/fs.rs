@@ -105,7 +105,9 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
         Whence::SeekSet => file.seek(SeekFrom::Start(offset as u64))?,
         Whence::SeekCur => file.seek(SeekFrom::Current(offset as i64))?,
         Whence::SeekEnd => file.seek(SeekFrom::End(offset as i64))?,
-        _ => todo!()
+        _ => {
+            return Err(SysError::EINVAL)
+        }
     };
     log::debug!("[sys_lseek]: ret: {}, file: {}", ret, fd);
     Ok(ret as isize)
@@ -172,48 +174,43 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
     let open_flags = OpenFlags::from_bits(flags as i32).unwrap();
     let at_flags = AtFlags::from_bits_truncate(flags as i32);
     let task = current_task().unwrap().clone();
-    let opt_path = user_path_to_string(
+    let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
-        );
-    if let Ok(path) = opt_path {
-        // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
-        let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-        if open_flags.contains(OpenFlags::O_CREAT) {
-            // the dir may not exist
-            if abs_path_to_name(&path).unwrap() != abs_path_to_name(&dentry.path()).unwrap() {
-                return Err(SysError::ENOENT);
-            }
-            // inode not exist, create it as a regular file
-            if open_flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
-                return Err(SysError::EEXIST);
-            }
-            let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
-            let name = abs_path_to_name(&path).unwrap();
-            let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
-            dentry.set_inode(new_inode);
-            // we shall not add child to parent until child is valid!
-            parent.add_child(dentry.clone());
-        }
-        if dentry.state() == DentryState::NEGATIVE {
-            log::warn!("cannot open {}, not exist", path);
+    )?;
+    // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
+    let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
+    if open_flags.contains(OpenFlags::O_CREAT) {
+        // the dir may not exist
+        if abs_path_to_name(&path).unwrap() != abs_path_to_name(&dentry.path()).unwrap() {
             return Err(SysError::ENOENT);
         }
-        let inode = dentry.inode().unwrap();
-        if open_flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_type() != InodeMode::DIR {
-            return Err(SysError::ENOTDIR);
+        // inode not exist, create it as a regular file
+        if open_flags.contains(OpenFlags::O_EXCL) && dentry.state() != DentryState::NEGATIVE {
+            return Err(SysError::EEXIST);
         }
-        let file = dentry.open(open_flags).unwrap();
-        file.set_flags(open_flags);
-        let fd = task.with_mut_fd_table(|table| table.alloc_fd())?;
-        let fd_info = FdInfo { file, flags: open_flags.into() };
-        task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
-        log::info!("return fd {fd}");
-        return Ok(fd as isize)
-    } else {
-        log::info!("[sys_openat]: pathname is empty!");
+        let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
+        let name = abs_path_to_name(&path).unwrap();
+        let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
+        dentry.set_inode(new_inode);
+        // we shall not add child to parent until child is valid!
+        parent.add_child(dentry.clone());
+    }
+    if dentry.state() == DentryState::NEGATIVE {
+        log::warn!("cannot open {}, not exist", path);
         return Err(SysError::ENOENT);
     }
+    let inode = dentry.inode().unwrap();
+    if open_flags.contains(OpenFlags::O_DIRECTORY) && inode.inode_type() != InodeMode::DIR {
+        return Err(SysError::ENOTDIR);
+    }
+    let file = dentry.open(open_flags).unwrap();
+    file.set_flags(open_flags);
+    let fd = task.with_mut_fd_table(|table| table.alloc_fd())?;
+    let fd_info = FdInfo { file, flags: open_flags.into() };
+    task.with_mut_fd_table(|t|t.put_file(fd, fd_info))?;
+    log::info!("return fd {fd}");
+    return Ok(fd as isize)
 }
 
 /// syscall: mkdirat
@@ -337,10 +334,13 @@ pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SysResult {
     task.with_mut_fd_table(|t| t.put_file(write_fd, FdInfo { file: write_file, flags: flags.into() }))?;
 
     let _sum = SumGuard::new();
-    let pipefd = unsafe { core::slice::from_raw_parts_mut(pipe, 2 * core::mem::size_of::<i32>()) };
+    // let pipefd = unsafe { core::slice::from_raw_parts_mut(pipe, 2 * core::mem::size_of::<i32>()) };
+    let pipefd = UserSliceRaw::new(pipe, 2)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?;
     info!("read fd: {}, write fd: {}", read_fd, write_fd);
-    pipefd[0] = read_fd as i32;
-    pipefd[1] = write_fd as i32;
+    pipefd.to_mut()[0] = read_fd as i32;
+    pipefd.to_mut()[1] = write_fd as i32;
     Ok(0)
 }
 
@@ -390,8 +390,13 @@ pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx
     let at_flags = AtFlags::from_bits_truncate(flags);
     let mask = XstatMask::from_bits_truncate(mask);
     let task = current_task().unwrap().clone();
+    let path = UserPtrRaw::new(pathname)
+        .cstr_slice(&mut task.vm_space.lock())?
+        .to_str()
+        .unwrap()
+        .to_string();
 
-    log::debug!("[sys_statx]: statx dirfd: {}, path: {:?}, at_flags {:?}, open_flags: {:?}", dirfd, pathname, at_flags, open_flags);
+    log::debug!("[sys_statx]: statx dirfd: {}, path: {}, at_flags {:?}, open_flags: {:?}", dirfd, path, at_flags, open_flags);
 
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if dentry.state() == DentryState::NEGATIVE && dentry.inode().is_none() {
@@ -540,10 +545,13 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
     let task = current_task().unwrap().clone();
     let old_path = user_path_to_string(
         UserPtrRaw::new(old_path_ptr), 
-        &mut task.get_vm_space().lock()).expect("failed to get old path");
+        &mut task.get_vm_space().lock())?;
     let new_path = user_path_to_string(
         UserPtrRaw::new(new_path_ptr), 
-        &mut task.get_vm_space().lock()).expect("failed to get new path");
+        &mut task.get_vm_space().lock())?;
+    if old_path.is_empty() || new_path.is_empty() {
+        return Err(SysError::ENOENT);
+    }
     log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
     let old_dentry = at_helper(task.clone(), new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if old_dentry.inode().is_none() {
@@ -603,7 +611,7 @@ pub fn sys_fchownat(dirfd: isize, pathname: *const u8, uid: i32, gid: i32, flags
     }
     let path = user_path_to_string(
         UserPtrRaw::new(pathname), 
-        &mut task.get_vm_space().lock()).expect("failed to get path");
+        &mut task.get_vm_space().lock())?;
     log::info!("[sys_fchownat] path {} owner {}, gid {}", path, uid, gid);
     let dentry = at_helper(task, dirfd, pathname, at_flags)?;
     if dentry.is_negative() && dentry.inode().is_none() {
@@ -1053,6 +1061,9 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
         len = in_file.read(&mut buf).await?;
     } else {
         let off = off_ptr.to_mut();
+        if (*off as isize) < 0 {
+            return Err(SysError::EINVAL);
+        }
         len = in_file.read_at(*off, &mut buf).await?;
         *off += len;
     }
@@ -1069,7 +1080,7 @@ pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, n
     let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, at_flags)?;
     let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, at_flags)?;
     log::debug!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
-    let old_inode = old_dentry.inode().unwrap();
+    let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     old_inode.link(&new_dentry.path())?;
     new_dentry.set_inode(old_inode);
     new_dentry.set_state(DentryState::USED);
@@ -1161,7 +1172,7 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
         return Err(SysError::EEXIST);
     }
 
-    let old_inode = old_dentry.inode().unwrap();
+    let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     let new_inode = new_dentry.inode();
     old_inode.rename(&new_dentry.path(), new_inode)?;
     new_dentry.set_inode(old_inode);

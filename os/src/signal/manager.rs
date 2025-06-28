@@ -74,6 +74,20 @@ impl SigManager {
         
     }
 
+    /// return all pending signals
+    pub fn pending_sigs(&self) -> SigSet {
+        let mut ret = SigSet::empty();
+        for i in 0..self.pending_sigs.len() {
+            ret.add_sig(self.pending_sigs[i].si_signo);
+        }
+        for (&signo, queue) in self.pending_rt_sigs.iter() {
+            if !queue.is_empty() {
+                ret.add_sig(signo);
+            }
+        }
+        ret
+    }
+
     /// check if there is any expected SigInfo in the pending_sigs
     /// if found, return the first match (peek)
     pub fn check_pending(&mut self, expected: SigSet) -> Option<SigInfo> {

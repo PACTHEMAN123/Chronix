@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use alloc::boxed::Box;
 use hal::instruction::{Instruction, InstructionHal};
 
-use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}};
+use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, mm::UserPtrRaw, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task};
 
 
 pub struct RtcFile {
@@ -47,11 +47,12 @@ impl File for RtcFile {
         Ok(buf.len())
     }
 
-    fn ioctl(&self, _cmd: usize, arg: usize) -> SysResult {
-        unsafe {
-            Instruction::set_sum();
-            (arg as *mut RtcTime).write(RtcTime::default());
-        }
+    fn ioctl(&self, _cmd: usize, rtc_ptr: usize) -> SysResult {
+        let task = current_task().unwrap().clone();
+        UserPtrRaw::new(rtc_ptr as *mut RtcTime)
+            .ensure_write(&mut task.vm_space.lock())
+            .ok_or(SysError::EFAULT)?
+            .write(RtcTime::default());
         Ok(0)
     }
 }
