@@ -88,6 +88,8 @@ pub enum SysError {
     ETIME = 62,
     /// Socket operation on non-socket
     ENOTSOCK = 88,
+    /// Protocol not supported
+    EPROTONOSUPPORT = 93,
     /// Unsupported
     EOPNOTSUPP = 95,
     /// unsupported protocol

@@ -25,6 +25,8 @@ pub mod listen_table;
 /// socket address family, used for syscalls
 /// 参考：https://code.dragonos.org.cn/xref/linux-5.19.10/include/linux/socket.h#180
 pub enum SaFamily {
+    /// unspec
+    // Unspec = 0,
     /// unix
     AfUnix = 1,
     /// ipv4

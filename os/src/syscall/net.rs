@@ -4,8 +4,9 @@ use alloc::{ffi::CString, sync::Arc, task, vec::Vec,vec};
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
+use smoltcp::socket::dns::Socket;
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, mm::UserPtrRaw, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, mm::{UserPtr, UserPtrRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -66,6 +67,9 @@ pub const SOCK_CLOEXEC: i32 = 0x80000;
 //        descriptor.  See the description of the O_CLOEXEC flag in
 //        open(2) for reasons why this may be useful.
 pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
+    if domain <= 0 || domain > 255 {
+        return Err(SysError::EAFNOSUPPORT);
+    }
     log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, _protocol);
     let domain = SaFamily::try_from(domain as u16)?;
     let mut types = types as i32;
@@ -82,7 +86,11 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
         flags |= OpenFlags::O_CLOEXEC;
     }
 
-    let types = SocketType::try_from(types)?;
+    let types = SocketType::try_from(types as i32)?;
+    if types != SocketType::STREAM  || types != SocketType::DGRAM {
+        //todo: temp meausure for protocol check
+        return Err(SysError::EPROTONOSUPPORT);
+    }
     let socket = socket::Socket::new(domain,types, nonblock);
     let fd_info = FdInfo {
         file: Arc::new(socket),
@@ -591,10 +599,10 @@ pub fn sys_socketpair(_domain: usize, _types: usize, _protocol: usize, sv: usize
         table.put_file(fd_write, fd_info_write)?;
         Ok([fd_read as u32, fd_write as u32])
     })?;
-    let sv_ptr = sv as *mut [u32; 2];
-    unsafe {
-        sv_ptr.write_volatile(pipe);
-    }
+    let sv = UserPtrRaw::new(sv as *mut [u32;2])
+    .ensure_write(&mut task.get_vm_space().lock())
+    .ok_or(SysError::EFAULT)?;
+    sv.write(pipe);
     Ok(0)
 }
 
@@ -839,3 +847,4 @@ pub fn sockaddr_writer(task: &Arc<TaskControlBlock>, addr: usize, addr_len: usiz
     }
     Ok(())
 }
+

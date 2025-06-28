@@ -24,7 +24,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
             .ensure_read(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_ref();
     let ret = file.write(buf).await?;
 
@@ -718,7 +718,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
         let times_ptr =
             UserSliceRaw::new(times as *mut TimeSpec, 2)
             .ensure_write(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
         let times = times_ptr.to_mut();
         log::info!("[sys_utimensat] times {:?}", times);
         match times[0].tv_nsec {
@@ -870,7 +870,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
         .ensure_read(&mut task.get_vm_space().lock())
-        .ok_or(SysError::EINVAL)?;
+        .ok_or(SysError::EFAULT)?;
     let mut totol_len = 0usize;
     // let mut offset = file.pos();
     for (i, iov) in iovs.to_ref().iter().enumerate() {
@@ -882,7 +882,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
         let iov_buf =
             UserSliceRaw::new(iov.base as *mut u8, iov.len)
                 .ensure_write(&mut task.get_vm_space().lock())
-                .ok_or(SysError::EINVAL)?;
+                .ok_or(SysError::EFAULT)?;
         let ret = file.read(iov_buf.to_mut()).await?;
 
         // ugly way
