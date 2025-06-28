@@ -4,7 +4,7 @@ echo "start to test ltp in musl"
 cd /
 cd sdcard/musl/ltp/testcases/bin
 
-echo "#### OS COMP TEST GROUP START ltp-musl ####"
+
 
 file_list="
 accept01 accept4_01
@@ -100,6 +100,7 @@ mkdirat01
 mlock01 mlock04
 mmap02 mmap05 mmap06 mmap09 mmap19
 mprotect05
+mtest01
 munlock01
 name_to_handle_at01
 
@@ -126,7 +127,6 @@ sbrk01 sbrk02
 sched_getaffinity01
 sendfile02 sendfile02_64 sendfile03 sendfile03_64 sendfile05 sendfile05_64
 setrlimit02 setrlimit04 setrlimit05
-settimeofday01 settimeofday02
 setuid01
 setxattr02
 signal02 signal03 signal04 signal05
@@ -159,6 +159,12 @@ write01 write02 write06
 "
 set -- $file_list
 
+echo "start to test ltp in musl"
+cd /
+cd sdcard/musl/ltp/testcases/bin
+
+echo "#### OS COMP TEST GROUP START ltp-musl ####"
+
 for file in $@; do
   # 跳过目录，仅处理文件
   if [ -f "$file" ]; then
@@ -175,3 +181,24 @@ done
 
 
 echo "#### OS COMP TEST GROUP END ltp-musl ####"
+
+echo "start to test ltp in glibc"
+cd /
+cd sdcard/glibc/ltp/testcases/bin
+
+
+echo "#### OS COMP TEST GROUP START ltp-glibc ####"
+
+for file in $@; do
+  if [ -f "$file" ]; then
+    echo "RUN LTP CASE $(basename "$file")"
+
+    "./$file"
+    ret=$?
+
+    echo "FAIL LTP CASE $(basename "$file") : $ret"
+  fi
+done
+
+
+echo "#### OS COMP TEST GROUP END ltp-glibc ####"

@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use core::{any::Any, ops::DerefMut, ptr::copy_nonoverlapping};
+use core::{any::Any, cmp, ops::DerefMut, ptr::copy_nonoverlapping};
 
 use alloc::{string::ToString, sync::Arc, vec};
 use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
@@ -669,7 +669,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     if dentry.state() == DentryState::NEGATIVE {
         return Err(SysError::EBADF);
     }
-    let inode = dentry.inode().unwrap();
+    let inode = dentry.inode().ok_or(SysError::ENOENT)?;
     if inode.inode_inner().mode() != InodeMode::LINK {
         return Err(SysError::EINVAL);
     }
@@ -681,9 +681,11 @@ pub fn sys_readlinkat(dirfd: isize, pathname: *const u8, buf: usize, len: usize)
     let new_buf = UserSliceRaw::new(buf as *mut u8, len)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EINVAL)?;
-    new_buf.to_mut()[path.len()..].fill(0u8);
-    new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
-
+    if len > path.len() {
+        new_buf.to_mut()[path.len()..].fill(0u8);
+    }
+    let copy_size = cmp::min(len, path.len());
+    new_buf.to_mut()[..copy_size].copy_from_slice(&path.as_bytes()[..copy_size]);
     return Ok(path.len() as isize)
 }
 

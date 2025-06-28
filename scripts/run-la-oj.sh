@@ -51,4 +51,9 @@ cd /loongarch/musl
 ./lmbench_testcode.sh
 cd ..
 
+echo "start to run ltp"
+cd /loongarch
+./run-ltp-la.sh
+cd ..
+
 exit

@@ -32,6 +32,7 @@ disk-img: user
 	sudo cp ./scripts/run-rv-oj.sh mnt/riscv/run-oj.sh
 	sudo cp ./scripts/run-la-oj.sh mnt/loongarch/run-oj.sh
 	sudo cp ./scripts/run-ltp-rv.sh mnt/riscv/run-ltp-rv.sh
+	sudo cp ./scripts/run-ltp-la.sh mnt/loongarch/run-ltp-la.sh
 
 	$(call building, "create bin/ lib/ dir")
 	sudo mkdir mnt/bin

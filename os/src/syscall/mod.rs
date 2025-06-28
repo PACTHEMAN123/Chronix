@@ -266,7 +266,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
+    // log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_SETXATTR => sys_temp(syscall_id),
