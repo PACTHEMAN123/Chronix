@@ -490,6 +490,7 @@ pub async fn sys_yield() -> SysResult {
 pub fn sys_brk(addr: VirtAddr) -> SysResult {
     let task = current_task().unwrap();
     let ret  = task.with_mut_vm_space(|vm_space| vm_space.reset_heap_break(addr).0) as isize;
+    // info!("[sys_brk] addr: {:#x}, ret: {:#x}", addr.0, ret);
     Ok(ret)
 }
 

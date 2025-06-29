@@ -107,7 +107,11 @@ pub fn sys_mmap(
     let prot = MmapProt::from_bits_truncate(prot);
     let perm = MapPerm::from(prot);
     let task = current_task().unwrap().clone();
-
+    // info!("[sys_mmap] addr: {:#x} length: {}, prot: {:?}, flags: {:?}, fd: {}, offset: {}", addr.0, length, prot, flags, fd, offset);
+    if !flags.contains(MmapFlags::MAP_ANONYMOUS) {
+        task.with_fd_table(|t| t.get_file(fd))?;
+    }
+    
     if length == 0 {
         return Err(SysError::EINVAL);
     } else if addr.0 == 0 && flags.contains(MmapFlags::MAP_FIXED) {

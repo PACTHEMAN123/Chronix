@@ -66,8 +66,8 @@
 - [ ] bpf_prog05
 - [ ] bpf_prog06
 - [ ] bpf_prog07
-- [ ] brk01     TFAIL: brk() failed to set address have 0x45fff expected 0x44000
-- [ ] brk02
+- [x] brk01
+- [x] brk02
 - [ ] cacheflush01: no summary
 - [ ] can_bcm01
 - [ ] can_filter
@@ -946,7 +946,7 @@
 - [ ] mmap04 : /proc
 - [x] mmap05
 - [x] mmap06 : p 2 f 6
-- [ ] mmap08 : f
+- [x] mmap08 : f
 - [x] mmap09
 - [ ] mmap1 : 压测?
 - [ ] mmap10 : /dev/zero panic
