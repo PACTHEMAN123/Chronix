@@ -287,10 +287,11 @@ pub async fn sys_recvfrom(
     }
     task.set_interruptable();
     let (bytes, remote_endpoint) = socket_file.sk.recv(&mut inner_vec).await?;
-    log::info!("first code recv:{} ",char::from(inner_vec[0]));
+    // log::info!("first code recv:{} ",char::from(inner_vec[0]));
     // log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
     let remote_addr = SockAddr::from_endpoint(remote_endpoint);
     task.set_running();
+    sockaddr_writer(&task,addr, addrlen, remote_addr)?;
     // write to pointer
     // log::info!("now set running");
     // let buf_slice = unsafe {
@@ -301,14 +302,14 @@ pub async fn sys_recvfrom(
         .ok_or(SysError::EFAULT)?;
     let buf_slice = buf_slice.to_mut();
     buf_slice[..bytes].copy_from_slice(&inner_vec[..bytes]);
-    log::info!("buf_slice[0]: {}",char::from(buf_slice[0]));
+    // log::info!("buf_slice[0]: {}",char::from(buf_slice[0]));
     // // write to sockaddr_in
     // if addr == 0 {
     //     return Ok(bytes as isize);  
     // }
     
-    sockaddr_writer(&task,addr, addrlen, remote_addr)?;
-    log::info!("now return bytes: {}",bytes);
+    
+    // log::info!("now return bytes: {}",bytes);
     Ok(bytes as isize)
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
