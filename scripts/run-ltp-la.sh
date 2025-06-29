@@ -71,7 +71,7 @@ getrandom01 getrandom02 getrandom03 getrandom04 getrandom05
 getrlimit01 getrlimit02
 getrusage01 getrusage02
 gettid02
-gettimeofday01 ettimeofday02
+gettimeofday01 gettimeofday02
 getuid01 getuid03
 getdomainname01
 

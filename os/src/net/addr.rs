@@ -174,18 +174,18 @@ pub union SockAddr {
 
 impl SockAddr {
     /// convert SockAddr wrapper into `IpEndpoint`
-    pub fn into_endpoint(&self) -> IpEndpoint {
+    pub fn into_endpoint(&self) -> Result<IpEndpoint,SysError> {
         unsafe {
             match SaFamily::try_from(self.family).unwrap() {
-                SaFamily::AfInet => IpEndpoint::new(
+                SaFamily::AfInet => Ok(IpEndpoint::new(
                     IpAddress::Ipv4(self.ipv4.sin_addr), 
                     self.ipv4.sin_port
-                ),
-                SaFamily::AfInet6 => IpEndpoint::new(
+                )),
+                SaFamily::AfInet6 => Ok(IpEndpoint::new(
                     IpAddress::Ipv6(self.ipv6.sin_addr), 
                     self.ipv6.sin_port
-                ),
-                _ => todo!(),
+                )),
+                _ => Err(SysError::EAFNOSUPPORT),
             }
         }   
     }

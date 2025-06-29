@@ -79,7 +79,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.set_nonblocking(),
             Sock::UDP(udp) => udp.set_nonblocking(),
-            Sock::Unix(_) => todo!(),
+            Sock::Unix(_) => {},
         }
     }
     /// get the peer_addr of the socket

@@ -87,10 +87,10 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
     }
 
     let types = SocketType::try_from(types as i32)?;
-    // if types != SocketType::STREAM  || types != SocketType::DGRAM {
-    //     //todo: temp meausure for protocol check
-    //     return Err(SysError::EPROTONOSUPPORT);
-    // }
+    if types != SocketType::STREAM  && types != SocketType::DGRAM {
+        //todo: temp meausure for protocol check
+        return Err(SysError::EPROTONOSUPPORT);
+    }
     let socket = socket::Socket::new(domain,types, nonblock);
     let fd_info = FdInfo {
         file: Arc::new(socket),
@@ -159,7 +159,7 @@ pub async fn sys_connect(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
     log::info!("[sys_connect] socket_file_type {:#?}", socket_file.sk_type);
-    socket_file.sk.connect(remote_addr.into_endpoint()).await?;
+    socket_file.sk.connect(remote_addr.into_endpoint()?).await?;
     // yield_now().await;
     Ok(0)
 }
@@ -243,7 +243,7 @@ pub async fn sys_sendto(
     let bytes = match socket_file.sk_type {
         SocketType::DGRAM => {
             let remote_addr = if addr != 0 {  Some(sockaddr_reader(addr, addr_len, &task)?
-            .into_endpoint())}else {
+            .into_endpoint()?)}else {
                 None
             };
             socket_file.sk.send(&buf_slice, remote_addr).await?    
@@ -340,7 +340,7 @@ pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
-    let peer_addr = socket_file.sk.peer_addr().unwrap();
+    let peer_addr = socket_file.sk.peer_addr()?;
     log::info!("Get peer address of socket: {:?}", peer_addr);
     // write to pointer
     sockaddr_writer(task,addr, addr_len, peer_addr)?;
@@ -675,7 +675,7 @@ pub async fn sys_sendmsg(
         log::warn!("unsupported control data");
     }
     let addr = sockaddr_reader(msg.msg_name, msg.msg_namelen as usize, task)?
-        .into_endpoint();
+        .into_endpoint()?;
     // let addr = match SaFamily::try_from(unsafe {
     //     Instruction::set_sum();
     //     *(msg.msg_name as *const u16)
