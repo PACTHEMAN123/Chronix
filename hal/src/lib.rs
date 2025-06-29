@@ -7,6 +7,7 @@
 #![feature(sync_unsafe_cell)]
 #![feature(allocator_api)]
 #![allow(unsafe_op_in_unsafe_fn)]
+#![feature(linkage)]
 
 extern crate alloc;
 

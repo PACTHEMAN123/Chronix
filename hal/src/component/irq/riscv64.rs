@@ -99,17 +99,13 @@ pub struct IrqCtrl {
 
 impl IrqCtrlHal for IrqCtrl {
     fn from_dt(device_tree: &fdt::Fdt, mmio: impl MmioMapperHal) -> Option<Self> {
-        if let Some(plic_node) = device_tree.find_compatible(&["riscv,plic0", "sifive,plic-1.0.0"]) {
-            let plic_reg = plic_node.reg().unwrap().next().unwrap();
-            let mmio_base = plic_reg.starting_address as usize;
-            let mmio_size = plic_reg.size.unwrap();
-            log::info!("plic base_address:{mmio_base:#x}, size:{mmio_size:#x}");
-            let mmio_vbase = mmio.map_mmio_area(mmio_base..mmio_base+mmio_size).start;
-            Some(IrqCtrl { plic: PLIC::new(mmio_base, mmio_size, mmio_vbase) })
-        } else {
-            log::error!("[PLIC probe] faild to find plic");
-            None
-        }
+        let plic_node = device_tree.find_compatible(&["riscv,plic0", "sifive,plic-1.0.0"])?;
+        let plic_reg = plic_node.reg().unwrap().next().unwrap();
+        let mmio_base = plic_reg.starting_address as usize;
+        let mmio_size = plic_reg.size.unwrap();
+        log::info!("plic base_address:{mmio_base:#x}, size:{mmio_size:#x}");
+        let mmio_vbase = mmio.map_mmio_area(mmio_base..mmio_base+mmio_size).start;
+        Some(Self { plic: PLIC::new(mmio_base, mmio_size, mmio_vbase) })
     }
 
     fn enable_irq(&self, no: usize) {

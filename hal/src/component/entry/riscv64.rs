@@ -1,4 +1,4 @@
-use core::sync::atomic::Ordering;
+use core::{arch::global_asm, sync::atomic::Ordering};
 use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println, timer::{Timer, TimerHal}};
 
 use super::RUNNING_PROCESSOR;

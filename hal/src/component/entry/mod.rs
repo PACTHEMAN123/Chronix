@@ -1,6 +1,6 @@
 // Declare the _main_for_arch exists.
 
-use core::sync::atomic::AtomicUsize;
+use core::{arch::global_asm, sync::atomic::AtomicUsize};
 
 use super::constant::{Constant, ConstantsHal};
 unsafe extern "Rust" {
@@ -40,6 +40,12 @@ fn clear_bss() {
         let mem = core::slice::from_raw_parts_mut(sbss as *mut u8, ebss as usize - sbss as usize);
         mem.fill(0);
     }
+}
+
+#[linkage = "weak"]
+#[unsafe(export_name = "_main_for_arch")]
+unsafe extern "C" fn default_main(_id: usize, _first: bool) -> bool {
+    false
 }
 
 #[macro_export]
