@@ -1,4 +1,4 @@
-use core::{any::Any, clone, mem, option, panic, ptr};
+use core::{any::Any, clone, mem, option, panic, ptr::{self, copy_nonoverlapping}};
 
 use alloc::{ffi::CString, sync::Arc, task, vec::Vec,vec};
 use fatfs::{info, warn};
@@ -36,7 +36,7 @@ impl TryFrom<i32> for SocketType {
         match value {
             1 => Ok(Self::STREAM),
             2 => Ok(Self::DGRAM),
-            3 => Ok(Self::RAW),
+            // 3 => Ok(Self::RAW),
             4 => Ok(Self::RDM),
             5 => Ok(Self::SEQPACKET),
             6 => Ok(Self::DCCP),
@@ -87,10 +87,10 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
     }
 
     let types = SocketType::try_from(types as i32)?;
-    if types != SocketType::STREAM  || types != SocketType::DGRAM {
-        //todo: temp meausure for protocol check
-        return Err(SysError::EPROTONOSUPPORT);
-    }
+    // if types != SocketType::STREAM  || types != SocketType::DGRAM {
+    //     //todo: temp meausure for protocol check
+    //     return Err(SysError::EPROTONOSUPPORT);
+    // }
     let socket = socket::Socket::new(domain,types, nonblock);
     let fd_info = FdInfo {
         file: Arc::new(socket),
@@ -228,9 +228,13 @@ pub async fn sys_sendto(
     }
     // log::info!("addr is {}, addr_len is {}", addr, addr_len);
     let task = current_task().unwrap().clone();
-    let buf_slice = unsafe {
-        core::slice::from_raw_parts_mut(buf as *mut u8, len)
-    };
+    // let buf_slice = unsafe {
+    //     core::slice::from_raw_parts_mut(buf as *mut u8, len)
+    // };
+    let buf_slice = UserSliceRaw::new(buf as *mut u8, len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let buf_slice = buf_slice.to_ref();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
         .downcast_arc::<socket::Socket>()
@@ -271,7 +275,7 @@ pub async fn sys_recvfrom(
     if (sockfd as isize) < 0 {
         return Err(SysError::EBADF);
     }
-    // log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
+    log::info!("sys_recvfrom sockfd: {}, buf: {:#x}, len: {}, flags: {:#x}, addr: {:#x}, addrlen: {}", sockfd, buf, len, _flags, addr, addrlen);
     let task = current_task().unwrap().clone();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(sockfd)})?
@@ -283,22 +287,28 @@ pub async fn sys_recvfrom(
     }
     task.set_interruptable();
     let (bytes, remote_endpoint) = socket_file.sk.recv(&mut inner_vec).await?;
+    log::info!("first code recv:{} ",char::from(inner_vec[0]));
     // log::info!("recvfrom: bytes: {}, remote_endpoint: {:?}", bytes, remote_endpoint);
     let remote_addr = SockAddr::from_endpoint(remote_endpoint);
     task.set_running();
     // write to pointer
     // log::info!("now set running");
-    let buf_slice = unsafe {
-        core::slice::from_raw_parts_mut(buf as *mut u8, bytes)
-    };
+    // let buf_slice = unsafe {
+    //     core::slice::from_raw_parts_mut(buf as *mut u8, bytes)
+    // };
+    let buf_slice = UserSliceRaw::new(buf as *mut u8, bytes)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let buf_slice = buf_slice.to_mut();
     buf_slice[..bytes].copy_from_slice(&inner_vec[..bytes]);
-    // write to sockaddr_in
-    if addr == 0 {
-        return Ok(bytes as isize);  
-    }
+    log::info!("buf_slice[0]: {}",char::from(buf_slice[0]));
+    // // write to sockaddr_in
+    // if addr == 0 {
+    //     return Ok(bytes as isize);  
+    // }
     
     sockaddr_writer(&task,addr, addrlen, remote_addr)?;
-    // log::info!("now return bytes: {}",bytes);
+    log::info!("now return bytes: {}",bytes);
     Ok(bytes as isize)
 }
 /// Returns the local address of the Socket corresponding to `sockfd`.
@@ -842,6 +852,9 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize, task: &Arc<TaskControlBlock
 }
 
 pub fn sockaddr_writer(task: &Arc<TaskControlBlock>, addr: usize, addr_len: usize, sock_addr: SockAddr) -> SockResult<()>{
+    if addr == 0{
+        return Ok(());
+    }
     let addr =  UserPtrRaw::new(addr as *const SockAddr)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
