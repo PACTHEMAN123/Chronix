@@ -12,31 +12,32 @@
 
 ### 初赛情况
 
-截至6月17日，Chronix 可以通过除了 LTP 之外的所有测试点*，在实时排行榜位于前列：
+截至6月29日23点，Chronix 已经通过初赛的大部分测试点，并在实时排行榜上位于前列：
 
-![leader-board](./docs/assets/leader-board.png)
+![leader-board-rank](./docs/assets/leader-board-rank-6-30.png)
 
-*：有一些测试点因为测例的原因无法通过，包括：
-1. libc-test 的 glibc 的一些测试点：因为 libc-test 本身面向 musl-libc 开发，因此即便是 linux 也无法通过这些测试点。
-2. cyclic-test 的 musl：因为这个测试会使用到的函数，在 musl-libc 的实现中为直接返回错误，因此本身无法正常运行。
-3. lmbench 所有测试点：测评机限定运行时间，导致本地可以顺利跑完的测试，在线上提交时可能会超时。
+![leader-board](./docs/assets/leader-board-6-30.png)
+
+
 
 ### Chronix 内核介绍
 
 - **进程管理**：异步无栈协程、多核调度、负载均衡。统一进程/线程模型。
-- **内存管理**：应用加载按需读取、写时复制、懒分配、全局使用 SLAB 内存分配器、支持零页分配。
-- **文件系统**：类 Linux 的虚拟文件系统、路径查找缓存、文件读写使用页缓存加速、支持挂载、支持 Ext4、Fat32 磁盘文件系统，内存文件系统、进程文件系统、设备文件系统。
-- **信号机制**：支持标准信号与实时信号、支持用户定义信号处理。
-- **设备驱动**：支持硬件中断、MMIO 驱动、PCI 驱动、串口驱动。支持设备树解析。
-- **网络模块**：支持 TCP UDP 套接字、支持本地回环设备、支持 IPv4、IPv6 协议。 
-- **架构管理**：自研硬件抽象层、支持 Risc-V、Loongarch 双架构。
+- **内存管理**：Chronix 支持了内核空间的动态映射，通过改造 xmas-elf 实现应用的按需加载、写时复制（Copy-on-Write）、懒分配（Lazy Allocation）等优化策略，并全局使用 SLAB 内存分配器，支持零页分配，以最小化内存开销并提升性能。使用了用户指针检查来确保安全性。
+- **文件系统**：Chronix 提供类 Linux 的虚拟文件系统（VFS）架构，支持路径查找缓存（Dentry Cache）和页缓存加速文件读写。同时，它兼容多种文件系统，包括 Ext4、Fat32 等磁盘文件系统，以及内存文件系统（tmpfs）、进程文件系统（procfs）和设备文件系统（devfs），并支持灵活的挂载机制。
+- **信号机制**：支持标准信号和实时信号，符合 linux 的信号排队机制，允许用户自定义信号处理逻辑，满足不同应用场景的需求。
+- **设备驱动**：Chronix 支持硬件中断、MMIO（内存映射 I/O）、PCI 设备驱动以及串口通信，并内置设备树（Device Tree）解析功能，便于硬件资源的动态管理。
+- **网络模块**：Chronix 实现了 TCP/UDP 套接字通信，支持本地回环设备（Loopback），并兼容 IPv4 和 IPv6 协议栈，为现代网络应用提供稳定高效的通信能力。
+- **架构管理**：使其能够灵活支持多种处理器架构，目前已经适配 RISC-V 和 LoongArch，未来可以扩展到更多平台。
 
-<img src="./docs/assets/total-arch.png" alt="Chronix 内核架构" width="500"/>
+<img src="./docs/assets/chronix-arch.svg" alt="Chronix 内核架构" width="500"/>
 
 
 ### 文档
 
 - [初赛文档]()
+- [演示视频]()
+- [总结幻灯片]()
 
 ### 项目结构
 
@@ -126,3 +127,5 @@ make run-la
 - [PolyHal](https://github.com/Byte-OS/polyhal.git) 硬件抽象层设计
 - [Titanix](https://github.com/greenhandzpx/Titanix.git) 动态链接、信号机制实现思路
 - [lunaix-OS](https://github.com/Minep/lunaix-os.git) 页缓存逻辑
+- [MankorOS](https://github.com/mankoros/mankoros) 设备树解析、部分驱动实现
+- [ArceOS](https://github.com/arceos-org/arceos) 网络模块的部分设计
