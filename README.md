@@ -35,9 +35,9 @@
 
 ### 文档
 
-- [初赛文档]()
-- [演示视频]()
-- [总结幻灯片]()
+- [初赛文档](https://github.com/PACTHEMAN123/Chronix/blob/main/Chronix-%E5%88%9D%E8%B5%9B%E6%96%87%E6%A1%A3.pdf)
+- [初赛总结幻灯片](https://github.com/PACTHEMAN123/Chronix/blob/main/Chronix-%E5%88%9D%E8%B5%9BPPT.pdf)
+- [初赛演示视频](https://pan.baidu.com/s/1byWv4IZ0vpMvu4rNXoEllA) 提取码：xvru
 
 ### 项目结构
 
