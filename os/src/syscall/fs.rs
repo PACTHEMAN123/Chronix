@@ -191,8 +191,17 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
         }
         let parent = dentry.parent().expect("[sys_openat]: can not open root as file!");
         let name = abs_path_to_name(&path).unwrap();
-        let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE).unwrap();
-        dentry.set_inode(new_inode);
+        let new_inode = parent.inode().unwrap().create(&name, InodeMode::FILE);
+        match new_inode {
+            Ok(inode) => {
+                dentry.set_inode(inode);
+            }
+            Err(SysError::EEXIST) => {}
+            _ => {
+                panic!("should not reach here")
+            }
+        }
+        
         // we shall not add child to parent until child is valid!
         parent.add_child(dentry.clone());
     }

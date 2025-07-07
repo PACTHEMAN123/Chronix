@@ -123,9 +123,9 @@ impl Inode for TmpInode {
         Ok(total_write_size)
     }
 
-    fn create(&self, _name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
+    fn create(&self, _name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
         let sb = self.inode_inner().super_block.clone().unwrap();
-        Some(TmpInode::new(sb, mode))
+        Ok(TmpInode::new(sb, mode))
     }
 
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {

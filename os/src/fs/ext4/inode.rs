@@ -21,7 +21,7 @@ use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::sync::UPSafeCell;
 use crate::utils::rel_path_to_abs;
-use crate::syscall::SysError;
+use crate::syscall::{SysError, SysResult};
 
 use lwext4_rust::bindings::{
     O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
@@ -322,25 +322,24 @@ impl Inode for Ext4Inode {
     }
 
     /// Create a new inode and return the inode
-    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
+    fn create(&self, name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
         let ty: InodeTypes = mode.into();
         let mut file = self.file.lock();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
-        warn!("parent path {parent_path}");
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
         info!("create {:?} on Ext4fs: {}", ty, fpath);
         //let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
         if fpath.is_empty() {
             info!("given path is empty");
-            return None;
+            return Err(SysError::EINVAL);
         }
 
         let types = ty;
 
         let result = if file.check_inode_exist(fpath, types.clone()) {
             info!("inode already exists");
-            Ok(0)
+            return Err(SysError::EEXIST)
         } else {
             if types == InodeTypes::EXT4_DE_DIR {
                 file.dir_mk(fpath)
@@ -354,11 +353,11 @@ impl Inode for Ext4Inode {
         match result {
             Err(e) => {
                 error!("create inode failed: {}", e);
-                None
+                return Err(SysError::from_i32(e));
             }
             Ok(_) => {
                 info!("create inode success");
-                Some(Arc::new(Ext4Inode::new(
+                Ok(Arc::new(Ext4Inode::new(
                     self.inode_inner().super_block.clone().unwrap(),
                     fpath, types)))
             }

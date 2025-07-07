@@ -46,7 +46,7 @@ endif
 
 ifeq ($(NET_C),y)
 $(info "enable qemu net device")
-QEMU_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.1,netdev=net0\
+QEMU_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.2,netdev=net0\
              -netdev user,id=net0,hostfwd=tcp::5555-:5555,hostfwd=udp::5555-:5555
 QEMU_ARGS += -d guest_errors\
 			 -d unimp

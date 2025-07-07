@@ -111,7 +111,7 @@ pub trait Inode {
         todo!()
     }
     /// create inode under current inode
-    fn create(&self, _name: &str, _mode: InodeMode) -> Option<Arc<dyn Inode>> {
+    fn create(&self, _name: &str, _mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
         todo!()
     }
     /// resize the current inode
