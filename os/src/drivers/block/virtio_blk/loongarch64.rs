@@ -44,13 +44,13 @@ impl BlockDevice for VirtIOBlock {
         BLOCK_SIZE
     }
     
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+    fn direct_read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.0
             .exclusive_access()
             .read_blocks(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
+    fn direct_write_block(&self, block_id: usize, buf: &[u8]) {
         self.0
             .exclusive_access()
             .write_blocks(block_id, buf)

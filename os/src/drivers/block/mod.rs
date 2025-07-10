@@ -1,13 +1,13 @@
 //! Block device driver
 
-mod virtio_blk;
+// mod virtio_blk;
 mod pci_blk;
 mod mmio_blk;
 
 use core::sync::atomic::AtomicUsize;
 
 use hal::println;
-pub use virtio_blk::VirtIOBlock;
+// pub use virtio_blk::VirtIOBlock;
 pub use pci_blk::VirtIOPCIBlock;
 pub use mmio_blk::VirtIOMMIOBlock;
 

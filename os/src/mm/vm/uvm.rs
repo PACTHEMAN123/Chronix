@@ -6,7 +6,7 @@ use log::info;
 use range_map::RangeMap;
 use xmas_elf::reader::Reader;
 
-use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, DentryState, File}, OpenFlags}, ipc::sysv::{self, ShmObj}, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, vm, FrameTracker, PageTable, KVMSPACE}, sync::mutex::{spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrqLock}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
+use crate::{config::PAGE_SIZE, fs::{page, utils::FileReader, vfs::{dentry::global_find_dentry, file::open_file, inode::InodeMode, DentryState, File}, OpenFlags}, ipc::sysv::{self, ShmObj}, mm::{allocator::{frames_alloc, FrameAllocator, SlabAllocator}, vm, FrameTracker, PageTable, KVMSPACE}, sync::mutex::{spin_rw_mutex::SpinRwMutex, MutexSupport, SpinNoIrqLock}, syscall::{mm::MmapFlags, SysError, SysResult}, task::utils::{generate_early_auxv, AuxHeader, AT_BASE, AT_CLKTCK, AT_EGID, AT_ENTRY, AT_EUID, AT_FLAGS, AT_GID, AT_HWCAP, AT_NOTELF, AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_PLATFORM, AT_RANDOM, AT_SECURE, AT_UID}, utils::{round_down_to_page, timer::TimerGuard}};
 
 use super::{KernVmArea, KernVmAreaType, KernVmSpaceHal, MapFlags, MaxEndVpn, PageFaultAccessType, StartPoint, UserVmArea, UserVmAreaType, UserVmAreaView, UserVmFile, UserVmSpaceHal};
 
@@ -587,12 +587,20 @@ impl UserVmSpace {
 
         let interp_file;
         let dentry = global_find_dentry(&interp).expect("cannot find interp dentry");
-        if dentry.state() == DentryState::NEGATIVE {
+        if dentry.is_negative() {
             log::warn!("[load_dl] missing dl {}", interp);
             return Err(SysError::ENOENT);
         }
         // log::info!("find symlink: {}, mode: {:?}", dentry.path(), dentry.inode().unwrap().inode_inner().mode);
-        let dentry = dentry.follow()?;
+        // assert link depth <= 1
+        let dentry = if dentry.inode().unwrap().inode_type() == InodeMode::LINK {
+            let inode = dentry.inode().unwrap();
+            let follow_path = inode.readlink()?;
+            global_find_dentry(&follow_path)?
+        } else {
+            dentry
+        };
+        
         // log::info!("follow symlink to {}", dentry.path());
         interp_file = dentry.open(OpenFlags::O_RDWR).unwrap();
 

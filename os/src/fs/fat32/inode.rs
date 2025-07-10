@@ -207,10 +207,10 @@ impl Inode for FatDirInode {
     fn read_page_at(self: Arc<Self>, _offset: usize) -> Option<Arc<Page>> {
         panic!("not support");
     }
-    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
+    fn create(&self, name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
         let dir = self.dir.exclusive_access();
         let super_block = self.inode_inner().super_block.clone();
-        match mode {
+        let ret = match mode {
             InodeMode::FILE => {
                 dir.inner
                 .create_file(name)
@@ -246,7 +246,8 @@ impl Inode for FatDirInode {
             _ => {
                 panic!("fat32 not support!")
             }
-        }
+        };
+        Ok(ret.unwrap())
     }
     fn getattr(&self) -> crate::fs::Kstat {
         Kstat {

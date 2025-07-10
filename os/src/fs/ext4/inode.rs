@@ -21,10 +21,10 @@ use crate::fs::{Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask};
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::sync::UPSafeCell;
 use crate::utils::rel_path_to_abs;
-use crate::syscall::SysError;
+use crate::syscall::{SysError, SysResult};
 
 use lwext4_rust::bindings::{
-    O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
+    EXT4_DE_SYMLINK, O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET
 };
 use lwext4_rust::{Ext4BlockWrapper, Ext4File, InodeTypes, KernelDevOp};
 
@@ -322,25 +322,24 @@ impl Inode for Ext4Inode {
     }
 
     /// Create a new inode and return the inode
-    fn create(&self, name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
-        let ty: InodeTypes = mode.into();
+    fn create(&self, name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
+        let ty: InodeTypes = mode.get_type().into();
         let mut file = self.file.lock();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
-        warn!("parent path {parent_path}");
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
         info!("create {:?} on Ext4fs: {}", ty, fpath);
         //let fpath = self.path_deal_with(&fpath);
         let fpath = fpath.as_str();
         if fpath.is_empty() {
             info!("given path is empty");
-            return None;
+            return Err(SysError::EINVAL);
         }
 
         let types = ty;
 
         let result = if file.check_inode_exist(fpath, types.clone()) {
             info!("inode already exists");
-            Ok(0)
+            return Err(SysError::EEXIST)
         } else {
             if types == InodeTypes::EXT4_DE_DIR {
                 file.dir_mk(fpath)
@@ -354,11 +353,11 @@ impl Inode for Ext4Inode {
         match result {
             Err(e) => {
                 error!("create inode failed: {}", e);
-                None
+                return Err(SysError::from_i32(e));
             }
             Ok(_) => {
                 info!("create inode success");
-                Some(Arc::new(Ext4Inode::new(
+                Ok(Arc::new(Ext4Inode::new(
                     self.inode_inner().super_block.clone().unwrap(),
                     fpath, types)))
             }
@@ -473,10 +472,10 @@ impl Inode for Ext4Inode {
         }
     }
 
-    fn symlink(&self, link_path: &str, _target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
+    fn symlink(&self, target_path: &str, link_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         let file = self.file.lock();
         // create symlink
-        file.symlink_create(link_path).expect("symlink create failed");
+        file.symlink_create(target_path, link_path).map_err(|e| SysError::from_i32(e))?;
         // get the symlink Inode
         Ok(Arc::new(Ext4Inode::new(
             self.inode_inner().super_block.clone().unwrap(),
@@ -495,7 +494,7 @@ impl Inode for Ext4Inode {
     fn readlink(&self) -> Result<String, SysError> {
         let file = self.file.lock();
         let mut path_buf: Vec<u8> = vec![0u8; 512];
-        let len = file.symlink_read(&mut path_buf).expect("symlink read failed");
+        let len = file.symlink_read(&mut path_buf).map_err(|e| SysError::from_i32(e))?;
         path_buf.truncate(len + 1);
         let path = CString::from_vec_with_nul(path_buf)
             .unwrap()

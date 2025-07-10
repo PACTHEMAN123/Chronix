@@ -123,9 +123,9 @@ impl Inode for TmpInode {
         Ok(total_write_size)
     }
 
-    fn create(&self, _name: &str, mode: InodeMode) -> Option<Arc<dyn Inode>> {
+    fn create(&self, _name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
         let sb = self.inode_inner().super_block.clone().unwrap();
-        Some(TmpInode::new(sb, mode))
+        Ok(TmpInode::new(sb, mode))
     }
 
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
@@ -237,7 +237,8 @@ impl Inode for TmpInode {
         }
     }
 
-    fn symlink(&self, _link_path: &str, target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
+    // call by link_path inode parent
+    fn symlink(&self, target_path: &str, _link_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         let sb = self.inode_inner().super_block.clone().unwrap();
         let inode = TmpInode::new(sb, InodeMode::LINK);
         inode.symlink_path.lock().push_str(target_path);

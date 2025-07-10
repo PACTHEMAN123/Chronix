@@ -6,6 +6,7 @@ pub mod plic;
 pub mod manager;
 pub mod pci;
 pub mod mmio;
+pub mod buffer_cache;
 use core::{any::Any, arch::global_asm, ops::Range};
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
@@ -17,7 +18,7 @@ use serial::scan_char_device;
 use smoltcp::phy::{DeviceCapabilities,RxToken, TxToken};
 use spin::Once;
 
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{devices::buffer_cache::BufferCache, sync::mutex::SpinNoIrqLock};
 use lazy_static::lazy_static;
 
 
@@ -144,13 +145,15 @@ pub trait Device: Sync + Send + DowncastSync {
 pub trait BlockDevice: Send + Sync + Any {
     fn size(&self) -> u64;
 
+    fn buffer_cache(&self) -> Option<Arc<BufferCache>>;
+
     fn block_size(&self) -> usize;
 
     /// Read data form block to buffer
-    fn read_block(&self, block_id: usize, buf: &mut [u8]);
+    fn direct_read_block(&self, block_id: usize, buf: &mut [u8]);
 
     /// Write data from buffer to block
-    fn write_block(&self, block_id: usize, buf: &[u8]);
+    fn direct_write_block(&self, block_id: usize, buf: &[u8]);
 }
 
 pub trait NetDevice: Send + Sync + Any {
