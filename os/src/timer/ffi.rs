@@ -1,4 +1,6 @@
 use alloc::collections::btree_map::Values;
+use crate::timer::get_current_time_ns;
+
 use super::{get_current_time_ms, NSEC_PER_SEC};
 use core::time::Duration;
 
@@ -77,6 +79,20 @@ impl TimeSpec {
     pub fn is_valid(&self) -> bool {
         self.tv_sec as isize >= 0 && self.tv_nsec as isize >= 0 && self.tv_nsec < 1000_000_000 
     }
+    pub const ZERO: Self = Self { tv_sec: 0, tv_nsec: 0 };
+
+    // wall time
+    pub fn wall_time() -> Self {
+        let mut base_time = TimeSpec{
+            tv_sec: 1_757_088_000,
+            tv_nsec: 0
+        };
+        let current = get_current_time_ns();
+        base_time.tv_nsec += (current % NSEC_PER_SEC);
+        base_time.tv_sec += (current / NSEC_PER_SEC) as usize;
+        base_time
+    }
+
 }
 
 impl From<Duration> for TimeSpec {

@@ -24,8 +24,8 @@
 - [x] add_key04
 - [ ] add_key05
 - [x] adjtimex01
-- [ ] adjtimex02
-- [ ] adjtimex03
+- [x] adjtimex02: pass 5 failed 2 skip 1
+- [ ] adjtimex03: broken
 - [ ] af_alg01   af_log: unimplemented safamily
 - [ ] af_alg02
 - [ ] af_alg03
@@ -107,20 +107,20 @@
 - [ ] chown04：需要实现链接悬垂引用
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
-- [ ] clock_adjtime01
-- [ ] clock_adjtime02
+- [x] clock_adjtime01: pass 18 broke 1
+- [x] clock_adjtime02: pass 3 failed 3
 - [x] clock_getres01: pass 40 failed 4 
 - [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
 - [x] clock_gettime02: 
 - [ ] clock_gettime03: TBROK: Cannot parse kernel .config
 - [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
-- [x] clock_nanosleep01: failed 8 
+- [x] clock_nanosleep01: passed 8 failed 2 skipped 2 
 - [ ] clock_nanosleep02: TBROK: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
-- [ ] clock_nanosleep03
-- [x] clock_nanosleep04
-- [ ] clock_settime01: skip
-- [ ] clock_settime02
-- [ ] clock_settime03
+- [ ] clock_nanosleep03: .config not exist
+- [x] clock_nanosleep04: pass 4 failed 4
+- [x] clock_settime01: all pass
+- [x] clock_settime02: all pass
+- [ ] clock_settime03: lack 107 syscall
 - [x] clone01
 - [ ] clone02: no summary
 - [x] clone03
@@ -131,8 +131,8 @@
 - [ ] clone08
 - [ ] clone09
 - [ ] clone301: todo! pidfd support 
-- [ ] clone302: can't handle page fault
-- [ ] clone303
+- [x] clone302: pass 6 failed 6
+- [ ] clone303: /proc/self/mounts
 - [x] close01
 - [x] close02
 - [ ] close_range01：No Free Device
