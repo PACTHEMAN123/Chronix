@@ -1706,11 +1706,11 @@
 - [ ] stream04 : no sum
 - [ ] stream05 : no sum
 - [x] string01 : no sum
-- [ ] symlink01 : f no sum
-- [ ] symlink02 : f
-- [ ] symlink03 : pass 2 failed 4 error code
-- [x] symlink04 : pass 1 failed 2
-- [ ] symlinkat01 : f
+- [x] symlink01 : no sum
+- [x] symlink02
+- [ ] symlink03 : pass 4 failed 2 error code
+- [x] symlink04
+- [x] symlinkat01 : no sum
 - [ ] sync01 :  no dev
 - [ ] sync_file_range01
 - [ ] sync_file_range02

@@ -260,7 +260,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     let _sum_guard= SumGuard::new();
     let at_flags = AtFlags::from_bits_truncate(flags);
     let o_flags = OpenFlags::from_bits_truncate(flags);
-
+    log::debug!("fstatat dirfd {}, at_flags {:?}, oflags {:?}", dirfd, at_flags, o_flags);
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
@@ -268,6 +268,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     if inode.is_none() {
         return Err(SysError::ENOENT)
     }
+    // debug_assert!(dentry.is_negative() == false);
     let stat = inode.unwrap().getattr();
     let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
         .ensure_write(&mut task.get_vm_space().lock())
@@ -533,7 +534,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     if flags == AT_REMOVEDIR && !is_dir {
         return Err(SysError::ENOTDIR);
     } else if flags != AT_REMOVEDIR && is_dir {
-        return Err(SysError::EPERM);
+        // return Err(SysError::EPERM);
     }
     // should clear inode first to drop inode (flush datas to disk)
     dentry.clear_inode();
@@ -561,16 +562,19 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
     if old_path.is_empty() || new_path.is_empty() {
         return Err(SysError::ENOENT);
     }
-    log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}", task.tid(), old_path, new_path);
-    let old_dentry = at_helper(task.clone(), new_dirfd, old_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
-    if old_dentry.inode().is_none() {
-        return Err(SysError::ENOENT);
-    }
+    log::info!("[sys_symlinkat] task {}, sym-link old path {} to new path {}, fd {new_dirfd}", task.tid(), old_path, new_path);
     let new_dentry = at_helper(task, new_dirfd, new_path_ptr, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     let new_path = new_dentry.path();
-    let old_path = old_dentry.path();
-    let new_inode = old_dentry.inode().unwrap().symlink(&new_path, &old_path)?;
-    global_update_dentry(&new_path, new_inode)?;
+    let parent = new_dentry.parent().unwrap().inode().unwrap();
+    // let old_path = old_dentry.path();
+    let new_inode = parent.symlink(&old_path, &new_path)?;
+    if new_dentry.inode().is_some() && !new_dentry.is_negative() {
+        return Err(SysError::EEXIST);
+    } else {
+        log::info!("create a new symlink");
+        new_dentry.set_inode(new_inode);
+    }
+    // global_update_dentry(&new_path, new_inode)?;
     Ok(0)
 }
 
@@ -1229,48 +1233,71 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
     if pathname.is_null() && !flags.contains(AtFlags::AT_EMPTY_PATH) {
         return Err(SysError::EFAULT);
     }
-    let opt_path = user_path_to_string(
+    let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
-        );
-    let dentry = match opt_path {
-        Ok(path) => {
-            if path.starts_with("/") {
+    )?;
+    at_helper1(task, dirfd, &path, flags)
+}
+
+pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
+    let dentry = if path != "" {
+        if path.starts_with("/") {
                 global_find_dentry(&path)?
-            } else {
-                // getting full path (absolute path)
-                let fpath = if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
-                    // look up in the current dentry
-                    let cw_dentry = task.with_cwd(|d| d.clone());
-                    let ret = rel_path_to_abs(&cw_dentry.path(), &path).unwrap();
-                    ret
-                } else {
-                    // look up in the current task's fd table
-                    // which the inode fd points to should be a dir
-                    let dir = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
-                    let dentry = dir.dentry().unwrap();
-                    rel_path_to_abs(&dentry.path(), &path).unwrap()
-                };
-                global_find_dentry(&fpath)?
-            }
-        }
-        Err(_) => {
-            if !flags.contains(AtFlags::AT_EMPTY_PATH) {
-                return Err(SysError::ENOENT);
-            }
-            if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
+        } else {
+            // getting full path (absolute path)
+            let mut rel_path = path.to_string();
+            let mut parent_dentry = if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
+                // look up in the current dentry
                 task.with_cwd(|d| d.clone())
             } else {
-                let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
-                file.dentry().unwrap()
+                // look up in the current task's fd table
+                // which the inode fd points to should be a dir
+                let dir = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
+                dir.dentry().unwrap()
+            };
+            if parent_dentry.is_negative() {
+                return Err(SysError::ENOENT)
             }
+
+            // resolve ../ to get final parent
+            // Symbolic links may contain ..  path components, which (if used at
+            // the start of the link) refer to the parent directories of that in
+            // which the link resides.
+            let mut cnt = 0usize;
+            while rel_path.starts_with("../") {
+                info!("before resolve parent {}, rel_path {}", parent_dentry.path(), rel_path);
+                if cnt > 0 {
+                    parent_dentry = parent_dentry.parent().expect("failed no parent");
+                }
+                rel_path = rel_path.trim_start_matches("../").to_string();
+                cnt += 1;
+                if cnt >= 40 {
+                    warn!("should not have so many ../, may occur some error");
+                }
+                info!("finish resolve parent {}, rel_path {}", parent_dentry.path(), rel_path);
+            }
+
+            let fpath = rel_path_to_abs(&parent_dentry.path(), &rel_path).unwrap();
+
+            global_find_dentry(&fpath)?
+        }
+    } else {
+        if !flags.contains(AtFlags::AT_EMPTY_PATH) {
+                return Err(SysError::ENOENT);
+        }
+        if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
+            task.with_cwd(|d| d.clone())
+        } else {
+            let file = task.with_fd_table(|t| t.get_file(dirfd as usize))?;
+            file.dentry().unwrap()
         }
     };
 
     if flags.contains(AtFlags::AT_SYMLINK_NOFOLLOW) {
         Ok(dentry)
     } else {
-        let dentry = dentry.follow()?;
+        let dentry = dentry.follow(task, dirfd, flags)?;
         Ok(dentry)
     }
 }

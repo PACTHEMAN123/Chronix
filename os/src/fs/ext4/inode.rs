@@ -24,7 +24,7 @@ use crate::utils::rel_path_to_abs;
 use crate::syscall::{SysError, SysResult};
 
 use lwext4_rust::bindings::{
-    O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET,
+    EXT4_DE_SYMLINK, O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_END, SEEK_SET
 };
 use lwext4_rust::{Ext4BlockWrapper, Ext4File, InodeTypes, KernelDevOp};
 
@@ -323,7 +323,7 @@ impl Inode for Ext4Inode {
 
     /// Create a new inode and return the inode
     fn create(&self, name: &str, mode: InodeMode) -> Result<Arc<dyn Inode>, SysError> {
-        let ty: InodeTypes = mode.into();
+        let ty: InodeTypes = mode.get_type().into();
         let mut file = self.file.lock();
         let parent_path = file.get_path().to_str().expect("cpath failed").to_string();
         let fpath = rel_path_to_abs(&parent_path, name).unwrap();
@@ -472,10 +472,10 @@ impl Inode for Ext4Inode {
         }
     }
 
-    fn symlink(&self, link_path: &str, _target_path: &str) -> Result<Arc<dyn Inode>, SysError> {
+    fn symlink(&self, target_path: &str, link_path: &str) -> Result<Arc<dyn Inode>, SysError> {
         let file = self.file.lock();
         // create symlink
-        file.symlink_create(link_path).expect("symlink create failed");
+        file.symlink_create(target_path, link_path).map_err(|e| SysError::from_i32(e))?;
         // get the symlink Inode
         Ok(Arc::new(Ext4Inode::new(
             self.inode_inner().super_block.clone().unwrap(),
@@ -494,7 +494,7 @@ impl Inode for Ext4Inode {
     fn readlink(&self) -> Result<String, SysError> {
         let file = self.file.lock();
         let mut path_buf: Vec<u8> = vec![0u8; 512];
-        let len = file.symlink_read(&mut path_buf).expect("symlink read failed");
+        let len = file.symlink_read(&mut path_buf).map_err(|e| SysError::from_i32(e))?;
         path_buf.truncate(len + 1);
         let path = CString::from_vec_with_nul(path_buf)
             .unwrap()

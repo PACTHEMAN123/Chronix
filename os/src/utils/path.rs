@@ -17,11 +17,12 @@ pub fn user_path_to_string(cpath: UserPtrRaw<u8>, vm: &mut crate::mm::vm::UserVm
     }
     let slice = cpath.cstr_slice(vm)?;
     let path = slice.to_str().map_err(|_| SysError::EINVAL)?;
-    if path.eq("") {
-        Err(SysError::EINVAL)
-    } else {
-        Ok(path.to_string())
-    }
+    // if path.eq("") {
+    //     Err(SysError::EINVAL)
+    // } else {
+    //     Ok(path.to_string())
+    // }
+    Ok(path.to_string())
 }
 
 /// get the file name using the absolute path
