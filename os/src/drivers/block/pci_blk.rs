@@ -13,6 +13,7 @@ use lazy_static::lazy_static;
 use virtio_drivers::transport::pci::bus::{BarInfo, Cam, Command, MemoryBarType, MmioCam, PciRoot};
 
 use crate::config::BLOCK_SIZE;
+use crate::devices::buffer_cache::BufferCache;
 use crate::devices::pci::{PciDeviceClass, PciDeviceDescriptor};
 use crate::devices::{BlockDevice, DevId, Device, DeviceMajor, DeviceMeta};
 use crate::drivers::dma::VirtioHal;
@@ -27,6 +28,7 @@ use super::BLK_ID;
 pub struct VirtIOPCIBlock {
     meta: DeviceMeta,
     blk: UPSafeCell<VirtIOBlk<VirtioHal, PciTransport>>,
+    buffer_cache: Arc<BufferCache>
 }
 
 impl BlockDevice for VirtIOPCIBlock {
@@ -40,14 +42,19 @@ impl BlockDevice for VirtIOPCIBlock {
     fn block_size(&self) -> usize {
         BLOCK_SIZE
     }
+
+    fn buffer_cache(&self) -> Option<Arc<BufferCache>> {
+        // Some(self.buffer_cache.clone())
+        None
+    }
     
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+    fn direct_read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.blk
             .exclusive_access()
             .read_blocks(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
+    fn direct_write_block(&self, block_id: usize, buf: &[u8]) {
         self.blk
             .exclusive_access()
             .write_blocks(block_id, buf)
@@ -97,7 +104,8 @@ impl VirtIOPCIBlock {
             irq_no: None,
             dtype: crate::devices::DeviceType::Block,
         };
-        Self { blk, meta }
+        let buffer_cache = Arc::new(BufferCache::new());
+        Self { blk, meta, buffer_cache }
     }
 }
 

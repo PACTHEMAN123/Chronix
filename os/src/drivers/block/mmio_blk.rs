@@ -11,6 +11,7 @@ use virtio_drivers::device::blk::VirtIOBlk;
 use virtio_drivers::transport::{self, Transport};
 use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 use crate::config::BLOCK_SIZE;
+use crate::devices::buffer_cache::BufferCache;
 use crate::devices::mmio::MmioDeviceDescripter;
 use crate::devices::{BlockDevice, DevId, Device, DeviceMajor};
 use crate::drivers::dma::VirtioHal;
@@ -23,6 +24,7 @@ use super::BLK_ID;
 
 pub struct VirtIOMMIOBlock {
     blk: UPSafeCell<VirtIOBlk<VirtioHal, MmioTransport>>,
+    buffer_cache: Arc<BufferCache>,
     meta: DeviceMeta,
 }
 
@@ -34,17 +36,22 @@ impl BlockDevice for VirtIOMMIOBlock {
             .capacity() * (BLOCK_SIZE as u64)
     }
 
+    fn buffer_cache(&self) -> Option<Arc<BufferCache>> {
+        // Some(self.buffer_cache.clone())
+        None
+    }
+
     fn block_size(&self) -> usize {
         BLOCK_SIZE
     }
     
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+    fn direct_read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.blk
             .exclusive_access()
             .read_blocks(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
+    fn direct_write_block(&self, block_id: usize, buf: &[u8]) {
         self.blk
             .exclusive_access()
             .write_blocks(block_id, buf)
@@ -88,6 +95,7 @@ impl VirtIOMMIOBlock {
             irq_no: None,
             dtype: crate::devices::DeviceType::Block,
         };
-        Self { blk, meta }
+        let buffer_cache = Arc::new(BufferCache::new());
+        Self { blk, meta, buffer_cache }
     }
 }
