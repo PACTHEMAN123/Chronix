@@ -60,6 +60,11 @@ impl Dentry for TmpDentry {
     }
 
     fn load_child_dentry(self: Arc<Self>) -> Result<Vec<Arc<dyn Dentry>>, SysError> {
+        if let Some(inode) = self.inode() {
+            if !inode.inode_type().contains(InodeMode::DIR) {
+                return Err(SysError::ENOTDIR)
+            }
+        }
         let mut child_dentrys: Vec<Arc<dyn Dentry>> = Vec::new();
         for (_, child) in self.children().iter() {
             if child.state() == DentryState::NEGATIVE {

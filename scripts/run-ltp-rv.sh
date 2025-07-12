@@ -8,7 +8,7 @@ cd sdcard/musl/ltp/testcases/bin
 
 file_list="
 accept01 accept4_01
-access01 access02 access03
+access01 access02 access03 access04
 add_key01 add_key04
 adjtimex01
 alarm02 alarm03 alarm05 alarm06 alarm07
@@ -17,15 +17,15 @@ bind01 bind04 bpf_map01
 
 capget01
 chdir04
-chmod01 chmod03
-chown01 chown02 chown03 chown05
+chmod01 chmod03 chmod06
+chown01 chown02 chown03 chown04 chown05
 clock_getres01 
 clock_gettime02
 clock_nanosleep01 clock_nanosleep04
 clone01 clone03 clone06
 close01 close02
 confstr01
-creat01 creat03 creat05 creat08
+creat01 creat03 creat05 creat06 creat08
 
 dio_sparse
 dup01 dup02 dup03 dup04 dup06 dup07 dup202 dup203 dup204 dup206 dup207 dup3_01 dup3_02
@@ -59,6 +59,8 @@ fstatfs02 fstatfs02_64
 ftruncate01 ftruncate01_64
 futex_wait01
 
+getdents02
+getdomainname01
 geteuid01 geteuid02
 gethostname01
 getitimer01 getitimer02
@@ -68,13 +70,13 @@ getpgid01
 getpgrp01
 getpid02
 getppid02
+getpriority01 getpriority02
 getrandom01 getrandom02 getrandom03 getrandom04 getrandom05
 getrlimit01 getrlimit02
 getrusage01 getrusage02
 gettid02
 gettimeofday01 gettimeofday02
 getuid01 getuid03
-getdomainname01
 
 in6_01
 inotify_init1_01 inotify_init1_02
@@ -93,9 +95,8 @@ lseek01
 madvise01 madvise05 madvise10
 memset01
 mesgq_nstest
-mincore02
-mincore03
-mkdir05
+mincore02 mincore03
+mkdir03 mkdir05
 mkdirat01
 mlock01 mlock04
 mmap02 mmap05 mmap06 mmap09 mmap19
@@ -113,9 +114,12 @@ posix_fadvise01 posix_fadvise01_64
 prctl01
 pselect03 pselect03_64
 pwrite02 pwrite02_64 pwrite03 pwrite03_64 pwrite04 pwrite04_64
+pwritev01 pwritev01_64 pwritev02 pwritev02_64 pwritev201 pwritev201_64 pwritev202 pwritev202_64
 
 read01 read02 read04
+readahead01
 readdir01
+readlink01 readlink03
 readlinkat01 readlinkat02
 readv01 readv02
 
@@ -126,6 +130,7 @@ rt_sigsuspend01
 sbrk01 sbrk02
 sched_getaffinity01
 sendfile02 sendfile02_64 sendfile03 sendfile03_64 sendfile05 sendfile05_64
+sendfile06 sendfile06_64 sendfile08 sendfile08_64
 setrlimit02 setrlimit04 setrlimit05
 setuid01
 setxattr02
@@ -135,10 +140,10 @@ sigwait01
 socket01
 socketpair01
 socketpair02
-splice02
+splice01 splice02 splice03 splice04
 stat01 stat01_64 stat02 stat02_64
 statx01 statx02 statx03
-symlink04
+symlink02 symlink04
 syscall01
 
 tgkill01 tgkill03
@@ -152,6 +157,8 @@ unlinkat01
 utime06 utime07
 utimes01
 utsname01 utsname04
+
+vmsplice01 vmsplice02 vmsplice03
 
 wait01 wait02 wait401
 waitpid01 waitpid03

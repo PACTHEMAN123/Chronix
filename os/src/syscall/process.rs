@@ -109,6 +109,13 @@ pub fn sys_gettid() -> SysResult {
     Ok(current_task().unwrap().tid() as isize)
 }
 
+pub fn sys_setuid(uid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    log::warn!("task {} set its uid to {}", task.tid(), uid);
+    task.set_uid(uid);
+    Ok(0)
+}
+
 /// exit the current process with the given exit code
 pub fn sys_exit(exit_code: i32) -> SysResult {
     let task = current_task().unwrap().clone();

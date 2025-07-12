@@ -263,6 +263,14 @@ impl File for PipeFile {
         return Ok(len);
     }
 
+    async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, SysError> {
+        Err(SysError::ESPIPE)
+    }
+
+    async fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, SysError> {
+        Err(SysError::ESPIPE)
+    }
+
     async fn base_poll(&self, events: PollEvents) -> PollEvents {
         if self.operate == false {
             // writer

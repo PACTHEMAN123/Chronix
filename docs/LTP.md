@@ -12,8 +12,8 @@
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
 - [x] access03
-- [ ] access04 : symlink broken
-- [ ] acct01 : symlink broken
+- [x] access04 : pass 8 failed 4
+- [ ] acct01
 - [ ] acct02
 - [ ] acct02_helper
 - [ ] acl1
@@ -99,12 +99,12 @@
 - [x] chmod01
 - [x] chmod03：
 - [ ] chmod05：cannot open /etc/group, not exist,Syscall number not included: 159
-- [ ] chmod06：symlink(test_file4,test_file5) failed: ENOENT (2)
+- [x] chmod06：pass 6 failed 3
 - [ ] chmod07：getgrnam(users) failed - try fallback daemon
 - [x] chown01
 - [x] chown02
 - [x] chown03
-- [ ] chown04：需要实现链接悬垂引用
+- [x] chown04：pass 5 failed 3
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
 - [ ] clock_adjtime01
@@ -168,7 +168,7 @@
 - [x] creat03
 - [ ] creat04: should not remove when unlink a inode ref by sth
 - [x] creat05
-- [ ] creat06: 悬垂引用
+- [x] creat06: pass 5 failed 3
 - [ ] creat07: failed to copy
 - [ ] creat07_child: failed
 - [x] creat08: pass 2 faild 7 
@@ -555,8 +555,8 @@
 - [ ] getcwd02 : failed
 - [ ] getcwd03 : failed
 - [x] getcwd04 : 压测
-- [ ] getdents01 : no dangle symlink
-- [ ] getdents02 : failed
+- [ ] getdents01 : some entries not found
+- [x] getdents02 : pass 9 failed 3, getdents still have some wrong
 - [x] getdomainname01
 
 ======== gid & uid ========
@@ -586,7 +586,7 @@
 - [x] getpid02
 - [ ] getppid01: /proc/sys/kernel/pid_max'
 - [x] getppid02
-- [ ] getpriority01: p2 failed 2
+- [x] getpriority01: p2 failed 2
 - [x] getpriority02: p2 failed 2
 - [x] getrandom01
 - [x] getrandom02
@@ -819,10 +819,10 @@
 
 ===== link ========
 - [x] link02
-- [x] link04 : p 5 f 9
+- [x] link04 : p 9 f 5
 - [x] link05
-- [ ] link08 : f
-- [ ] linkat01 : f
+- [ ] link08 : expected: 40 - ELOOP: ENAMETOOLONG (36)
+- [ ] linkat01 : pass lot f 3, no sum
 - [ ] linkat02 : no dev
 
 - [x] listen01 : no sum
@@ -904,13 +904,13 @@
 - [ ] min_free_kbytes : f
 
 ===== mkdir =====
-- [ ] mkdir02
-- [ ] mkdir03
-- [ ] mkdir04
-- [x] mkdir05 : failed unlink pass1 failed1
+- [ ] mkdir02 : f 2
+- [x] mkdir03 : passed 7 failed 4
+- [ ] mkdir04 : f 1
+- [x] mkdir05
 - [ ] mkdir09 : no dev
-- [x] mkdirat01
-- [ ] mkdirat02 : failed symlink
+- [x] mkdirat01 : no sum
+- [ ] mkdirat02 : failed 4, failed unexpectedly; expected: 40 - ELOOP: ENAMETOOLONG
 
 ===== mknod =======
 - [ ] mknod01
@@ -1256,7 +1256,7 @@
 - [ ] process_vm_writev02
 - [ ] proc_sched_rt01
 - [ ] profil01
-- [ ] prot_hsymlinks
+- [ ] prot_hsymlinks : abort
 
 ======= pselect ======
 - [ ] pselect01 : /proc
@@ -1300,30 +1300,30 @@
 - [x] pwrite03_64
 - [x] pwrite04 : p1 f1
 - [x] pwrite04_64
-- [ ] pwritev01
-- [ ] pwritev01_64
-- [ ] pwritev02
-- [ ] pwritev02_64
-- [ ] pwritev03
-- [ ] pwritev03_64
-- [ ] pwritev201
-- [ ] pwritev201_64
-- [ ] pwritev202
-- [ ] pwritev202_64
+- [x] pwritev01
+- [x] pwritev01_64
+- [x] pwritev02 : p6 f1
+- [x] pwritev02_64 : p6 f1
+- [ ] pwritev03 : no dev
+- [ ] pwritev03_64 : no dev
+- [x] pwritev201
+- [x] pwritev201_64
+- [x] pwritev202 : p5 f2
+- [x] pwritev202_64 : p5 f2
 
 ======== read ======== (support more read syscall)
 - [x] read01
 - [x] read02 : p5 f1
 - [ ] read03 : mknodat
 - [x] read04
-- [ ] readahead01
-- [ ] readahead02
-- [ ] read_all : f
+- [x] readahead01 : p4 f1
+- [ ] readahead02 : no dev
+- [ ] read_all : brok The directory argument (-d) is required
 - [x] readdir01
-- [ ] readdir21 : f
-- [ ] readlink01 : f
-- [ ] readlink03 : f
-- [x] readlinkat01 : p5 f7
+- [ ] readdir21 : tconf
+- [x] readlink01
+- [x] readlink03 : p5 f3
+- [x] readlinkat01 : p10 f2
 - [x] readlinkat02 : p5 f1
 - [x] readv01: pass 10
 - [x] readv02: p3 f2
@@ -1455,12 +1455,12 @@
 - [x] sendfile04_64
 - [x] sendfile05
 - [x] sendfile05_64
-- [ ] sendfile06 : f
-- [ ] sendfile06_64
-- [ ] sendfile07 : hang
+- [x] sendfile06
+- [x] sendfile06_64
+- [ ] sendfile07 : test timeout, Congratulation, likely test hit a kernel bug.
 - [ ] sendfile07_64
-- [ ] sendfile08 : f
-- [ ] sendfile08_64
+- [x] sendfile08
+- [x] sendfile08_64
 - [ ] sendfile09 : tconf
 - [ ] sendfile09_64
 - [ ] sendmmsg01 : skip
@@ -1468,13 +1468,16 @@
 - [ ] sendmsg01: no summary
 - [ ] sendmsg02
 - [ ] sendmsg03
+
+
 - [ ] sendto01: panic
 - [ ] sendto02
 - [ ] sendto03
-
 - [ ] setdomainname01: 162
 - [ ] setdomainname02: 
 - [ ] setdomainname03
+
+
 - [ ] setegid01
 - [ ] setegid02
 - [ ] setfsgid01
@@ -1657,13 +1660,13 @@
 - [ ] sockioctl01: f
 
 ======= splice =======
-- [ ] splice01 : read failed
+- [x] splice01
 - [x] splice02
-- [ ] splice03 : we can support this
-- [ ] splice04 : hang
-- [ ] splice05 : f
+- [x] splice03 : p5 f2
+- [x] splice04
+- [ ] splice05 : f, now not consider socket file
 - [ ] splice06 : tconf
-- [ ] splice07 : panic
+- [ ] splice07 : f
 - [ ] splice08 : tconf
 - [ ] splice09 : tconf
 
@@ -1760,7 +1763,7 @@
 - [ ] tkill02 : /proc/sys/kernel/pid_max
 - [ ] truncate02 : not support truncate
 - [ ] truncate02_64
-- [ ] truncate03 : symlink
+- [ ] truncate03 : f 8
 - [ ] truncate03_64
 
 - [ ] uaccess : tconf
@@ -1778,8 +1781,8 @@
 - [ ] uname02 : panic
 - [ ] uname04
 - [x] unlink05 : pass 1 failed 1
-- [x] unlink07 : pass 5 failed 1
-- [ ] unlink08 : failed
+- [x] unlink07
+- [ ] unlink08 : failed 4
 - [ ] unlink09 : ioctl failed
 - [x] unlinkat01 : pass 5 failed 2
 - [ ] unshare01 : no share syscall
@@ -1819,10 +1822,10 @@
 - [ ] vma02
 - [ ] vma03
 - [ ] vma04 : 
-- [ ] vmsplice01: read failed
-- [ ] vmsplice02: should failed
-- [ ] vmsplice03: vmsplice() didn't write anything
-- [ ] vmsplice04: not support
+- [x] vmsplice01
+- [x] vmsplice02
+- [x] vmsplice03
+- [ ] vmsplice04: f
 - [ ] vsock01 : .config
 
 ====== wait ============

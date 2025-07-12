@@ -179,6 +179,43 @@ bitflags::bitflags! {
     }
 }
 
+bitflags::bitflags! {
+    /// Define in <uapi/linux/fs.h>
+    pub struct RwfFlags: i32 {
+        /* high priority request, poll if possible */
+        const RWF_HIPRI	            = 0x00000001;
+        /* per-IO O_DSYNC */
+        const RWF_DSYNC	            = 0x00000002;
+        /* per-IO O_SYNC */
+        const RWF_SYNC	            = 0x00000004;
+        /* per-IO, return -EAGAIN if operation would block */
+        const RWF_NOWAIT	        = 0x00000008;
+        /* per-IO O_APPEND */
+        const RWF_APPEND	        = 0x00000010;
+        /* per-IO negation of O_APPEND */
+        const RWF_NOAPPEND	        = 0x00000020;
+        /* Atomic Write */
+        const RWF_ATOMIC	        = 0x00000040;
+        /* buffered IO that drops the cache after reading or writing data */
+        const RWF_DONTCACHE	        = 0x00000080;
+    }
+}
+
+bitflags::bitflags! {
+    /// Define in <linux/include/linux/splice.h>
+    pub struct SpliceFlags: u32 {
+        /* move pages instead of copying */
+        const SPLICE_F_MOVE	        = 0x01;	
+        /* don't block on the pipe splicing */
+        const SPLICE_F_NONBLOCK     = 0x02; 
+        /* expect more data */
+        const SPLICE_F_MORE	        = 0x04;
+        /* pages passed in are a gift */	
+        const SPLICE_F_GIFT	        = 0x08;
+
+    }
+}
+
 
 bitflags::bitflags! {
     // Defined in <bits/fcntl-linux.h>.

@@ -7,8 +7,8 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, StatFs, UtsName, Xstat, XstatMask
-}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::block_on};
+    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, UtsName, Xstat, XstatMask
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
 use crate::utils::{
     path::*,
     string::*,
@@ -49,7 +49,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
 /// syscall: read
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    // log::debug!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
+    log::info!("task {} trying to read fd {} to buf {:#x} with len {:#x}", task.gettid(), fd, buf, len);
     let file = task.with_fd_table(|table| table.get_file(fd))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, len)
@@ -75,7 +75,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     //         break;
     //     }
     // }
-
+    log::info!("read size: {ret}");
     return Ok(ret as isize);
 }
 
@@ -178,7 +178,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
     )?;
-    // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
+    log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if open_flags.contains(OpenFlags::O_CREAT) {
         // the dir may not exist
@@ -230,28 +230,25 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
 /// If pathname is relative and dirfd is the special value AT_FDCWD, 
 /// then pathname is interpreted relative to the current working directory of the calling process (like mkdir(2)).
 /// If pathname is absolute, then dirfd is ignored.
-pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SysResult {
+pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, mode: usize) -> SysResult {
     let task = current_task().unwrap();
-    let opt_path = user_path_to_string(
+    let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
-        );
-    if let Ok(path) = opt_path {
-        let task = current_task().unwrap().clone();
-        let dentry = at_helper(task, dirfd, pathname, AtFlags::empty())?;
-        if dentry.state() != DentryState::NEGATIVE {
-            return Err(SysError::EEXIST);
-        }
-        let parent = dentry.parent().unwrap();
-        let name = abs_path_to_name(&path).unwrap();
-        let new_inode = parent.inode().unwrap().create(&name, InodeMode::DIR).unwrap();
-        dentry.set_inode(new_inode);
-        dentry.set_state(DentryState::USED);
-        parent.add_child(dentry);
-    } else {
-        warn!("[sys_mkdirat]: pathname is empty!");
-        return Err(SysError::ENOENT);
+    )?;
+    let _mode = InodeMode::from_bits_truncate(mode as u32);
+    let task = current_task().unwrap().clone();
+    let dentry = at_helper(task, dirfd, pathname, AtFlags::empty())?;
+    if dentry.state() != DentryState::NEGATIVE {
+        return Err(SysError::EEXIST);
     }
+    let parent = dentry.parent().unwrap();
+    let name = abs_path_to_name(&path).unwrap();
+    let new_inode = parent.inode().unwrap().create(&name, InodeMode::DIR).unwrap();
+    // new_inode.inode_inner().set_mode(mode);
+    dentry.set_inode(new_inode);
+    dentry.set_state(DentryState::USED);
+    parent.add_child(dentry);
     Ok(0)
 }
 
@@ -467,13 +464,31 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let dentry = file.dentry().unwrap();
+    log::info!("reading dentry path {}", dentry.path());
     let mut buf_it = buf_slice;
     let mut writen_len = 0;
-    for child in dentry.load_child_dentry()?.iter().skip(file.pos()) {
-        assert!(child.state() != DentryState::NEGATIVE);
+
+    // the first will be "." the second will be ".."
+    let mut dents = dentry.clone().load_child_dentry()?;
+    dents.insert(0, dentry.clone());
+    if let Some(parent) = dentry.parent() {
+        dents.insert(0, parent);
+    }
+    
+    for (idx, child) in dents.iter().skip(file.pos()).enumerate() {
+        // assert!(child.state() != DentryState::NEGATIVE);
+        let name = if idx == 0 {
+            ".".to_string()
+        } else if idx == 1 {
+            "..".to_string()
+        } else {
+            child.name().to_string()
+        };
+
         // align to 8 bytes
-        let c_name_len = child.name().len() + 1;
+        let c_name_len = name.len() + 1;
         let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
+        // let rec_len = LEN_BEFORE_NAME + c_name_len;
         let inode = child.inode().unwrap();
         let linux_dirent = LinuxDirent64 {
             d_ino: inode.inode_inner().ino as u64,
@@ -484,7 +499,8 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 
         //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
         if writen_len + rec_len > len {
-            break;
+            // Result buffer is too small.
+            return Err(SysError::EINVAL)
         }
 
         file.seek(SeekFrom::Current(1))?;
@@ -493,12 +509,12 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
             ptr.copy_from_nonoverlapping(&linux_dirent, 1);
         }
         buf_it[LEN_BEFORE_NAME..LEN_BEFORE_NAME + c_name_len - 1]
-            .copy_from_slice(child.name().as_bytes());
+            .copy_from_slice(name.as_bytes());
         buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
         buf_it = &mut buf_it[rec_len..];
         writen_len += rec_len;
     }
-    log::debug!("writen_len: {}", writen_len);
+    log::info!("writen_len: {}", writen_len);
     return Ok(writen_len as isize);
 }
 
@@ -913,27 +929,6 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
                 .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EFAULT)?;
         let ret = file.read(iov_buf.to_mut()).await?;
-
-        // ugly way
-        // let start = iov.base & !(Constant::PAGE_SIZE - 1);
-        // let end = iov.base + iov.len;
-        // let mut ret = 0;
-
-        // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        //     let va = aligned_va.max(iov.base);
-        //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        //     let va = VirtAddr::from(va);
-        //     let pa = task.with_mut_vm_space(|vm| {
-        //         translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
-        //     });
-        //     let data = pa.get_slice_mut(len);
-        //     let read_size = file.read(data).await?;
-        //     ret += read_size;
-        //     if read_size < len {
-        //         break;
-        //     }
-        // }
-
         totol_len += ret;
         // offset += ret;
     }
@@ -963,20 +958,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult {
                 .ensure_read(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EINVAL)?;
         let ret = file.write(iov_buf.to_ref()).await?;
-
-        // let start = iov.base & !(Constant::PAGE_SIZE - 1);
-        // let end = iov.base + iov.len;
-        // let mut ret = 0;
-        // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-        //     let va = aligned_va.max(iov.base);
-        //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-        //     let va = VirtAddr::from(va);
-        //     let pa = task.with_mut_vm_space(|vm| {
-        //         translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
-        //     });
-        //     let data = pa.get_slice(len);
-        //     ret += file.write(data).await?;
-        // }
         totol_len += ret;
     }
     Ok(totol_len as isize)
@@ -999,23 +980,6 @@ pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> Sy
                 .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EFAULT)?;
     let ret = file.read(user_buf.to_mut()).await?;
-    // let start = buf & !(Constant::PAGE_SIZE - 1);
-    // let end = buf + count;
-    // let mut ret = 0;
-    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-    //     let va = aligned_va.max(buf);
-    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-    //     let va = VirtAddr::from(va);
-    //     let pa = task.with_mut_vm_space(|vm| {
-    //         translate_uva_checked(vm, va, PageFaultAccessType::WRITE).unwrap()
-    //     });
-    //     let data = pa.get_slice_mut(len);
-    //     let read_size = file.read(data).await?;
-    //     ret += read_size;
-    //     if read_size < len {
-    //         break;
-    //     }
-    // }
     file.set_pos(old_pos);
     Ok(ret as isize)
 }
@@ -1028,30 +992,165 @@ pub async fn sys_pwrite(fd: usize, buf: usize, count: usize, offset: usize) -> S
     let task = current_task().unwrap().clone();
     log::debug!("[sys_pwrite] task {} try to read fd {} to buf {:#x} at offset {}, len {}", task.tid(), fd, buf, offset, count);
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let old_pos = file.pos();
-    // assume: during file read, no task switch
-    file.seek(SeekFrom::Start(offset as u64))?;
     let user_buf = 
         UserSliceRaw::new(buf as *mut u8, count)
             .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EINVAL)?;
-    let ret = file.write(user_buf.to_ref()).await?;
-    // let start = buf & !(Constant::PAGE_SIZE - 1);
-    // let end = buf + count;
-    // let mut ret = 0;
-    // for aligned_va in (start..end).step_by(Constant::PAGE_SIZE) {
-    //     let va = aligned_va.max(buf);
-    //     let len = (Constant::PAGE_SIZE - (va % Constant::PAGE_SIZE)).min(end - va);
-    //     let va = VirtAddr::from(va);
-    //     let pa = task.with_mut_vm_space(|vm| {
-    //         translate_uva_checked(vm, va, PageFaultAccessType::READ).unwrap()
-    //     });
-    //     let data = pa.get_slice(len);
-    //     ret += file.write(data).await?;
-    // }
-    file.set_pos(old_pos);
+    let ret = file.write_at(offset, user_buf.to_ref()).await?;
     log::debug!("finish pwrite return {}", ret);
     Ok(ret as isize)
+}
+
+/// The preadv() system call combines the functionality of readv() and pread(2).
+///  It performs the same task as readv(), but adds a fourth argument, offset, 
+/// which specifies the file offset at which the input operation is to be performed.
+pub async fn sys_preadv(fd: usize, iov: usize, iovcnt: usize, offset: usize) -> SysResult {
+    sys_preadv2(fd, iov, iovcnt, offset, 0).await
+}
+
+/// The pwritev() system call combines the functionality of writev() and pwrite(2). 
+/// It performs the same task as writev(), but adds a fourth argument, offset, 
+/// which specifies the file offset at which the output operation is to be performed.
+pub async fn sys_pwritev(fd: usize, iov: usize, iovcnt: usize, offset: usize) -> SysResult {
+    sys_pwritev2(fd, iov, iovcnt, offset, 0).await
+}
+
+
+/// These system calls are similar to preadv() and pwritev() calls,
+/// but add a fifth argument, flags, which modifies the behavior on a
+/// per-call basis.
+pub async fn sys_preadv2(fd: usize, iov: usize, iovcnt: usize, offset: usize, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let flags = RwfFlags::from_bits_truncate(flags);
+    info!("preadv2 using flags: {:?}", flags);
+
+    if (iovcnt as isize) < 0 {
+        return Err(SysError::EINVAL);
+    }
+    let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let mut totol_len = 0usize;
+    // let mut offset = file.pos();
+    for (i, iov) in iovs.to_ref().iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::debug!("[sys_preadv]: iov[{}], ptr: {:#x}, len: {}, read from file pos {}", i, iov.base, iov.len, file.pos());
+        
+        let iov_buf =
+            UserSliceRaw::new(iov.base as *mut u8, iov.len)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+        let ret = file.read_at(offset, iov_buf.to_mut()).await?;
+        totol_len += ret;
+        // offset += ret;
+    }
+    // assert!(offset == file.pos());
+    Ok(totol_len as isize)
+}
+
+
+
+pub async fn sys_pwritev2(fd: usize, iov: usize, iovcnt: usize, offset: usize, flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let flags = RwfFlags::from_bits_truncate(flags);
+    info!("pwritev2 using flags {:?}", flags);
+    
+    if file.inode().ok_or(SysError::EINVAL)?.inode_type() == InodeMode::DIR {
+            return Err(SysError::EISDIR);
+    }
+
+    let iovs = UserSliceRaw::new(iov as *const IoVec, iovcnt)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let mut total_len = 0usize;
+    
+    if (offset as isize) < 0 && !flags.contains(RwfFlags::RWF_APPEND) {
+        return Err(SysError::EINVAL)
+    }
+    for (i, iov) in iovs.to_ref().iter().enumerate() {
+        if iov.len == 0 {
+            continue;
+        }
+        if (iov.len as isize) < 0 {
+            return Err(SysError::EINVAL);
+        }
+        if total_len + iov.len < total_len {
+            return Err(SysError::EINVAL);
+        }
+        log::debug!("[sys_pwritev]: iov[{}], ptr: {:#x}, len: {:#x}, file pos {}", i, iov.base, iov.len, file.pos());
+
+        let iov_buf =
+            UserSliceRaw::new(iov.base as *const u8, iov.len)
+                .ensure_read(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+
+        let ret = if flags.contains(RwfFlags::RWF_APPEND) {
+            let old_pos = file.pos();
+            let write_size = file.write_at(old_pos, iov_buf.to_ref()).await?;
+            if (offset as isize) == -1 {
+                file.set_pos(old_pos + write_size);
+            }
+            write_size
+        } else {
+            file.write_at(offset, iov_buf.to_ref()).await?
+        };
+        total_len += ret;
+    }
+    Ok(total_len as isize)
+}
+
+/// If fd is opened for writing, the vmsplice() system call maps
+/// nr_segs ranges of user memory described by iov into a pipe.  If fd
+/// is opened for reading, the vmsplice() system call fills nr_segs
+/// ranges of user memory described by iov from a pipe.  The file
+/// descriptor fd must refer to a pipe.
+/// TODOS: now write into pipe instead of mapping memory
+pub async fn sys_vmsplice(fd: usize, iovs_ptr: usize, nr_segs: usize, flags: u32) -> SysResult {
+    const IOV_MAX: usize = 1024;
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let flags = SpliceFlags::from_bits_truncate(flags);
+    if file.inode().ok_or(SysError::ENOENT)?.inode_type() != InodeMode::FIFO {
+        return Err(SysError::EBADF);
+    }
+    let is_read = file.readable();
+    if nr_segs > IOV_MAX {
+        return Err(SysError::EINVAL);
+    }
+
+    let iovs = UserSliceRaw::new(iovs_ptr as *const IoVec, nr_segs)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    let mut total_size = 0usize;
+    for iov in iovs.to_ref().iter() {
+        if iov.len == 0 {
+            continue;
+        }
+        log::info!("[sys_vmsplice]: ptr: {:#x}, len: {:#x}", iov.base, iov.len);
+        if flags.contains(SpliceFlags::SPLICE_F_GIFT) {
+            if !is_page_aligned(iov.len) | !is_page_aligned(iov.base) {
+                return Err(SysError::EINVAL);
+            }
+        }
+        let ret = if is_read {
+            let iov_buf = UserSliceRaw::new(iov.base as *const u8, iov.len)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            file.read(iov_buf.to_mut()).await?
+        } else {
+            let iov_buf = UserSliceRaw::new(iov.base as *const u8, iov.len)
+                .ensure_read(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            file.write(iov_buf.to_ref()).await?
+        };
+        total_size += ret;
+    }
+    Ok(total_size as isize)
 }
 
 /// sendfile() copies data between one file descriptor and another.
@@ -1072,15 +1171,16 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
     let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
     let mut buf = vec![0u8; count];
-    let off_ptr = {
+    
+    let len;
+    if offset == 0 {
+        len = in_file.read(&mut buf).await?;
+    } else {
+        let off_ptr = {
         UserPtrRaw::new(offset as *mut usize)
             .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EFAULT)?
-    };
-    let len;
-    if off_ptr.raw == core::ptr::null() {
-        len = in_file.read(&mut buf).await?;
-    } else {
+        };
         let off = off_ptr.to_mut();
         if (*off as isize) < 0 {
             return Err(SysError::EINVAL);
@@ -1090,6 +1190,74 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     }
     let ret = out_file.write(&buf[..len]).await?;
     Ok(ret as isize)
+}
+
+/// splice() moves data between two file descriptors without copying
+/// between kernel address space and user address space.  It transfers
+/// up to size bytes of data from the file descriptor fd_in to the
+/// file descriptor fd_out, where one of the file descriptors must
+/// refer to a pipe.
+pub async fn sys_splice(in_fd: usize, in_off_ptr: usize, out_fd: usize, out_off_ptr: usize, size: usize, _flags: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
+    let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
+    let in_is_pipe = in_file.inode().ok_or(SysError::ENOENT)?.inode_type() == InodeMode::FIFO;
+    let out_is_pipe = out_file.inode().ok_or(SysError::ENOENT)?.inode_type() == InodeMode::FIFO;
+    log::info!("in_is_pipe {in_is_pipe}, out_is_pipe {out_is_pipe}");
+    let mut buf = vec![0u8; size];
+    if !in_is_pipe && !out_is_pipe {
+        return Err(SysError::EINVAL);
+    }
+    let read_size = if in_is_pipe {
+        if !in_file.readable() {
+            return Err(SysError::EBADF);
+        }
+        if in_off_ptr != 0 {
+            return Err(SysError::ESPIPE);
+        }
+        in_file.read(&mut buf).await?
+    } else {
+        if in_off_ptr == 0 {
+            in_file.read(&mut buf).await?
+        } else {
+            let in_off_ptr = UserPtrRaw::new(in_off_ptr as *mut usize)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            let in_off = in_off_ptr.to_mut();
+            if (*in_off as isize) < 0 {
+                return Err(SysError::EINVAL);
+            }
+            let read_size = in_file.read_at(*in_off, &mut buf).await?;
+            *in_off += read_size;
+            read_size
+        }
+    };
+
+    let write_size = if out_is_pipe {
+        if !out_file.writable() {
+            return Err(SysError::EBADF);
+        }
+        if out_off_ptr != 0 {
+            return Err(SysError::ESPIPE);
+        }
+        out_file.write(&mut buf).await?
+    } else {
+        if out_off_ptr == 0 {
+            out_file.write(&buf[..read_size]).await?
+        } else {
+            let out_off_ptr = UserPtrRaw::new(out_off_ptr as *mut usize)
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            let out_off = out_off_ptr.to_mut();
+            if (*out_off as isize) < 0 {
+                return Err(SysError::EINVAL);
+            }
+            let write_size = out_file.write_at(*out_off, &buf[..read_size]).await?;
+            *out_off += write_size;
+            write_size
+        }
+    };
+    Ok(write_size as isize)
 }
 
 /// syscall: linkat
@@ -1219,6 +1387,22 @@ pub fn sys_ftruncate(fildes: usize, length: usize) -> SysResult {
 pub fn sys_fdatasync(fd: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let _ = task.with_fd_table(|t| t.get_file(fd))?;
+    Ok(0)
+}
+
+/// readahead: readahead() initiates readahead on a file so that subsequent reads
+// from that file will be satisfied from the cache
+pub fn sys_readahead(fd: usize, _offset: usize, _count: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|f| f.get_file(fd))?;
+    let dentry = file.dentry().unwrap();
+    if dentry.inode().is_none() {
+        return Err(SysError::EINVAL);
+    }
+    let inode = dentry.inode().unwrap();
+    if inode.inode_type() != InodeMode::FILE {
+        return Err(SysError::EINVAL);
+    }
     Ok(0)
 }
 
