@@ -428,10 +428,12 @@ pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx
 pub fn sys_uname(uname_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
     let uname = UtsName::default();
-    let uname_ptr = uname_buf as *mut UtsName;
-    unsafe {
-        *uname_ptr = uname;
-    }
+    // let uname_ptr = uname_buf as *mut UtsName;
+    let task = current_task().unwrap();
+    let uname_ptr = UserPtrRaw::new(uname_buf as *mut UtsName)
+    .ensure_write(&mut task.vm_space.lock())
+    .ok_or(SysError::EFAULT)?;
+    uname_ptr.write(uname);
     Ok(0)
 }
 

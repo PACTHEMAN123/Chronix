@@ -228,7 +228,7 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
         // thread does is to write its thread ID at this address.
         let user_ptr = UserPtrRaw::new(child_tid.0 as *mut u32)
             .ensure_write(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EINVAL)?;
+            .ok_or(SysError::EFAULT)?;
         user_ptr.write(new_tid as u32);
     }
     if flags.contains(CloneFlags::CHILD_CLEARTID) {
@@ -349,7 +349,9 @@ pub async fn sys_execve(pathname: usize, argv: usize, envp: usize) -> SysResult 
 /// is equal to that of the calling process at the time of the call to waitpid().
 /// pid > 0 meaning wait for the child whose process ID is equal to the value of pid.
 pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysResult {
-    
+    if option < 0 {
+        return Err(SysError::EINVAL);
+    }
     let task = current_task().unwrap().clone();
     // println!("[sys_waitpid]: TCB: {}, pid: {}, exitcode_ptr: {:x}, option: {}", task.tid(), pid, exit_code_ptr, option);
     let option = WaitOptions::from_bits_truncate(option);
@@ -585,6 +587,7 @@ pub fn sys_setsid() -> SysResult {
 ///  glibc provides no wrapper for clone3(), necessitating the
 /// use of syscall(2).
 pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
+    let task = current_task().unwrap();
     // log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
 
     if size > PAGE_SIZE {
@@ -593,10 +596,14 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     if size < CLONE_ARGS_SIZE_VER0 {
         return Err(SysError::EINVAL);
     }
-    let cl_args = unsafe {
-        Instruction::set_sum();
-        *(cl_args_ptr as *const CloneArgs)
-    };
+    // let cl_args = unsafe {
+    //     Instruction::set_sum();
+    //     *(cl_args_ptr as *const CloneArgs)
+    // };
+    let cl_args = *UserPtrRaw::new(cl_args_ptr as *const CloneArgs)
+    .ensure_read(&mut task.get_vm_space().lock())
+    .ok_or(SysError::EFAULT)?
+    .to_ref();
     let flags = cl_args.flags;
     // log::info!("[sys_clone3]: flags: {:x}", flags);
     let stack = VirtAddr::from(cl_args.stack);

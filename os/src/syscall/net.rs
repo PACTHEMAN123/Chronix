@@ -317,6 +317,9 @@ pub fn sys_getsockname(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     if (fd as isize) < 0 {
         return Err(SysError::EBADF);
     }
+    if addr == 0 {
+        return Err(SysError::EFAULT);
+    }
     log::info!("sys_getsockname fd: {}, addr: {:#x}, addr_len: {}", fd, addr, addr_len);
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
@@ -507,67 +510,69 @@ pub fn sys_getsockopt (
             optval_ptr.write(0);
         }
     }
+    let task = current_task().unwrap();
+    let optlen_ptr = UserPtrRaw::new(option_len as *mut u32)
+    .ensure_write(&mut task.get_vm_space().lock())    
+    .ok_or(SysError::EFAULT)?;
     match SocketLevel::try_from(level)? {
         SocketLevel::SolSocket => {
             const SEND_BUFFER_SIZE: usize = 64 * 1024; // 64KB
             const RECV_BUFFER_SIZE: usize = 64 * 1024; // 64KB
             match SocketOption::try_from(option_name)?{
                 SocketOption::SNDBUF => {
-                    let optval_ptr = option_value as *mut u32;
-                    let optlen_ptr = option_len as *mut u32;
-                    unsafe {
-                        optval_ptr.write_volatile(SEND_BUFFER_SIZE as u32);
-                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
-                    }
+                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
+                    optval_ptr.write(SEND_BUFFER_SIZE as u32);
+                    optlen_ptr.write(size_of::<u32>() as u32);
                 },
                 SocketOption::RCVBUF => {
-                    let optval_ptr = option_value as *mut u32;
-                    let optlen_ptr = option_len as *mut u32;
-                    unsafe {
-                        optval_ptr.write_volatile(RECV_BUFFER_SIZE as u32);
-                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
-                    }
+                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
+                    optval_ptr.write(RECV_BUFFER_SIZE as u32);
+                    optlen_ptr.write(size_of::<u32>() as u32);
                 },
                 SocketOption::ERROR => {
-                    let optval_ptr = option_value as *mut u32;
-                    let optlen_ptr = option_len as *mut u32;
-                    unsafe {
-                        optval_ptr.write_volatile(0 as u32);
-                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
-                    }
+                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
+                    optval_ptr.write(0 as u32);
+                    optlen_ptr.write(size_of::<u32>() as u32);
                 }
                 _ =>{
-                    todo!()
+                    
                 } 
             }
         },
         SocketLevel::IpprotoTcp | SocketLevel::IpprotoIp  => {
             const MAX_SEGMENT: usize = 1460; // 1460 byte susually MTU
-            let optlen_ptr = option_len as *mut u32;
             match TcpSocketOption::try_from(option_name)? {
                 TcpSocketOption::NODELAY => {
-                    unsafe {
-                        let optval_ptr = option_value as *mut u32;
-                        optval_ptr.write_volatile(0 as u32);
-                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
-                    }
+                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
+                    optval_ptr.write(0 as u32);
+                    optlen_ptr.write(size_of::<u32>() as u32);
+                    
                 },
                 TcpSocketOption::MAXSEG => {
-                    unsafe {
-                        let optval_ptr = option_value as *mut u32;
-                        optval_ptr.write_volatile(MAX_SEGMENT as u32);
-                        optlen_ptr.write_volatile(size_of::<u32>() as u32);
-                    } 
+                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
+                        optval_ptr.write(MAX_SEGMENT as u32);
+                        optlen_ptr.write(size_of::<u32>() as u32);
                 },
                 TcpSocketOption::INFO => {},
                 TcpSocketOption::CONGESTION => {
                     log::warn!("[sys_getsockopt], TcpSocketOption::CONGESTION");
-                    unsafe {
+                        let optval_ptr = UserPtrRaw::new(option_value as *mut u8)
+                        .ensure_write(&mut task.get_vm_space().lock())
+                        .ok_or(SysError::EFAULT)?;
                         let str = "reno";
-                        let optval_ptr = option_value as *mut u8;
+                        let optval_ptr = optval_ptr.to_mut() as *mut u8;
                         write_string_to_ptr(optval_ptr, str);
-                        optlen_ptr.write_volatile(4);
-                    }
+                        optlen_ptr.write(4);
                 },
             }
         },

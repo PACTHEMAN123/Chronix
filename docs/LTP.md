@@ -24,8 +24,8 @@
 - [x] add_key04
 - [ ] add_key05
 - [x] adjtimex01
-- [ ] adjtimex02
-- [ ] adjtimex03
+- [x] adjtimex02: pass 5 failed 2 skip 1
+- [ ] adjtimex03: broken
 - [ ] af_alg01   af_log: unimplemented safamily
 - [ ] af_alg02
 - [ ] af_alg03
@@ -107,20 +107,20 @@
 - [x] chown04：pass 5 failed 3
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
-- [ ] clock_adjtime01
-- [ ] clock_adjtime02
+- [x] clock_adjtime01: pass 18 broke 1
+- [x] clock_adjtime02: pass 3 failed 3
 - [x] clock_getres01: pass 40 failed 4 
 - [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
 - [x] clock_gettime02: 
 - [ ] clock_gettime03: TBROK: Cannot parse kernel .config
 - [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
-- [x] clock_nanosleep01: failed 8 
+- [x] clock_nanosleep01: passed 8 failed 2 skipped 2 
 - [ ] clock_nanosleep02: TBROK: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
-- [ ] clock_nanosleep03
-- [x] clock_nanosleep04
-- [ ] clock_settime01: skip
-- [ ] clock_settime02
-- [ ] clock_settime03
+- [ ] clock_nanosleep03: .config not exist
+- [x] clock_nanosleep04: pass 4 failed 4
+- [x] clock_settime01: all pass
+- [x] clock_settime02: all pass
+- [ ] clock_settime03: lack 107 syscall
 - [x] clone01
 - [ ] clone02: no summary
 - [x] clone03
@@ -131,8 +131,8 @@
 - [ ] clone08
 - [ ] clone09
 - [ ] clone301: todo! pidfd support 
-- [ ] clone302: can't handle page fault
-- [ ] clone303
+- [x] clone302: pass 6 failed 6
+- [ ] clone303: /proc/self/mounts
 - [x] close01
 - [x] close02
 - [ ] close_range01：No Free Device
@@ -189,7 +189,7 @@
 - [ ] data
 - [ ] datafiles
 - [ ] data_space: pass,no summary
-- [ ] delete_module01
+- [ ] delete_module01: parse kernel .config
 - [ ] delete_module02
 - [ ] delete_module03
 - [ ] dio_append
@@ -240,7 +240,7 @@
 - [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
 - [ ] epoll_pwait01: panic
-- [ ] epoll_pwait02: faild ,441, same sa follows
+- [ ] epoll_pwait02: failed ,441, same as follows
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
@@ -616,7 +616,7 @@
 - [ ] getrusage04: cannot open /proc/cpuinfo, not exist
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
 - [ ] getsid02: failed to open FILE '/proc/sys/kernel/pid_max'
-- [ ] getsockname01: skip 
+- [x] getsockname01:pass 5 failed 1  
 - [ ] getsockopt01: skip
 - [ ] getsockopt02: skip
 - [ ] gettid01: Failed to open FILE '/proc/self/status' for reading: ENOENT (2)
@@ -695,8 +695,8 @@
 - [ ] initialize_if
 - [ ] init_module01
 - [ ] init_module02
-- [ ] inode01
-- [ ] inode02: TBROK: fopen(/proc/cmdline,r) failed: ENOENT (2)
+- [x] inode01: pass no sum
+- [ ] inode02: pass no sum
 - [ ] inotify01: 26,27,28, seem stuck?
 - [ ] inotify02: broke
 - [ ] inotify03
@@ -786,19 +786,19 @@
 ===== kill =======
 - [ ] kill02 : hang
 - [ ] kill03
-- [ ] kill05
-- [ ] kill06
-- [ ] kill07
-- [ ] kill08
-- [ ] kill09
-- [ ] kill10
-- [ ] kill11
-- [ ] kill12
-- [ ] kill13
+- [ ] kill05 : deadlock in sys_shmget
+- [x] kill06
+- [ ] kill07: deadlock in sys_shmget
+- [ ] kill08: pass no sum
+- [ ] kill09: pass no sum
+- [ ] kill10: 
+- [x] kill11: p24
+- [ ] kill12: stuck
+- [ ] kill13: .config
 - [ ] killall_icmp_traffic
 - [ ] killall_tcp_traffic
 - [ ] killall_udp_traffic
-- [ ] kmsg01
+- [ ] kmsg01:/dev/kmsg
 - [ ] ksm01
 - [ ] ksm02
 - [ ] ksm03
@@ -866,7 +866,7 @@
 - [ ] mallocstress : stress
 - [ ] mallopt01
 - [ ] max_map_count
-- [ ] mbind01
+- [ ] mbind01: platform not supported
 - [ ] mbind02
 - [ ] mbind03
 - [ ] mbind04
@@ -876,7 +876,7 @@
 - [ ] mc_verify_opts
 - [ ] mc_verify_opts_error
 - [ ] meltdown
-- [ ] mem02
+- [ ] mem02: pass no sum
 - [ ] membarrier01
 - [ ] memcg_process
 - [ ] memcg_process_stress
@@ -884,12 +884,12 @@
 - [ ] memcg_test_2
 - [ ] memcg_test_3
 - [ ] memcg_test_4
-- [ ] memcmp01
-- [ ] memcontrol01
+- [x] memcmp01
+- [ ] memcontrol01:Can't open /proc/self/mounts
 - [ ] memcontrol02
 - [ ] memcontrol03
 - [ ] memcontrol04
-- [ ] memcpy01
+- [x] memcpy01
 - [ ] memctl_test01 : panic in sys_kill
 - [ ] memfd_create01 : tconf
 - [ ] memfd_create02 : tconf
@@ -913,8 +913,8 @@
 - [ ] mkdirat02 : failed 4, failed unexpectedly; expected: 40 - ELOOP: ENAMETOOLONG
 
 ===== mknod =======
-- [ ] mknod01
-- [ ] mknod02
+- [x] mknod01: p1 b1
+- [x] mknod02: p1 b1
 - [ ] mknod03
 - [ ] mknod04
 - [ ] mknod05
@@ -1028,13 +1028,13 @@
 - [ ] mremap06 : f
 
 - [ ] msg_comm
-- [ ] msgctl01
-- [ ] msgctl02
-- [ ] msgctl03
+- [x] msgctl01: p2 f12
+- [x] msgctl02: p1f1
+- [x] msgctl03: p1f1
 - [ ] msgctl04
 - [ ] msgctl05
-- [ ] msgctl06
-- [ ] msgctl12
+- [ ] msgctl06: p1f1b1
+- [x] msgctl12
 - [ ] msgget01
 - [ ] msgget02
 - [ ] msgget03
@@ -1045,7 +1045,7 @@
 - [ ] msgrcv03
 - [ ] msgrcv05
 - [ ] msgrcv06
-- [ ] msgrcv07
+- [x] msgrcv07: p7 f8
 - [ ] msgrcv08
 - [ ] msgsnd01
 - [ ] msgsnd02
@@ -1072,7 +1072,7 @@
 
 - [ ] nanosleep01 : /proc
 - [ ] nanosleep02 : f
-- [ ] nanosleep04 : time overflow
+- [x] nanosleep04
 
 - [ ] netstress
 - [ ] newuname01

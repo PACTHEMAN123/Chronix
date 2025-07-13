@@ -2,8 +2,8 @@
 
 use core::{fmt::Error, ops::DerefMut, time::Duration};
 
-use alloc::{boxed::Box, fmt, sync::Arc};
-use fatfs::info;
+use alloc::{boxed::Box, fmt, sync::Arc, task};
+use fatfs::{info, Time};
 use hal::instruction::{Instruction, InstructionHal};
 use xmas_elf::program::Flags;
 
@@ -52,6 +52,9 @@ pub async fn sys_nanosleep(time_ptr: usize, time_out_ptr: usize) -> SysResult {
             .ensure_read(&mut task.get_vm_space().lock())
             .ok_or(SysError::EFAULT)?;
     let time_val = *time_val_ptr.to_ref(); 
+    if !time_val.is_valid() {
+        return  Err(SysError::EINVAL);
+    }
     let sleep_time_duration = time_val.into();
     let remain = suspend_timeout(current_task().unwrap(), sleep_time_duration).await;
     if remain.is_zero() {
@@ -274,6 +277,9 @@ pub async fn sys_clock_nanosleep(
                 .ensure_read(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EFAULT)?
                 .to_ref());
+            if !t.is_valid() {
+                return  Err(SysError::EINVAL);
+            }
             let req_time: Duration = t.into();
             let remain_time = if flags == 1 {
                 let current_time = get_current_time_duration();
@@ -288,17 +294,233 @@ pub async fn sys_clock_nanosleep(
             if remain_time.is_zero() {
                 Ok(0)
             }else {
-                if rem_ptr != 0 {
-                    let remptr = UserPtrRaw::new(rem_ptr as *mut TimeSpec)
+                log::warn!("[sys_clock_nanosleep] rem_ptr: {}", rem_ptr);
+                let remptr = UserPtrRaw::new(rem_ptr as *mut TimeSpec)
                     .ensure_write(&mut task.get_vm_space().lock())
                     .ok_or(SysError::EFAULT)?;
+                if rem_ptr != 0 {
                     remptr.write(remain_time.into());
                 }
                 Err(SysError::EINTR)
             }
         }
         _ => {
+            return Err(SysError::EOPNOTSUPP);
+        }
+    }
+}
+
+/// from linux
+#[derive(Clone, Copy, Debug,Default)]
+#[repr(C)]
+pub struct KernTimex {
+    // unsigned int
+    pub kt_modes: u32, 
+    // padding
+    _pad0: u32,     
+    // long long
+    pub kt_offset: i64, 
+    pub kt_freq: i64,
+    pub kt_maxerror: i64,
+    pub kt_esterror: i64,
+    // int
+    pub kt_status: i32,
+    // padding 
+    _pad1: u32,      
+
+    pub kt_constant: i64,
+    pub kt_precision: i64,
+    pub kt_tolerance: i64,
+
+    pub kt_time: TimeVal, 
+
+    pub kt_tick: i64,
+    pub kt_ppsfreq: i64,
+    pub kt_jitter: i64,
+    pub kt_shift: i32,
+    _pad2: u32,
+
+    pub kt_stabil: i64,
+    pub kt_jitcnt: i64,
+    pub kt_calcnt: i64,
+    pub kt_errcnt: i64,
+    pub kt_stbcnt: i64,
+
+    pub kt_tai: i32,
+
+    // padding data from linux
+    _pad_last: [u32; 11],
+}
+
+bitflags! {
+    pub struct TimexModes: u32 {
+        const ADJ_OFFSET           = 0x0001;
+        const ADJ_FREQUENCY        = 0x0002;
+        const ADJ_MAXERROR         = 0x0004;
+        const ADJ_ESTERROR         = 0x0008;
+        const ADJ_STATUS           = 0x0010;
+        const ADJ_TIMECONST        = 0x0020;
+        const ADJ_TAI              = 0x0080;
+        const ADJ_SETOFFSET        = 0x0100;
+        const ADJ_MICRO            = 0x1000;
+        const ADJ_NANO             = 0x2000;
+        const ADJ_TICK             = 0x4000;
+        // Userland only
+        const ADJ_OFFSET_SINGLESHOT = 0x8001;
+        const ADJ_OFFSET_SS_READ    = 0xa001;
+    }
+}
+
+bitflags! {
+    /// Status bits for struct timex.status
+    pub struct TimexStatus: u32 {
+        const STA_PLL        = 0x0001;
+        const STA_PPSFREQ    = 0x0002;
+        const STA_PPSTIME    = 0x0004;
+        const STA_FLL        = 0x0008;
+        const STA_INS        = 0x0010;
+        const STA_DEL        = 0x0020;
+        const STA_UNSYNC     = 0x0040;
+        const STA_FREQHOLD   = 0x0080;
+        const STA_PPSSIGNAL  = 0x0100;
+        const STA_PPSJITTER  = 0x0200;
+        const STA_PPSWANDER  = 0x0400;
+        const STA_PPSERROR   = 0x0800;
+        const STA_CLOCKERR   = 0x1000;
+        const STA_NANO       = 0x2000;
+        const STA_MODE       = 0x4000;
+        const STA_CLK        = 0x8000;
+
+        /// Read-only bits mask
+        const STA_RONLY = Self::STA_PPSSIGNAL.bits()
+                         | Self::STA_PPSJITTER.bits()
+                         | Self::STA_PPSWANDER.bits()
+                         | Self::STA_PPSERROR.bits()
+                         | Self::STA_CLOCKERR.bits()
+                         | Self::STA_NANO.bits()
+                         | Self::STA_MODE.bits()
+                         | Self::STA_CLK.bits();
+    }
+}
+// global variable save last none 0 set kerntimex
+pub static mut TIMEX: KernTimex = KernTimex {
+    kt_modes:     0,
+    _pad0:     0,
+    kt_offset:    0,
+    kt_freq:      0,
+    kt_maxerror:  0,
+    kt_esterror:  0,
+    kt_status:    0,
+    _pad1:     0,
+    kt_constant:  0,
+    kt_precision: 0,
+    kt_tolerance: 0,
+    kt_time:      TimeVal { sec: 0, usec: 0 },
+    kt_tick:      10000,
+    kt_ppsfreq:   0,
+    kt_jitter:    0,
+    kt_shift:     0,
+    _pad2:     0,
+    kt_stabil:    0,
+    kt_jitcnt:    0,
+    kt_calcnt:    0,
+    kt_errcnt:    0,
+    kt_stbcnt:    0,
+    kt_tai:       0,
+    _pad_last:[0; 11],
+};
+
+
+/// kernel time adjustment
+pub fn sys_adjtimex(timex: usize) -> SysResult {
+    /// do_adjtimex in linux
+    fn do_adjtimex(timex: &mut KernTimex) -> SysResult {
+        if timex.kt_modes == 0x80000 {
             return Err(SysError::EINVAL);
+        }
+        let support_mode = TimexModes::all();
+        let modes = match TimexModes::from_bits(timex.kt_modes) {
+            None => return Err(SysError::EINVAL),
+            Some(mode) => {
+                if !(mode & !support_mode).is_empty() {
+                    return Err(SysError::EINVAL);
+                }else {
+                    mode
+                }
+            }
+        };
+        let mut ret = 0;
+        if modes.contains(TimexModes::ADJ_SETOFFSET) {
+            let mut delta = TimeSpec::ZERO;
+            delta.tv_sec = timex.kt_time.sec;
+            delta.tv_nsec = timex.kt_time.usec;
+            if modes.contains(TimexModes::ADJ_NANO) {
+                delta.tv_nsec *= 1000;
+            }
+            ret = add_offset(&delta)?;
+        }
+        if modes.contains(TimexModes::ADJ_TICK) {
+            let tick = timex.kt_tick;
+            if tick < 9000 || tick > 11000 {
+                return Err(SysError::EINVAL);
+            }
+        }
+        Ok(ret)
+    }
+
+    /// helper func for delta in kern clock
+    fn add_offset(delta: &TimeSpec) -> SysResult {
+        if !delta.is_valid(){
+            return Err(SysError::EINVAL);
+        }
+        let wall_time = TimeSpec::wall_time();
+        let new_time = TimeSpec {
+            tv_sec: wall_time.tv_sec + delta.tv_sec,
+            tv_nsec: wall_time.tv_nsec + delta.tv_nsec,
+        };
+        let delta_dur: Duration = (*delta).into();
+        let wall_time_dur: Duration = wall_time.into();
+        if delta_dur > (get_current_time_duration() - wall_time_dur) || !new_time.is_valid() {
+            return Err(SysError::EINVAL);
+        }
+        Ok(0)
+    }
+    let task = current_task().unwrap();
+    let mut r_timex = *UserPtrRaw::new(timex as *mut KernTimex)
+    .ensure_read(&mut task.get_vm_space().lock())
+    .ok_or(SysError::EFAULT)?
+    .to_ref();
+    let modes = r_timex.kt_modes; 
+    if modes == 0x80000 {
+        return Err(SysError::EINVAL);
+    }
+    let w_timex = UserPtrRaw::new(timex as *mut KernTimex)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    if modes == 0 {
+        unsafe {w_timex.write(TIMEX)};
+        return Ok(0);   
+    }
+
+    let status = do_adjtimex(&mut r_timex)?;
+    w_timex.to_mut().kt_tick = 10000;
+    unsafe {TIMEX.clone_from(w_timex.to_mut());}
+    Ok(status)
+}
+
+/// able to choose which clock compared tp adjtimex
+pub fn sys_clock_adjtime(clock_id: usize, timex: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let _timex = UserPtrRaw::new(timex as *mut KernTimex)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?
+        .to_ref();
+    match clock_id {
+        CLOCK_REALTIME  => {
+            sys_adjtimex(timex)
+        }
+        _ => {
+            Ok(0)
         }
     }
 }
