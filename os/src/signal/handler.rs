@@ -46,7 +46,7 @@ pub fn core_sig_handler(signo: i32) {
     info!("[core_sig_handler]: task {} recv sig {}, terminated and coredump", task.gettid(), signo);
 
     // exit all the members of a thread group (process)
-    task.do_group_exit((task.exit_code() & 0xff80) | ((signo as usize) & 0x7f));
+    task.do_group_exit((signo as usize & 0x7f) | 0x80);
     // task.do_group_exit(0);
     // todo: produce a core dump file?
 }

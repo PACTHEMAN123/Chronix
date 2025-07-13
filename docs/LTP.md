@@ -99,7 +99,7 @@
 - [x] chmod01
 - [x] chmod03：
 - [ ] chmod05：cannot open /etc/group, not exist,Syscall number not included: 159
-- [ ] chmod06：symlink(test_file4,test_file5) failed: ENOENT (2)
+- [x] chmod06：pass06 failed3
 - [ ] chmod07：getgrnam(users) failed - try fallback daemon
 - [x] chown01
 - [x] chown02
@@ -189,7 +189,7 @@
 - [ ] data
 - [ ] datafiles
 - [ ] data_space: pass,no summary
-- [ ] delete_module01
+- [ ] delete_module01: parse kernel .config
 - [ ] delete_module02
 - [ ] delete_module03
 - [ ] dio_append
@@ -240,7 +240,7 @@
 - [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
 - [ ] epoll_pwait01: panic
-- [ ] epoll_pwait02: faild ,441, same sa follows
+- [ ] epoll_pwait02: failed ,441, same as follows
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
@@ -616,7 +616,7 @@
 - [ ] getrusage04: cannot open /proc/cpuinfo, not exist
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
 - [ ] getsid02: failed to open FILE '/proc/sys/kernel/pid_max'
-- [ ] getsockname01: skip 
+- [x] getsockname01:pass 5 failed 1  
 - [ ] getsockopt01: skip
 - [ ] getsockopt02: skip
 - [ ] gettid01: Failed to open FILE '/proc/self/status' for reading: ENOENT (2)
@@ -695,8 +695,8 @@
 - [ ] initialize_if
 - [ ] init_module01
 - [ ] init_module02
-- [ ] inode01
-- [ ] inode02: TBROK: fopen(/proc/cmdline,r) failed: ENOENT (2)
+- [x] inode01: pass no sum
+- [ ] inode02: pass no sum
 - [ ] inotify01: 26,27,28, seem stuck?
 - [ ] inotify02: broke
 - [ ] inotify03
@@ -786,19 +786,19 @@
 ===== kill =======
 - [ ] kill02 : hang
 - [ ] kill03
-- [ ] kill05
-- [ ] kill06
-- [ ] kill07
-- [ ] kill08
-- [ ] kill09
-- [ ] kill10
-- [ ] kill11
-- [ ] kill12
-- [ ] kill13
+- [ ] kill05 : deadlock in sys_shmget
+- [x] kill06
+- [ ] kill07: deadlock in sys_shmget
+- [ ] kill08: pass no sum
+- [ ] kill09: pass no sum
+- [ ] kill10: 
+- [x] kill11: p24
+- [ ] kill12: stuck
+- [ ] kill13: .config
 - [ ] killall_icmp_traffic
 - [ ] killall_tcp_traffic
 - [ ] killall_udp_traffic
-- [ ] kmsg01
+- [ ] kmsg01:/dev/kmsg
 - [ ] ksm01
 - [ ] ksm02
 - [ ] ksm03
@@ -819,10 +819,10 @@
 
 ===== link ========
 - [x] link02
-- [x] link04 : p 5 f 9
+- [x] link04 : p 9 f 5
 - [x] link05
 - [ ] link08 : f
-- [ ] linkat01 : f
+- [ ] linkat01 : p no sum
 - [ ] linkat02 : no dev
 
 - [x] listen01 : no sum
@@ -866,7 +866,7 @@
 - [ ] mallocstress : stress
 - [ ] mallopt01
 - [ ] max_map_count
-- [ ] mbind01
+- [ ] mbind01: platform not supported
 - [ ] mbind02
 - [ ] mbind03
 - [ ] mbind04
@@ -876,7 +876,7 @@
 - [ ] mc_verify_opts
 - [ ] mc_verify_opts_error
 - [ ] meltdown
-- [ ] mem02
+- [ ] mem02: pass no sum
 - [ ] membarrier01
 - [ ] memcg_process
 - [ ] memcg_process_stress
@@ -884,12 +884,12 @@
 - [ ] memcg_test_2
 - [ ] memcg_test_3
 - [ ] memcg_test_4
-- [ ] memcmp01
-- [ ] memcontrol01
+- [x] memcmp01
+- [ ] memcontrol01:Can't open /proc/self/mounts
 - [ ] memcontrol02
 - [ ] memcontrol03
 - [ ] memcontrol04
-- [ ] memcpy01
+- [x] memcpy01
 - [ ] memctl_test01 : panic in sys_kill
 - [ ] memfd_create01 : tconf
 - [ ] memfd_create02 : tconf
@@ -905,7 +905,7 @@
 
 ===== mkdir =====
 - [ ] mkdir02
-- [ ] mkdir03
+- [ ] mkdir03: p5 failed 6
 - [ ] mkdir04
 - [x] mkdir05 : failed unlink pass1 failed1
 - [ ] mkdir09 : no dev
@@ -913,8 +913,8 @@
 - [ ] mkdirat02 : failed symlink
 
 ===== mknod =======
-- [ ] mknod01
-- [ ] mknod02
+- [x] mknod01: p1 b1
+- [x] mknod02: p1 b1
 - [ ] mknod03
 - [ ] mknod04
 - [ ] mknod05
@@ -1028,13 +1028,13 @@
 - [ ] mremap06 : f
 
 - [ ] msg_comm
-- [ ] msgctl01
-- [ ] msgctl02
-- [ ] msgctl03
+- [x] msgctl01: p2 f12
+- [x] msgctl02: p1f1
+- [x] msgctl03: p1f1
 - [ ] msgctl04
 - [ ] msgctl05
-- [ ] msgctl06
-- [ ] msgctl12
+- [ ] msgctl06: p1f1b1
+- [x] msgctl12
 - [ ] msgget01
 - [ ] msgget02
 - [ ] msgget03
@@ -1045,7 +1045,7 @@
 - [ ] msgrcv03
 - [ ] msgrcv05
 - [ ] msgrcv06
-- [ ] msgrcv07
+- [x] msgrcv07: p7 f8
 - [ ] msgrcv08
 - [ ] msgsnd01
 - [ ] msgsnd02
@@ -1072,7 +1072,7 @@
 
 - [ ] nanosleep01 : /proc
 - [ ] nanosleep02 : f
-- [ ] nanosleep04 : time overflow
+- [x] nanosleep04
 
 - [ ] netstress
 - [ ] newuname01

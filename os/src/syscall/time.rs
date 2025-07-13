@@ -271,9 +271,6 @@ pub async fn sys_clock_nanosleep(
     rem_ptr: usize
 ) -> SysResult {
     let task = current_task().unwrap();
-    let remptr = UserPtrRaw::new(rem_ptr as *mut TimeSpec)
-                    .ensure_write(&mut task.get_vm_space().lock())
-                    .ok_or(SysError::EFAULT)?;
     match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => {
             let t = *(UserPtrRaw::new(t_ptr as *const TimeSpec)
@@ -298,6 +295,9 @@ pub async fn sys_clock_nanosleep(
                 Ok(0)
             }else {
                 log::warn!("[sys_clock_nanosleep] rem_ptr: {}", rem_ptr);
+                let remptr = UserPtrRaw::new(rem_ptr as *mut TimeSpec)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
                 if rem_ptr != 0 {
                     remptr.write(remain_time.into());
                 }
