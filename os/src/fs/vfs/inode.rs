@@ -218,3 +218,29 @@ bitflags::bitflags! {
         const OTHER_EXEC = 0o1;
     }
 }
+
+impl InodeMode {
+    pub fn is_dir(&self) -> bool {
+        self.contains(InodeMode::DIR)
+    }
+
+    pub fn is_dir_err(&self) -> Result<(), SysError> {
+        if self.contains(InodeMode::DIR) {
+            Err(SysError::EISDIR)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn is_pipe(&self) -> bool {
+        self.contains(InodeMode::FIFO)
+    }
+
+    pub fn is_pipe_err(&self) -> Result<(), SysError> {
+        if self.contains(InodeMode::FIFO) {
+            Err(SysError::ESPIPE)
+        } else {
+            Ok(())
+        }
+    }
+}

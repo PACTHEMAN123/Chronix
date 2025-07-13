@@ -442,7 +442,7 @@
 - [x] fork07
 - [x] fork08
 - [ ] fork09 : no output?
-- [ ] fork10 : read(3,0x3fffffe860,1024) failed
+- [x] fork10
 - [ ] fork13 : /proc/sys/kernel/pid_max: ENOENT (2)
 - [ ] fork14 : skip
 - [ ] fork_exec_loop : 压测
@@ -1230,22 +1230,22 @@
 - [ ] prctl09
 - [ ] prctl10
 
-======== pread ======= failed all
-- [ ] pread01 : f
-- [ ] pread01_64
-- [ ] pread02 : f
-- [ ] pread02_64
-- [ ] preadv01
-- [ ] preadv01_64
-- [ ] preadv02
-- [ ] preadv02_64
-- [ ] preadv03
+======== pread =======
+- [x] pread01
+- [x] pread01_64
+- [x] pread02
+- [x] pread02_64
+- [x] preadv01
+- [x] preadv01_64
+- [x] preadv02 : p7 f1 todo: check read/write of stdin stdout
+- [x] preadv02_64
+- [ ] preadv03 : no dev
 - [ ] preadv03_64
-- [ ] preadv201
-- [ ] preadv201_64
-- [ ] preadv202
-- [ ] preadv202_64
-- [ ] preadv203
+- [x] preadv201
+- [x] preadv201_64
+- [x] preadv202 : pass 6 failed 2 (should not success)
+- [x] preadv202_64 : 
+- [ ] preadv203 : no dev
 - [ ] preadv203_64
 
 - [ ] proc01
@@ -1292,9 +1292,9 @@
 - [ ] pty07
 
 ======= pwrite ====== (we can support pwritev)
-- [ ] pwrite01 : f
-- [ ] pwrite01_64
-- [x] pwrite02 : p1 f4
+- [x] pwrite01
+- [x] pwrite01_64
+- [x] pwrite02 : p2 f3
 - [x] pwrite02_64
 - [x] pwrite03
 - [x] pwrite03_64
@@ -1871,15 +1871,15 @@
 ====== write =========
 - [x] write01
 - [x] write02
-- [ ] write03: kernel trap
+- [x] write03
 - [ ] write04: open .4
-- [ ] write05: kernel trap
-- [x] write06: wrong size
+- [x] write05: pass 3 failed 1
+- [x] write06
 - [x] writetest: no sum
-- [ ] writev01: kernel trap
-- [ ] writev02: efault
+- [x] writev01
+- [x] writev02 : no sum
 - [ ] writev03: no device
-- [ ] writev05: efault
+- [x] writev05: no sum
 - [x] writev06: no sum
 - [ ] writev07: kernel trap
 
