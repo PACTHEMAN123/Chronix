@@ -243,4 +243,16 @@ impl InodeMode {
             Ok(())
         }
     }
+
+    pub fn is_link(&self) -> bool {
+        self.contains(InodeMode::LINK)
+    }
+
+    pub fn is_link_err(&self) -> Result<(), SysError> {
+        if self.contains(InodeMode::LINK) {
+            Err(SysError::EINVAL)
+        } else {
+            Ok(())
+        }
+    }
 }

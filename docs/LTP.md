@@ -140,8 +140,8 @@
 - [x] confstr01
 - [ ] connect01: no_summary
 - [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
-- [ ] copy_file_range01
-- [ ] copy_file_range02
+- [ ] copy_file_range01 : no dev
+- [ ] copy_file_range02 : no dev
 - [ ] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
@@ -490,8 +490,8 @@
 - [ ] ftest08 : failed
 - [x] ftruncate01
 - [x] ftruncate01_64
-- [ ] ftruncate03 : fruncate use a wired dentry?
-- [ ] ftruncate03_64
+- [x] ftruncate03 : pass 3 failed 1
+- [x] ftruncate03_64
 - [ ] ftruncate04 : no .config
 - [ ] ftruncate04_64
 
@@ -551,8 +551,8 @@
 - [ ] getaddrinfo_01
 - [ ] getcontext01
 - [ ] getcpu01
-- [ ] getcwd01 : kernel trap
-- [ ] getcwd02 : failed
+- [x] getcwd01
+- [ ] getcwd02 : should support /proc/self/fd
 - [ ] getcwd03 : failed
 - [x] getcwd04 : 压测
 - [ ] getdents01 : some entries not found
@@ -1761,10 +1761,10 @@
 - [ ] time-schedule : 230 syscall
 - [x] tkill01
 - [ ] tkill02 : /proc/sys/kernel/pid_max
-- [ ] truncate02 : not support truncate
-- [ ] truncate02_64
-- [ ] truncate03 : f 8
-- [ ] truncate03_64
+- [x] truncate02
+- [x] truncate02_64
+- [x] truncate03 : pass 6 failed 2
+- [x] truncate03_64 : pass 6 failed 2
 
 - [ ] uaccess : tconf
 - [ ] uevent01 : tconf
@@ -1881,5 +1881,5 @@
 - [ ] writev03: no device
 - [x] writev05: no sum
 - [x] writev06: no sum
-- [ ] writev07: kernel trap
+- [x] writev07: pass 2 faied 6 (should support truncate in tmp)
 

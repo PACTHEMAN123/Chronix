@@ -310,7 +310,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as usize),
         SYSCALL_STATFS => sys_statfs(args[0], args[1]),
         SYSCALL_FSTATFS => sys_temp(syscall_id),
-        SYSCALL_TRUNCATE => sys_temp(syscall_id),
+        SYSCALL_TRUNCATE => sys_truncate(args[0] as *const u8, args[1]),
         SYSCALL_FTRUNCATE => sys_ftruncate(args[0], args[1]),
         SYSCALL_FALLOCATE => sys_temp(syscall_id),
         SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2], args[3] as i32),

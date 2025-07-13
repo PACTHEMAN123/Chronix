@@ -193,7 +193,7 @@ impl dyn Dentry {
         //info!("[DCACHE] miss one: {:?}, start to search from {}", path, self.path());
         let dentry = current.clone().walk(path)?;
         if dentry.state() == DentryState::NEGATIVE {
-            //info!("[DENTRY] invalid path!");
+            info!("[DENTRY] invalid path! {}", dentry.path());
             Ok(None)
         } else {
             Ok(Some(dentry.clone()))

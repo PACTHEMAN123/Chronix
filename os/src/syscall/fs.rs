@@ -125,13 +125,19 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult {
 /// The contents of the array pointed to by buf are undefined on error.
 pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
     let task = current_task().unwrap();
+    
     task.with_cwd(|cwd| {
         let path = cwd.path();
         if len < path.len() + 1 {
             info!("[sys_getcwd]: buf len too small to recv path");
             return Err(SysError::ERANGE);
         } else {
-            //info!("copying path: {}, len: {}", path, path.len());
+            if buf == 0 {
+                return Err(SysError::EFAULT);
+            }
+            if (len as isize) < 0 {
+                return Err(SysError::EINVAL);
+            }
             let new_buf = UserSliceRaw::new(buf as *mut u8, len)
                 .ensure_write(&mut task.get_vm_space().lock())
                 .ok_or(SysError::EFAULT)?;
@@ -291,7 +297,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult {
     } else {
         old_dentry.find(&path)?.ok_or(SysError::ENOENT)?
     };
-    if new_dentry.state() == DentryState::NEGATIVE {
+    if new_dentry.is_negative() {
         log::warn!("[sys_chdir]: dentry not found");
         return Err(SysError::ENOENT);
     } else if !new_dentry.inode().unwrap().inode_type().contains(InodeMode::DIR) {
@@ -312,7 +318,7 @@ pub fn sys_fchdir(fd: usize) -> SysResult {
     let dir = task.with_fd_table(|t| t.get_file(fd))?;
     let dentry = dir.dentry().unwrap();
     let inode = dentry.inode().unwrap();
-    if inode.inode_type() != InodeMode::DIR {
+    if !inode.inode_type().is_dir() {
         return Err(SysError::ENOTDIR);
     }
     log::info!("[fchdir]: task {} change cwd to {}", task.tid(), dentry.path());
@@ -587,8 +593,8 @@ pub fn sys_symlinkat(old_path_ptr: *const u8, new_dirfd: isize, new_path_ptr: *c
     if new_dentry.inode().is_some() && !new_dentry.is_negative() {
         return Err(SysError::EEXIST);
     } else {
-        log::info!("create a new symlink");
-        new_dentry.set_inode(new_inode);
+        log::info!("create a new symlink, path {}", new_dentry.path());
+        new_dentry.set_inode(new_inode.clone());
     }
     // global_update_dentry(&new_path, new_inode)?;
     Ok(0)
@@ -1407,11 +1413,36 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 /// syscall: ftruncate
 pub fn sys_ftruncate(fildes: usize, length: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    let file = task.with_fd_table(|f| f.get_file(fildes))?;
+    if (length as isize) < 0 {
+        return Err(SysError::EINVAL)
+    }
     log::info!("[sys_ftruncate] fd {} truncate size to {}", fildes, length);
-    file.inode().unwrap().truncate(length)?;
+    let file = task.with_fd_table(|f| f.get_file(fildes))?;
+    let dentry = file.dentry().ok_or(SysError::EINVAL)?;
+    dentry.inode().unwrap().truncate(length)?;
     Ok(0)
 }
+
+pub fn sys_truncate(pathname: *const u8, length: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let path = user_path_to_string(
+        UserPtrRaw::new(pathname),
+        &mut task.get_vm_space().lock()
+    )?;
+    if path == "" {
+        return Err(SysError::ENOENT);
+    }
+    let dentry = at_helper1(task, -100, &path, AtFlags::empty())?;
+    log::info!("[sys_truncate] {}({}) truncate size to {}", path, dentry.path(), length);
+    if (length as isize) < 0 {
+        return Err(SysError::E2BIG)
+    }
+    let inode = dentry.inode().ok_or(SysError::EINVAL)?;
+    inode.inode_type().is_dir_err()?;
+    inode.truncate(length)?;
+    Ok(0)
+}
+
 
 /// fake async
 pub fn sys_fdatasync(fd: usize) -> SysResult {
@@ -1484,7 +1515,8 @@ pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: 
                 if cnt > 0 {
                     parent_dentry = parent_dentry.parent().expect("failed no parent");
                 }
-                rel_path = rel_path.trim_start_matches("../").to_string();
+                rel_path = rel_path.trim_start_matches("..").to_string();
+                rel_path = rel_path.trim_start_matches("/").to_string();
                 cnt += 1;
                 if cnt >= 40 {
                     warn!("should not have so many ../, may occur some error");
