@@ -2,7 +2,7 @@
 PHONY_TARGET := 
 
 PHONY_TARGET += all
-all: disk-img kernel-rv kernel-la 
+all: disk-img kernel-rv-test kernel-la-test 
 
 PHONY_TARGET += setup
 setup:
@@ -20,6 +20,17 @@ kernel-la: setup
 	make -f Makefile.sub kernel ARCH=loongarch64
 	cp ./target/loongarch64-unknown-none/release/os ./kernel-la
 
+PHONY_TARGET += kernel-rv-test
+kernel-rv-test: setup
+	make -f Makefile.sub kernel-bin ARCH=riscv64 AUTOTEST=y
+	cp ./target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
+
+PHONY_TARGET += kernel-la
+kernel-la-test: setup
+	make -f Makefile.sub kernel ARCH=loongarch64 AUTOTEST=y
+	cp ./target/loongarch64-unknown-none/release/os ./kernel-la
+
+
 PHONY_TARGET += disk-img
 disk-img: setup
 	make -f Makefile.sub disk-img
@@ -31,6 +42,14 @@ run-rv: kernel-rv
 PHONY_TARGET += run-la
 run-la: kernel-la
 	make -f Makefile.sub run ARCH=loongarch64
+
+PHONY_TARGET += test-rv
+test-rv: kernel-rv-test
+	make -f Makefile.sub run ARCH=riscv64 AUTOTEST=y
+
+PHONY_TARGET += test-la
+test-la: kernel-la-test
+	make -f Makefile.sub run ARCH=loongarch64 AUTOTEST=y
 
 # replace the GDB to yours
 PHONY_TARGET += debug-rv

@@ -75,11 +75,11 @@ pub trait File: Send + Sync + DowncastSync {
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError>;
     /// Read file, file offset will not change
     async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, SysError> {
-        todo!()
+        Err(SysError::EINVAL)
     }
     /// Write file, file offset will not change
     async fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, SysError> {
-        todo!()
+        Err(SysError::EINVAL)
     }
     /// get the dentry it points to
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {

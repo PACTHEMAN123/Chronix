@@ -38,6 +38,7 @@ hal = { path = "../hal" }
 smp = []
 fat32 = []
 net = []
+autotest = []
 
 [profile.release]
 debug = true

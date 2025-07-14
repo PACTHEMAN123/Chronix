@@ -265,4 +265,8 @@ impl File for Socket {
         // log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
         res
     }
+
+    fn dentry(&self) -> Option<Arc<dyn Dentry>> {
+        None
+    }
 }

@@ -3,6 +3,9 @@
 ########################################################
 ARCH := riscv64
 
+# run mode
+AUTOTEST :=
+
 # smp
 export SMP := 
 

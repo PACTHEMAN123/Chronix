@@ -17,6 +17,10 @@ ifeq ($(NET_C),y)
 KERNEL_FEATURES += net
 endif
 
+ifeq ($(AUTOTEST),y)
+KERNEL_FEATURES += autotest
+endif
+
 # kernel target
 ifeq ($(ARCH), riscv64)
 KERNEL_TARGET := riscv64gc-unknown-none-elf
@@ -59,6 +63,7 @@ kernel: dumpdtb
 	@rm -rf hal/.cargo
 	@cp -r os/cargo os/.cargo
 	@cp -r hal/cargo hal/.cargo
+	$(call building, "Kernel features: $(KERNEL_FEATURES)")
 ifeq ($(KERNEL_FEATURES), ) 
 	@cd os && cargo build $(KERNEL_TARGET_ARG) $(KERNEL_MODE_ARG)
 else

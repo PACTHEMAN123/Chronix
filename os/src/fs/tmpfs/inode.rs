@@ -1,5 +1,7 @@
 //! inode in memory
 
+use core::cmp;
+
 use alloc::{string::{String, ToString}, sync::{Arc, Weak}};
 
 use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::{page::{cache::PageCache, page::Page}, vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
@@ -56,17 +58,17 @@ impl Inode for TmpInode {
 
     fn cache_read_at(self: Arc<Self>, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
         let size = self.inner.size();
-        log::debug!("cur size: {}, buf size: {}", size, buf.len());
-        if offset >= size {
-            log::debug!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
-            return Ok(0);
-        }
+        log::info!("cur size: {}, buf size: {}", size, buf.len());
+        // if offset >= size {
+        //     log::debug!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
+        //     return Ok(0);
+        // }
         let mut total_read_size = 0usize;
         let mut current_offset = offset;
         let mut buf_offset = 0usize;
         while buf_offset < buf.len() {
             let cache = self.cache.clone();
-            if current_offset > cache.end() {
+            if current_offset >= cache.end() {
                 break;
             }
             let page_offset = current_offset / PAGE_SIZE * PAGE_SIZE;
@@ -79,13 +81,14 @@ impl Inode for TmpInode {
                 // cache.update_end(page_offset + PAGE_SIZE);
                 page
             };
-            let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..]);
+            let buf_read_size = cmp::min(cache.end() - current_offset, buf.len() - buf_offset);
+            let page_read_size = page.read_at(in_page_offset, &mut buf[buf_offset..buf_offset + buf_read_size]);
             // should truncate the read size if larger than file size
-            if current_offset + page_read_size > size {
-                assert!(size >= current_offset);
-                total_read_size += size - current_offset;
-                break;
-            }
+            // if current_offset + page_read_size > size {
+            //     assert!(size >= current_offset);
+            //     total_read_size += size - current_offset;
+            //     break;
+            // }
             total_read_size += page_read_size;
             buf_offset += page_read_size;
             current_offset += page_read_size; 
@@ -112,7 +115,7 @@ impl Inode for TmpInode {
             };
             let page_write_size = page.write_at(in_page_offset, &buf[buf_offset..]);
             page.set_dirty();
-            cache.update_end(page_offset + page_write_size);
+            cache.update_end(page_offset + page_write_size + in_page_offset);
             self.inner.set_size(cache.end());
 
             total_write_size += page_write_size;

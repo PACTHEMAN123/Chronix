@@ -12,8 +12,8 @@
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
 - [x] access03
-- [ ] access04 : symlink broken
-- [ ] acct01 : symlink broken
+- [x] access04 : pass 8 failed 4
+- [ ] acct01
 - [ ] acct02
 - [ ] acct02_helper
 - [ ] acl1
@@ -99,12 +99,12 @@
 - [x] chmod01
 - [x] chmod03：
 - [ ] chmod05：cannot open /etc/group, not exist,Syscall number not included: 159
-- [x] chmod06：pass06 failed3
+- [x] chmod06：pass 6 failed 3
 - [ ] chmod07：getgrnam(users) failed - try fallback daemon
 - [x] chown01
 - [x] chown02
 - [x] chown03
-- [ ] chown04：需要实现链接悬垂引用
+- [x] chown04：pass 5 failed 3
 - [x] chown05：需要修改 uid gid
 - [ ] chroot01-04：需要支持修改 root path
 - [x] clock_adjtime01: pass 18 broke 1
@@ -140,8 +140,8 @@
 - [x] confstr01
 - [ ] connect01: no_summary
 - [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
-- [ ] copy_file_range01
-- [ ] copy_file_range02
+- [ ] copy_file_range01 : no dev
+- [ ] copy_file_range02 : no dev
 - [ ] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
@@ -168,7 +168,7 @@
 - [x] creat03
 - [ ] creat04: should not remove when unlink a inode ref by sth
 - [x] creat05
-- [ ] creat06: 悬垂引用
+- [x] creat06: pass 5 failed 3
 - [ ] creat07: failed to copy
 - [ ] creat07_child: failed
 - [x] creat08: pass 2 faild 7 
@@ -442,7 +442,7 @@
 - [x] fork07
 - [x] fork08
 - [ ] fork09 : no output?
-- [ ] fork10 : read(3,0x3fffffe860,1024) failed
+- [x] fork10
 - [ ] fork13 : /proc/sys/kernel/pid_max: ENOENT (2)
 - [ ] fork14 : skip
 - [ ] fork_exec_loop : 压测
@@ -490,8 +490,8 @@
 - [ ] ftest08 : failed
 - [x] ftruncate01
 - [x] ftruncate01_64
-- [ ] ftruncate03 : fruncate use a wired dentry?
-- [ ] ftruncate03_64
+- [x] ftruncate03 : pass 3 failed 1
+- [x] ftruncate03_64
 - [ ] ftruncate04 : no .config
 - [ ] ftruncate04_64
 
@@ -551,12 +551,12 @@
 - [ ] getaddrinfo_01
 - [ ] getcontext01
 - [ ] getcpu01
-- [ ] getcwd01 : kernel trap
-- [ ] getcwd02 : failed
+- [x] getcwd01
+- [ ] getcwd02 : should support /proc/self/fd
 - [ ] getcwd03 : failed
 - [x] getcwd04 : 压测
-- [ ] getdents01 : no dangle symlink
-- [ ] getdents02 : failed
+- [ ] getdents01 : some entries not found
+- [x] getdents02 : pass 9 failed 3, getdents still have some wrong
 - [x] getdomainname01
 
 ======== gid & uid ========
@@ -586,7 +586,7 @@
 - [x] getpid02
 - [ ] getppid01: /proc/sys/kernel/pid_max'
 - [x] getppid02
-- [ ] getpriority01: p2 failed 2
+- [x] getpriority01: p2 failed 2
 - [x] getpriority02: p2 failed 2
 - [x] getrandom01
 - [x] getrandom02
@@ -821,8 +821,8 @@
 - [x] link02
 - [x] link04 : p 9 f 5
 - [x] link05
-- [ ] link08 : f
-- [ ] linkat01 : p no sum
+- [ ] link08 : expected: 40 - ELOOP: ENAMETOOLONG (36)
+- [ ] linkat01 : pass lot f 3, no sum
 - [ ] linkat02 : no dev
 
 - [x] listen01 : no sum
@@ -904,13 +904,13 @@
 - [ ] min_free_kbytes : f
 
 ===== mkdir =====
-- [ ] mkdir02
-- [ ] mkdir03: p5 failed 6
-- [ ] mkdir04
-- [x] mkdir05 : failed unlink pass1 failed1
+- [ ] mkdir02 : f 2
+- [x] mkdir03 : passed 7 failed 4
+- [ ] mkdir04 : f 1
+- [x] mkdir05
 - [ ] mkdir09 : no dev
-- [x] mkdirat01
-- [ ] mkdirat02 : failed symlink
+- [x] mkdirat01 : no sum
+- [ ] mkdirat02 : failed 4, failed unexpectedly; expected: 40 - ELOOP: ENAMETOOLONG
 
 ===== mknod =======
 - [x] mknod01: p1 b1
@@ -1230,22 +1230,22 @@
 - [ ] prctl09
 - [ ] prctl10
 
-======== pread ======= failed all
-- [ ] pread01 : f
-- [ ] pread01_64
-- [ ] pread02 : f
-- [ ] pread02_64
-- [ ] preadv01
-- [ ] preadv01_64
-- [ ] preadv02
-- [ ] preadv02_64
-- [ ] preadv03
+======== pread =======
+- [x] pread01
+- [x] pread01_64
+- [x] pread02
+- [x] pread02_64
+- [x] preadv01
+- [x] preadv01_64
+- [x] preadv02 : p7 f1 todo: check read/write of stdin stdout
+- [x] preadv02_64
+- [ ] preadv03 : no dev
 - [ ] preadv03_64
-- [ ] preadv201
-- [ ] preadv201_64
-- [ ] preadv202
-- [ ] preadv202_64
-- [ ] preadv203
+- [x] preadv201
+- [x] preadv201_64
+- [x] preadv202 : pass 6 failed 2 (should not success)
+- [x] preadv202_64 : 
+- [ ] preadv203 : no dev
 - [ ] preadv203_64
 
 - [ ] proc01
@@ -1256,7 +1256,7 @@
 - [ ] process_vm_writev02
 - [ ] proc_sched_rt01
 - [ ] profil01
-- [ ] prot_hsymlinks
+- [ ] prot_hsymlinks : abort
 
 ======= pselect ======
 - [ ] pselect01 : /proc
@@ -1292,38 +1292,38 @@
 - [ ] pty07
 
 ======= pwrite ====== (we can support pwritev)
-- [ ] pwrite01 : f
-- [ ] pwrite01_64
-- [x] pwrite02 : p1 f4
+- [x] pwrite01
+- [x] pwrite01_64
+- [x] pwrite02 : p2 f3
 - [x] pwrite02_64
 - [x] pwrite03
 - [x] pwrite03_64
 - [x] pwrite04 : p1 f1
 - [x] pwrite04_64
-- [ ] pwritev01
-- [ ] pwritev01_64
-- [ ] pwritev02
-- [ ] pwritev02_64
-- [ ] pwritev03
-- [ ] pwritev03_64
-- [ ] pwritev201
-- [ ] pwritev201_64
-- [ ] pwritev202
-- [ ] pwritev202_64
+- [x] pwritev01
+- [x] pwritev01_64
+- [x] pwritev02 : p6 f1
+- [x] pwritev02_64 : p6 f1
+- [ ] pwritev03 : no dev
+- [ ] pwritev03_64 : no dev
+- [x] pwritev201
+- [x] pwritev201_64
+- [x] pwritev202 : p5 f2
+- [x] pwritev202_64 : p5 f2
 
 ======== read ======== (support more read syscall)
 - [x] read01
 - [x] read02 : p5 f1
 - [ ] read03 : mknodat
 - [x] read04
-- [ ] readahead01
-- [ ] readahead02
-- [ ] read_all : f
+- [x] readahead01 : p4 f1
+- [ ] readahead02 : no dev
+- [ ] read_all : brok The directory argument (-d) is required
 - [x] readdir01
-- [ ] readdir21 : f
-- [ ] readlink01 : f
-- [ ] readlink03 : f
-- [x] readlinkat01 : p5 f7
+- [ ] readdir21 : tconf
+- [x] readlink01
+- [x] readlink03 : p5 f3
+- [x] readlinkat01 : p10 f2
 - [x] readlinkat02 : p5 f1
 - [x] readv01: pass 10
 - [x] readv02: p3 f2
@@ -1455,12 +1455,12 @@
 - [x] sendfile04_64
 - [x] sendfile05
 - [x] sendfile05_64
-- [ ] sendfile06 : f
-- [ ] sendfile06_64
-- [ ] sendfile07 : hang
+- [x] sendfile06
+- [x] sendfile06_64
+- [ ] sendfile07 : test timeout, Congratulation, likely test hit a kernel bug.
 - [ ] sendfile07_64
-- [ ] sendfile08 : f
-- [ ] sendfile08_64
+- [x] sendfile08
+- [x] sendfile08_64
 - [ ] sendfile09 : tconf
 - [ ] sendfile09_64
 - [ ] sendmmsg01 : skip
@@ -1471,10 +1471,11 @@
 - [ ] sendto01: no sum
 - [x] sendto02
 - [ ] sendto03
-
 - [ ] setdomainname01: 162
 - [ ] setdomainname02: 
 - [ ] setdomainname03
+
+
 - [ ] setegid01
 - [ ] setegid02
 - [ ] setfsgid01
@@ -1657,13 +1658,13 @@
 - [ ] sockioctl01: f
 
 ======= splice =======
-- [ ] splice01 : read failed
+- [x] splice01
 - [x] splice02
-- [ ] splice03 : we can support this
-- [ ] splice04 : hang
-- [ ] splice05 : f
+- [x] splice03 : p5 f2
+- [x] splice04
+- [ ] splice05 : f, now not consider socket file
 - [ ] splice06 : tconf
-- [ ] splice07 : panic
+- [ ] splice07 : f
 - [ ] splice08 : tconf
 - [ ] splice09 : tconf
 
@@ -1758,10 +1759,10 @@
 - [ ] time-schedule : 230 syscall
 - [x] tkill01
 - [ ] tkill02 : /proc/sys/kernel/pid_max
-- [ ] truncate02 : not support truncate
-- [ ] truncate02_64
-- [ ] truncate03 : symlink
-- [ ] truncate03_64
+- [x] truncate02
+- [x] truncate02_64
+- [x] truncate03 : pass 6 failed 2
+- [x] truncate03_64 : pass 6 failed 2
 
 - [ ] uaccess : tconf
 - [ ] uevent01 : tconf
@@ -1778,8 +1779,8 @@
 - [ ] uname02 : panic
 - [ ] uname04
 - [x] unlink05 : pass 1 failed 1
-- [x] unlink07 : pass 5 failed 1
-- [ ] unlink08 : failed
+- [x] unlink07
+- [ ] unlink08 : failed 4
 - [ ] unlink09 : ioctl failed
 - [x] unlinkat01 : pass 5 failed 2
 - [ ] unshare01 : no share syscall
@@ -1819,10 +1820,10 @@
 - [ ] vma02
 - [ ] vma03
 - [ ] vma04 : 
-- [ ] vmsplice01: read failed
-- [ ] vmsplice02: should failed
-- [ ] vmsplice03: vmsplice() didn't write anything
-- [ ] vmsplice04: not support
+- [x] vmsplice01
+- [x] vmsplice02
+- [x] vmsplice03
+- [ ] vmsplice04: f
 - [ ] vsock01 : .config
 
 ====== wait ============
@@ -1868,14 +1869,15 @@
 ====== write =========
 - [x] write01
 - [x] write02
-- [ ] write03: kernel trap
+- [x] write03
 - [ ] write04: open .4
-- [ ] write05: kernel trap
-- [x] write06: wrong size
+- [x] write05: pass 3 failed 1
+- [x] write06
 - [x] writetest: no sum
-- [ ] writev01: kernel trap
-- [ ] writev02: efault
+- [x] writev01
+- [x] writev02 : no sum
 - [ ] writev03: no device
-- [ ] writev05: efault
+- [x] writev05: no sum
 - [x] writev06: no sum
-- [ ] writev07: kernel trap
+- [x] writev07: pass 2 faied 6 (should support truncate in tmp)
+
