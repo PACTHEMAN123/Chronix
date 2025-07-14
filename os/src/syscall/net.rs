@@ -1,12 +1,12 @@
 use core::{any::Any, clone, mem, option, panic, ptr::{self, copy_nonoverlapping}};
 
-use alloc::{ffi::CString, sync::Arc, task, vec::Vec,vec};
+use alloc::{ffi::CString, string::String, sync::Arc, task, vec,vec::Vec};
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::socket::dns::Socket;
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -226,7 +226,13 @@ pub async fn sys_sendto(
     if (fd as isize) < 0 {
         return Err(SysError::EBADF);
     }
-    // log::info!("addr is {}, addr_len is {}", addr, addr_len);
+    if (buf as i32) < 0 || (buf == 0 && len != 0) {
+        return Err(SysError::EFAULT);
+    }
+    if len > 64 * 128 {
+        return Err(SysError::EMSGSIZE);
+    }
+    log::info!("addr is {}, addr_len is {}", addr, addr_len);
     let task = current_task().unwrap().clone();
     // let buf_slice = unsafe {
     //     core::slice::from_raw_parts_mut(buf as *mut u8, len)
@@ -887,3 +893,43 @@ pub fn sockaddr_writer(task: &Arc<TaskControlBlock>, addr: usize, addr_len: usiz
     Ok(())
 }
 
+///set host name
+pub async fn sys_sethostname(hostname: usize, len: usize) -> SysResult {
+    if (len as isize) < 0 || (len as isize) > 64 {
+        return Err(SysError::EINVAL);
+    }
+    let task = current_task().unwrap();
+    if hostname == 0 {
+        return Err(SysError::EFAULT);
+    }
+    if hostname == 0 && len != 0 {
+        return Err(SysError::EFAULT);
+    }
+    let hostname = UserSliceRaw::new(hostname as *const u8, len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let file = open_file("/etc/hostname", OpenFlags::O_RDWR).unwrap();
+    file.write_at(0,hostname.to_ref()).await?;
+    // log::info!("[sys_hostname] hostname will be set {}", String::from_utf8_lossy(hostname.to_ref()));
+    // log::info!("[sys_sethostname] now file hostname: {}", String::from_utf8_lossy(&file.read_all()));
+    Ok(0)
+}
+
+pub async fn sys_gethostname(hostname: usize, len: usize) -> SysResult {
+    if (len as isize) < 0 || (len as isize) > 64 {
+        return Err(SysError::EINVAL);
+    }
+    let task = current_task().unwrap();
+    if hostname == 0 {
+        return Err(SysError::EFAULT);
+    }
+    if hostname == 0 && len != 0 {
+        return Err(SysError::EFAULT);
+    }
+    let hostname = UserSliceRaw::new(hostname as *mut u8, len)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let file = open_file("/etc/hostname", OpenFlags::O_WRONLY|OpenFlags::O_CLOEXEC).unwrap();
+    file.read(hostname.to_mut()).await?;
+    Ok(0)
+}

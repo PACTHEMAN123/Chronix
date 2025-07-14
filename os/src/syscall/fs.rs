@@ -1,7 +1,7 @@
 //! File and filesystem-related syscalls
 use core::{any::Any, cmp, ops::DerefMut, ptr::copy_nonoverlapping};
 
-use alloc::{string::ToString, sync::Arc, vec};
+use alloc::{string::{String, ToString}, sync::Arc, vec};
 use hal::{addr::{PhysAddrHal, PhysPageNumHal, VirtAddr, VirtAddrHal}, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::{info, warn};
 use strum::FromRepr;
@@ -424,12 +424,25 @@ pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx
 /// syscall uname
 pub fn sys_uname(uname_buf: usize) -> SysResult {
     let _sum_guard = SumGuard::new();
-    let uname = UtsName::default();
+    let mut uname = UtsName::default();
     // let uname_ptr = uname_buf as *mut UtsName;
     let task = current_task().unwrap();
     let uname_ptr = UserPtrRaw::new(uname_buf as *mut UtsName)
     .ensure_write(&mut task.vm_space.lock())
     .ok_or(SysError::EFAULT)?;
+    if let Some(hostnamefile) = open_file("/etc/hostname", OpenFlags::O_RDWR){
+        let hostname = hostnamefile.read_all();
+        if hostname.len() > 0 {
+            uname.set_nodename(&hostname);
+        }
+        log::info!("[sys_uname]: get name {}", String::from_utf8_lossy(&hostname));
+    }
+    if let Some(domainnamefile) = open_file("/etc/domainname", OpenFlags::O_RDWR){
+        let domainname = domainnamefile.read_all();
+        if domainname.len() > 0 {
+            uname.set_domainname(&domainname);
+        }
+    }
     uname_ptr.write(uname);
     Ok(0)
 }
