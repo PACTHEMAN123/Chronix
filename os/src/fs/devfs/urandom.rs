@@ -67,86 +67,7 @@ impl SimpleRng {
     }
 }
 
-
-
 pub static RNG: SpinNoIrqLock<SimpleRng> = SpinNoIrqLock::new(SimpleRng::new());
-
-pub struct UrandomFile {
-    inner: FileInner,
-}
-
-impl UrandomFile {
-    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
-        let inner = FileInner {
-            offset: 0.into(),
-            dentry,
-            flags: SpinNoIrqLock::new(OpenFlags::empty()),
-        };
-        Arc::new(Self { inner })
-    }
-}
-
-#[async_trait]
-impl File for UrandomFile {
-    fn file_inner(&self) ->  &FileInner {
-        &self.inner
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        RNG.lock().fill_buf(buf);
-        Ok(buf.len())
-    }
-
-    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
-        Ok(buf.len())
-    }
-}
-
-pub struct UrandomDentry {
-    inner: DentryInner,
-}
-
-impl UrandomDentry {
-    pub fn new(
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent),
-        })
-    }
-}
-
-unsafe impl Send for UrandomDentry {}
-unsafe impl Sync for UrandomDentry {}
-
-impl Dentry for UrandomDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(&self,
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<dyn Dentry> {
-        let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        });
-        dentry
-    }
-    
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(UrandomFile::new(self.clone()))
-    }
-}
 
 pub struct UrandomInode {
     inner: InodeInner,
@@ -164,6 +85,15 @@ impl UrandomInode {
 impl Inode for UrandomInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        RNG.lock().fill_buf(buf);
+        Ok(buf.len())
+    }
+
+    fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize, i32> {
+        Ok(buf.len())
     }
 
     fn getattr(&self) -> crate::fs::Kstat {

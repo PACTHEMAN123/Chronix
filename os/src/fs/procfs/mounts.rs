@@ -1,95 +1,13 @@
 //! /proc/mounts file
 
+use core::cmp;
+
 use alloc::{string::{String, ToString}, sync::{Arc, Weak}};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
 use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask, FS_MANAGER}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
-
-pub struct MountsFile {
-    inner: FileInner,
-}
-
-impl MountsFile {
-    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
-        let inner = FileInner {
-            offset: 0.into(),
-            dentry,
-            flags: SpinNoIrqLock::new(OpenFlags::empty()),
-        };
-        Arc::new(Self { inner })
-    }
-}
-
-#[async_trait]
-impl File for MountsFile {
-    fn file_inner(&self) ->  &FileInner {
-        &self.inner
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        let info = list_mounts();
-        let len = info.len();
-        let pos = self.pos();
-        if self.pos() >= len {
-            return Ok(0);
-        }
-        buf[..len].copy_from_slice(info.as_bytes());
-        self.set_pos(pos + len);
-        Ok(len)
-    }
-
-    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
-        Ok(0)
-    }
-}
-
-pub struct MountsDentry {
-    inner: DentryInner,
-}
-
-impl MountsDentry {
-    pub fn new(
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent),
-        })
-    }
-}
-
-unsafe impl Send for MountsDentry {}
-unsafe impl Sync for MountsDentry {}
-
-impl Dentry for MountsDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(&self,
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<dyn Dentry> {
-        let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        });
-        dentry
-    }
-    
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(MountsFile::new(self.clone()))
-    }
-}
 
 pub struct MountsInode {
     inner: InodeInner,
@@ -107,6 +25,21 @@ impl MountsInode {
 impl Inode for MountsInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        let size = self.inode_inner().size();
+        if offset > size {
+            return Ok(0)
+        }
+        let info = list_mounts();
+        let read_size = cmp::min(buf.len(), size - offset);
+        buf[..read_size].copy_from_slice(&info.as_bytes()[offset..offset+read_size]);
+        Ok(read_size)
+    }
+
+    fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
+        Err((SysError::EINVAL).code() as i32)
     }
 
     fn getattr(&self) -> crate::fs::Kstat {

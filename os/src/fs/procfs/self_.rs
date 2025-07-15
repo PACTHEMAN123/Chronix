@@ -2,45 +2,8 @@
 
 use alloc::{string::String, sync::{Arc, Weak}};
 
-use crate::{fs::{simplefs::file::SpFile, vfs::{inode::InodeMode, Dentry, DentryInner, File, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError, task::current_task};
+use crate::{fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError, task::current_task};
 
-/// exe dentry
-pub struct ExeDentry {
-    inner: DentryInner
-}
-
-impl ExeDentry {
-    pub fn new(parent: Option<Arc<dyn Dentry>>) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new("exe", parent),
-        })
-    }
-}
-
-unsafe impl Send for ExeDentry {}
-unsafe impl Sync for ExeDentry {}
-
-
-impl Dentry for ExeDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(
-            &self,
-            name: &str,
-            parent: Option<Arc<dyn Dentry>>,
-        ) -> Arc<dyn Dentry> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        })
-    }
-
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        // only need to open as simple file
-        Some(SpFile::new(self.clone()))
-    }
-}
 
 /// exe inode
 pub struct ExeInode {

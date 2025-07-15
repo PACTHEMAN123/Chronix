@@ -11,7 +11,7 @@ pub mod pipefs;
 pub mod page;
 pub mod devfs;
 pub mod utils;
-pub mod simplefs;
+// pub mod simplefs;
 pub mod procfs;
 pub mod shmfs;
 pub mod tmpfs;

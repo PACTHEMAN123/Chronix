@@ -6,84 +6,6 @@ use alloc::boxed::Box;
 
 use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
 
-
-pub struct CpuDmaLatencyFile {
-    inner: FileInner,
-}
-
-impl CpuDmaLatencyFile {
-    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
-        let inner = FileInner {
-            offset: 0.into(),
-            dentry,
-            flags: SpinNoIrqLock::new(OpenFlags::empty()),
-        };
-        Arc::new(Self { inner })
-    }
-}
-
-#[async_trait]
-impl File for CpuDmaLatencyFile {
-    fn file_inner(&self) ->  &FileInner {
-        &self.inner
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        buf.fill(0);
-        Ok(buf.len())
-    }
-
-    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
-        Ok(buf.len())
-    }
-}
-
-pub struct CpuDmaLatencyDentry {
-    inner: DentryInner,
-}
-
-impl CpuDmaLatencyDentry {
-    pub fn new(
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent),
-        })
-    }
-}
-
-unsafe impl Send for CpuDmaLatencyDentry {}
-unsafe impl Sync for CpuDmaLatencyDentry {}
-
-impl Dentry for CpuDmaLatencyDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(&self,
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<dyn Dentry> {
-        let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        });
-        dentry
-    }
-    
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(CpuDmaLatencyFile::new(self.clone()))
-    }
-}
-
 pub struct CpuDmaLatencyInode {
     inner: InodeInner,
 }
@@ -100,6 +22,15 @@ impl CpuDmaLatencyInode {
 impl Inode for CpuDmaLatencyInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        buf.fill(0);
+        Ok(buf.len())
+    }
+
+    fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize, i32> {
+        Ok(buf.len())
     }
 
     fn getattr(&self) -> crate::fs::Kstat {

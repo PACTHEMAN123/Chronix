@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 
-use crate::{devices::BlockDevice, fs::{simplefs::{dentry::SpDentry, inode::SpInode}, vfs::{fstype::{FSType, FSTypeInner, MountFlags}, inode::InodeMode, Dentry, DentryState, DCACHE}, SuperBlock, SuperBlockInner}};
+use crate::{devices::BlockDevice, fs::{vfs::{fstype::{FSType, FSTypeInner, MountFlags}, inode::InodeMode, Dentry, DentryState, DCACHE}, SuperBlock, SuperBlockInner}};
 
 use super::{dentry::TmpDentry, inode::TmpInode, superblock::TmpSuperBlock};
 

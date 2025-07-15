@@ -52,7 +52,7 @@ impl Inode for FatFileInode {
         &self.inner
     }
 
-    fn cache(&self) -> Arc<PageCache> {
+    fn cache(&self) -> Option<Arc<PageCache>> {
         panic!("not support");
     }
 
@@ -201,7 +201,7 @@ impl Inode for FatDirInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
     }
-    fn cache(&self) -> Arc<PageCache> {
+    fn cache(&self) -> Option<Arc<PageCache>> {
         panic!("fat32 not support for caching")
     }
     fn read_page_at(self: Arc<Self>, _offset: usize) -> Option<Arc<Page>> {

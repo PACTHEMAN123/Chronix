@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 
-use crate::{devices::BlockDevice, fs::{simplefs::{dentry::SpDentry, inode::SpInode}, vfs::{fstype::{FSType, FSTypeInner, MountFlags}, Dentry, DentryState, DCACHE}, SuperBlock, SuperBlockInner}};
+use crate::{devices::BlockDevice, fs::{tmpfs::{dentry::TmpDentry, inode::TmpInode}, vfs::{fstype::{FSType, FSTypeInner, MountFlags}, inode::InodeMode, Dentry, DentryState, DCACHE}, SuperBlock, SuperBlockInner}};
 
 use super::superblock::DevSuperBlock;
 
@@ -28,8 +28,8 @@ impl FSType for DevFsType {
             Arc::from_raw(ptr)
         };
         let sb = DevSuperBlock::new(SuperBlockInner::new(dev, fs_type.clone()));
-        let root_inode = SpInode::new(Arc::downgrade(&sb.clone()));
-        let root_dentry = SpDentry::new(name, parent.clone());
+        let root_inode = TmpInode::new(Arc::downgrade(&sb.clone()), InodeMode::DIR);
+        let root_dentry = TmpDentry::new(name, parent.clone());
         root_dentry.set_inode(root_inode);
         sb.set_root_dentry(root_dentry.clone());
         DCACHE.lock().insert(root_dentry.path(), root_dentry.clone());

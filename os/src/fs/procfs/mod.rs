@@ -1,13 +1,13 @@
 //! proc file system
 
-use alloc::sync::Arc;
-use meminfo::{MemInfoDentry, MemInfoInode};
-use mounts::{MountsDentry, MountsInode};
-use self_::{ExeDentry, ExeInode};
+use alloc::sync::{Arc, Weak};
+use meminfo::MemInfoInode;
+use mounts::MountsInode;
+use self_::ExeInode;
 
-use crate::fs::{tmpfs::{dentry::TmpDentry, inode::TmpInode}, vfs::inode::InodeMode};
+use crate::fs::{procfs::{meminfo::MEM_INFO, mounts::list_mounts}, tmpfs::{dentry::TmpDentry, inode::TmpInode}, vfs::{inode::InodeMode, Inode}, SuperBlock};
 
-use super::{simplefs::{dentry::SpDentry, inode::SpInode}, vfs::{Dentry, DCACHE}};
+use super::vfs::{Dentry, DCACHE};
 
 pub mod fstype;
 pub mod superblock;
@@ -20,31 +20,41 @@ pub fn init_procfs(root_dentry: Arc<dyn Dentry>) {
     let sb = root_dentry.inode().unwrap().inode_inner().super_block.clone();
 
     // mkdir /proc/self
-    let self_dentry = TmpDentry::new("self", Some(root_dentry.clone()));
-    let self_inode = TmpInode::new(sb.clone().unwrap(), InodeMode::DIR);
-    self_dentry.set_inode(self_inode);
-    root_dentry.add_child(self_dentry.clone());
-    DCACHE.lock().insert(self_dentry.path(), self_dentry.clone());
+    let self_dentry = create_sys_dir("self", sb.clone().unwrap(), root_dentry.clone());
 
     // touch /proc/self/exe
-    let exe_dentry = ExeDentry::new(Some(root_dentry.clone()));
+    let exe_dentry = TmpDentry::new("exe", Some(root_dentry.clone()));
     let exe_inode = ExeInode::new(sb.clone().unwrap());
     exe_dentry.set_inode(exe_inode);
     self_dentry.add_child(exe_dentry.clone());
     DCACHE.lock().insert(exe_dentry.path(), exe_dentry.clone());
 
     // touch /proc/meminfo
-    let mem_dentry = MemInfoDentry::new("meminfo", Some(root_dentry.clone()));
-    let mem_inode = MemInfoInode::new(sb.clone().unwrap());
-    mem_dentry.set_inode(mem_inode);
-    root_dentry.add_child(mem_dentry.clone());
-    DCACHE.lock().insert(mem_dentry.path(), mem_dentry.clone());
-
+    create_sys_file(&MEM_INFO.lock().serialize(), "meminfo", sb.clone().unwrap(), root_dentry.clone());
     // touch /proc/mounts
-    let mounts_dentry = MountsDentry::new("mounts", Some(root_dentry.clone()));
-    let mounts_inode = MountsInode::new(sb.clone().unwrap());
-    mounts_dentry.set_inode(mounts_inode);
-    root_dentry.add_child(mounts_dentry.clone());
-    DCACHE.lock().insert(mounts_dentry.path(), mounts_dentry.clone());
+    create_sys_file(&list_mounts(),"mounts", sb.clone().unwrap(), root_dentry.clone());
+    // touch /proc/sys/kernel/pid_max
+    let sys_dentry = create_sys_dir("sys", sb.clone().unwrap(), root_dentry.clone());
+    let kernel_dentry = create_sys_dir("kernel", sb.clone().unwrap(), sys_dentry);
+    create_sys_file("4194304", "pid_max", sb.clone().unwrap(), kernel_dentry);
+}
 
+/// helper method to generate written dir
+pub fn create_sys_dir(name: &str, sb: Weak<dyn SuperBlock>, parent: Arc<dyn Dentry>) -> Arc<dyn Dentry> {
+    let dentry = TmpDentry::new(name, Some(parent.clone()));
+    let inode = TmpInode::new(sb.clone(), InodeMode::DIR);
+    dentry.set_inode(inode);
+    parent.add_child(dentry.clone());
+    dentry
+}
+
+/// helper method to generate written file
+pub fn create_sys_file(contents: &str, name: &str, sb: Weak<dyn SuperBlock>, parent: Arc<dyn Dentry>) -> Arc<dyn Dentry> {
+    let contents = contents.as_bytes();
+    let dentry = TmpDentry::new(name, Some(parent.clone()));
+    let inode = TmpInode::new(sb.clone(), InodeMode::FILE);
+    let _ = inode.clone().cache_write_at(0, contents);
+    dentry.set_inode(inode);
+    parent.add_child(dentry.clone());
+    dentry
 }

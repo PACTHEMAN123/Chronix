@@ -1,96 +1,12 @@
 //! the zero device
 
+use core::cmp;
+
 use alloc::sync::{Arc, Weak};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
 use crate::{config::BLOCK_SIZE, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::SysError};
-
-
-pub struct ZeroFile {
-    inner: FileInner,
-}
-
-impl ZeroFile {
-    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
-        let inner = FileInner {
-            offset: 0.into(),
-            dentry,
-            flags: SpinNoIrqLock::new(OpenFlags::empty()),
-        };
-        Arc::new(Self { inner })
-    }
-}
-
-#[async_trait]
-impl File for ZeroFile {
-    fn file_inner(&self) ->  &FileInner {
-        &self.inner
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        let pos = self.pos();
-        let size = self.inode().unwrap().inode_inner().size();
-        assert!(pos <= size);
-        let read_size = core::cmp::min(buf.len(), size - pos);
-        buf[0..read_size].fill(0);
-        Ok(read_size)
-    }
-
-    async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
-        let pos = self.pos();
-        let size = buf.len();
-        self.set_pos(pos + size);
-        self.inode().unwrap().inode_inner().set_size(pos + size);
-        Ok(buf.len())
-    }
-}
-
-pub struct ZeroDentry {
-    inner: DentryInner,
-}
-
-impl ZeroDentry {
-    pub fn new(
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent),
-        })
-    }
-}
-
-unsafe impl Send for ZeroDentry {}
-unsafe impl Sync for ZeroDentry {}
-
-impl Dentry for ZeroDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(&self,
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<dyn Dentry> {
-        let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        });
-        dentry
-    }
-    
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(ZeroFile::new(self.clone()))
-    }
-}
 
 pub struct ZeroInode {
     inner: InodeInner,
@@ -108,6 +24,16 @@ impl ZeroInode {
 impl Inode for ZeroInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn read_at(&self, _offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        buf.fill(0);
+        Ok(buf.len())
+    }
+
+    fn write_at(&self, _offset: usize, buf: &[u8]) -> Result<usize, i32> {
+        let len = buf.len();
+        Ok(len)
     }
 
     fn getattr(&self) -> crate::fs::Kstat {

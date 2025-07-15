@@ -92,8 +92,8 @@ pub trait Inode {
         Ok(0)
     }
     /// get the page cache it owned
-    fn cache(&self) -> Arc<PageCache> {
-        todo!()
+    fn cache(&self) -> Option<Arc<PageCache>> {
+        None
     }
     /// get a page at given offset
     /// if the page already in cache, just return the cache

@@ -30,8 +30,8 @@ impl Inode for TmpInode {
         &self.inner
     }
 
-    fn cache(&self) -> Arc<PageCache> {
-        self.cache.clone()
+    fn cache(&self) -> Option<Arc<PageCache>> {
+        Some(self.cache.clone())
     }
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
@@ -40,7 +40,7 @@ impl Inode for TmpInode {
             log::debug!("[Tmp Inode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
-        let page_cache = self.cache();
+        let page_cache = self.cache().unwrap();
         // since tmp file relies only on page cache
         // if not found, may indicates that a "hole" is in the page cache
         // due to the un-continuous write

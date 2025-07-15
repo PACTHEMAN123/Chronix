@@ -50,19 +50,32 @@ impl File for TmpFile {
     }
     async fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
-        let size = inode.cache_read_at(offset, buf).unwrap();
+        let size = if inode.cache().is_some() {
+            inode.cache_read_at(offset, buf).unwrap()
+        } else {
+            inode.read_at(offset, buf).unwrap()
+        };
         Ok(size)
     }
     async fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
-        let size = inode.cache_write_at(offset, buf).unwrap();
+        let size = if inode.cache().is_some() {
+            inode.cache_write_at(offset, buf).unwrap()
+        } else {
+            inode.write_at(offset, buf).unwrap()
+        };
         Ok(size)
     }
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
-        log::debug!("[Tmp file] read start from pos {}", self.pos());
-        let size = inode.cache_read_at(self.pos(), buf).unwrap();
+        log::info!("[Tmp file] read start from pos {}", self.pos());
+        let size = if inode.cache().is_some() {
+            inode.cache_read_at(self.pos(), buf).unwrap()
+        } else {
+            inode.read_at(self.pos(), buf).unwrap()
+        };
         self.seek(SeekFrom::Current(size as i64)).expect("seek failed");
+        log::info!("finish, return {size}");
         Ok(size)
     }
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
@@ -72,7 +85,11 @@ impl File for TmpFile {
         let pos = self.pos();
         log::debug!("[Tmp file] writing {}, state: {:?}", self.dentry().unwrap().path(), self.dentry().unwrap().state());
         let inode = self.dentry().unwrap().inode().unwrap();
-        let size = inode.cache_write_at(pos, buf).unwrap();
+        let size = if inode.cache().is_some() {
+            inode.cache_write_at(pos, buf).unwrap()
+        } else {
+            inode.write_at(pos, buf).unwrap()
+        };
         log::debug!("[Tmp file] set pos at {}", pos + size);
         self.set_pos(pos + size);
         Ok(size)

@@ -95,8 +95,8 @@ impl Inode for Ext4Inode {
         &self.inner
     }
 
-    fn cache(&self) -> Arc<PageCache> {
-        self.cache.clone()
+    fn cache(&self) -> Option<Arc<PageCache>> {
+        Some(self.cache.clone())
     }
 
     fn read_page_at(self: Arc<Self>, offset: usize) -> Option<Arc<Page>> {
@@ -105,7 +105,7 @@ impl Inode for Ext4Inode {
             info!("[Ext4 INode]: read_page_at: reach EOF, offset: {} size: {}", offset, size);
             return None;
         }
-        let page_cache = self.cache();
+        let page_cache = self.cache().unwrap();
         let page = if let Some(page) = page_cache.get_page(offset) {
             page.clone()
         } else {
@@ -374,8 +374,12 @@ impl Inode for Ext4Inode {
             file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
             let fsize = file.file_size() as usize;
             file.file_close().expect("failed to close");
-            let page_cache_end = self.cache().end();
-            cmp::max(page_cache_end, fsize)
+            if let Some(cache) = self.cache() {
+                let page_cache_end = cache.end();
+                cmp::max(page_cache_end, fsize)
+            } else {
+                fsize
+            }
         } else {
             // DIR size should be 0
             0
@@ -423,8 +427,12 @@ impl Inode for Ext4Inode {
             file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
             let fsize = file.file_size() as usize;
             file.file_close().expect("failed to close");
-            let page_cache_end = self.cache().end();
-            cmp::max(page_cache_end, fsize)
+            if let Some(cache) = self.cache() {
+                let page_cache_end = cache.end();
+                cmp::max(page_cache_end, fsize)
+            } else {
+                fsize
+            }
         } else {
             // DIR size should be 0
             0

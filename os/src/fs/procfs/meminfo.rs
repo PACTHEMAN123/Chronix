@@ -1,6 +1,8 @@
 //! fake meminfo file
 //! adapt from phoenix
 
+use core::cmp;
+
 use alloc::sync::{Arc, Weak};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -77,87 +79,6 @@ impl MemInfo {
     }
 }
 
-pub struct MemInfoFile {
-    inner: FileInner,
-}
-
-impl MemInfoFile {
-    pub fn new(dentry: Arc<dyn Dentry>) -> Arc<Self> {
-        let inner = FileInner {
-            offset: 0.into(),
-            dentry,
-            flags: SpinNoIrqLock::new(OpenFlags::empty()),
-        };
-        Arc::new(Self { inner })
-    }
-}
-
-#[async_trait]
-impl File for MemInfoFile {
-    fn file_inner(&self) ->  &FileInner {
-        &self.inner
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        let info = MEM_INFO.lock().serialize();
-        let len = info.len();
-        if self.pos() >= len {
-            return Ok(0);
-        }
-        buf[..len].copy_from_slice(info.as_bytes());
-        Ok(len)
-    }
-
-    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
-        Ok(0)
-    }
-}
-
-pub struct MemInfoDentry {
-    inner: DentryInner,
-}
-
-impl MemInfoDentry {
-    pub fn new(
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<Self> {
-        Arc::new(Self {
-            inner: DentryInner::new(name, parent),
-        })
-    }
-}
-
-unsafe impl Send for MemInfoDentry {}
-unsafe impl Sync for MemInfoDentry {}
-
-impl Dentry for MemInfoDentry {
-    fn dentry_inner(&self) -> &DentryInner {
-        &self.inner
-    }
-
-    fn new(&self,
-        name: &str,
-        parent: Option<Arc<dyn Dentry>>,
-    ) -> Arc<dyn Dentry> {
-        let dentry = Arc::new(Self {
-            inner: DentryInner::new(name, parent)
-        });
-        dentry
-    }
-    
-    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
-        Some(MemInfoFile::new(self.clone()))
-    }
-}
 
 pub struct MemInfoInode {
     inner: InodeInner,
@@ -175,6 +96,21 @@ impl MemInfoInode {
 impl Inode for MemInfoInode {
     fn inode_inner(&self) -> &InodeInner {
         &self.inner
+    }
+
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, i32> {
+        let size = self.inode_inner().size();
+        if offset > size {
+            return Ok(0)
+        }
+        let info = MEM_INFO.lock().serialize();
+        let read_size = cmp::min(buf.len(), size - offset);
+        buf[..read_size].copy_from_slice(&info.as_bytes()[offset..offset+read_size]);
+        Ok(read_size)
+    }
+
+    fn write_at(&self, _offset: usize, _buf: &[u8]) -> Result<usize, i32> {
+        Err((SysError::EINVAL).code() as i32)
     }
 
     fn getattr(&self) -> crate::fs::Kstat {
