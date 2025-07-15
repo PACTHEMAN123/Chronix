@@ -88,6 +88,8 @@ pub enum SysError {
     ETIME = 62,
     /// Socket operation on non-socket
     ENOTSOCK = 88,
+    /// sendmsg bigger than biggest message
+    EMSGSIZE = 90,
     /// Protocol not supported
     EPROTONOSUPPORT = 93,
     /// Unsupported

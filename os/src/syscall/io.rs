@@ -5,9 +5,10 @@ use core::{future::Future, mem, pin::Pin, ptr::read, task::{Context, Poll}, time
 use alloc::{sync::Arc, vec::Vec};
 use hal::instruction::{Instruction, InstructionHal};
 use log::SetLoggerError;
+use smoltcp::time;
 use virtio_drivers::device::socket::SocketError;
 
-use crate::{fs::vfs::{file::PollEvents, File}, signal::SigSet, task::{current_task, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
+use crate::{fs::vfs::{file::PollEvents, File}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, task::{current_task, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
 
 use super::{SysError, SysResult};
 
@@ -57,36 +58,59 @@ impl Future for PPollFuture {
 /// it waits for one of a set of file descriptors to become ready to perform I/O.
 pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ts: usize, sigmask: usize) -> SysResult {
     let task = current_task().unwrap().clone();
-    let raw_fds: &mut [PollFd] = unsafe {
-        Instruction::set_sum();
-        core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds)
-    };
+    // let raw_fds: &mut [PollFd] = unsafe {
+    //     Instruction::set_sum();
+    //     core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds)
+    // };
+    // log::info!("fds: {fds}, nfds: {nfds}, timeout_ts: {timeout_ts}, sigmask: {sigmask}");
+    if (nfds as i32) < 0 {
+        return Err(SysError::EINVAL);
+    }
+    let raw_fds = UserSliceRaw::new(fds as *mut PollFd, nfds)
+    .ensure_write(&mut task.get_vm_space().lock())
+    .ok_or(SysError::EFAULT)?;
+    let raw_fds = raw_fds.to_mut();
     let mut poll_fds: Vec<PollFd> = Vec::new();
     poll_fds.extend_from_slice(raw_fds);
 
     let timeout = if timeout_ts == 0 {
         None
     } else {
-        Some(unsafe {
-            *(timeout_ts as *const TimeSpec)
-        })
+        let ret = *UserPtrRaw::new(timeout_ts as *const TimeSpec)
+            .ensure_read(&mut  task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref();
+        if !ret.is_valid(){
+            return Err(SysError::EINVAL);
+        }
+        Some(ret)
     };
 
     let new_mask = if sigmask == 0 {
         None
     } else {
-        Some(unsafe {
-            *(sigmask as *const SigSet)
-        })
+        Some(
+            *UserPtrRaw::new(sigmask as *const SigSet)
+            .ensure_read(&mut  task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref()
+        )
     };
 
     // put the file in the vec of polling futures
     let mut polls = Vec::<(PollEvents, Arc<dyn File>)>::with_capacity(nfds);
-    for poll_fd in poll_fds.iter() {
+    for (_i, poll_fd) in poll_fds.iter_mut().enumerate() {
         let fd = poll_fd.fd as usize;
         let events = poll_fd.events;
-        let file = task.with_fd_table(|t| t.get_file(fd))?;
-        polls.push((events, file));
+        // let file = task.with_fd_table(|t| t.get_file(fd))?;
+        match task.with_fd_table(|t| t.get_file(fd)) {
+            Ok(file) => {
+                polls.push((events, file));
+            }
+            _ => {
+                poll_fd.revents |= PollEvents::INVAL;
+            }
+        }
     }
 
     // save the old sig mask
@@ -95,6 +119,44 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ts: usize, sigmask: usiz
     if let Some(mask) = new_mask {
         task.sig_manager.lock().blocked_sigs |= mask;
         current_mask |= mask;
+    }
+
+    if nfds == 0 {
+        task.set_interruptable();
+        task.set_wake_up_sigs(!current_mask);
+
+        if let Some(timeout) = timeout {
+            let sleep_future = TimedTaskFuture::new(
+                timeout.into(),
+                PendingFuture{}
+            );
+            let intr_future = IntrBySignalFuture {
+                task: task.clone(),
+                mask: current_mask,
+            };
+
+            let result = Select2Futures::new(sleep_future, intr_future).await;
+            task.set_running();
+            task.sig_manager.lock().blocked_sigs = old_mask;
+            match result {
+                SelectOutput::Output1(_) => {
+                    raw_fds.copy_from_slice(&poll_fds);
+                    return Ok(poll_fds.iter().filter(|f| !f.revents.is_empty()).count() as isize);
+
+                }
+                SelectOutput::Output2(_) => {
+                    return Err(SysError::EINTR);
+                }
+            }
+        }else {
+            let intr_future = IntrBySignalFuture {
+                task: task.clone(),
+                mask: current_mask,
+            };
+            match intr_future.await {
+                _ => return Err(SysError::EINTR),
+            }
+        }
     }
 
     let poll_future = PPollFuture { polls };
@@ -132,7 +194,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ts: usize, sigmask: usiz
     Ok(ret as isize)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 /// fd set struct
 pub struct FdSet {
@@ -181,39 +243,56 @@ pub async fn sys_pselect6(
     if nfds < 0 {
         return Err(SysError::EINVAL);
     }
-    let task = current_task().unwrap();
-    let mut readfds = unsafe {
+    let task = current_task().unwrap().clone();
+    let mut readfds = {
         if readfds_ptr == 0 {
             None
         }else {
-            Instruction::set_sum();
-           Some(&mut *(readfds_ptr as *mut FdSet))
+            let raw_fds = UserPtrRaw::new(readfds_ptr as *mut FdSet)
+                    .ensure_read(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+            Some(
+                *raw_fds.to_ref()
+            )
         } 
     };
-    let mut writefds = unsafe {
+    let mut writefds = {
         if writefds_ptr == 0 {
             None
         }else {
-            Instruction::set_sum();
-            Some(&mut *(writefds_ptr as *mut FdSet))
+            Some(*UserPtrRaw::new(writefds_ptr as *mut FdSet)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref())
         }
     };
-    let mut exceptfds = unsafe {
+    let mut exceptfds = {
         if exceptfds_ptr == 0 {
             None
         }else {
-            Instruction::set_sum();
-            Some(&mut *(exceptfds_ptr as *mut FdSet))
+            Some(*UserPtrRaw::new(exceptfds_ptr as *mut FdSet)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref())
         }
     };
-    let timeout: Option<Duration> = unsafe {
+    let timeout: Option<Duration> = {
         if timeout_ptr == 0 {
             None
         }else {
-            Instruction::set_sum();
-            Some((*(timeout_ptr as *const TimeSpec)).into())
+            let ret = *UserPtrRaw::new(timeout_ptr as *const TimeSpec)
+            .ensure_read(&mut  task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref();
+            if !ret.is_valid(){
+                return Err(SysError::EINVAL);
+            }
+            Some(ret.into())
         }
     };
+    if let Some(inner_timeout) = timeout {
+        log::info!("timeout: {:?}",inner_timeout);
+    }
     // log::info!(
     //     "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
     //     readfds, writefds, exceptfds, timeout
@@ -221,10 +300,11 @@ pub async fn sys_pselect6(
     let new_mask = if sigmask_ptr == 0 {
         None
     } else {
-        unsafe {
-            Instruction::set_sum();
-            Some(*(sigmask_ptr as *const SigSet))
-        }
+        Some(*UserPtrRaw::new(sigmask_ptr as *const SigSet)
+            .ensure_read(&mut  task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?
+            .to_ref()
+        )
     };
 
     let mut polls= Vec::<(usize,PollEvents, Arc<dyn File>)>::with_capacity(nfds as usize);

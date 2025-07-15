@@ -1130,7 +1130,7 @@
 - [ ] openat201 : no openat2
 - [ ] openat202 : f
 - [ ] openat203 : no openat2
-- [ ] open_by_handle_at01
+- [x] open_by_handle_at01: p1f3b1
 - [ ] open_by_handle_at02
 - [ ] open_tree01 : no dev
 - [ ] open_tree02 : no dev
@@ -1141,7 +1141,7 @@
 - [x] page01: pass no sum
 - [x] page02: pass no sum
 - [x] pathconf01
-- [ ] pathconf02: b 1
+- [x] pathconf02: p 1 f 5
 - [ ] pause01: '/proc/37/stat'
 - [ ] pause02
 - [ ] pause03
@@ -1191,7 +1191,7 @@
 - [x] pipe09 : no sum 
 - [x] pipe10
 - [x] pipe11 : 70 pass!
-- [ ] pipe12 : ioctl
+- [ ] pipe12 : ioctl p 1 f 1 b 1
 - [ ] pipe13 : /proc
 - [x] pipe14
 - [ ] pipe15 : /proc
@@ -1217,16 +1217,16 @@
 - [ ] posix_fadvise04 : f
 - [ ] posix_fadvise04_64
 
-- [ ] ppoll01 : panic
+- [x] ppoll01 : p 15 f 5: still remains problem :-(
 - [x] prctl01 : p1 f1
 - [ ] prctl02 : f
-- [ ] prctl03
-- [ ] prctl04
-- [ ] prctl05
+- [x] prctl03: p2 f3
+- [x] prctl04: p5 f5
+- [x] prctl05: p2 f2
 - [ ] prctl06
 - [ ] prctl06_execve
 - [ ] prctl07
-- [ ] prctl08
+- [ ] prctl08: p6 f4 s1
 - [ ] prctl09
 - [ ] prctl10
 
@@ -1261,8 +1261,8 @@
 ======= pselect ======
 - [ ] pselect01 : /proc
 - [ ] pselect01_64
-- [ ] pselect02 : time overflow
-- [ ] pselect02_64
+- [x] pselect02
+- [x] pselect02_64
 - [x] pselect03
 - [x] pselect03_64
 
@@ -1332,8 +1332,8 @@
 - [ ] realpath01 : f
 - [ ] reboot01 : shutdown
 - [ ] reboot02 : shutdown
-- [ ] recv01 : panic in sys_kill
-- [ ] recvfrom01 : panic in sys_kill
+- [ ] recv01 : pass no sum
+- [ ] recvfrom01 : pass no sum
 - [ ] recvmmsg01 : tconf (socket)
 - [ ] recvmsg01 : tconf (socket)
 - [ ] recvmsg02 : tconf
@@ -1397,8 +1397,8 @@
 - [ ] sched_get_priority_max02
 - [ ] sched_get_priority_min01
 - [ ] sched_get_priority_min02
-- [ ] sched_getscheduler01
-- [ ] sched_getscheduler02
+- [x] sched_getscheduler01: p2 f4
+- [ ] sched_getscheduler02: /proc/sys/kernel/pid_max
 - [ ] sched_rr_get_interval01
 - [ ] sched_rr_get_interval02
 - [ ] sched_rr_get_interval03
@@ -1409,7 +1409,7 @@
 - [ ] sched_setparam03
 - [ ] sched_setparam04
 - [ ] sched_setparam05
-- [ ] sched_setscheduler01 : /proc
+- [ ] sched_setscheduler01 : /proc/sys/kernel/pid_max
 - [ ] sched_setscheduler02 : f
 - [ ] sched_setscheduler03 : f
 - [ ] sched_setscheduler04 : tconf
@@ -1419,7 +1419,7 @@
 ====== select ======
 - [ ] select01 : mknodat
 - [ ] select02 : /proc
-- [ ] select03 : user ptr?
+- [x] select03 : p14 failed 2 b 2 s 24
 - [ ] select04
 
 ======= sem ========
@@ -1445,7 +1445,7 @@
 - [ ] semtest_2ns
 
 ====== send =======
-- [ ] send01: panic
+- [ ] send01: no sum p2 b2
 - [ ] send02: skip
 - [x] sendfile02
 - [x] sendfile02_64
@@ -1468,10 +1468,8 @@
 - [ ] sendmsg01: no summary
 - [ ] sendmsg02
 - [ ] sendmsg03
-
-
-- [ ] sendto01: panic
-- [ ] sendto02
+- [ ] sendto01: no sum
+- [x] sendto02
 - [ ] sendto03
 - [ ] setdomainname01: 162
 - [ ] setdomainname02: 

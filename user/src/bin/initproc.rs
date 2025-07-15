@@ -57,6 +57,11 @@ fn init_env() {
     // /etc/passwd
     run_cmd("echo 'root:x:0:0:root:/root:/bin/bash' > /etc/passwd");
     run_cmd("echo 'nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin' >/etc/passwd ");
+
+    // /etc/hostname
+    run_cmd("touch /etc/hostname");
+    run_cmd("touch /etc/domainname");
+    
 }
 
 fn term_sig_handler(_signo: i32) {

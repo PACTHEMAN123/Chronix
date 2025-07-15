@@ -62,7 +62,7 @@ impl <F: Future + Send + 'static> Future for TimedTaskFuture<F> {
     }
 }
 
-struct PendingFuture ;
+pub struct PendingFuture ;
 
 impl Future for PendingFuture {
     type Output = ();
