@@ -59,6 +59,8 @@ pub struct TcpSocket {
     nonblock_flag: AtomicBool,
     /// shutdown flag
     shutdown_flag: UPSafeCell<u8>,
+    /// reuse addr flag
+    reuse_addr_flag: AtomicBool,
 }
 
 unsafe impl Send for TcpSocket {}
@@ -74,6 +76,7 @@ impl TcpSocket {
             remote_endpoint: UPSafeCell::const_new(Some(ZERO_IPV4_ENDPOINT)),
             nonblock_flag: AtomicBool::new(false),
             shutdown_flag: UPSafeCell::const_new(0),
+            reuse_addr_flag: AtomicBool::new(false),
         }
     }
     /// create a TcpSocket with a socket handle
@@ -85,6 +88,7 @@ impl TcpSocket {
             remote_endpoint: UPSafeCell::const_new(Some(remote_endpoint)),
             nonblock_flag: AtomicBool::new(false),
             shutdown_flag: UPSafeCell::const_new(0),
+            reuse_addr_flag: AtomicBool::new(false),
         }
     }
     /// get the socket state
@@ -178,6 +182,15 @@ impl TcpSocket {
         unsafe {
             self.shutdown_flag.get().write(flag)
         }
+    }
+    /// get reuse_addr_flag
+    pub fn get_reuse_addr(&self) -> bool {
+        self.reuse_addr_flag.load(Ordering::Acquire)
+    }
+
+    /// set reuse_addr_flag
+    pub fn set_reuse_addr(&self, reuse_flag: bool) {
+        self.reuse_addr_flag.store(reuse_flag, Ordering::Release)
     }
 }
 
