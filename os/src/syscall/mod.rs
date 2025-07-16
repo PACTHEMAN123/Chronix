@@ -414,7 +414,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CLONE => sys_clone(args[0] as u64, args[1].into(), args[2].into(), args[3].into(), args[4].into()),
         SYSCALL_CLONE3 => sys_clone3(args[0], args[1]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
-        SYSCALL_SETHOSTNAME => sys_temp(syscall_id),
+        SYSCALL_SETHOSTNAME => sys_sethostname(args[0], args[1]).await,
         SYSCALL_SETDOMAINNAME =>  sys_temp(syscall_id),
         SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),
         SYSCALL_GETRUSAGE => sys_getrusage(args[0] as i32, args[1]),

@@ -1,11 +1,15 @@
 //! misc syscall
 #![allow(missing_docs)]
 
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use hal::constant::ConstantsHal;
 use hal::instruction::{Instruction, InstructionHal};
 use strum::FromRepr;
+use lazy_static::lazy_static;
 
 use crate::mm::{UserPtrRaw, UserSliceRaw};
+use crate::sync::mutex::SpinNoIrqLock;
 use crate::syscall::SysError;
 use crate::{fs::devfs::urandom::RNG, task::{current_task, manager::TASK_MANAGER}, timer::{get_current_time,ffi::TimeVal}};
 
@@ -334,5 +338,95 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SysResult {
             return Err(SysError::EINVAL);
         }
     } 
+    Ok(0)
+}
+
+
+// Defined in <sys/utsname.h>.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct UtsName {
+    /// Name of the implementation of the operating system.
+    pub sysname: [u8; 65],
+    /// Name of this node on the network.
+    pub nodename: [u8; 65],
+    /// Current release level of this implementation.
+    pub release: [u8; 65],
+    /// Current version level of this release.
+    pub version: [u8; 65],
+    /// Name of the hardware type the system is running on.
+    pub machine: [u8; 65],
+    /// Name of the domain of this node on the network.
+    pub domainname: [u8; 65],
+}
+
+impl UtsName {
+    fn from_str(info: &str) -> [u8; 65] {
+        let mut data: [u8; 65] = [0; 65];
+        data[..info.len()].copy_from_slice(info.as_bytes());
+        data
+    }
+}
+
+pub struct UtsManager {
+    /// Name of the implementation of the operating system.
+    pub sysname: String,
+    /// Name of this node on the network.
+    pub nodename: String,
+    /// Current release level of this implementation.
+    pub release: String,
+    /// Current version level of this release.
+    pub version: String,
+    /// Name of the hardware type the system is running on.
+    pub machine: String,
+    /// Name of the domain of this node on the network.
+    pub domainname: String,
+}
+
+impl UtsManager {
+    pub fn new() -> Self {
+        Self {
+            sysname: "Linux".to_string(),
+            nodename: "Linux".to_string(),
+            release: "5.19.0-42-generic".to_string(),
+            version: "#43~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 21 16:51:08 UTC 2".to_string(),
+            machine: "RISC-V SiFive Freedom U740 SoC".to_string(),
+            domainname: "localhost".to_string()
+        }
+    }
+
+    pub fn get_utsname(&self) -> UtsName {
+        UtsName {
+            sysname: UtsName::from_str(&self.sysname),
+            nodename: UtsName::from_str(&self.nodename),
+            release: UtsName::from_str(&self.release),
+            version: UtsName::from_str(&self.version),
+            machine: UtsName::from_str(&self.machine),
+            domainname: UtsName::from_str(&self.domainname),
+        }
+    }
+
+    pub fn set_nodename(&mut self, nodename: &str) {
+        self.nodename = nodename.to_string()
+    }
+
+    pub fn set_domainname(&mut self, domainname: &str) {
+        self.domainname = domainname.to_string()
+    }
+}
+
+lazy_static! {
+    pub static ref UTS: SpinNoIrqLock<UtsManager> = SpinNoIrqLock::new(UtsManager::new());
+}
+
+/// syscall uname
+pub fn sys_uname(uname_buf: usize) -> SysResult {
+    let uname = UTS.lock().get_utsname();
+    // let uname_ptr = uname_buf as *mut UtsName;
+    let task = current_task().unwrap();
+    let uname_ptr = UserPtrRaw::new(uname_buf as *mut UtsName)
+        .ensure_write(&mut task.vm_space.lock())
+        .ok_or(SysError::EFAULT)?;
+    uname_ptr.write(uname);
     Ok(0)
 }

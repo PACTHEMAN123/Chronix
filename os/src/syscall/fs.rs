@@ -7,7 +7,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, UtsName, Xstat, XstatMask
+    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, UtsName, Xstat, XstatMask
 }, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
 use crate::utils::{
     path::*,
@@ -424,31 +424,6 @@ pub fn sys_statx(dirfd: isize, pathname: *const u8, flags: i32, mask: u32, statx
     Ok(0)
 }
 
-/// syscall uname
-pub fn sys_uname(uname_buf: usize) -> SysResult {
-    let _sum_guard = SumGuard::new();
-    let mut uname = UtsName::default();
-    // let uname_ptr = uname_buf as *mut UtsName;
-    let task = current_task().unwrap();
-    let uname_ptr = UserPtrRaw::new(uname_buf as *mut UtsName)
-    .ensure_write(&mut task.vm_space.lock())
-    .ok_or(SysError::EFAULT)?;
-    if let Some(hostnamefile) = open_file("/etc/hostname", OpenFlags::O_RDWR){
-        let hostname = hostnamefile.read_all();
-        if hostname.len() > 0 {
-            uname.set_nodename(&hostname);
-        }
-        log::info!("[sys_uname]: get name {}", String::from_utf8_lossy(&hostname));
-    }
-    if let Some(domainnamefile) = open_file("/etc/domainname", OpenFlags::O_RDWR){
-        let domainname = domainnamefile.read_all();
-        if domainname.len() > 0 {
-            uname.set_domainname(&domainname);
-        }
-    }
-    uname_ptr.write(uname);
-    Ok(0)
-}
 
 /// syscall: syslog
 /// TODO: unimplement

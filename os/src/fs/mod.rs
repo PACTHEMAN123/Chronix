@@ -11,9 +11,9 @@ pub mod pipefs;
 pub mod page;
 pub mod devfs;
 pub mod utils;
+pub mod fs;
 // pub mod simplefs;
 pub mod procfs;
-pub mod shmfs;
 pub mod tmpfs;
 
 use devfs::{fstype::DevFsType, init_devfs};

@@ -165,13 +165,12 @@ pub trait File: Send + Sync + DowncastSync {
 
 impl dyn File {
     /// Read all data inside a inode into vector
-    pub fn read_all(&self) -> Vec<u8> {
+    pub async fn read_all(&self) -> Vec<u8> {
         let mut offset = 0usize;
-        let inode = self.dentry().unwrap().inode().unwrap();
         let mut buffer = [0u8; PAGE_SIZE];
         let mut v: Vec<u8> = Vec::new();
         loop {
-            let len = inode.clone().read_at(offset, &mut buffer).unwrap();
+            let len = self.read_at(offset, &mut buffer).await.expect("read all failed");
             if len == 0 {
                 break;
             }
@@ -186,6 +185,7 @@ impl dyn File {
         self.base_poll(events).await
     }
 }
+
 
 /// helper function: Open file in disk fs with flags
 /// notice that ext4 file is a abstract

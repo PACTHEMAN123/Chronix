@@ -76,7 +76,7 @@
 - [ ] cap_bounds_rw
 - [ ] cap_bset_inh_bounds
 - [x] capget01
-- [ ] capget02:  /proc/sys/kernel/pid_max, not exist
+- [ ] capget02: f 6
 - [ ] capset03
 - [ ] capset04
 - [ ] cfs_bandwidth01
@@ -443,7 +443,7 @@
 - [x] fork08
 - [ ] fork09 : no output?
 - [x] fork10
-- [ ] fork13 : /proc/sys/kernel/pid_max: ENOENT (2)
+- [ ] fork13 : f
 - [ ] fork14 : skip
 - [ ] fork_exec_loop : 压测
 - [x] fork_procs : 压测 1000 个进程
@@ -580,11 +580,11 @@
 - [x] getpagesize01
 - [x] getpeername01
 - [x] getpgid01 1failed : Failed to open FILE '/proc/1/stat' for reading: ENOENT (2)
-- [ ] getpgid02 :Failed to open FILE '/proc/sys/kernel/pid_max'
+- [x] getpgid02
 - [x] getpgrp01
-- [ ] getpid01: /proc/sys/kernel/pid_max'
+- [x] getpid01: pass 100
 - [x] getpid02
-- [ ] getppid01: /proc/sys/kernel/pid_max'
+- [x] getppid01
 - [x] getppid02
 - [x] getpriority01: p2 failed 2
 - [x] getpriority02: p2 failed 2
@@ -608,14 +608,14 @@
 - [x] getrlimit01
 - [x] getrlimit02
 - [ ] getrlimit03: all failed
-- [ ] get_robust_list01: Failed to open FILE '/proc/sys/kernel/pid_max'
+- [ ] get_robust_list01 : kernel panic
 - [x] getrusage01
 - [x] getrusage02: 1skip
 - [ ] getrusage03: Failed to copy
 - [ ] getrusage03_child
 - [ ] getrusage04: cannot open /proc/cpuinfo, not exist
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
-- [ ] getsid02: failed to open FILE '/proc/sys/kernel/pid_max'
+- [ ] getsid02: no syscall 156
 - [x] getsockname01:pass 5 failed 1  
 - [ ] getsockopt01: skip
 - [ ] getsockopt02: skip
@@ -1398,7 +1398,7 @@
 - [ ] sched_get_priority_min01
 - [ ] sched_get_priority_min02
 - [x] sched_getscheduler01: p2 f4
-- [ ] sched_getscheduler02: /proc/sys/kernel/pid_max
+- [ ] sched_getscheduler02: f
 - [ ] sched_rr_get_interval01
 - [ ] sched_rr_get_interval02
 - [ ] sched_rr_get_interval03
@@ -1409,7 +1409,7 @@
 - [ ] sched_setparam03
 - [ ] sched_setparam04
 - [ ] sched_setparam05
-- [ ] sched_setscheduler01 : /proc/sys/kernel/pid_max
+- [ ] sched_setscheduler01 : f
 - [ ] sched_setscheduler02 : f
 - [ ] sched_setscheduler03 : f
 - [ ] sched_setscheduler04 : tconf
@@ -1492,9 +1492,9 @@
 - [x] setgroups02: 2fail
 - [ ] setgroups03
 - [ ] setgroups04
-- [ ] sethostname01: 161 ,fail
-- [ ] sethostname02
-- [ ] sethostname03
+- [x] sethostname01
+- [x] sethostname02
+- [ ] sethostname03 : should failed
 - [ ] set_ipv4addr
 - [x] setitimer01: 1 broken timedout
 - [x] setitimer02
@@ -1506,7 +1506,7 @@
 - [ ] setns01: 268
 - [ ] setns02
 - [x] setpgid01: no sum
-- [ ] setpgid02: '/proc/sys/kernel/pid_max
+- [ ] setpgid02: failed 3
 - [ ] setpgid03 failed
 - [ ] setpgid03_child
 - [x] setpgrp01: no sum
@@ -1758,7 +1758,7 @@
 - [ ] times03 : tms_time wrong
 - [ ] time-schedule : 230 syscall
 - [x] tkill01
-- [ ] tkill02 : /proc/sys/kernel/pid_max
+- [x] tkill02
 - [x] truncate02
 - [x] truncate02_64
 - [x] truncate03 : pass 6 failed 2
@@ -1776,8 +1776,8 @@
 - [ ] umount2_01 : no dev
 - [ ] umount2_02 : no dev
 - [x] uname01
-- [ ] uname02 : panic
-- [ ] uname04
+- [x] uname02
+- [x] uname04
 - [x] unlink05 : pass 1 failed 1
 - [x] unlink07
 - [ ] unlink08 : failed 4

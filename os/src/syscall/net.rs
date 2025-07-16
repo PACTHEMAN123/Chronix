@@ -6,7 +6,7 @@ use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::socket::dns::Socket;
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{fs::CNXFS, pipefs, vfs::{dentry::global_find_dentry, file::open_file}, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily}, signal::SigSet, syscall::misc::{UtsName, UTS}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -894,42 +894,41 @@ pub fn sockaddr_writer(task: &Arc<TaskControlBlock>, addr: usize, addr_len: usiz
 }
 
 ///set host name
-pub async fn sys_sethostname(hostname: usize, len: usize) -> SysResult {
+pub async fn sys_sethostname(hostname_ptr: usize, len: usize) -> SysResult {
     if (len as isize) < 0 || (len as isize) > 64 {
         return Err(SysError::EINVAL);
     }
     let task = current_task().unwrap();
-    if hostname == 0 {
+    if hostname_ptr == 0 {
         return Err(SysError::EFAULT);
     }
-    if hostname == 0 && len != 0 {
+    if hostname_ptr == 0 && len != 0 {
         return Err(SysError::EFAULT);
     }
-    let hostname = UserSliceRaw::new(hostname as *const u8, len)
+    let hostname_buf = UserSliceRaw::new(hostname_ptr as *const u8, len)
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
-    let file = open_file("/etc/hostname", OpenFlags::O_RDWR).unwrap();
-    file.write_at(0,hostname.to_ref()).await?;
-    // log::info!("[sys_hostname] hostname will be set {}", String::from_utf8_lossy(hostname.to_ref()));
-    // log::info!("[sys_sethostname] now file hostname: {}", String::from_utf8_lossy(&file.read_all()));
+    let hostname = String::from_utf8(hostname_buf.to_ref().to_vec()).map_err(|_| SysError::EINVAL)?;
+    log::info!("[sys_hostname] hostname will be set {}", hostname);
+    UTS.lock().set_nodename(&hostname);
     Ok(0)
 }
 
-pub async fn sys_gethostname(hostname: usize, len: usize) -> SysResult {
+pub async fn sys_gethostname(hostname_ptr: usize, len: usize) -> SysResult {
     if (len as isize) < 0 || (len as isize) > 64 {
         return Err(SysError::EINVAL);
     }
     let task = current_task().unwrap();
-    if hostname == 0 {
+    if hostname_ptr == 0 {
         return Err(SysError::EFAULT);
     }
-    if hostname == 0 && len != 0 {
+    if hostname_ptr == 0 && len != 0 {
         return Err(SysError::EFAULT);
     }
-    let hostname = UserSliceRaw::new(hostname as *mut u8, len)
+    let hostname_buf = UserSliceRaw::new(hostname_ptr as *mut u8, len)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
-    let file = open_file("/etc/hostname", OpenFlags::O_WRONLY|OpenFlags::O_CLOEXEC).unwrap();
-    file.read(hostname.to_mut()).await?;
+    let hostname = UTS.lock().get_utsname().nodename;
+    hostname_buf.to_mut().copy_from_slice(&hostname[..len]);
     Ok(0)
 }
