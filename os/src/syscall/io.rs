@@ -243,56 +243,39 @@ pub async fn sys_pselect6(
     if nfds < 0 {
         return Err(SysError::EINVAL);
     }
-    let task = current_task().unwrap().clone();
-    let mut readfds = {
+    let task = current_task().unwrap();
+    let mut readfds = unsafe {
         if readfds_ptr == 0 {
             None
         }else {
-            let raw_fds = UserPtrRaw::new(readfds_ptr as *mut FdSet)
-                    .ensure_read(&mut task.get_vm_space().lock())
-                    .ok_or(SysError::EFAULT)?;
-            Some(
-                *raw_fds.to_ref()
-            )
+            Instruction::set_sum();
+           Some(&mut *(readfds_ptr as *mut FdSet))
         } 
     };
-    let mut writefds = {
+    let mut writefds = unsafe {
         if writefds_ptr == 0 {
             None
         }else {
-            Some(*UserPtrRaw::new(writefds_ptr as *mut FdSet)
-            .ensure_read(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EFAULT)?
-            .to_ref())
+            Instruction::set_sum();
+            Some(&mut *(writefds_ptr as *mut FdSet))
         }
     };
-    let mut exceptfds = {
+    let mut exceptfds = unsafe {
         if exceptfds_ptr == 0 {
             None
         }else {
-            Some(*UserPtrRaw::new(exceptfds_ptr as *mut FdSet)
-            .ensure_read(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EFAULT)?
-            .to_ref())
+            Instruction::set_sum();
+            Some(&mut *(exceptfds_ptr as *mut FdSet))
         }
     };
-    let timeout: Option<Duration> = {
+    let timeout: Option<Duration> = unsafe {
         if timeout_ptr == 0 {
             None
         }else {
-            let ret = *UserPtrRaw::new(timeout_ptr as *const TimeSpec)
-            .ensure_read(&mut  task.get_vm_space().lock())
-            .ok_or(SysError::EFAULT)?
-            .to_ref();
-            if !ret.is_valid(){
-                return Err(SysError::EINVAL);
-            }
-            Some(ret.into())
+            Instruction::set_sum();
+            Some((*(timeout_ptr as *const TimeSpec)).into())
         }
     };
-    if let Some(inner_timeout) = timeout {
-        log::info!("timeout: {:?}",inner_timeout);
-    }
     // log::info!(
     //     "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
     //     readfds, writefds, exceptfds, timeout
@@ -300,11 +283,10 @@ pub async fn sys_pselect6(
     let new_mask = if sigmask_ptr == 0 {
         None
     } else {
-        Some(*UserPtrRaw::new(sigmask_ptr as *const SigSet)
-            .ensure_read(&mut  task.get_vm_space().lock())
-            .ok_or(SysError::EFAULT)?
-            .to_ref()
-        )
+        unsafe {
+            Instruction::set_sum();
+            Some(*(sigmask_ptr as *const SigSet))
+        }
     };
 
     let mut polls= Vec::<(usize,PollEvents, Arc<dyn File>)>::with_capacity(nfds as usize);
