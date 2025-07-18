@@ -90,6 +90,8 @@ pub enum SysError {
     ENOTSOCK = 88,
     /// sendmsg bigger than biggest message
     EMSGSIZE = 90,
+    // sock opt not support
+    ENOPROTOOPT=92,
     /// Protocol not supported
     EPROTONOSUPPORT = 93,
     /// Unsupported

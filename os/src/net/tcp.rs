@@ -1,6 +1,6 @@
 use core::{fmt::UpperExp, future::Future, net::SocketAddr, sync::atomic::{AtomicBool, AtomicU8, Ordering}, time::{self, Duration}};
 
-use crate::{ net::addr::LOCAL_IPV4, sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::timed_task::ksleep, utils::{get_waker, suspend_now, yield_now}};
+use crate::{ net::addr::LOCAL_IPV4, sync::{mutex::SpinNoIrqLock, UPSafeCell}, syscall::{sys_error::SysError, SysResult}, task::current_task, timer::{ffi::TimeSpec, get_current_time, get_current_time_duration, timed_task::ksleep}, utils::{get_waker, suspend_now, yield_now}};
 
 use super::{addr::{ ZERO_IPV4_ADDR, ZERO_IPV4_ENDPOINT}, get_ephemeral_port, listen_table::ListenTable, socket::{PollState, Sock}, NetPollTimer, SocketSetWrapper, ETH0, LISTEN_TABLE, PORT_END, PORT_START, RCV_SHUTDOWN, SEND_SHUTDOWN, SHUTDOWN_MASK, SHUTRD, SHUTRDWR, SHUTWR, SOCKET_SET, SOCK_RAND_SEED, TCP_TX_BUF_LEN};
 use alloc::vec::Vec;
@@ -61,6 +61,8 @@ pub struct TcpSocket {
     shutdown_flag: UPSafeCell<u8>,
     /// reuse addr flag
     reuse_addr_flag: AtomicBool,
+    /// timeout flag
+    pub timeout: SpinNoIrqLock<Option<TimeSpec>>,
 }
 
 unsafe impl Send for TcpSocket {}
@@ -77,6 +79,7 @@ impl TcpSocket {
             nonblock_flag: AtomicBool::new(false),
             shutdown_flag: UPSafeCell::const_new(0),
             reuse_addr_flag: AtomicBool::new(false),
+            timeout: SpinNoIrqLock::new(None),
         }
     }
     /// create a TcpSocket with a socket handle
@@ -89,6 +92,7 @@ impl TcpSocket {
             nonblock_flag: AtomicBool::new(false),
             shutdown_flag: UPSafeCell::const_new(0),
             reuse_addr_flag: AtomicBool::new(false),
+            timeout: SpinNoIrqLock::new(None),
         }
     }
     /// get the socket state
@@ -191,6 +195,15 @@ impl TcpSocket {
     /// set reuse_addr_flag
     pub fn set_reuse_addr(&self, reuse_flag: bool) {
         self.reuse_addr_flag.store(reuse_flag, Ordering::Release)
+    }
+
+    /// get timeout
+    pub fn get_timeout(&self) -> Option<TimeSpec> {
+        *self.timeout.lock()
+    }
+    /// set timeout
+    pub fn set_timeout(&self, timeout: Option<TimeSpec>) {
+        *self.timeout.lock() = timeout;
     }
 }
 
@@ -361,6 +374,14 @@ impl TcpSocket {
     
     pub async fn recv(&self, data: &mut [u8]) -> SockResult<(usize, IpEndpoint)> {
         let shutdown = self.get_shutdown();
+        let mut has_timeout_flag= (false, get_current_time_duration());
+        match self.get_timeout() {
+            Some(timeout) => {
+                has_timeout_flag.0 = true;
+                has_timeout_flag.1 += timeout.into();
+            }
+            None => {}
+        }
         if shutdown & RCV_SHUTDOWN != 0 {
             info!("[tcp socket] shutdown&RCV_SHUTDOWN != 0, return 0");
             let peer_addr = self.peer_addr()?;
@@ -394,8 +415,13 @@ impl TcpSocket {
                     }else {
                         // no more data
                         // log::info!("[TcpSocket::recv] handle{handle} has no data to recv, register waker and suspend");
-                        socket.register_recv_waker(&waker);
-                        Err(SysError::EAGAIN)
+                        if get_current_time_duration() > has_timeout_flag.1 && has_timeout_flag.0 {
+                            return Err(SysError::ETIMEOUT);
+                        }
+                        else {
+                            socket.register_recv_waker(&waker);
+                            Err(SysError::EAGAIN)
+                        }  
                     }
                 })
             }).await

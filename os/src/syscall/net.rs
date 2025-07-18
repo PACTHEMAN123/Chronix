@@ -1,10 +1,10 @@
-use core::{any::Any, clone, f32::consts::E, mem, option, panic, ptr::{self, copy_nonoverlapping}};
+use core::{any::Any, clone, f32::consts::E, mem, net::Ipv4Addr, option, panic, ptr::{self, copy_nonoverlapping}};
 
 use alloc::{ffi::CString, string::String, sync::Arc, task, vec,vec::Vec};
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
-use smoltcp::{socket::dns::Socket, time::Duration};
+use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
 
 use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
@@ -356,6 +356,7 @@ pub fn sys_getpeername(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     Ok(0)
 }
 #[allow(missing_docs)]
+#[repr(usize)]
 pub enum SocketLevel {
     /// Dummy protocol for TCP
     IpprotoIp = 0,
@@ -366,6 +367,72 @@ pub enum SocketLevel {
     IpprotoIpv6 = 41,
 }
 
+///为每个level建立一个配置enum
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum IpOption {
+    //设置多播数据的发送出口网络接口,设置多播接口中从哪个接口发送对应数据包
+    IP_MULTICAST_IF = 32,
+    //设置多播数据包的生存时间（TTL），控制其传播范围
+    IP_MULTICAST_TTL = 33,
+    ///控制多播数据的本地环回
+    /// 启用（1）：发送的多播数据会被同一主机上的接收套接字收到。
+    /// 禁用（0）：发送的数据不环回，仅其他主机接收。
+    IP_MULTICAST_LOOP = 34,
+    ///加入一个多播组，开始接收发送到该组地址的数据
+    IP_ADD_MEMBERSHIP = 35,
+    IP_PKTINFO = 11,
+    MCAST_JOIN_GROUP = 42,
+    MCAST_LEAVE_GROUP = 45,
+}
+
+impl TryFrom<usize> for IpOption {
+    type Error = SysError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            32 => Ok(IpOption::IP_MULTICAST_IF),
+            33 => Ok(IpOption::IP_MULTICAST_TTL),
+            34 => Ok(IpOption::IP_MULTICAST_LOOP),
+            35 => Ok(IpOption::IP_ADD_MEMBERSHIP),
+            11 => Ok(IpOption::IP_PKTINFO),
+            42 => Ok(IpOption::MCAST_JOIN_GROUP),
+            45 => Ok(IpOption::MCAST_LEAVE_GROUP),
+            _ => Err(SysError::EINVAL),
+        }
+    }
+}
+
+impl IpOption {
+    pub fn set(&self, socket: &crate::net::socket::Socket, opt: &[u8]) -> SockResult<isize> {
+        match self {
+            IpOption::IP_MULTICAST_IF | IpOption::MCAST_JOIN_GROUP => {
+                Ok(0)
+            }
+            IpOption::MCAST_LEAVE_GROUP => {
+                return Err(SysError::EADDRNOTAVAIL);
+            }
+            IpOption::IP_MULTICAST_TTL => {
+                match &socket.sk {
+                    Sock::UDP(udp) => {
+                        let ttl = u8::from_be_bytes(<[u8; 1]>::try_from(&opt[0..1]).unwrap());
+                        udp.set_ttl(ttl);
+                        Ok(0)
+                    }
+                    _ => Err(SysError::EINVAL)
+                }
+            }
+            IpOption::IP_MULTICAST_LOOP => Ok(0),
+            IpOption::IP_ADD_MEMBERSHIP => {
+                // let multicast_addr = IpAddress::Ipv4(Ipv4Address::new(opt[0], opt[1], opt[2], opt[3]));
+                // let interface_addr = IpAddress::Ipv4(Ipv4Address::new(opt[4], opt[5], opt[6], opt[7]));
+                // todo: add_membership
+                Ok(0)
+            }
+            _ => {Ok(0)}
+        }
+    }
+}
 impl TryFrom<usize> for SocketLevel {
     type Error = SysError;
 
@@ -526,11 +593,16 @@ impl SocketOption {
                     return Err(SysError::EINVAL);
                 }
                 let timeout = unsafe { *(opt.as_ptr() as *const TimeSpec) };
-                socket.set_timeout(if !timeout.is_valid() || timeout.tv_nsec == 0 && timeout.tv_sec == 0 {
-                    None
-                }else {
-                    Some(timeout)
-                });
+                match &socket.sk {
+                    Sock::TCP(tcp) => {
+                        tcp.set_timeout(if !timeout.is_valid() || timeout.tv_nsec == 0 && timeout.tv_sec == 0 {
+                            None
+                        }else {
+                            Some(timeout)
+                        });
+                    }
+                    _ => {}
+                }
                 Ok(0)
             }
 
@@ -561,7 +633,8 @@ impl SocketOption {
                 if buf_len < 4 {
                     return Err(SysError::EINVAL)
                 } 
-                opt.copy_from_slice(value);
+                let len = value.len();
+                opt[..len].copy_from_slice(value);
                 *opt_len = 4;
                 Ok(())
             }
@@ -572,21 +645,24 @@ impl SocketOption {
                 }
                 let value: i32 = if socket.dont_route {1}else {0};
                 let value = &value.to_ne_bytes();
-                opt.copy_from_slice(value);
+                let len = value.len();
+                opt[..len].copy_from_slice(value);
                 *opt_len = 4;
                 Ok(())
             }
 
             SocketOption::SNDBUF => {
                 let size = socket.get_send_buf_size().to_ne_bytes();
-                opt.copy_from_slice(&size);
+                let len = size.len();
+                opt[..len].copy_from_slice(&size);
                 *opt_len = 4;
                 Ok(())
             }
 
             SocketOption::RCVBUF => {
                 let size = socket.get_recv_buf_size().to_ne_bytes();
-                opt.copy_from_slice(&size);
+                let len = size.len();
+                opt[..len].copy_from_slice(&size);
                 *opt_len = 4;
                 Ok(())
             }
@@ -602,7 +678,8 @@ impl SocketOption {
                             SOCKET_SET.with_socket::<smoltcp::socket::tcp::Socket,_,_>(handle, |socket| {
                                 let value: i32 = if socket.keep_alive().is_none() {1} else {0};
                                 let value = &value.to_ne_bytes();
-                                opt.copy_from_slice(value);
+                                let len = value.len();
+                                opt[..len].copy_from_slice(value);
                                 *opt_len = 4;
                             });
                         }
@@ -616,15 +693,24 @@ impl SocketOption {
                 if buf_len < size_of::<TimeSpec>() {
                     return Err(SysError::EINVAL);
                 }
-                match socket.get_timeout() {
-                    Some(timeout) => {
-                        opt.copy_from_slice(TimeSpec::_as_bytes(&timeout));
-                        *opt_len = size_of::<TimeSpec>() as u32;
+                match &socket.sk {
+                    Sock::TCP(tcp) => {
+                        match tcp.get_timeout() {
+                            Some(timeout) => {
+                                let time_u8 = TimeSpec::_as_bytes(&timeout);
+                                let len = time_u8.len();
+                                opt[..len].copy_from_slice(time_u8);
+                                *opt_len = size_of::<TimeSpec>() as u32;
+                            }
+                            None => {
+                                let data = &0u8.to_ne_bytes();
+                                let len = data.len();
+                                opt[..len].copy_from_slice(data);
+                                *opt_len = size_of::<TimeSpec>() as u32;
+                            }
+                        }
                     }
-                    None => {
-                        opt.copy_from_slice(&0u8.to_ne_bytes());
-                        *opt_len = size_of::<TimeSpec>() as u32;
-                    }
+                    _ =>{}
                 }
                 Ok(())
             }
@@ -698,23 +784,25 @@ impl TcpSocketOption {
                                 }
                                 let value: i32 = if socket.nagle_enabled() {0} else {1};
                                 let value = value.to_ne_bytes();
-                                opt_addr.copy_from_slice(&value);
+                                let index = value.len();
+                                opt_addr[..index].copy_from_slice(&value);
                                 *opt_len = 4;
                                 Ok(())
                             }
                             TcpSocketOption::MAXSEG => {
                                 let len = size_of::<usize>();
-
                                 let value: usize = 1500;
                                 let value = value.to_ne_bytes();
-                                opt_addr.copy_from_slice(&value);
+                                let index = value.len();
+                                opt_addr[..index].copy_from_slice(&value);
                                 *opt_len = len as u32;
                                 Ok(())
                             },
                             TcpSocketOption::INFO => {Ok(())},
                             TcpSocketOption::CONGESTION => {
+                                let len = rawsocket.get_congestion().as_bytes().len() as u32;
                                 opt_addr.copy_from_slice(rawsocket.get_congestion().as_bytes());
-                                *opt_len = rawsocket.get_congestion().as_bytes().len() as u32;
+                                *opt_len = len as u32;
                                 Ok(())
                             }
                             _=> {
@@ -731,18 +819,104 @@ impl TcpSocketOption {
         }
     }
 }
+
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Ipv6Option {
+    UNICAST_HOPS = 4,
+    MULTICAST_IF = 9,
+    MULTICAST_HOPS = 10,
+    //fake
+    IPV6_DEV = 26,
+    IPV6_ONLY = 27,
+    PACKET_INFO = 61,
+    RECV_TRAFFIC_CLASS = 66,
+    TRAFFIC_CLASS = 67,
+}
+impl TryFrom<usize> for Ipv6Option {
+    type Error = SysError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            4 => Ok(Ipv6Option::UNICAST_HOPS),
+            9 => Ok(Ipv6Option::MULTICAST_IF),
+            10 => Ok(Ipv6Option::MULTICAST_HOPS),
+            26 => Ok(Ipv6Option::IPV6_DEV),
+            27 => Ok(Ipv6Option::IPV6_ONLY),
+            61 => Ok(Ipv6Option::PACKET_INFO),
+            66 => Ok(Ipv6Option::RECV_TRAFFIC_CLASS),
+            67 => Ok(Ipv6Option::TRAFFIC_CLASS),
+            _ => {
+                log::warn!("[Ipv6Option] unsupported option: {value}");
+                Err(Self::Error::EINVAL)
+            }
+        }
+    }
+}
+
+impl Ipv6Option {
+    pub fn set(&self, socket: &crate::net::socket::Socket, opt: &[u8]) -> SockResult<isize> {
+        Ok(0)
+    }
+}
+
 // ============================== 
 /// socket configure interface for user
 /// level: protocel level at which the option resides,
 /// option name
 pub fn sys_setsockopt  (
-    _fd: usize,
-    _level: usize,
-    _option_name: usize,
-    _option_value: usize,
-    _option_len: usize,
+    fd: usize,
+    level: usize,
+    option_name: usize,
+    option_value: usize,
+    option_len: usize,
 ) -> SysResult {
-    Ok(0)
+    let Ok(level) = SocketLevel::try_from(level) else{
+        return Err(SysError::ENOPROTOOPT);
+    };
+    let task = current_task().unwrap();
+    let socket_file = task.with_fd_table(|table| {
+        table.get_file(fd)})?
+        .downcast_arc::<socket::Socket>()
+        .map_err(|_| SysError::ENOTSOCK)?;
+
+    let opt_val_r = UserSliceRaw::new(option_value as *const u8, option_len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    
+    let mut kernel_opt: Vec<u8> = vec![0; option_len];
+    kernel_opt.copy_from_slice(opt_val_r.to_ref());
+    
+    match level {
+        SocketLevel::IpprotoIp => {
+            let Ok(option) = IpOption::try_from(option_name) else {
+                return Err(SysError::ENOPROTOOPT);
+            };
+            option.set(&socket_file, kernel_opt.as_slice())
+        }
+        SocketLevel::SolSocket => {
+            let Ok(option) = SocketOption::try_from(option_name) else {
+                return Err(SysError::ENOPROTOOPT);
+            };
+            option.set(&socket_file, kernel_opt.as_slice())
+        }
+        SocketLevel::IpprotoTcp => {
+            let Ok(option) = TcpSocketOption::try_from(option_name) else{
+                return Err(SysError::ENOPROTOOPT);
+            };
+            option.set(&socket_file, kernel_opt.as_slice())
+        }
+        SocketLevel::IpprotoIpv6 => {
+            let Ok(option) = Ipv6Option::try_from(option_name) else {
+                return Err(SysError::ENOPROTOOPT);
+            };
+            option.set(&socket_file, &kernel_opt.as_slice())
+        }
+        _ => {
+            Ok(0)
+        }
+    }
+
 }
 /// get socket configure interface for user
 pub fn sys_getsockopt (

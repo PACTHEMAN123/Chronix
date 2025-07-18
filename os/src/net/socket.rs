@@ -182,6 +182,8 @@ pub struct Socket {
     pub sk: Sock,
     /// socket type
     pub sk_type: SocketType,
+    /// domain
+    pub domain: SaFamily,
     /// fd flags
     pub file_inner: FileInner,
     /// some socket options
@@ -191,8 +193,6 @@ pub struct Socket {
     pub recv_buf_size: AtomicUsize,
     /// congestion flag
     pub congestion:  SpinNoIrqLock<String>,
-    /// timeout flag
-    pub timeout: SpinNoIrqLock<Option<TimeSpec>>,
     /// socketopt dout route flag
     pub dont_route: bool,
 }
@@ -218,6 +218,7 @@ impl Socket {
 
         Self {
             sk_type: sk_type,
+            domain: domain,
             sk: sk,
             file_inner: FileInner {
                 dentry: Arc::<usize>::new_zeroed(),
@@ -227,7 +228,6 @@ impl Socket {
             send_buf_size: AtomicUsize::new(16 * 4096),
             recv_buf_size: AtomicUsize::new(16 * 4096),
             congestion: SpinNoIrqLock::new((String::from("reno"))),
-            timeout: SpinNoIrqLock::new(None),
             dont_route: false,
         }
     }
@@ -236,6 +236,7 @@ impl Socket {
         Self {
             sk: sk,
             sk_type: another.sk_type,
+            domain: another.domain,
             file_inner: FileInner{
                 dentry: Arc::<usize>::new_zeroed(),
                 offset: AtomicUsize::new(0),
@@ -244,7 +245,6 @@ impl Socket {
             send_buf_size: AtomicUsize::new(16 * 4096),
             recv_buf_size: AtomicUsize::new(16 * 4096),
             congestion: SpinNoIrqLock::new((String::from("reno"))),
-            timeout: SpinNoIrqLock::new(None),
             dont_route: false
         }
     }
@@ -272,16 +272,6 @@ impl Socket {
     pub fn set_congestion(&self, congestion: String) {
         *self.congestion.lock() = congestion;
     }
-    /// get timeout
-    pub fn get_timeout(&self) -> Option<TimeSpec> {
-        *self.timeout.lock()
-    }
-    /// set timeout
-    pub fn set_timeout(&self, timeout: Option<TimeSpec>) {
-        *self.timeout.lock() = timeout;
-    }
-
-
 }
 
 #[async_trait]

@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use fatfs::{info, warn};
 use lwext4_rust::bindings::EEXIST;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
+use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{self, BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
 use spin::{RwLock, Spin};
 
 use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::{get_waker, suspend_now, yield_now}};
@@ -48,6 +48,13 @@ impl UdpSocket {
     /// set reuse addr flag
     pub fn set_reuse_addr(&self, reuse_flag: bool) {
         self.reuse_addr_flag.store(reuse_flag, core::sync::atomic::Ordering::Release)
+    }
+
+    pub fn set_ttl(&self, ttl: u8) {
+        let handle = self.handle;
+        SOCKET_SET.with_socket_mut::<smoltcp::socket::udp::Socket, _,_>(handle, |socket| {
+            socket.set_hop_limit(Some(ttl));
+        }); 
     }
 }
 
