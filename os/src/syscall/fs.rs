@@ -465,21 +465,23 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
     let mut writen_len = 0;
 
     // the first will be "." the second will be ".."
-    let mut dents = dentry.clone().load_child_dentry()?;
-    dents.insert(0, dentry.clone());
-    if let Some(parent) = dentry.parent() {
-        dents.insert(0, parent);
-    }
+    let dents = dentry.clone().load_child_dentry()?;
+    // dents.insert(0, dentry.clone());
+    // if let Some(parent) = dentry.parent() {
+    //     dents.insert(0, parent);
+    // }
     
     for (idx, child) in dents.iter().skip(file.pos()).enumerate() {
         // assert!(child.state() != DentryState::NEGATIVE);
-        let name = if idx == 0 {
-            ".".to_string()
-        } else if idx == 1 {
-            "..".to_string()
-        } else {
-            child.name().to_string()
-        };
+        // let name = if idx == 0 {
+        //     ".".to_string()
+        // } else if idx == 1 {
+        //     "..".to_string()
+        // } else {
+        //     child.name().to_string()
+        // };
+        let name = child.name().to_string();
+        log::info!("[{idx}] loading child {}", name);
 
         // align to 8 bytes
         let c_name_len = name.len() + 1;
@@ -496,7 +498,8 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
         if writen_len + rec_len > len {
             // Result buffer is too small.
-            return Err(SysError::EINVAL)
+            // return Err(SysError::EINVAL)
+            break;
         }
 
         file.seek(SeekFrom::Current(1))?;
@@ -509,6 +512,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
         buf_it = &mut buf_it[rec_len..];
         writen_len += rec_len;
+        log::info!("[{idx}] end");
     }
     log::info!("writen_len: {}", writen_len);
     return Ok(writen_len as isize);

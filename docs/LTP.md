@@ -1807,8 +1807,8 @@
 - [ ] utimensat01 : no dev
 - [x] utimes01: pass 2 failed 1
 - [x] utsname01
-- [ ] utsname02 : failed
-- [ ] utsname03 : not support
+- [x] utsname02
+- [x] utsname03 : p1 f1
 - [x] utsname04
 - [ ] verify_caps_exec
 - [ ] vfork
@@ -1830,7 +1830,7 @@
 - [x] wait01
 - [x] wait02
 - [x] wait401 : pass 2 failed 1
-- [ ] wait402 : /proc/...
+- [x] wait402
 - [ ] wait403 : /proc/...
 - [ ] waitid01
 - [ ] waitid02
