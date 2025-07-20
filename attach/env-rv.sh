@@ -4,3 +4,8 @@ ln -s /riscv/glibc/lib/libc.so /lib/libc.so.6
 ln -s /riscv/glibc/lib/libm.so /lib/libm.so.6
 ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1
 ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64.so.1
+ln -s /attach/riscv/git /bin/git
+ln -s /attach/riscv/libz.so /lib/libz.so
+ln -s /attach/riscv/libz.so /lib/libz.so.1
+ln -s /attach/riscv/libpcre2-8.so /lib/libpcre2-8.so 
+ln -s /attach/riscv/libpcre2-8.so /lib/libpcre2-8.so.0 
