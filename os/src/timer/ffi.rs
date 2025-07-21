@@ -61,6 +61,13 @@ impl TimeVal {
     pub fn is_valid(&self) -> bool {
         self.sec as isize > 0 && self.usec as isize >= 0 && self.usec  < 1000_000 
     }
+
+    /// to bytes
+    pub fn _as_bytes(time: &Self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts((time as *const Self) as *const u8, core::mem::size_of::<Self>())
+        }
+    }
 }
 
 impl TimeSpec {
@@ -91,6 +98,13 @@ impl TimeSpec {
         base_time.tv_nsec += (current % NSEC_PER_SEC);
         base_time.tv_sec += (current / NSEC_PER_SEC) as usize;
         base_time
+    }
+
+     /// to bytes
+    pub fn _as_bytes(time: &Self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts((time as *const Self) as *const u8, core::mem::size_of::<Self>())
+        }
     }
 
 }

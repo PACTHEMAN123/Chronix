@@ -1,10 +1,10 @@
-use core::{sync::atomic::AtomicUsize, task::Poll};
+use core::{sync::atomic::{self, AtomicUsize}, task::Poll};
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::LOCAL_IPS, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::LOCAL_IPS, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -158,6 +158,23 @@ impl Sock {
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
         }
     }
+    /// set socket reuse addr
+    pub fn set_reuse_addr(&self, reuse_flag: bool) {
+        match self {
+            Sock::TCP(tcp) => tcp.set_reuse_addr(reuse_flag),
+            Sock::UDP(udp) => udp.set_reuse_addr(reuse_flag),
+            Sock::Unix(_) => {},
+        }
+    }
+
+    /// get_reuse_addr_flag
+    pub fn get_reuse_addr_flag(&self) -> bool {
+        match self {
+            Sock::TCP(tcp) => tcp.get_reuse_addr(),
+            Sock::UDP(udp) => udp.get_reuse_addr(),
+            Sock::Unix(_) => false,
+        }
+    }
 }
 /// socket for user space,Related to network protocols and communication modes
 pub struct Socket {
@@ -165,8 +182,19 @@ pub struct Socket {
     pub sk: Sock,
     /// socket type
     pub sk_type: SocketType,
+    /// domain
+    pub domain: SaFamily,
     /// fd flags
     pub file_inner: FileInner,
+    /// some socket options
+    /// send_buf_size
+    pub send_buf_size: AtomicUsize,
+    /// recv_buf_size
+    pub recv_buf_size: AtomicUsize,
+    /// congestion flag
+    pub congestion:  SpinNoIrqLock<String>,
+    /// socketopt dout route flag
+    pub dont_route: bool,
 }
 
 impl Socket {
@@ -190,12 +218,17 @@ impl Socket {
 
         Self {
             sk_type: sk_type,
+            domain: domain,
             sk: sk,
             file_inner: FileInner {
                 dentry: Arc::<usize>::new_zeroed(),
                 offset: AtomicUsize::new(0),
                 flags: SpinNoIrqLock::new(fd_flags),
             },
+            send_buf_size: AtomicUsize::new(16 * 4096),
+            recv_buf_size: AtomicUsize::new(16 * 4096),
+            congestion: SpinNoIrqLock::new((String::from("reno"))),
+            dont_route: false,
         }
     }
     /// new a socket with a given socket 
@@ -203,12 +236,41 @@ impl Socket {
         Self {
             sk: sk,
             sk_type: another.sk_type,
+            domain: another.domain,
             file_inner: FileInner{
                 dentry: Arc::<usize>::new_zeroed(),
                 offset: AtomicUsize::new(0),
                 flags: SpinNoIrqLock::new(OpenFlags::O_RDWR),
             },
+            send_buf_size: AtomicUsize::new(16 * 4096),
+            recv_buf_size: AtomicUsize::new(16 * 4096),
+            congestion: SpinNoIrqLock::new((String::from("reno"))),
+            dont_route: false
         }
+    }
+    /// get send buf size
+    pub fn get_send_buf_size(&self) -> usize {
+        self.send_buf_size.load(atomic::Ordering::Acquire)
+    }
+    /// set send buf size
+    pub fn set_send_buf_size(&self, size: usize) {
+        self.send_buf_size.store(size, atomic::Ordering::Release)
+    }
+    // get recv buf size
+    pub fn get_recv_buf_size(&self) -> usize {
+        self.recv_buf_size.load(atomic::Ordering::Acquire)
+    }
+    /// set recv buf size
+    pub fn set_recv_buf_size(&self, size: usize) {
+        self.recv_buf_size.store(size, atomic::Ordering::Release)
+    }
+    /// get congestion state
+    pub fn get_congestion(&self) -> String {
+        self.congestion.lock().clone()
+    }
+    /// set congestion state
+    pub fn set_congestion(&self, congestion: String) {
+        *self.congestion.lock() = congestion;
     }
 }
 

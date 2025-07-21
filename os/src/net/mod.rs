@@ -164,8 +164,8 @@ const LISTEN_QUEUE_SIZE: usize = 512;
 static LISTEN_TABLE: Lazy<ListenTable> = Lazy::new(ListenTable::new);
 
 /// A wrapper for SocketSet in smoltcp
-struct SocketSetWrapper<'a>(SpinNoIrqLock<SocketSet<'a>>) ; 
-static SOCKET_SET: Lazy<SocketSetWrapper> = Lazy::new(SocketSetWrapper::new);
+pub struct SocketSetWrapper<'a>(SpinNoIrqLock<SocketSet<'a>>) ; 
+pub static SOCKET_SET: Lazy<SocketSetWrapper> = Lazy::new(SocketSetWrapper::new);
 
 /// TCP RX and TX buffer size
 pub const TCP_RX_BUF_LEN: usize = 64 * 1024;

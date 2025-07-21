@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use fatfs::{info, warn};
 use lwext4_rust::bindings::EEXIST;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
+use smoltcp::{iface::SocketHandle, socket::{dns::GetQueryResultError, udp::{self, BindError, SendError}}, wire::{IpEndpoint, IpListenEndpoint}};
 use spin::{RwLock, Spin};
 
 use crate::{net::{LISTEN_TABLE, PORT_END, PORT_START, SOCK_RAND_SEED}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::{get_waker, suspend_now, yield_now}};
@@ -20,6 +20,8 @@ pub struct UdpSocket {
     peer_endpoint: RwLock<Option<IpEndpoint>>,
     /// nonblock flag
     nonblock_flag: AtomicBool,
+    /// reuse flag
+    reuse_addr_flag: AtomicBool,
 }
 
 impl UdpSocket {
@@ -32,11 +34,27 @@ impl UdpSocket {
             local_endpoint: RwLock::new(None),
             peer_endpoint: RwLock::new(None),
             nonblock_flag: AtomicBool::new(false),
+            reuse_addr_flag: AtomicBool::new(false),
         }
     }
     /// check if the nonblock flag is nonblock
     pub fn is_nonblocking(&self) -> bool {
         self.nonblock_flag.load(core::sync::atomic::Ordering::Acquire)
+    }
+    /// get reuse addr flag
+    pub fn get_reuse_addr(&self) -> bool {
+        self.reuse_addr_flag.load(core::sync::atomic::Ordering::Acquire)
+    }
+    /// set reuse addr flag
+    pub fn set_reuse_addr(&self, reuse_flag: bool) {
+        self.reuse_addr_flag.store(reuse_flag, core::sync::atomic::Ordering::Release)
+    }
+
+    pub fn set_ttl(&self, ttl: u8) {
+        let handle = self.handle;
+        SOCKET_SET.with_socket_mut::<smoltcp::socket::udp::Socket, _,_>(handle, |socket| {
+            socket.set_hop_limit(Some(ttl));
+        }); 
     }
 }
 
