@@ -543,7 +543,7 @@ impl Inode for Ext4Inode {
         assert!(!fpath.is_empty()); // already check at `root.rs`
 
         match ty {
-            InodeTypes::EXT4_DE_REG_FILE => {
+            InodeTypes::EXT4_DE_REG_FILE | InodeTypes::EXT4_DE_SYMLINK => {
                 file.file_remove(fpath)
             }
             InodeTypes::EXT4_DE_DIR => {
@@ -562,8 +562,9 @@ impl Inode for Ext4Inode {
         let ty = file.get_type();
         let old_mode = InodeMode::from_inode_type(ty).get_type();
         log::debug!("old mode: {:x}", old_mode.bits());
+        log::info!("[Ext4] rename {} -> {}", old_path, target);
         if let Some(new) = new_inode {
-            let new_mode = new.inode_inner().mode();
+            let new_mode = new.inode_type();
             if new_mode != old_mode {
                 return match (old_mode, new_mode) {
                     (InodeMode::FILE, InodeMode::DIR) => Err(SysError::EISDIR),

@@ -1367,8 +1367,13 @@ pub fn sys_faccessat2(dirfd: isize, pathname: *const u8, mode: i32, flags: i32) 
 pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, new_path: *const u8, flags: i32) -> Result<isize, SysError> {
     let task = current_task().unwrap().clone();
     let flags = RenameFlags::from_bits(flags).ok_or(SysError::EINVAL)?;
+
     let old_dentry = at_helper(task.clone(), old_dirfd, old_path, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     let new_dentry = at_helper(task.clone(), new_dirfd, new_path, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+
+    let old_path = user_path_to_string(UserPtrRaw::new(old_path), &mut task.vm_space.lock())?;
+    let new_path = user_path_to_string(UserPtrRaw::new(new_path), &mut task.vm_space.lock())?;
+    info!(" rename {} -> {}", old_path, new_path);
 
     if flags.contains(RenameFlags::RENAME_EXCHANGE)
             && (flags.contains(RenameFlags::RENAME_NOREPLACE)
