@@ -9,7 +9,7 @@ use spin::Once;
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
-use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::{current_task, suspend_current_and_run_next}};
+use crate::{devices::CharDevice, drivers::serial::UART0, fs::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::{current_task, suspend_current_and_run_next}};
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(FromRepr, Debug)]
@@ -184,23 +184,23 @@ impl File for TtyFile {
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let char_dev = UART0.clone();
-        //let len = char_dev.read(buf).await;
-        let mut c: usize;
-        loop {
-            c = console_getchar();
-            if c == 0 || c as u8 == 0xff {
-                suspend_current_and_run_next();
-                continue;
-            } else {
-                break;
-            }
-        }
-        let ch = c as u8;
-        let len = 1;
-        assert!(c < 256);
-        unsafe {
-            buf.as_mut_ptr().write_volatile(ch);
-        }
+        let len = char_dev.read(buf).await;
+        // let mut c: usize;
+        // loop {
+        //     c = console_getchar();
+        //     if c == 0 || c as u8 == 0xff {
+        //         suspend_current_and_run_next();
+        //         continue;
+        //     } else {
+        //         break;
+        //     }
+        // }
+        // let ch = c as u8;
+        // let len = 1;
+        // assert!(c < 256);
+        // unsafe {
+        //     buf.as_mut_ptr().write_volatile(ch);
+        // }
         
         let termios = self.meta.lock().termios;
         if termios.is_icrnl() {
@@ -214,6 +214,23 @@ impl File for TtyFile {
             self.write(buf).await;
         }
         Ok(len)
+    }
+
+    async fn base_poll(&self, events: PollEvents) -> PollEvents {
+        let mut res = PollEvents::empty();
+        let char_dev = UART0.clone();
+        if events.contains(PollEvents::IN) {
+            if char_dev.poll_in().await {
+                res |= PollEvents::IN;
+            }
+        }
+        if events.contains(PollEvents::OUT) {
+            if char_dev.poll_out().await {
+                res |= PollEvents::OUT;
+            }
+        }
+        log::info!("[tty] base poll return event {:?}", res);
+        res
     }
 
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {

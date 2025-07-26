@@ -105,22 +105,23 @@ impl IrqCtrlHal for IrqCtrl {
         let mmio_size = plic_reg.size.unwrap();
         log::info!("plic base_address:{mmio_base:#x}, size:{mmio_size:#x}");
         let mmio_vbase = mmio.map_mmio_area(mmio_base..mmio_base+mmio_size).start;
+        log::info!("after mapping: mmio vbase {:#x}", mmio_vbase);
         Some(Self { plic: PLIC::new(mmio_base, mmio_size, mmio_vbase) })
     }
 
-    fn enable_irq(&self, no: usize) {
-        self.plic.enable_irq(no, 0);
+    fn enable_irq(&self, no: usize, ctx_id: usize) {
+        self.plic.enable_irq(no, ctx_id);
     }
 
-    fn disable_irq(&self, no: usize) {
-        self.plic.disable_irq(no, 0);
+    fn disable_irq(&self, no: usize, ctx_id: usize) {
+        self.plic.disable_irq(no, ctx_id);
     }
 
-    fn claim_irq(&self) -> Option<usize> {
-        self.plic.claim_irq(0)
+    fn claim_irq(&self, ctx_id: usize) -> Option<usize> {
+        self.plic.claim_irq(ctx_id)
     }
 
-    fn complete_irq(&self, no: usize) {
-        self.plic.complete_irq(no, 0);
+    fn complete_irq(&self, no: usize, ctx_id: usize) {
+        self.plic.complete_irq(no, ctx_id);
     }
 }

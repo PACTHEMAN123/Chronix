@@ -33,7 +33,7 @@ impl IrqCtrlHal for IrqCtrl {
         Some(Self { platic })
     }
     
-    fn enable_irq(&self, no: usize) {
+    fn enable_irq(&self, no: usize, _ctx_id: usize) {
         Eiointc::enable_irq(no);
         if no < 32 {
             let mut mask = self.platic.read_w(Platic::INT_MASK);
@@ -50,7 +50,7 @@ impl IrqCtrlHal for IrqCtrl {
         }
     }
     
-    fn disable_irq(&self, no: usize) {
+    fn disable_irq(&self, no: usize, _ctx_id: usize) {
         Eiointc::disable_irq(no);
         if no < 32 {
             let mut mask = self.platic.read_w(Platic::INT_MASK);
@@ -65,11 +65,11 @@ impl IrqCtrlHal for IrqCtrl {
         }
     }
     
-    fn claim_irq(&self) -> Option<usize> {
+    fn claim_irq(&self, _ctx_id: usize) -> Option<usize> {
         Eiointc::claim_irq()
     }
     
-    fn complete_irq(&self, no: usize) {
+    fn complete_irq(&self, no: usize, _ctx_id: usize) {
         Eiointc::disable_irq(no);
     }
 }

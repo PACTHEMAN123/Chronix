@@ -203,7 +203,7 @@ impl DeviceManager {
         for i in 0..2 {
             for dev in self.devices.values() {
                 if let Some(irq) = dev.irq_no() {
-                    self.irq_ctrl().enable_irq(irq);
+                    self.irq_ctrl().enable_irq(irq, i);
                     log::info!("Enable external interrupt:{irq}, context:{i}");
                 }
             }
@@ -225,11 +225,10 @@ impl DeviceManager {
             }
         }
         unsafe { Instruction::disable_interrupt() };
-        log::trace!("[Device Manager]: handle interrupt");
-        if let Some(irq_num) = self.irq_ctrl().claim_irq() {
+        if let Some(irq_num) = self.irq_ctrl().claim_irq(irq_ctx()) {
             if let Some(dev) = self.irq_map.get(&irq_num) {
                 dev.handle_irq();
-                self.irq_ctrl().complete_irq(irq_num);
+                self.irq_ctrl().complete_irq(irq_num, irq_ctx());
                 return;
             }
         } 
