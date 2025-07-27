@@ -60,6 +60,12 @@ PHONY_TARGET += debug-la
 debug-la: kernel-la
 	make -f Makefile.sub debug ARCH=loongarch64 GDB=loongarch64-linux-gnu-gdb
 
+PHONY_TARGET += zImage-rv
+zImage-rv: kernel-rv
+#	gzip -f kernel-rv
+#	mkimage -A riscv -O linux -C gzip -T kernel -a 0x80200000 -e 0x80200000 -n Chronix -d kernel-rv.gz zImage
+	mkimage -A riscv -O linux -C none -T kernel -a 0x80200000 -e 0x80200000 -n Chronix -d kernel-rv zImage
+
 PHONY_TARGET += clean
 clean:
 	make -f Makefile.sub clean ARCH=loongarch64

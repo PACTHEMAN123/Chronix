@@ -55,7 +55,7 @@ kernel-bin: kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
 # kernel in elf
-kernel: dumpdtb
+kernel:
 	$(call building, "Architecture: $(ARCH)")
 	$(call building, "Platform: $(BOARD)")
 	@cp os/src/linker-$(ARCH)-$(BOARD).ld os/src/linker.ld
