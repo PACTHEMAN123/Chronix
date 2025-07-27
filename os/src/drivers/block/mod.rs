@@ -3,6 +3,7 @@
 // mod virtio_blk;
 mod pci_blk;
 mod mmio_blk;
+mod mmc;
 
 use core::sync::atomic::AtomicUsize;
 
@@ -10,6 +11,7 @@ use hal::println;
 // pub use virtio_blk::VirtIOBlock;
 pub use pci_blk::VirtIOPCIBlock;
 pub use mmio_blk::VirtIOMMIOBlock;
+pub use mmc::MMCBlock;
 
 use alloc::sync::Arc;
 use crate::devices::{BlockDevice, DeviceMajor, DEVICE_MANAGER};

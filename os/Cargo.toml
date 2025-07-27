@@ -27,6 +27,7 @@ fatfs.workspace = true
 xmas-elf.workspace = true
 lwext4_rust.workspace = true
 smoltcp.workspace = true
+bitfield-struct.workspace = true
 
 # use other cargos in this project
 range-map = { path = "../utils/range-map" }

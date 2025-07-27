@@ -7,6 +7,7 @@ pub mod manager;
 pub mod pci;
 pub mod mmio;
 pub mod buffer_cache;
+pub mod sdio;
 use core::{any::Any, arch::global_asm, ops::Range};
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
