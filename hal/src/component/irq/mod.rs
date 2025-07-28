@@ -12,8 +12,8 @@ pub use loongarch64::*;
 
 pub trait IrqCtrlHal {
     fn from_dt(device_tree: &fdt::Fdt, mmio: impl crate::mapper::MmioMapperHal) -> Option<Self> where Self: Sized;
-    fn enable_irq(&self, no: usize);
-    fn disable_irq(&self, no: usize);
-    fn claim_irq(&self) -> Option<usize>;
-    fn complete_irq(&self, no: usize);
+    fn enable_irq(&self, no: usize, ctx_id: usize);
+    fn disable_irq(&self, no: usize, ctx_id: usize);
+    fn claim_irq(&self, ctx_id: usize) -> Option<usize>;
+    fn complete_irq(&self, no: usize, ctx_id: usize);
 }

@@ -19,7 +19,6 @@ pushall.sh
 .gdbinit
 *.img
 *.o
-*.dtb
 
 ltp/
 kernel-la
@@ -29,3 +28,5 @@ testcase/
 log.txt
 log-rv.txt
 log-la.txt
+
+zImage

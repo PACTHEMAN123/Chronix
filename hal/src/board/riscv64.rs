@@ -7,13 +7,26 @@ pub const MMIO: &[(usize, usize)] = &[
 
 pub const MAX_PROCESSORS: usize = 4;
 
+#[cfg(not(feature = "vf2"))]
 core::arch::global_asm!{
     "
     .section .rodata
     .global _dtb_start
     .global _dtb_end
     _dtb_start:
-        .incbin \"hal/src/board/riscv64-qemu.dtb\"
+        .incbin \"hal/src/board/dtbs/riscv64-qemu.dtb\"
+    _end_end:
+    "
+}
+
+#[cfg(feature = "vf2")]
+core::arch::global_asm!{
+    "
+    .section .rodata
+    .global _dtb_start
+    .global _dtb_end
+    _dtb_start:
+        .incbin \"hal/src/board/dtbs/jh7110-starfive-visionfive-2-v1.3b.dtb\"
     _end_end:
     "
 }
