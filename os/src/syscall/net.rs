@@ -624,19 +624,21 @@ impl SocketOption {
     }
 
     /// get socket option value
-    pub fn get(&self, socket: &crate::net::socket::Socket, opt: &mut [u8],  opt_len: &mut u32) -> SockResult<()>{
-        let buf_len = *opt_len  as usize;
+    pub fn get(&self, socket: &crate::net::socket::Socket, opt: usize,  opt_len: UserPtrRaw<u32>, task: &Arc<TaskControlBlock> ) -> SockResult<isize>{
+        let opt_len_r= opt_len.ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let opt_len_w = opt_len.ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+        let buf_len = *opt_len_r.to_ref()  as usize;
         match self {
             SocketOption::REUSEADDR => {
                 let value: i32 = if socket.sk.get_reuse_addr_flag() {1}else {0};
-                let value = &value.to_ne_bytes();
-                if buf_len < 4 {
-                    return Err(SysError::EINVAL)
-                } 
-                let len = value.len();
-                opt[..len].copy_from_slice(value);
-                *opt_len = 4;
-                Ok(())
+                let opt_w = UserSliceRaw::new(opt as *mut u8, 4)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                opt_w.to_mut().copy_from_slice(&value.to_ne_bytes());
+                opt_len_w.write(4);
+                Ok(0)
             }
 
             SocketOption::DONTROUTE => {
@@ -644,49 +646,54 @@ impl SocketOption {
                     return Err(SysError::EINVAL)
                 }
                 let value: i32 = if socket.dont_route {1}else {0};
-                let value = &value.to_ne_bytes();
-                let len = value.len();
-                opt[..len].copy_from_slice(value);
-                *opt_len = 4;
-                Ok(())
+                let opt_w = UserSliceRaw::new(opt as *mut u8, 4)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                opt_w.to_mut().copy_from_slice(&value.to_ne_bytes());
+                opt_len_w.write(4);
+                Ok(0)
             }
 
             SocketOption::SNDBUF => {
-                let size = socket.get_send_buf_size().to_ne_bytes();
-                let len = size.len();
-                opt[..len].copy_from_slice(&size);
-                *opt_len = 4;
-                Ok(())
+                let size = socket.get_send_buf_size() as i32;
+                let opt_w = UserSliceRaw::new(opt as *mut u8, 4)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                opt_w.to_mut().copy_from_slice(&size.to_ne_bytes());
+                opt_len_w.write(4);
+                Ok(0)
             }
 
             SocketOption::RCVBUF => {
-                let size = socket.get_recv_buf_size().to_ne_bytes();
-                let len = size.len();
-                opt[..len].copy_from_slice(&size);
-                *opt_len = 4;
-                Ok(())
+                let size = socket.get_recv_buf_size() as i32;
+                let opt_w = UserSliceRaw::new(opt as *mut u8, 4)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                opt_w.to_mut().copy_from_slice(&size.to_ne_bytes());
+                opt_len_w.write(4);
+                Ok(0)
             }
 
             SocketOption::KEEPALIVE => {
                 if buf_len < 4 {
                     return Err(SysError::EINVAL)
                 }
-
+                let opt_w = UserSliceRaw::new(opt as *mut u8, 4)
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
                 match &socket.sk {
                     Sock::TCP(tcp) => {
                         if let Some(handle) = tcp.handle(){
                             SOCKET_SET.with_socket::<smoltcp::socket::tcp::Socket,_,_>(handle, |socket| {
                                 let value: i32 = if socket.keep_alive().is_none() {1} else {0};
-                                let value = &value.to_ne_bytes();
-                                let len = value.len();
-                                opt[..len].copy_from_slice(value);
-                                *opt_len = 4;
+                                opt_w.to_mut().copy_from_slice(&value.to_ne_bytes());
+                                opt_len_w.write(4);
                             });
                         }
                     }
                     _ => {}
                 }
-                Ok(())
+                Ok(0)
             }
 
             SocketOption::RcvtimeoOld => {
@@ -697,26 +704,28 @@ impl SocketOption {
                     Sock::TCP(tcp) => {
                         match tcp.get_timeout() {
                             Some(timeout) => {
-                                let time_u8 = TimeSpec::_as_bytes(&timeout);
-                                let len = time_u8.len();
-                                opt[..len].copy_from_slice(time_u8);
-                                *opt_len = size_of::<TimeSpec>() as u32;
+                                let opt_w = UserSliceRaw::new(opt as *mut u8, size_of::<TimeSpec>())
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
+                                opt_w.to_mut().copy_from_slice(TimeSpec::_as_bytes(&timeout));
                             }
                             None => {
                                 let data = &0u8.to_ne_bytes();
-                                let len = data.len();
-                                opt[..len].copy_from_slice(data);
-                                *opt_len = size_of::<TimeSpec>() as u32;
+                                let opt_w = UserSliceRaw::new(opt as *mut u8, size_of::<TimeSpec>())
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
+                                opt_w.to_mut().copy_from_slice(data);
                             }
                         }
+                        opt_len_w.write(size_of::<TimeSpec>() as u32);
                     }
                     _ =>{}
                 }
-                Ok(())
+                Ok(0)
             }
 
             _ => {
-                Ok(())
+                Ok(0)
             }
         }
     }
@@ -771,12 +780,16 @@ impl TcpSocketOption {
         }
     }
 
-    pub fn get(&self, rawsocket: &crate::net::socket::Socket, opt_addr: &mut [u8], opt_len:&mut u32) -> SockResult<()> {
-        let buf_len = unsafe { *opt_len };
+    pub fn get(&self, rawsocket: &crate::net::socket::Socket, opt_addr: usize, opt_len:UserPtrRaw<u32>, task: &Arc<TaskControlBlock>) -> SockResult<isize> {
+        let opt_len_r = opt_len.ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let buf_len = *opt_len_r.to_ref();
+        let opt_len_w = opt_len.ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
         match &rawsocket.sk {
             Sock::TCP(tcp) => {
                 if let Some(handle) = tcp.handle(){
-                    let res: Result<(), SysError> = SOCKET_SET.with_socket_mut::<smoltcp::socket::tcp::Socket,_,_>(handle, |socket| {
+                    let res: Result<isize, SysError> = SOCKET_SET.with_socket_mut::<smoltcp::socket::tcp::Socket,_,_>(handle, |socket| {
                         match self {
                             TcpSocketOption::NODELAY => {
                                 if buf_len < 4 {
@@ -784,38 +797,47 @@ impl TcpSocketOption {
                                 }
                                 let value: i32 = if socket.nagle_enabled() {0} else {1};
                                 let value = value.to_ne_bytes();
-                                let index = value.len();
-                                opt_addr[..index].copy_from_slice(&value);
-                                *opt_len = 4;
-                                Ok(())
+                                let opt_addr_w = UserSliceRaw::new(opt_addr as *mut u8, 4)
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
+                                opt_addr_w.to_mut().copy_from_slice(&value);
+                                opt_len_w.write(4);
+                                Ok(0)
                             }
                             TcpSocketOption::MAXSEG => {
                                 let len = size_of::<usize>();
                                 let value: usize = 1500;
                                 let value = value.to_ne_bytes();
-                                let index = value.len();
-                                opt_addr[..index].copy_from_slice(&value);
-                                *opt_len = len as u32;
-                                Ok(())
+                                let opt_addr_w = UserSliceRaw::new(opt_addr as *mut u8, len)
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
+                                opt_addr_w.to_mut().copy_from_slice(&value);
+                                opt_len_w.write(len as u32);
+                                Ok(0)
                             },
-                            TcpSocketOption::INFO => {Ok(())},
+                            TcpSocketOption::INFO => {Ok(0)},
                             TcpSocketOption::CONGESTION => {
-                                let len = rawsocket.get_congestion().as_bytes().len() as u32;
-                                opt_addr.copy_from_slice(rawsocket.get_congestion().as_bytes());
-                                *opt_len = len as u32;
-                                Ok(())
-                            }
+                                let bytes = rawsocket.get_congestion();
+                                let bytes = bytes.as_bytes();
+                                let len = bytes.len();
+                                let opt_addr_w = UserSliceRaw::new(opt_addr as *mut u8, len)
+                                    .ensure_write(&mut task.get_vm_space().lock())
+                                    .ok_or(SysError::EFAULT)?;
+                                opt_addr_w.to_mut().copy_from_slice(bytes);
+                                opt_len_w.write(len as u32);
+                                Ok(0)
+                            },
                             _=> {
-                                Ok(())
+                                Ok(0)
                             }
                         }
                     });
                     res
                 }else {
-                    Ok(())
+                    Ok(0)
                 }
             }
-            _ => Ok(())
+            _ => Ok(0)
         }
     }
 }
@@ -920,94 +942,58 @@ pub fn sys_setsockopt  (
 }
 /// get socket configure interface for user
 pub fn sys_getsockopt (
-    _fd: usize,
+    fd: usize,
     level: usize,
     option_name: usize,
     option_value: usize,
     option_len: usize,
 ) -> SysResult {
-    fn write_string_to_ptr(mut optval_ptr: *mut u8, str:&str) {
-        let c_str = CString::new(str).expect("CString::new failed");
-        let bytes = c_str.as_bytes();
-        for byte in bytes {
-            unsafe {
-                optval_ptr.write(*byte);
-                optval_ptr = optval_ptr.offset(1);
-            }
-        }
-        unsafe {
-            optval_ptr.write(0);
-        }
+    if option_len == 0 {
+        return Err(SysError::EFAULT);
     }
+    let opt_len_r = UserPtrRaw::new(option_len as *mut u32)
+        .ensure_read(&mut current_task().unwrap().get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let buf_len = *opt_len_r.to_ref() as u32;
+    if buf_len > 1000 {
+        return Err(SysError::EINVAL);
+    }
+    if option_value == 0 {
+        return Err(SysError::EFAULT);
+    }
+    let Ok(level) = SocketLevel::try_from(level) else {
+        return Err(SysError::EOPNOTSUPP);
+    };
     let task = current_task().unwrap();
-    let optlen_ptr = UserPtrRaw::new(option_len as *mut u32)
-    .ensure_write(&mut task.get_vm_space().lock())    
-    .ok_or(SysError::EFAULT)?;
-    match SocketLevel::try_from(level)? {
+    let file = task.with_fd_table(|table| {
+        table.get_file(fd)})?;
+    let socket_file = match file.downcast_ref::<socket::Socket>() {
+       Some(s) => s,
+        None => return Err(SysError::ENOTSOCK),
+    };
+    match level {
+        SocketLevel::IpprotoIp => {
+            // todo not set currently
+            let _option = SocketOption::try_from(option_name).map_err(|_err| SysError::ENOPROTOOPT)?;
+            return Ok(0);
+        }
         SocketLevel::SolSocket => {
-            const SEND_BUFFER_SIZE: usize = 64 * 1024; // 64KB
-            const RECV_BUFFER_SIZE: usize = 64 * 1024; // 64KB
-            match SocketOption::try_from(option_name)?{
-                SocketOption::SNDBUF => {
-                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                    optval_ptr.write(SEND_BUFFER_SIZE as u32);
-                    optlen_ptr.write(size_of::<u32>() as u32);
-                },
-                SocketOption::RCVBUF => {
-                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                    optval_ptr.write(RECV_BUFFER_SIZE as u32);
-                    optlen_ptr.write(size_of::<u32>() as u32);
-                },
-                SocketOption::ERROR => {
-                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                    optval_ptr.write(0 as u32);
-                    optlen_ptr.write(size_of::<u32>() as u32);
-                }
-                _ =>{
-                    
-                } 
-            }
-        },
-        SocketLevel::IpprotoTcp | SocketLevel::IpprotoIp  => {
-            const MAX_SEGMENT: usize = 1460; // 1460 byte susually MTU
-            match TcpSocketOption::try_from(option_name)? {
-                TcpSocketOption::NODELAY => {
-                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                    optval_ptr.write(0 as u32);
-                    optlen_ptr.write(size_of::<u32>() as u32);
-                    
-                },
-                TcpSocketOption::MAXSEG => {
-                    let optval_ptr = UserPtrRaw::new(option_value as *mut u32)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                        optval_ptr.write(MAX_SEGMENT as u32);
-                        optlen_ptr.write(size_of::<u32>() as u32);
-                },
-                TcpSocketOption::INFO => {},
-                TcpSocketOption::CONGESTION => {
-                    log::warn!("[sys_getsockopt], TcpSocketOption::CONGESTION");
-                        let optval_ptr = UserPtrRaw::new(option_value as *mut u8)
-                        .ensure_write(&mut task.get_vm_space().lock())
-                        .ok_or(SysError::EFAULT)?;
-                        let str = "reno";
-                        let optval_ptr = optval_ptr.to_mut() as *mut u8;
-                        write_string_to_ptr(optval_ptr, str);
-                        optlen_ptr.write(4);
-                },
-            }
-        },
-        SocketLevel::IpprotoIpv6 => {},
+            let option = SocketOption::try_from(option_name).map_err(|_err| SysError::ENOPROTOOPT)?;
+            let res = option.get(socket_file, option_value, UserPtrRaw::new(option_len as *mut u32), task);
+            return res;
+        }
+        SocketLevel::IpprotoTcp => {
+            let option = TcpSocketOption::try_from(option_name).map_err(|_err| SysError::ENOPROTOOPT)?;
+            let res = option.get(socket_file, option_value, UserPtrRaw::new(option_len as *mut u32), task);
+            return res;
+        }
+        SocketLevel::IpprotoIpv6 => {
+            return Ok(0);
+        }
+        _ => {
+            return Err(SysError::ENOPROTOOPT);
+        }
     }
-    Ok(0)
 }
 
 /// sys_shutdown() allows a greater control over the behaviour of connection-oriented sockets.

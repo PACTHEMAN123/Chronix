@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [ ] accept03 : 在openat直接寄掉
+- [ ] accept03 : p3 f1
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -128,7 +128,7 @@
 - [ ] clone05: exit_code 0 expected 1
 - [x] clone06
 - [ ] clone07
-- [ ] clone08
+- [x] clone08: p3 f2
 - [ ] clone09
 - [ ] clone301: todo! pidfd support 
 - [x] clone302: pass 6 failed 6
@@ -617,7 +617,7 @@
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
 - [ ] getsid02: no syscall 156
 - [x] getsockname01:pass 5 failed 1  
-- [ ] getsockopt01: skip
+- [x] getsockopt01: p 8 f 1
 - [ ] getsockopt02: skip
 - [ ] gettid01: Failed to open FILE '/proc/self/status' for reading: ENOENT (2)
 - [x] gettid02
@@ -1565,11 +1565,11 @@
 - [ ] setsid01 : p1 f2 no sum
 
 ======sockopts======
-- [ ] setsockopt01: now not supported,the follows the follows
+- [x] setsockopt01: p6 f2
 - [ ] setsockopt02
-- [ ] setsockopt03
-- [ ] setsockopt04
-- [ ] setsockopt05
+- [x] setsockopt03: 
+- [x] setsockopt04: p1 s1
+- [ ] setsockopt05: .config same as follows
 - [ ] setsockopt06
 - [ ] setsockopt07
 - [ ] setsockopt08
@@ -1648,8 +1648,8 @@
 - [ ] snd_timer01 : /proc/sys
 
 ======= socket ======= (not tested)
-- [x] socket01 : pass 6 failed 3
-- [ ] socket02
+- [x] socket01 : pass 5 failed 4
+- [ ] socket02: pass 4
 - [ ] socketcall01
 - [ ] socketcall02
 - [ ] socketcall03
@@ -1673,12 +1673,12 @@
 - [ ] stack_clash : /proc/cmdline
 - [x] stack_space : no sum
 - [ ] starvation : stress
-- [x] stat01: pass 10 failed 2
-- [x] stat01_64 : pass 10 failed 2
-- [x] stat02 : pass 1 failed 1
-- [x] stat02_64 : wrong size
-- [ ] stat03 : f
-- [ ] stat03_64 : f
+- [x] stat01: pass 12
+- [x] stat01_64 : pass 12
+- [x] stat02 : pass 2
+- [x] stat02_64 : pass 2
+- [x] stat03 : pass4 failed 2
+- [x] stat03_64 : p4 f2
 - [ ] statfs01 : dev
 - [ ] statfs01_64 : no dev
 - [ ] statfs02 : f
@@ -1699,7 +1699,7 @@
 - [ ] statx10 : no dev
 - [ ] statx11 : no dev
 - [ ] statx12 : no dev
-- [ ] stime01 : f
+- [x] stime01 : p1 f1 b1 
 - [ ] stime02 : should failed
 - [ ] stream01 : no sum
 - [ ] stream02 : no sum
@@ -1727,7 +1727,7 @@
 - [ ] sysfs04 : tconf
 - [ ] sysfs05 : tconf
 - [x] sysinfo01 : no sum
-- [ ] sysinfo02 : panic
+- [x] sysinfo02 : no sum
 - [ ] sysinfo03 : .config
 - [ ] syslog11 : /proc/sys/kernel/printk:
 - [ ] syslog12 : failed
