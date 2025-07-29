@@ -1,10 +1,10 @@
-use core::{sync::atomic::{self, AtomicUsize}, task::Poll};
+use core::{sync::atomic::{self, AtomicBool, AtomicUsize}, task::Poll};
 
 use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::LOCAL_IPS, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{AlgInstance, SockAddrAlg}, LOCAL_IPS}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -195,6 +195,13 @@ pub struct Socket {
     pub congestion:  SpinNoIrqLock<String>,
     /// socketopt dout route flag
     pub dont_route: bool,
+    // !member concerning af_alg
+    /// whether af_alg or not 
+    pub is_af_alg: AtomicBool,
+    /// socket_af_alg addr
+    pub socket_af_alg: SpinNoIrqLock<Option<SockAddrAlg>>,
+    /// key context
+    pub alg_instance: SpinNoIrqLock<Option<AlgInstance>>
 }
 
 impl Socket {
@@ -208,6 +215,7 @@ impl Socket {
                 }
             },
             SaFamily::AfUnix => Sock::Unix(UnixSocket {  }),
+            _ => unimplemented!(),
         };
         let fd_flags = if non_block {
             sk.set_nonblocking();
@@ -229,6 +237,9 @@ impl Socket {
             recv_buf_size: AtomicUsize::new(16 * 4096),
             congestion: SpinNoIrqLock::new((String::from("reno"))),
             dont_route: false,
+            is_af_alg: AtomicBool::new(false),
+            socket_af_alg: SpinNoIrqLock::new(None),
+            alg_instance: SpinNoIrqLock::new(None),
         }
     }
     /// new a socket with a given socket 
@@ -245,7 +256,10 @@ impl Socket {
             send_buf_size: AtomicUsize::new(16 * 4096),
             recv_buf_size: AtomicUsize::new(16 * 4096),
             congestion: SpinNoIrqLock::new((String::from("reno"))),
-            dont_route: false
+            dont_route: false,
+            is_af_alg: AtomicBool::new(false),
+            socket_af_alg: SpinNoIrqLock::new(None),        
+            alg_instance: SpinNoIrqLock::new(None),
         }
     }
     /// get send buf size
@@ -271,6 +285,14 @@ impl Socket {
     /// set congestion state
     pub fn set_congestion(&self, congestion: String) {
         *self.congestion.lock() = congestion;
+    }
+    /// set whether is af_alg socket
+    pub fn set_is_af_alg(&self, is_af_alg: bool) {
+        self.is_af_alg.store(is_af_alg, atomic::Ordering::Release);
+    }
+    /// get whether is af_alg socket
+    pub fn get_is_af_alg(&self) -> bool {
+        self.is_af_alg.load(atomic::Ordering::Acquire)
     }
 }
 

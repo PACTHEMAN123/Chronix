@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [ ] accept03 : p3 f1
+- [x] accept03 : p3 f1
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -1601,7 +1601,7 @@
 - [ ] shmctl04
 - [ ] shmctl05
 - [ ] shmctl06
-- [ ] shmctl07
+- [x] shmctl07
 - [ ] shmctl08
 - [ ] shmdt01
 - [ ] shmdt02
@@ -1648,8 +1648,8 @@
 - [ ] snd_timer01 : /proc/sys
 
 ======= socket ======= (not tested)
-- [x] socket01 : pass 5 failed 4
-- [ ] socket02: pass 4
+- [x] socket01 : pass 6 failed 2
+- [x] socket02: pass 4
 - [ ] socketcall01
 - [ ] socketcall02
 - [ ] socketcall03

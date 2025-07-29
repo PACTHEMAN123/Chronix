@@ -36,7 +36,7 @@ impl TryFrom<i32> for SocketType {
         match value {
             1 => Ok(Self::STREAM),
             2 => Ok(Self::DGRAM),
-            // 3 => Ok(Self::RAW),
+            3 => Ok(Self::RAW),
             4 => Ok(Self::RDM),
             5 => Ok(Self::SEQPACKET),
             6 => Ok(Self::DCCP),
@@ -72,6 +72,10 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
     }
     log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, _protocol);
     let domain = SaFamily::try_from(domain as u16)?;
+    let s_type = SocketType::try_from(types as i32)?;
+    if s_type == SocketType::RAW && domain!= SaFamily::Packet {
+        return Err(SysError::EPROTONOSUPPORT);
+    }
     let mut types = types as i32;
     let mut nonblock = false;
     // file descriptor flags
@@ -85,12 +89,7 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
         types &= !SOCK_CLOEXEC;
         flags |= OpenFlags::O_CLOEXEC;
     }
-
     let types = SocketType::try_from(types as i32)?;
-    if types != SocketType::STREAM  && types != SocketType::DGRAM {
-        //todo: temp meausure for protocol check
-        return Err(SysError::EPROTONOSUPPORT);
-    }
     let socket = socket::Socket::new(domain,types, nonblock);
     let fd_info = FdInfo {
         file: Arc::new(socket),
