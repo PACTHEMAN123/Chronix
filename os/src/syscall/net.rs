@@ -6,7 +6,7 @@ use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::misc::UTS, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::SockAddrAlg, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::misc::UTS, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -109,6 +109,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
     if (fd as isize) < 0 {
         return Err(SysError::EBADF);
     }
+    if addr_len <= 3 {
+        return Err(SysError::EINVAL);
+    }
     let task = current_task().unwrap();
     let local_addr = sockaddr_reader(addr, addr_len, task)?;
     log::info!("[sys_bind] local_addr's port is: {}",unsafe {
@@ -119,6 +122,18 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
     log::info!("[sys_bind] socket_file_type {:#?}, fd_type {:#?}", socket_file.sk_type, fd);
+    let addr_family = SaFamily::try_from(unsafe { local_addr.family })?;
+    if socket_file.domain != addr_family && socket_file.domain != SaFamily::Rds {
+        return Err(SysError::EAFNOSUPPORT);
+    }
+
+    if socket_file.domain == SaFamily::Alg {
+        socket_file.set_is_af_alg(true);
+        let bind_addr = unsafe {local_addr.alg};
+        bind_addr.check_alg()?;
+        *socket_file.socket_af_alg.lock() = Some(bind_addr);
+        return Ok(0);
+    }
     socket_file.sk.bind(fd, local_addr)?;
     Ok(0)
 }
@@ -183,10 +198,31 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         return Err(SysError::EBADF);
     }
     let task = current_task().unwrap();
-    let socket_file = task.with_fd_table(|table| {
-        table.get_file(fd)})?
+    let file = task.with_fd_table(|table| {
+        table.get_file(fd)})?;
+    if file.flags().contains(OpenFlags::O_PATH) {
+        return Err(SysError::EBADF);
+    }
+    if !file.readable() && !file.writable() {
+        return Err(SysError::EBADF);
+    }
+    let socket_file = file
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
+    if socket_file.domain == SaFamily::Alg {
+        let res: Result<isize, SysError> = task.with_mut_fd_table(|table|{
+            let new_socket = socket_file.accept_alg()?;
+            let new_fd = table.alloc_fd()?;
+            let inner_flags = socket_file.file_inner.flags.lock().clone();
+            let fd_info = FdInfo {
+                file: Arc::new(new_socket),
+                flags: inner_flags.into(),
+            };
+            table.put_file(fd, fd_info)?;
+            return Ok(new_fd as isize);
+        });
+        return res;
+    }
     // moniter accept, allow sig_kill and sig_stop to interrupt
     task.set_interruptable();
     let old_mask = task.sig_manager.lock().blocked_sigs;
@@ -1267,6 +1303,12 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize, task: &Arc<TaskControlBlock
             }
            Ok(addr)
         },
+        SaFamily::Alg => {
+            if addr_len < size_of::<SockAddrAlg>() {
+                return Err(SysError::EINVAL);
+            }
+            Ok(addr)
+        }
         _ => todo!()
     }
 }

@@ -30,6 +30,7 @@ sbi-rt = { version = "0.0.2", features = ["legacy"] }
 riscv = "0.11.0"
 plic = "0.0.3"
 bitfield-struct = "0.8"
+dyn-clone = "1.0.20"
 
 # crates on github
 bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", branch = "main"}

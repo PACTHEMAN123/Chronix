@@ -3,7 +3,7 @@ use core::{fmt::Display, panic};
 use alloc::{fmt, format};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint,Ipv4Address, Ipv6Address};
 
-use crate::syscall::SysError;
+use crate::{net::crypto::SockAddrAlg, syscall::SysError};
 
 use super::SaFamily;
 
@@ -170,6 +170,7 @@ pub union SockAddr {
     pub ipv4: SockAddrIn4,
     pub ipv6: SockAddrIn6,
     pub unix: SockAddrUn,
+    pub alg: SockAddrAlg,
 }
 
 impl SockAddr {

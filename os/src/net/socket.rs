@@ -4,7 +4,7 @@ use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{AlgInstance, SockAddrAlg}, LOCAL_IPS}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{AlgInstance, AlgType, SockAddrAlg}, LOCAL_IPS}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -215,6 +215,7 @@ impl Socket {
                 }
             },
             SaFamily::AfUnix => Sock::Unix(UnixSocket {  }),
+            SaFamily::Alg => Sock::TCP(TcpSocket::new_v4_without_handle()),
             _ => unimplemented!(),
         };
         let fd_flags = if non_block {
@@ -352,5 +353,38 @@ impl File for Socket {
 
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
         None
+    }
+}
+
+/// for alg socket
+impl Socket {
+    // For AF_ALG sockets, accept() behaves differently than for 
+    // traditional network sockets. Instead of accepting a network 
+    // connection, it creates a child socket (also called a "request 
+    // socket"). This child socket is used for the actual data 
+    // transmission (encryption or decryption operations). 
+    // Typically, you call accept() to obtain a new child socket 
+    // for each encryption or decryption operation.
+    pub fn accept_alg(&self) -> SockResult<Self> {
+        if self.domain != SaFamily::Alg || !self.get_is_af_alg() {
+            return Err(SysError::EOPNOTSUPP);
+        }
+        Ok(Socket {
+            sk: Sock::TCP(TcpSocket::new_v4_without_handle()),
+            sk_type: self.sk_type,
+            domain: self.domain.clone(),
+            file_inner: FileInner{
+                dentry: Arc::<usize>::new_zeroed(),
+                offset: AtomicUsize::new(0),
+                flags: SpinNoIrqLock::new(OpenFlags::O_RDWR),
+            },
+            send_buf_size: AtomicUsize::new(16 * 4096),
+            recv_buf_size: AtomicUsize::new(16 * 4096),
+            congestion: SpinNoIrqLock::new((String::from("reno"))),
+            dont_route: false,
+            is_af_alg: AtomicBool::new(true),
+            socket_af_alg: SpinNoIrqLock::new(self.socket_af_alg.lock().clone()),        
+            alg_instance: SpinNoIrqLock::new(self.alg_instance.lock().clone()),
+        })
     }
 }

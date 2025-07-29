@@ -2,7 +2,8 @@ use core::str::from_utf8;
 
 use alloc::{boxed::Box, string::{String, ToString}, vec::Vec};
 
-use crate::syscall::SysError;
+use dyn_clone::{clone_trait_object, DynClone};
+use crate::{net::socket::SockResult, syscall::SysError};
 
 /// api for both user space an kernel space
 #[repr(C)]
@@ -28,8 +29,56 @@ impl SockAddrAlg {
             Err(_) => return Err(SysError::EINVAL),
         }
     }
+    pub fn check_alg(&self) -> SockResult<isize> {
+        /// check type
+        let type_name_end = self.salg_type
+            .iter().position(|&bytes| bytes == 0)
+            .unwrap_or(self.salg_type.len());
+        let raw_type = &self.salg_type[..type_name_end];
+        let alg_type = match from_utf8(raw_type) {
+            Ok(string) => string,
+            Err(_) => return Err(SysError::EINVAL),
+        };
+
+        /// check name
+        let name_end =  self.salg_name
+            .iter().position(|&bytes| bytes == 0)
+            .unwrap_or(self.salg_name.len());
+        let raw_name = &self.salg_name[..name_end];
+        let alg_name = match from_utf8(raw_name) {
+            Ok(string) => string,
+            Err(_) => return Err(SysError::EINVAL),
+        };
+
+        if alg_type == "hash" {
+            if alg_name.starts_with("hmac(") && alg_name.ends_with(')') {
+                let inner_part = &alg_name[5.. alg_name.len()-1];
+                if inner_part.starts_with("hmac(") {
+                    return Err(SysError::ENOENT);
+                }
+            }
+        }
+
+        if alg_type == "ahead" {
+            if alg_name.starts_with("rfc7539(") && alg_name.ends_with(')') {
+                let inner = &alg_name[8.. alg_name.len()-1];
+                let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+                if parts.len() == 2 {
+                    let cipher = parts[0];
+                    let mac = parts[1];
+                    if cipher == "chacha20" && mac != "poly1305" {
+                        return Err(SysError::ENOENT);
+                    }
+                }else {
+                    return Err(SysError::ENOENT);
+                }
+            }
+        }
+        Ok(0)
+
+    }
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AlgType {
     /// Asynchronous Compression
     Acomp,
@@ -78,15 +127,17 @@ impl AlgType {
 /// trait for symmetric cipher, crypto API
 /// differnet algroithm may have different context,but all of them should
 /// follow the belowing trait
-pub trait CryptoContext: Send +  Sync  {
+pub trait CryptoContext: Send +  Sync + DynClone  {
     fn set_key(&mut self, key: &[u8]) -> Result<(), SysError>;
     fn encrypt(&self, input: &[u8]) -> Result<(), SysError>;
     fn decrypt(&self, input: &[u8]) -> Result<(), SysError>;
 }
 
+clone_trait_object!(CryptoContext);
 // todo:  different algorithm context
 
 /// AlgInstance structure in socket
+#[derive(Clone)]
 pub struct AlgInstance {
     pub alg_type: AlgType,
     pub context: Box<dyn CryptoContext>,
