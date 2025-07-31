@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [x] accept03 : p3 f1
+- [x] accept03 : p4 f1
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -1464,7 +1464,7 @@
 - [ ] sendfile09 : tconf
 - [ ] sendfile09_64
 - [ ] sendmmsg01 : skip
-- [ ] sendmmsg02: skip
+- [x] sendmmsg02: p2f2
 - [ ] sendmsg01: no summary
 - [ ] sendmsg02
 - [ ] sendmsg03

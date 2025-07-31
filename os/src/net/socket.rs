@@ -211,12 +211,12 @@ impl Socket {
                 match sk_type {
                     SocketType::STREAM => Sock::TCP(TcpSocket::new_v4_without_handle()),
                     SocketType::DGRAM => Sock::UDP(UdpSocket::new()),
-                    _ => unimplemented!(),
+                    _ => Sock::TCP(TcpSocket::new_v4_without_handle()),
                 }
             },
             SaFamily::AfUnix => Sock::Unix(UnixSocket {  }),
             SaFamily::Alg => Sock::TCP(TcpSocket::new_v4_without_handle()),
-            _ => unimplemented!(),
+            _ => Sock::TCP(TcpSocket::new_v4_without_handle()),
         };
         let fd_flags = if non_block {
             sk.set_nonblocking();

@@ -6,7 +6,7 @@ use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::SockAddrAlg, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::misc::UTS, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::SockAddrAlg, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -51,6 +51,78 @@ pub const SOCK_NONBLOCK: i32 = 0x800;
 /// Set FD_CLOEXEC flag on the new fd
 pub const SOCK_CLOEXEC: i32 = 0x80000;
 
+/// specifiy the protocol to be used with the socket
+#[derive(Clone, PartialEq, Eq, Debug)]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum Protocol{
+    IP            = 0,
+    /// ICMPv4
+    ICMP          = 1,
+    /// IGMP
+    IGMP          = 2,
+    ETH_P_ALL     = 3, 
+    /// TCP（SOCK_STREAM 的默认）
+    TCP           = 6,
+    /// EGP
+    EGP           = 8,
+    /// PUP
+    PUP           = 12,
+    /// UDP（SOCK_DGRAM 的默认）
+    UDP           = 17,
+    /// IDP
+    IDP           = 22,
+    /// IPv6 路由头
+    IPv6         = 41,
+    /// ICMPv6
+    ICMPv6       = 58,
+    IPPROTO_UDPLITE = 136,
+    IPPROTO_SCTP = 132,
+}
+
+impl TryFrom<usize> for Protocol {
+    type Error = SysError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::IP),
+            1 => Ok(Self::ICMP),
+            2 => Ok(Self::IGMP),    
+            3 => Ok(Self::ETH_P_ALL),
+            6 => Ok(Self::TCP),
+            8 => Ok(Self::EGP),
+            12 => Ok(Self::PUP),
+            17 => Ok(Self::UDP),
+            22 => Ok(Self::IDP),    
+            41 => Ok(Self::IPv6),
+            58 => Ok(Self::ICMPv6),
+            136 => Ok(Self::IPPROTO_UDPLITE),
+            132 => Ok(Self::IPPROTO_SCTP),
+            _ => Err(Self::Error::EINVAL),
+        }
+    }
+}
+
+impl Protocol {
+    pub fn check_socket_type(self, socket_type: SocketType) -> bool {
+        match socket_type {
+            SocketType::STREAM | SocketType::SEQPACKET | SocketType::RAW => {
+                if self != Protocol::TCP && self != Protocol::IP && self != Protocol::ETH_P_ALL {
+                    return false;
+                } 
+            }
+            SocketType::DGRAM => {
+                if self != Protocol::UDP && self != Protocol::IP && self != Protocol::IPPROTO_UDPLITE {
+                    return false;
+                }
+            }
+            _ => {
+                return false;
+            }
+        }
+        true
+    }
+}
 /// create an endpoint for communication and returns a file decriptor refers to the endpoint
 /// Since Linux 2.6.27, the type argument serves a second purpose: in
 ///addition to specifying a socket type, it may include the bitwise
@@ -66,11 +138,11 @@ pub const SOCK_CLOEXEC: i32 = 0x80000;
 //        Set the close-on-exec (FD_CLOEXEC) flag on the new file
 //        descriptor.  See the description of the O_CLOEXEC flag in
 //        open(2) for reasons why this may be useful.
-pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
+pub fn sys_socket(domain: usize, types: i32, protocol: usize) -> SysResult {
     if domain <= 0 || domain > 255 {
         return Err(SysError::EAFNOSUPPORT);
     }
-    log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, _protocol);
+    log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, protocol);
     let domain = SaFamily::try_from(domain as u16)?;
     let s_type = SocketType::try_from(types as i32)?;
     if s_type == SocketType::RAW && domain!= SaFamily::Packet {
@@ -90,6 +162,7 @@ pub fn sys_socket(domain: usize, types: i32, _protocol: usize) -> SysResult {
         flags |= OpenFlags::O_CLOEXEC;
     }
     let types = SocketType::try_from(types as i32)?;
+    let _protocol = Protocol::try_from(protocol)?;
     let socket = socket::Socket::new(domain,types, nonblock);
     let fd_info = FdInfo {
         file: Arc::new(socket),
@@ -281,7 +354,7 @@ pub async fn sys_sendto(
         .downcast_arc::<socket::Socket>()
         .map_err(|_| SysError::ENOTSOCK)?;
     task.set_interruptable();
-    let bytes = match socket_file.sk_type {
+    let bytes=  match socket_file.sk_type {
         SocketType::DGRAM => {
             let remote_addr = if addr != 0 {  Some(sockaddr_reader(addr, addr_len, &task)?
             .into_endpoint()?)}else {
@@ -917,6 +990,40 @@ impl Ipv6Option {
     }
 }
 
+pub enum AlgOption {
+    AlgSetKey = 1,
+    AlgSetIV = 2,
+    AlgSetAeadAuthsize = 3,
+    AlgSetOP = 4,
+}
+
+impl TryFrom<usize> for AlgOption {
+    type Error = SysError;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(AlgOption::AlgSetKey),
+            2 => Ok(AlgOption::AlgSetIV),
+            3 => Ok(AlgOption::AlgSetAeadAuthsize),
+            4 => Ok(AlgOption::AlgSetOP),
+            _ => {
+                log::warn!("[AlgOption] unsupported option: {value}");
+                Err(Self::Error::EINVAL)
+            }
+        }
+    }
+}
+
+impl AlgOption {
+    pub fn set(&self, socket: &crate::net::socket::Socket, opt: &[u8]) -> SockResult<isize> {
+        match self {
+            AlgOption::AlgSetKey => {
+                // socket.alg_instance.lock().set_alg_key(opt);
+                Ok(0)
+            }
+            _ => unimplemented!(),
+        }
+    }
+}
 // ============================== 
 /// socket configure interface for user
 /// level: protocel level at which the option resides,
@@ -1103,6 +1210,7 @@ pub struct CmsgHdr {
     /// data len
     pub cmsg_len: u32,
 }
+
 /// send a message through a connection-mode or connectionless-mode socket. 
 pub async fn sys_sendmsg(
     fd: usize,
@@ -1126,73 +1234,79 @@ pub async fn sys_sendmsg(
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?
         .to_ref();
-    if msg.msg_controllen != 0 {
-        log::warn!("unsupported control data");
+    // if msg.msg_controllen != 0 {
+    //     log::warn!("unsupported control data");
+    // }
+    let mut peer_addr = None;
+    if socket_file.domain != SaFamily::Alg && socket_file.domain != SaFamily::AfUnix {
+        if msg.msg_namelen > 0 {
+            let addr = sockaddr_reader(msg.msg_name, msg.msg_namelen as usize, task)?;
+            peer_addr = Some(addr.into_endpoint()?);
+        }
     }
-    let addr = sockaddr_reader(msg.msg_name, msg.msg_namelen as usize, task)?
-        .into_endpoint()?;
-    // let addr = match SaFamily::try_from(unsafe {
-    //     Instruction::set_sum();
-    //     *(msg.msg_name as *const u16)
-    // })? {
-    //     SaFamily::AfInet => {
-    //         if msg.msg_namelen < mem::size_of::<SockAddrIn4>() as u32 {
-    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-    //             return Err(SysError::EINVAL);
-    //         }
-    //         Ok(SockAddr{
-    //             ipv4: unsafe { *(msg.msg_name as *const SockAddrIn4) },
-    //         }.into_endpoint())
-    //     },
-    //     SaFamily::AfInet6 => {
-    //         if msg.msg_namelen < mem::size_of::<SockAddrIn6>() as u32 {
-    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-    //             return Err(SysError::EINVAL);
-    //         }
-    //         Ok(SockAddr{
-    //             ipv6: unsafe {
-    //                 *(msg.msg_name as *const SockAddrIn6)
-    //             }
-    //         }.into_endpoint())
-    //     },
-    //     SaFamily::AfUnix => {
-    //         if msg.msg_namelen < mem::size_of::<SockAddrUn>() as u32 {
-    //             log::error!("[sendmsg] invalid address length: {}", msg.msg_namelen);
-    //             return Err(SysError::EINVAL);
-    //         }
-    //         Ok(SockAddr{
-    //             ipv6: unsafe {
-    //                 *(msg.msg_name as *const _)
-    //             }
-    //         }.into_endpoint())
-    //     },
-    //     _ => todo!()
-    // }?;
-    // let iovs = unsafe {
-    //     Instruction::set_sum();
-    //     core::slice::from_raw_parts(msg.msg_iov as *const IoVec, msg.msg_iovlen as usize)
-    // };
+
     let iovs_slice = UserSliceRaw::new(msg.msg_iov as *const IoVec, msg.msg_iovlen as usize)
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
     let iovs = iovs_slice.to_ref();
-    let mut total_len = 0;
-    for (_i, iov) in iovs.iter().enumerate() {
-        if iov.len == 0 {
-            continue;
+
+    // todo: use control data in af_alg case
+    let _control_slice = UserSliceRaw::new(msg.msg_control as *const u8, msg.msg_controllen as usize)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    let mut kernel_iovec_buf = Vec::new();
+    let total_len: usize = iovs.iter().map(|iov| iov.len as usize ).sum();
+    if total_len > 0{
+        kernel_iovec_buf.resize(total_len, 0);
+        let mut offset = 0;
+        for iov in iovs.iter() {
+            let len = iov.len as usize;
+            if len > 0 {
+                let src = UserSliceRaw::new(iov.base as *const u8, iov.len)
+                    .ensure_read(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                kernel_iovec_buf[offset..offset+len].copy_from_slice(src.to_ref());
+                offset += len;
+            }
         }
-        let ptr = iov.base as *const u8;
-        // let buf_slice = unsafe {
-        //     core::slice::from_raw_parts(ptr, iov.len as usize)
-        // };
-        let buf_slice = UserSliceRaw::new(ptr, iov.len as usize)
-            .ensure_read(&mut task.get_vm_space().lock())
-            .ok_or(SysError::EFAULT)?;
-        let buf_slice = buf_slice.to_ref();
-        let send_len = socket_file.sk.send(buf_slice, Some(addr)).await?;
-        total_len += send_len;
     }
-    Ok(total_len as isize)
+    if socket_file.domain == SaFamily::Alg {
+        // todo: encode the given msg then return encode len in recv
+        unimplemented!()
+    }
+
+    match socket_file.sk.send(kernel_iovec_buf.as_slice(), peer_addr).await {
+        Ok(len) => Ok(len as isize),
+        Err(e) => Err(e),
+    }
+}
+
+bitflags::bitflags! {
+    /// `recv`/`send` flags (from `<sys/socket.h>`).
+    pub struct MsgFlags: u32 {
+        const MSG_OOB         = 0x01;        // Process out-of-band data.
+        const MSG_PEEK        = 0x02;        // Peek at incoming messages.
+        const MSG_DONTROUTE   = 0x04;        // Don’t use local routing.
+        const MSG_CTRUNC      = 0x08;        // Control data lost before delivery.
+        const MSG_PROXY       = 0x10;        // Supply or ask second address.
+        const MSG_TRUNC       = 0x20;
+        const MSG_DONTWAIT    = 0x40;        // Nonblocking IO.
+        const MSG_EOR         = 0x80;        // End of record.
+        const MSG_WAITALL     = 0x100;       // Wait for a full request.
+        const MSG_FIN         = 0x200;
+        const MSG_SYN         = 0x400;
+        const MSG_CONFIRM     = 0x800;       // Confirm path validity.
+        const MSG_RST         = 0x1000;
+        const MSG_ERRQUEUE    = 0x2000;      // Fetch message from error queue.
+        const MSG_NOSIGNAL    = 0x4000;      // Do not generate SIGPIPE.
+        const MSG_MORE        = 0x8000;      // Sender will send more.
+        const MSG_WAITFORONE  = 0x10000;     // Wait for at least one packet.
+        const MSG_BATCH       = 0x40000;     // sendmmsg: more messages coming.
+        const MSG_ZEROCOPY    = 0x4000000;   // Use user data in kernel path.
+        const MSG_FASTOPEN    = 0x20000000;  // Send data in TCP SYN.
+        const MSG_CMSG_CLOEXEC= 0x40000000;  // Set CLOEXEC on SCM_RIGHTS fds.
+    }
 }
 
 /// receive a message from a connection-mode or connectionless-mode socket.
@@ -1208,6 +1322,14 @@ pub async fn sys_recvmsg(
     if flags != 0 {
         log::warn!("unsupported flags: {}", flags);
     }
+    let flags = MsgFlags::from_bits(flags as u32).ok_or(SysError::EINVAL)?;
+    if flags.contains(MsgFlags::MSG_OOB) {
+        return Err(SysError::EINVAL);
+    }
+    if flags.contains(MsgFlags::MSG_ERRQUEUE) {
+        return Err(SysError::EAGAIN);
+    }
+
     let task = current_task().unwrap();
     let socket_file = task.with_fd_table(|table| {
         table.get_file(fd)})?
@@ -1217,19 +1339,38 @@ pub async fn sys_recvmsg(
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?
         .to_ref();
+    
     if inner_msg.msg_controllen != 0 {
         log::warn!("unsupported control data");
+    }
+    if (inner_msg.msg_namelen as i32) < 0 || (inner_msg.msg_controllen as i32) < 0 {
+        return Err(SysError::EINVAL);
     }
     // let iovs = unsafe {
     //     Instruction::set_sum();
     //     core::slice::from_raw_parts(inner_msg.msg_iov as *const IoVec, inner_msg.msg_iovlen as usize)
     // };
+    let iovec_count = inner_msg.msg_iovlen as i32;
+    if iovec_count < 0 {
+        return Err(SysError::EMSGSIZE);
+    }
     let iovs_slice = UserSliceRaw::new(inner_msg.msg_iov as *const IoVec, inner_msg.msg_iovlen as usize)
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
     let iovs = iovs_slice.to_ref();
-    let mut tmp_buf = vec![0u8; 64 * 1024];
+    let mut total_len: usize = 0;
+    for iov in iovs {
+        total_len = total_len.saturating_add(iov.len);
+    }
+    if total_len == 0 {
+        return Ok(0);
+    }
+    let mut tmp_buf = vec![0u8; total_len];
     let (recv_len,src_addr) = socket_file.sk.recv(&mut tmp_buf).await?;
+    if recv_len == 0 {
+        return Ok(0);
+    }
+
     let mut copied = 0;
     let data = tmp_buf[..recv_len].to_vec();
     for iov in iovs {
@@ -1309,7 +1450,9 @@ pub fn sockaddr_reader(addr: usize, addr_len: usize, task: &Arc<TaskControlBlock
             }
             Ok(addr)
         }
-        _ => todo!()
+        _ => {
+            return Err(SysError::EINVAL);
+        }
     }
 }
 
