@@ -23,6 +23,7 @@ FS := ext4
 # board
 BOARD := qemu
 SBI ?= rustsbi
+VF2 :=
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=${ARCH}

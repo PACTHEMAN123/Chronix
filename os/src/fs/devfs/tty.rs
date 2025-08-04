@@ -229,7 +229,7 @@ impl File for TtyFile {
                 res |= PollEvents::OUT;
             }
         }
-        log::info!("[tty] base poll return event {:?}", res);
+        // log::info!("[tty] base poll return event {:?}", res);
         res
     }
 

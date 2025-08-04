@@ -40,6 +40,4 @@ smp = []
 fat32 = []
 net = []
 autotest = []
-
-[profile.release]
-debug = true
+vf2 = ["hal/vf2"]

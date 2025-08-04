@@ -1,0 +1,299 @@
+/dts-v1/;
+
+/ {
+	model = "loongson,LS2k1000-EVP";
+	compatible = "loongson,ls2k";
+	#address-cells = <0x02>;
+	#size-cells = <0x02>;
+
+	memory {
+		device_type = "memory";
+		reg = <0x00 0x200000 0x00 0xce00000 0x01 0x10000000 0x00 0xd0000000>;
+	};
+
+	aliases {
+		ethernet0 = "/soc/ethernet@0x40040000";
+		ethernet1 = "/soc/ethernet@0x40050000";
+	};
+
+	soc {
+		compatible = "ls,nbus\0simple-bus";
+		#address-cells = <0x01>;
+		#size-cells = <0x01>;
+		ranges = <0x10000000 0x00 0x10000000 0x10000000 0x40000000 0x00 0x40000000 0x40000000 0x20000000 0x00 0x20000000 0x20000000 0xd000000 0x00 0xd000000 0x2000000>;
+		dma-coherent;
+		nr_cpus_loongson = <0x02>;
+		cores_per_package = <0x02>;
+
+		interrupt-controller@1fe11400 {
+			compatible = "loongson,2k-icu";
+			interrupt-controller;
+			#interrupt-cells = <0x01>;
+			reg = <0x1fe11400 0x40>;
+			linux,phandle = <0x01>;
+			phandle = <0x01>;
+		};
+
+		pci-msi-controller@1fe114a0 {
+			compatible = "loongson,2k-pci-msi";
+			msi-controller;
+			interrupt-parent = <0x01>;
+			msi-mask = <0xc0 0x40000c00>;
+			reg = <0x1fe114a0 0x60>;
+		};
+
+		dc@0x400c0000 {
+			compatible = "loongson,ls-fb";
+			reg = <0x400c0000 0x10000 0xd000000 0x2000000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x24>;
+		};
+
+		ohci@0x40070000 {
+			compatible = "loongson,ls2k-ohci\0usb-ohci\0generic-ohci";
+			reg = <0x40070000 0x10000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x3b>;
+			dma-mask = <0x00 0xffffffff>;
+		};
+
+		ehci@0x40060000 {
+			compatible = "loongson,ls2k-ehci\0usb-ehci";
+			reg = <0x40060000 0x10000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x3a>;
+			dma-mask = <0xffffffff 0xffffffff>;
+		};
+
+		otg@0x40000000 {
+			compatible = "loongson,dwc-otg\0dwc-otg";
+			reg = <0x40000000 0x40000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x39>;
+			dma-mask = <0x00 0xffffffff>;
+		};
+
+		ahci@0x400e0000 {
+			compatible = "snps,spear-ahci";
+			reg = <0x400e0000 0x10000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x1b>;
+			dma-mask = <0x00 0xffffffff>;
+		};
+
+		ethernet@0x40040000 {
+			compatible = "snps,dwmac-3.70a\0ls,ls-gmac";
+			reg = <0x40040000 0x10000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x14 0x15>;
+			interrupt-names = "macirq\0eth_wake_irq";
+			mac-address = [64 48 48 48 48 60];
+			phy-mode = "rgmii";
+			bus_id = <0x00>;
+			phy_addr = <0xffffffff>;
+			dma-mask = <0xffffffff 0xffffffff>;
+		};
+
+		ethernet@0x40050000 {
+			compatible = "snps,dwmac-3.70a\0ls,ls-gmac";
+			reg = <0x40050000 0x10000>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x16 0x17>;
+			interrupt-names = "macirq\0eth_wake_irq";
+			mac-address = [64 48 48 48 48 61];
+			phy-mode = "rgmii";
+			bus_id = <0x01>;
+			phy_addr = <0xffffffff>;
+			dma-mask = <0xffffffff 0xffffffff>;
+		};
+
+		pcie0_port0@40100000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x28>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x01 0x03>;
+			ranges = <0x2000000 0x00 0x40260000 0x40260000 0x00 0x8000000 0x1000000 0x00 0x4028c000 0x4028c000 0x00 0xff000>;
+		};
+
+		pcie0_port1@50000000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x29>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x04 0x06>;
+			ranges = <0x2000000 0x00 0x50000000 0x50000000 0x00 0x4000000 0x1000000 0x00 0x18100000 0x18100000 0x00 0x100000>;
+		};
+
+		pcie0_port2@54000000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x2a>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x08 0x0a>;
+			ranges = <0x2000000 0x00 0x54000000 0x54000000 0x00 0x4000000 0x1000000 0x00 0x18200000 0x18200000 0x00 0x100000>;
+		};
+
+		pcie0_port3@58000000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x2b>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x0c 0x0e>;
+			ranges = <0x2000000 0x00 0x58000000 0x58000000 0x00 0x8000000 0x1000000 0x00 0x18300000 0x18300000 0x00 0x100000>;
+		};
+
+		pcie1_port0@60000000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x2c>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x10 0x12>;
+			ranges = <0x2000000 0x00 0x60000000 0x60000000 0x00 0x18000000 0x1000000 0x00 0x18400000 0x18400000 0x00 0x100000>;
+		};
+
+		pcie1_port1@78000000 {
+			compatible = "loongson,ls-pcie";
+			interrupt-parent = <0x01>;
+			interrupts = <0x2d>;
+			#address-cells = <0x03>;
+			#size-cells = <0x02>;
+			bus-range = <0x14 0x16>;
+			ranges = <0x2000000 0x00 0x78000000 0x78000000 0x00 0x8000000 0x1000000 0x00 0x18500000 0x18500000 0x00 0x100000>;
+		};
+
+		serial0x@0x1fe00000 {
+			device_type = "serial";
+			compatible = "ns16550";
+			reg = <0x1fe00000 0x100>;
+			clock-frequency = <0x7735940>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x08>;
+		};
+
+		serial5x@0x1fe00500 {
+			device_type = "serial";
+			compatible = "ns16550";
+			reg = <0x1fe00500 0x100>;
+			clock-frequency = <0x7735940>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x09>;
+		};
+
+		gpio@0x1fe10500 {
+			compatible = "ls,ls2k-gpio\0ls,ls-gpio";
+			reg = <0x1fe10500 0x38>;
+			ngpios = <0x40>;
+			gpio-controller;
+			#gpio-cells = <0x02>;
+		};
+
+		i2c@1fe01000 {
+			compatible = "loongson,ls-i2c";
+			reg = <0x1fe01000 0x08>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x1e>;
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+
+			rtc@51 {
+				compatible = "nxp,pcf8563";
+				reg = <0x51>;
+			};
+		};
+
+		spi@1fff0220 {
+			compatible = "loongson,ls2k-spi";
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			reg = <0x1fff0220 0x10>;
+
+			spidev@0 {
+				compatible = "rohm,dh2228fv";
+				spi-max-frequency = <0x5f5e100>;
+				reg = <0x00>;
+			};
+		};
+
+		can@1fe00c00 {
+			compatible = "nxp,sja1000";
+			reg = <0x1fe00c00 0xff>;
+			nxp,external-clock-frequency = <0x7735940>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x18>;
+		};
+
+		can@1fe00d00 {
+			compatible = "nxp,sja1000";
+			reg = <0x1fe00d00 0xff>;
+			nxp,external-clock-frequency = <0x7735940>;
+			interrupt-parent = <0x01>;
+			interrupts = <0x19>;
+		};
+
+		apbdma@1fe10438 {
+			compatible = "loongson,ls-apbdma";
+			reg = <0x1fe10438 0x08>;
+			#config-nr = <0x02>;
+			linux,phandle = <0x02>;
+			phandle = <0x02>;
+		};
+
+		dma@1fe10c00 {
+			compatible = "loongson,ls-apbdma-0";
+			reg = <0x1fe10c00 0x08>;
+			apbdma-sel = <0x02 0x00 0x00>;
+			#dma-cells = <0x01>;
+			dma-channels = <0x01>;
+			dma-requests = <0x01>;
+		};
+
+		dma@1fe10c10 {
+			compatible = "loongson,ls-apbdma-1";
+			reg = <0x1fe10c10 0x08>;
+			apbdma-sel = <0x02 0x05 0x01>;
+			#dma-cells = <0x01>;
+			dma-channels = <0x01>;
+			dma-requests = <0x01>;
+		};
+
+		dma@1fe10c20 {
+			compatible = "loongson,ls-apbdma-2";
+			reg = <0x1fe10c20 0x08>;
+			apbdma-sel = <0x02 0x06 0x02>;
+			#dma-cells = <0x01>;
+			dma-channels = <0x01>;
+			dma-requests = <0x01>;
+		};
+
+		dma@1fe10c30 {
+			compatible = "loongson,ls-apbdma-3";
+			reg = <0x1fe10c30 0x08>;
+			apbdma-sel = <0x02 0x07 0x03>;
+			#dma-cells = <0x01>;
+			dma-channels = <0x01>;
+			dma-requests = <0x01>;
+		};
+
+		hwmon@0x1fe07000 {
+			#address-cells = <0x01>;
+			#size-cells = <0x01>;
+			compatible = "loongson,ls-hwmon";
+			reg = <0x1fe07000 0x01>;
+			max-id = <0x00>;
+			id = <0x00>;
+		};
+	};
+
+	suspend_to_ram {
+		suspend_addr = <0x1fc00500>;
+	};
+
+	chosen {
+	};
+};

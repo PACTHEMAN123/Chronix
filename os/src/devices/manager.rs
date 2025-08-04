@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::Transport;
 
-use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{devices::sdio::scan_sdio_blk, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -57,6 +57,9 @@ impl DeviceManager {
     /// Device Init Stage1: scan the whole device tree and create instances
     /// map DevId to device, map IrqNo to device
     pub fn map_devices(&mut self, device_tree: &Fdt) {
+
+        log::info!("Device: {}", device_tree.root().model());
+
         // map char device
         let serial = scan_char_device(device_tree);
         self.devices.insert(serial.dev_id(), serial.clone());
@@ -105,6 +108,11 @@ impl DeviceManager {
             }
         }
         self.mmio = Some(mmio);
+
+        if let Some(sdio_blk) = scan_sdio_blk(device_tree) {
+            log::info!("find a sdio block device");
+            self.devices.insert(sdio_blk.dev_id(), sdio_blk);
+        }
 
         // let plic = scan_plic_device(device_tree);
         // if let Some(plic) = plic {
