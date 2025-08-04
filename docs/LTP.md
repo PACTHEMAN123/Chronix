@@ -27,7 +27,7 @@
 - [x] adjtimex02: pass 5 failed 2 skip 1
 - [ ] adjtimex03: broken
 - [x] af_alg01: p14
-- [ ] af_alg02
+- [x] af_alg02
 - [ ] af_alg03
 - [ ] af_alg04
 - [ ] af_alg05

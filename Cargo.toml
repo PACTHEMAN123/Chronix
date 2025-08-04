@@ -31,6 +31,13 @@ riscv = "0.11.0"
 plic = "0.0.3"
 bitfield-struct = "0.8"
 dyn-clone = "1.0.20"
+salsa20 = { version = "0.10.2", default-features = false }
+aes = {version = "0.8.4", default-features = false }
+polyval = {version = "0.6.2", default_features = false }
+universal-hash = { version = "0.5.1", default-features = false }
+sha2 = {version = "0.10.9", default_features = false }
+sha1 = {version = "0.10.6", default_features = false }
+hmac = { version = "0.12", default-features = false }
 
 # crates on github
 bitmap-allocator = { git = "https://github.com/rcore-os/bitmap-allocator.git", branch = "main"}

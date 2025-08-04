@@ -1,12 +1,12 @@
 use core::{any::Any, clone, f32::consts::E, mem, net::Ipv4Addr, option, panic, ptr::{self, copy_nonoverlapping}};
 
-use alloc::{ffi::CString, string::String, sync::Arc, task, vec,vec::Vec};
+use alloc::{ffi::CString, string::{String, ToString}, sync::Arc, task, vec::Vec,vec};
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::SockAddrAlg, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::{encode, AlgInstance, AlgType, SockAddrAlg}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -205,6 +205,9 @@ pub fn sys_bind(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         let bind_addr = unsafe {local_addr.alg};
         bind_addr.check_alg()?;
         *socket_file.socket_af_alg.lock() = Some(bind_addr);
+        let alg_type = AlgType::from_bytes(&bind_addr.salg_type)?;
+        let alg_name = bind_addr.get_name()?;
+        *socket_file.alg_instance.lock() = Some(AlgInstance::new_without_key(alg_type, alg_name.to_string()));
         return Ok(0);
     }
     socket_file.sk.bind(fd, local_addr)?;
@@ -286,12 +289,13 @@ pub async fn sys_accept(fd: usize, addr: usize, addr_len: usize) -> SysResult {
         let res: Result<isize, SysError> = task.with_mut_fd_table(|table|{
             let new_socket = socket_file.accept_alg()?;
             let new_fd = table.alloc_fd()?;
+            log::warn!("[accept_alg] new_fd: {}", new_fd);
             let inner_flags = socket_file.file_inner.flags.lock().clone();
             let fd_info = FdInfo {
                 file: Arc::new(new_socket),
                 flags: inner_flags.into(),
             };
-            table.put_file(fd, fd_info)?;
+            table.put_file(new_fd, fd_info)?;
             return Ok(new_fd as isize);
         });
         return res;
@@ -473,6 +477,8 @@ pub enum SocketLevel {
     IpprotoTcp = 6,
     /// IPv6-in-IPv4 tunnelling
     IpprotoIpv6 = 41,
+    /// set alg key
+    SolAlg = 279,
 }
 
 ///为每个level建立一个配置enum
@@ -550,6 +556,7 @@ impl TryFrom<usize> for SocketLevel {
             1 => Ok(SocketLevel::SolSocket),
             6 => Ok(SocketLevel::IpprotoTcp),
             41 => Ok(SocketLevel::IpprotoIpv6),
+            279 => Ok(SocketLevel::SolAlg),
             _ => Err(SysError::EINVAL),
         }
     }
@@ -1018,7 +1025,12 @@ impl AlgOption {
         match self {
             AlgOption::AlgSetKey => {
                 // socket.alg_instance.lock().set_alg_key(opt);
-                Ok(0)
+                log::info!("[AlgOption] key is set: {:x?}", opt);
+                match socket.set_raw_key(opt) {
+                    Ok(_) => Ok(0),
+                    Err(e) => Err(e)
+                }
+                
             }
             _ => unimplemented!(),
         }
@@ -1036,6 +1048,7 @@ pub fn sys_setsockopt  (
     option_len: usize,
 ) -> SysResult {
     let Ok(level) = SocketLevel::try_from(level) else{
+        log::error!("unsupported socket level {} ",level);
         return Err(SysError::ENOPROTOOPT);
     };
     let task = current_task().unwrap();
@@ -1075,6 +1088,19 @@ pub fn sys_setsockopt  (
                 return Err(SysError::ENOPROTOOPT);
             };
             option.set(&socket_file, &kernel_opt.as_slice())
+        }
+        SocketLevel::SolAlg => {
+            let Ok(alg_op) = AlgOption::try_from(option_name) else {
+                log::error!("unsupported alg option: {option_name}");
+                return Err(SysError::ENOPROTOOPT);
+            };
+            let opt_val_alg_r = UserSliceRaw::new(option_value as *const u8, 32)
+                .ensure_read(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+    
+            let mut kernel_opt: Vec<u8> = vec![0; 32];
+            kernel_opt.copy_from_slice(opt_val_alg_r.to_ref());
+            alg_op.set(&socket_file, &kernel_opt.as_slice())
         }
         _ => {
             Ok(0)
@@ -1251,7 +1277,7 @@ pub async fn sys_sendmsg(
     let iovs = iovs_slice.to_ref();
 
     // todo: use control data in af_alg case
-    let _control_slice = UserSliceRaw::new(msg.msg_control as *const u8, msg.msg_controllen as usize)
+    let control_slice = UserSliceRaw::new(msg.msg_control as *const u8, msg.msg_controllen as usize)
         .ensure_read(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
 
@@ -1273,7 +1299,7 @@ pub async fn sys_sendmsg(
     }
     if socket_file.domain == SaFamily::Alg {
         // todo: encode the given msg then return encode len in recv
-        unimplemented!()
+        return encode(&socket_file, iovs, control_slice.to_ref())
     }
 
     match socket_file.sk.send(kernel_iovec_buf.as_slice(), peer_addr).await {

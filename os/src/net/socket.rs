@@ -1,10 +1,10 @@
-use core::{sync::atomic::{self, AtomicBool, AtomicUsize}, task::Poll};
+use core::{sync::atomic::{self, AtomicBool, AtomicUsize, Ordering}, task::Poll};
 
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{AlgInstance, AlgType, SockAddrAlg}, LOCAL_IPS}, sync::mutex::SpinNoIrqLock, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -200,6 +200,8 @@ pub struct Socket {
     pub is_af_alg: AtomicBool,
     /// socket_af_alg addr
     pub socket_af_alg: SpinNoIrqLock<Option<SockAddrAlg>>,
+    /// raw alg_cipertext
+    pub ciphertext: SpinNoIrqLock<Option<Vec<u8>>>,
     /// key context
     pub alg_instance: SpinNoIrqLock<Option<AlgInstance>>
 }
@@ -240,6 +242,7 @@ impl Socket {
             dont_route: false,
             is_af_alg: AtomicBool::new(false),
             socket_af_alg: SpinNoIrqLock::new(None),
+            ciphertext: SpinNoIrqLock::new(None),
             alg_instance: SpinNoIrqLock::new(None),
         }
     }
@@ -260,6 +263,7 @@ impl Socket {
             dont_route: false,
             is_af_alg: AtomicBool::new(false),
             socket_af_alg: SpinNoIrqLock::new(None),        
+            ciphertext: SpinNoIrqLock::new(None),
             alg_instance: SpinNoIrqLock::new(None),
         }
     }
@@ -295,7 +299,25 @@ impl Socket {
     pub fn get_is_af_alg(&self) -> bool {
         self.is_af_alg.load(atomic::Ordering::Acquire)
     }
+    /// set ciphertext
+    pub fn set_ciphertext(&self, ciphertext: &[u8]) {
+        *self.ciphertext.lock() = Some(ciphertext.to_vec());
+    }
+
+    pub fn set_raw_key(&self, raw_key: &[u8]) -> SockResult<()>{
+        if let Some(alg_instance) = self.alg_instance.lock().as_mut(){
+            Ok(alg_instance.set_key(raw_key))
+        }else {
+            return Err(SysError::ENOPROTOOPT);
+        }
+    }
+
+    pub fn get_alg_instance(&self) -> Option<AlgInstance> {
+        self.alg_instance.lock().clone()
+    }
 }
+
+static ALG_WRITE_COUNTERE: AtomicUsize = AtomicUsize::new(0);
 
 #[async_trait]
 impl File for Socket {
@@ -321,6 +343,17 @@ impl File for Socket {
         if buf.len() == 0 {
             return Ok(0);
         }
+        if self.domain == SaFamily::Alg && self.get_is_af_alg() {
+            let mut ciphertext: crate::sync::mutex::spin_mutex::MutexGuard<'_, Option<Vec<u8>>, SpinNoIrq> = self.ciphertext.lock();
+            if let Some(cipher_text) = ciphertext.as_mut() {
+               unsafe {
+                    core::ptr::copy_nonoverlapping(cipher_text.as_ptr(), buf.as_mut_ptr(), cipher_text.len());
+               }
+                return Ok(cipher_text.len());
+            }else {
+                return Err(SysError::EINVAL);
+            }
+        }
         self.sk.recv(buf).await.map(|e|e.0)
     }
 
@@ -329,6 +362,12 @@ impl File for Socket {
     async fn write(& self, buf: &[u8]) -> Result<usize, SysError> {
         if buf.len() == 0 {
             return Ok(0);
+        }
+        log::info!("buf len: {}", buf.len());
+        if self.domain == SaFamily::Alg && self.get_is_af_alg() {
+            encode_raw(self, buf)?;
+            ALG_WRITE_COUNTERE.fetch_add(1, Ordering::SeqCst);
+            return Ok(buf.len());
         }
         self.sk.send(buf, None).await.map(|e|e)
     }
@@ -384,6 +423,7 @@ impl Socket {
             dont_route: false,
             is_af_alg: AtomicBool::new(true),
             socket_af_alg: SpinNoIrqLock::new(self.socket_af_alg.lock().clone()),        
+            ciphertext: SpinNoIrqLock::new(self.ciphertext.lock().clone()),
             alg_instance: SpinNoIrqLock::new(self.alg_instance.lock().clone()),
         })
     }
