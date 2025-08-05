@@ -469,7 +469,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MLOCK => sys_temp(syscall_id),
         SYSCALL_MEMBARRIER => sys_temp(syscall_id),
         SYSCALL_MLOCK2 => sys_temp(syscall_id),
-        SYSCALL_COPY_FILE_RANGE => sys_temp(syscall_id),
+        SYSCALL_COPY_FILE_RANGE => sys_copy_file_range(args[0], args[1], args[2], args[3], args[4], args[5] as u32).await,
         SYSCALL_IO_URING_SETUP => sys_temp(syscall_id),
         SYSCALL_SETREGID => sys_temp(syscall_id),
         SYSCALL_SETGID => sys_temp(syscall_id),

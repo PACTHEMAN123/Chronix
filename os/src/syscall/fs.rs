@@ -1290,6 +1290,53 @@ pub async fn sys_splice(in_fd: usize, in_off_ptr: usize, out_fd: usize, out_off_
     Ok(write_size as isize)
 }
 
+/// syscall: copy file range
+/// It copies up to size bytes of data from the source
+/// file descriptor fd_in to the target file descriptor fd_out,
+/// overwriting any data that exists within the requested range of the
+/// target file.
+pub async fn sys_copy_file_range(in_fd: usize, in_off_ptr: usize, out_fd: usize, out_off_ptr: usize, len: usize, _flags: u32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    log::info!("[sys_copy_file_range] in fd {in_fd}, in_off_ptr {:#x}, out fd {out_fd}, out_off_ptr {:#x}, len {len}", in_off_ptr, out_off_ptr);
+    let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
+    let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
+    let mut buf = vec![0u8; len];
+
+    let read_size = if in_off_ptr == 0 {
+        in_file.read(&mut buf).await?
+    } else {
+        let in_off_ptr = UserPtrRaw::new(in_off_ptr as *mut isize)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let in_off = in_off_ptr.to_mut();
+        if *in_off < 0 {
+            return Err(SysError::EINVAL);
+        }
+        let read_size = in_file.read_at(*in_off as usize, &mut buf).await?;
+        *in_off += read_size as isize;
+        read_size
+    };
+
+    let write_size = if out_off_ptr == 0{
+        out_file.write(&buf).await?
+    } else {
+        let out_off_ptr = UserPtrRaw::new(out_off_ptr as *mut isize)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let out_off = out_off_ptr.to_mut();
+        if *out_off < 0 {
+            return Err(SysError::EINVAL);
+        }
+        let write_size = out_file.write_at(*out_off as usize, &buf).await?;
+        *out_off += write_size as isize;
+        write_size
+    };
+
+    log::info!("read size {read_size}, write size {write_size}");
+
+    Ok(read_size as isize)
+}
+
 /// syscall: linkat
 /// link() creates a new link (also known as a hard link) to an existing file.
 /// The linkat() system call operates in exactly the same way as link(2), 
