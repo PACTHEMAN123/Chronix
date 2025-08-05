@@ -217,55 +217,68 @@ impl PageTableEntryHal for PageTableEntry {
         ret
     }
     
-    fn set_flags(&mut self, map_flags: MapPerm) {
+    fn set_flags(&mut self, map_flags: MapPerm) -> &mut Self {
         let pte: PTEFlags = map_flags.into();
         self.bits &= !Self::FLAGS_MASK;
         self.bits |= pte.bits as usize & Self::FLAGS_MASK;
+        self
     }
     
     fn ppn(&self) -> PhysPageNum {
         PhysPageNum((self.bits & Self::PPN_MASK) >> 12)
     }
     
-    fn set_ppn(&mut self, ppn: PhysPageNum) {
+    fn set_ppn(&mut self, ppn: PhysPageNum) -> &mut Self{
         self.bits &= !Self::PPN_MASK;
         self.bits |= (ppn.0 << 12) & Self::PPN_MASK;
+        self
     }
 
     fn is_dirty(&self) -> bool {
         self.pteflags().contains(PTEFlags::D)
     }
     
-    fn set_dirty(&mut self, val: bool) {
+    fn set_dirty(&mut self, val: bool) -> &mut Self {
         if val {
             self.bits |= PTEFlags::D.bits as usize;
         } else {
             self.bits &= !(PTEFlags::D.bits as usize);
         }
+        self
     }
 
     fn is_valid(&self) -> bool {
         self.pteflags().contains(PTEFlags::V)
     }
     
-    fn set_valid(&mut self, val: bool) {
+    fn set_valid(&mut self, val: bool) -> &mut Self {
         if val {
             self.bits |= PTEFlags::V.bits as usize
         } else {
             self.bits &= !(PTEFlags::V.bits as usize)
         }
+        self
+    }
+
+    fn is_access(&self) -> bool {
+        return true;
+    }
+    
+    fn set_access(&mut self, _val: bool) -> &mut Self {
+        self
     }
 
     fn is_cow(&self) -> bool {
         self.pteflags().contains(PTEFlags::C)
     }
     
-    fn set_cow(&mut self, val: bool) {
+    fn set_cow(&mut self, val: bool) -> &mut Self {
         if val {
             self.bits |= PTEFlags::C.bits as usize
         } else {
             self.bits &= !(PTEFlags::C.bits as usize)
         }
+        self
     }
     
     fn is_leaf(&self) -> bool {
