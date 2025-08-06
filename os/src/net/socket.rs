@@ -4,7 +4,7 @@ use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{addr::ZERO_IPV4_ENDPOINT, crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, socketpair::{SocketPairConnection, SocketPairInternal}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -23,6 +23,7 @@ pub enum Sock {
     TCP(TcpSocket),
     UDP(UdpSocket),
     Unix(UnixSocket),
+    SocketPair(SocketPairConnection),
 }
 impl Sock {
     /// connect method for socket connect to remote socket, for user socket
@@ -30,7 +31,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.connect(addr).await,
             Sock::UDP(udp) => udp.connect(addr),
-            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            _ =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// bind method for socket to tell kernel which local address to bind to, for server socket
@@ -63,7 +64,10 @@ impl Sock {
                 }
             }
             // todo: suit for most cases
-            Sock::Unix(_) => Err(SysError::ENOTDIR)
+            Sock::Unix(_) => Err(SysError::ENOTDIR),
+            _ => {
+                Err(SysError::EAFNOSUPPORT)
+            }
         }
     }
     /// listen method for socket to listen for incoming connections, for server socket
@@ -71,7 +75,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.listen(),
             Sock::UDP(udp) => Err(SysError::EOPNOTSUPP),
-            Sock::Unix(_) => Err(SysError::EAFNOSUPPORT),
+            _ => Err(SysError::EAFNOSUPPORT),
         }
     }
     /// set socket non-blocking, 
@@ -79,7 +83,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.set_nonblocking(),
             Sock::UDP(udp) => udp.set_nonblocking(),
-            Sock::Unix(_) => {},
+            _ => {},
         }
     }
     /// get the peer_addr of the socket
@@ -93,7 +97,7 @@ impl Sock {
                 let peer_addr = udp_socket.peer_addr()?;
                 Ok(SockAddr::from_endpoint(peer_addr))
             },
-            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            _ =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// get the local_addr of the socket
@@ -107,7 +111,7 @@ impl Sock {
                 let local_addr = udp_socket.local_addr()?;
                 Ok(SockAddr::from_endpoint(local_addr))
             },
-            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            _ =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// send data to the socket
@@ -121,6 +125,7 @@ impl Sock {
                 }
             },
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            Sock::SocketPair(socket_pair) => socket_pair.send(data).await,
         }
     }
     /// recv data from the socket
@@ -129,6 +134,10 @@ impl Sock {
             Sock::TCP(tcp) => tcp.recv(data).await,
             Sock::UDP(udp_socket) => udp_socket.recv(data).await,
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            Sock::SocketPair(pair) => {
+                let res = pair.recv(data).await?;
+                Ok((res, ZERO_IPV4_ENDPOINT))
+            },
         }
     }
     /// shutdown a connection
@@ -137,6 +146,7 @@ impl Sock {
             Sock::TCP(tcp) => tcp.shutdown(how),
             Sock::UDP(udp_socket) => udp_socket.shutdown(),
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            Sock::SocketPair(pair) => Ok(pair.close()),
         }
     }
     /// poll the socket for events
@@ -144,7 +154,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.poll().await,
             Sock::UDP(udp_socket) => udp_socket.poll().await,
-            Sock::Unix(_) => todo!(),
+            _ => todo!(),
         }
     }
     /// for tcp socket listener, accept a connection
@@ -155,7 +165,7 @@ impl Sock {
                         Ok(new)
                     }
             Sock::UDP(udp_socket) => Err(SysError::EOPNOTSUPP),
-            Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
+            _ =>  Err(SysError::EAFNOSUPPORT),
         }
     }
     /// set socket reuse addr
@@ -163,7 +173,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.set_reuse_addr(reuse_flag),
             Sock::UDP(udp) => udp.set_reuse_addr(reuse_flag),
-            Sock::Unix(_) => {},
+            _ => {},
         }
     }
 
@@ -172,7 +182,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.get_reuse_addr(),
             Sock::UDP(udp) => udp.get_reuse_addr(),
-            Sock::Unix(_) => false,
+            _ => false,
         }
     }
 }
@@ -373,21 +383,26 @@ impl File for Socket {
     }
 
     async fn base_poll(&self, events:PollEvents) -> PollEvents {
-        let mut res = PollEvents::empty();
-        poll_interfaces();
-        let netstate = self.sk.poll().await;
-        if events.contains(PollEvents::IN) && netstate.readable {
-            res |= PollEvents::IN;
+        if let Sock::SocketPair(socket_pair) = &self.sk {
+            return socket_pair.poll(events).await;
+        }else {
+             let mut res = PollEvents::empty();
+            poll_interfaces();
+            let netstate = self.sk.poll().await;
+            if events.contains(PollEvents::IN) && netstate.readable {
+                res |= PollEvents::IN;
+            }
+            if events.contains(PollEvents::OUT) && netstate.writable {
+                res |= PollEvents::OUT;
+            }
+            if netstate.hangup {
+                log::warn!("[Socket::bask_poll] PollEvents is hangup");
+                res |= PollEvents::HUP;
+            }
+            // log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
+            res
         }
-        if events.contains(PollEvents::OUT) && netstate.writable {
-            res |= PollEvents::OUT;
-        }
-        if netstate.hangup {
-            log::warn!("[Socket::bask_poll] PollEvents is hangup");
-            res |= PollEvents::HUP;
-        }
-        // log::info!("[Socket::base_poll] ret events:{res:?} {netstate:?}");
-        res
+       
     }
 
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
