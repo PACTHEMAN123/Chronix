@@ -61,7 +61,8 @@ fn init_env() {
     // /etc/hostname
     run_cmd("touch /etc/hostname");
     run_cmd("touch /etc/domainname");
-    
+    run_cmd("touch /etc/group");
+    run_cmd("echo 'nogroup:x:65534:' >> /etc/group");
 }
 
 fn term_sig_handler(_signo: i32) {
