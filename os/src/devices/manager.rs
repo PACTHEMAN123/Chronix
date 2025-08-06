@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::Transport;
 
-use crate::{devices::sdio::scan_sdio_blk, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{devices::sdio::scan_sdio_blk, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::{current_processor_id, PROCESSORS}};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -208,7 +208,7 @@ impl DeviceManager {
             }
         }
         #[cfg(not(feature="smp"))]
-        for i in 0..2 {
+        for i in 0..3 { // todo: avoid hard-coding
             for dev in self.devices.values() {
                 if let Some(irq) = dev.irq_no() {
                     self.irq_ctrl().enable_irq(irq, i);
@@ -222,23 +222,19 @@ impl DeviceManager {
     }
     /// handle interrupt
     pub fn handle_irq(&self) {
-        fn irq_ctx() -> usize {
-            #[cfg(not(feature="smp"))]
-            {
-                1
-            }
-            #[cfg(feature="smp")]
-            {
-                todo!()
-            }
-        }
         unsafe { Instruction::disable_interrupt() };
-        if let Some(irq_num) = self.irq_ctrl().claim_irq(irq_ctx()) {
+        if let Some(irq_num) = self.irq_ctrl().claim_irq(self.irq_ctx()) {
+            // log::warn!("[Device manager] get irq no {irq_num}");
             if let Some(dev) = self.irq_map.get(&irq_num) {
                 dev.handle_irq();
-                self.irq_ctrl().complete_irq(irq_num, irq_ctx());
+                self.irq_ctrl().complete_irq(irq_num, self.irq_ctx());
                 return;
             }
         } 
+    }
+
+    // get the current irq context id based on hart id
+    pub fn irq_ctx(&self) -> usize {
+        current_processor_id() * 2
     }
 }

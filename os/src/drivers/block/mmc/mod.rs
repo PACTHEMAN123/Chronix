@@ -102,13 +102,13 @@ impl MMCBlock {
                 major: DeviceMajor::Block,
                 minor: 3,
             }, 
-            name: "snps,dw_mshc".to_string(),
+            name: "sda0".to_string(),
             need_mapping: true,
             mmio_ranges: vec![mmio_dev.mmio_region],
             irq_no: None, 
             dtype: DeviceType::Block 
             },
-            fifo_offset: SpinNoIrqLock::new(0x660),
+            fifo_offset: SpinNoIrqLock::new(0x600),
             frames: SpinNoIrqLock::new(Vec::new()),
         }
     }

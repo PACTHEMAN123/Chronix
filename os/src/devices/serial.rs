@@ -61,7 +61,8 @@ pub fn get_serial(stdout: &FdtNode) -> Serial {
                 .as_usize()
                 .expect("Parse clock-frequency to usize failed")
             } else {
-                50_000_000usize
+                // ugly: how to get clock freq?
+                500_000_000usize
             };
             let mut reg_io_width = 1;
             if let Some(reg_io_width_raw) = stdout.property("reg-io-width") {

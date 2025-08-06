@@ -30,3 +30,15 @@ core::arch::global_asm!{
     _end_end:
     "
 }
+
+// #[cfg(feature = "vf2")]
+// core::arch::global_asm!{
+//     "
+//     .section .rodata
+//     .global _dtb_start
+//     .global _dtb_end
+//     _dtb_start:
+//         .incbin \"hal/src/board/dtbs/jh7110-starfive-visionfive-2-v1.3b.dtb\"
+//     _end_end:
+//     "
+// }

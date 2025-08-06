@@ -13,11 +13,16 @@ pub fn scan_sdio_blk(root: &Fdt) -> Option<Arc<MMCBlock>> {
         let base_addr = node.reg().unwrap().next().unwrap().starting_address as usize;
         let size = node.reg().unwrap().next().unwrap().size.unwrap();
         log::info!("SD card host controller found at {:#x}", base_addr);
-        let fd = MmioDeviceDescripter {
+        
+        // ugly
+        if base_addr == 0x1602_0000usize {
+            let fd = MmioDeviceDescripter {
             mmio_region: base_addr..base_addr+size
-        };
-        let mmc_blk = MMCBlock::new(fd);
-        return Some(Arc::new(mmc_blk))
+            };
+            let mmc_blk = MMCBlock::new(fd);
+            return Some(Arc::new(mmc_blk))
+        }
+        
     }
     None
 }
