@@ -72,7 +72,7 @@ impl Future for SocketPairReadFuture {
         let (read_endpoint, other_end_closed_mutex) = if self.is_first_end {
             (&meta.end2, &meta.end2_closed)
         } else {
-        (&meta.end1, &meta.end1_closed)
+            (&meta.end1, &meta.end1_closed)
         };
         let mut read_buffer = read_endpoint.buffer.lock();
 
@@ -262,7 +262,7 @@ impl Drop for SocketPairConnection {
     }
 }
 
-pub fn make_socketpair(capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<Socket>) {
+pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<Socket>) {
     let internal = SocketPairInternal::new(capacity);
 
     let conn1 = SocketPairConnection {
@@ -271,8 +271,8 @@ pub fn make_socketpair(capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<So
     };
 
     let mut socket1 = Socket::new(
-            SaFamily::AfUnix,
-            SocketType::STREAM,
+            domain,
+            sk_type,
             non_block,
         );
     socket1.sk = super::socket::Sock::SocketPair(conn1);
@@ -282,8 +282,8 @@ pub fn make_socketpair(capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<So
         is_first_end: false,
     };
     let mut socket2 = Socket::new(
-        SaFamily::AfUnix,
-        SocketType::STREAM,
+        domain,
+        sk_type,
         non_block,
     );
     socket2.sk = super::socket::Sock::SocketPair(conn2);

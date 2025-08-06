@@ -1,4 +1,4 @@
-use core::{sync::atomic::{self, AtomicBool, AtomicUsize, Ordering}, task::Poll};
+use core::{sync::atomic::{self, AtomicBool, AtomicU32, AtomicUsize, Ordering}, task::Poll};
 
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
@@ -64,7 +64,7 @@ impl Sock {
                 }
             }
             // todo: suit for most cases
-            Sock::Unix(_) => Err(SysError::ENOTDIR),
+            Sock::Unix(_) => {Ok(())},
             _ => {
                 Err(SysError::EAFNOSUPPORT)
             }
@@ -205,6 +205,8 @@ pub struct Socket {
     pub congestion:  SpinNoIrqLock<String>,
     /// socketopt dout route flag
     pub dont_route: bool,
+    /// socketopt version
+    pub packet_version: AtomicU32,
     // !member concerning af_alg
     /// whether af_alg or not 
     pub is_af_alg: AtomicBool,
@@ -254,6 +256,7 @@ impl Socket {
             socket_af_alg: SpinNoIrqLock::new(None),
             ciphertext: SpinNoIrqLock::new(None),
             alg_instance: SpinNoIrqLock::new(None),
+            packet_version: AtomicU32::new(0),
         }
     }
     /// new a socket with a given socket 
@@ -275,6 +278,7 @@ impl Socket {
             socket_af_alg: SpinNoIrqLock::new(None),        
             ciphertext: SpinNoIrqLock::new(None),
             alg_instance: SpinNoIrqLock::new(None),
+            packet_version: AtomicU32::new(0),
         }
     }
     /// get send buf size
@@ -324,6 +328,14 @@ impl Socket {
 
     pub fn get_alg_instance(&self) -> Option<AlgInstance> {
         self.alg_instance.lock().clone()
+    }
+
+    pub fn set_packet_version(&self, version: u32) {
+        self.packet_version.store(version, atomic::Ordering::Release)
+    }
+
+    pub fn get_packet_version(&self) -> u32 {
+        self.packet_version.load(atomic::Ordering::Acquire)
     }
 }
 
@@ -440,6 +452,7 @@ impl Socket {
             socket_af_alg: SpinNoIrqLock::new(self.socket_af_alg.lock().clone()),        
             ciphertext: SpinNoIrqLock::new(self.ciphertext.lock().clone()),
             alg_instance: SpinNoIrqLock::new(self.alg_instance.lock().clone()),
+            packet_version: AtomicU32::new(0),
         })
     }
 }

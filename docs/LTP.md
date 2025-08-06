@@ -53,14 +53,14 @@
 - [ ] autogroup01
 - [x] bind01
 - [ ] bind02: /etc/group not exist
-- [ ] bind03: /unix broken
+- [x] bind03: 
 - [x] bind04: pass 9 failed 7 , failed ipv6 handle
 - [ ] bind05: still broken in ipv6
 - [ ] bind06
 - [ ] block_dev
 - [x] bpf_map01: pass 5 faile 4 broken 1
-- [x] bpf_prog01: p1 b1 todo: socketpair 
-- [x] bpf_prog02: same as 1
+- [ ] bpf_prog01 
+- [ ] bpf_prog02
 - [ ] bpf_prog03
 - [ ] bpf_prog04
 - [ ] bpf_prog05
@@ -1566,7 +1566,7 @@
 
 ======sockopts======
 - [x] setsockopt01: p6 f2
-- [ ] setsockopt02
+- [x] setsockopt02
 - [x] setsockopt03: 
 - [x] setsockopt04: p1 s1
 - [ ] setsockopt05: .config same as follows
@@ -1650,11 +1650,11 @@
 ======= socket ======= (not tested)
 - [x] socket01 : pass 6 failed 2
 - [x] socket02: pass 4
-- [ ] socketcall01
+- [ ] socketcall01 : 32位系统调用
 - [ ] socketcall02
 - [ ] socketcall03
-- [x] socketpair01 : pass 3 failed 7
-- [x] socketpair02 : pass 2 failed 2
+- [x] socketpair01 : 
+- [x] socketpair02 :
 - [ ] sockioctl01: f
 
 ======= splice =======
