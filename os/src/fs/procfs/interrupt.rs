@@ -12,12 +12,14 @@ lazy_static! {
 
 pub struct IrqCounter {
     counter: BTreeMap<usize, usize>,
+    timer_irq_cnt: usize,
 }
 
 impl IrqCounter {
     pub fn new() -> Self {
         Self {
-            counter: BTreeMap::new()
+            counter: BTreeMap::new(),
+            timer_irq_cnt: 0
         }
     }
 
@@ -27,6 +29,10 @@ impl IrqCounter {
         } else {
             self.counter.insert(irq_no, 0);
         }
+    }
+
+    pub fn add_timer_irq_cnt(&mut self) {
+        self.timer_irq_cnt = self.timer_irq_cnt.saturating_add(1)
     }
 }
 
@@ -39,9 +45,16 @@ impl Interrupts {
 }
 
 impl InodeContent for Interrupts {
+    /// hard code timer irq no as 5
     fn serialize(&self) -> alloc::string::String {
         let mut res = "".to_string();
+        res += &"5: ".to_string();
+        res += &IRQ_COUNTER.lock().timer_irq_cnt.to_string();
+        res += &"\n".to_string();
         for (&irq_no, &count) in IRQ_COUNTER.lock().counter.iter() {
+            if irq_no == 5 {
+                continue;
+            }
             res += &irq_no.to_string();
             res += &": ".to_string();
             res += &count.to_string();

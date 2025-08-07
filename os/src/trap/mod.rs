@@ -20,6 +20,7 @@ use hal::pagetable::PageTableHal;
 use hal::println;
 use hal::trap::{set_kernel_trap_entry, set_user_trap_entry, TrapContext, TrapContextHal, TrapType, TrapTypeHal};
 use hal::util::backtrace;
+use crate::fs::procfs::interrupt::IRQ_COUNTER;
 use crate::mm::vm::{KernVmSpaceHal, PageFaultAccessType, UserVmSpaceHal};
 use crate::mm::KVMSPACE;
 use crate::signal::{SigInfo, SIGILL, SIGKILL, SIGSEGV, SIGTRAP};
@@ -120,6 +121,7 @@ pub async fn user_trap_handler() -> bool {
             task.recv_sigs(SigInfo { si_signo: SIGILL, si_code: SigInfo::KERNEL, si_pid: None });
         }
         TrapType::Timer => {
+            IRQ_COUNTER.lock().add_timer_irq_cnt();
             crate::timer::timer::TIMER_MANAGER.check();
             #[cfg(feature = "smp")]
             crate::processor::processor::current_processor().update_load_avg();
@@ -216,6 +218,7 @@ fn kernel_trap_handler() {
         }
         TrapType::Timer => {
             // println!("interrupt: supervisor timer");
+            IRQ_COUNTER.lock().add_timer_irq_cnt();
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();
         }

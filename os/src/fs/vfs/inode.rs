@@ -143,6 +143,10 @@ pub trait Inode {
     fn unlink(&self) -> Result<usize, i32> {
         todo!()
     }
+    /// prevent removing target inode
+    fn is_unlinkable(&self) -> Result<(), SysError> {
+        Ok(())
+    }
     /// remove inode current inode
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
         todo!()

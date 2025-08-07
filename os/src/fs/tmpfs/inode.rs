@@ -265,6 +265,7 @@ pub trait InodeContent {
     fn serialize(&self) -> String;
 }
 
+/// special system file: read only
 pub struct TmpSysInode {
     inner: InodeInner,
     content: Arc<dyn InodeContent>,
@@ -385,5 +386,9 @@ impl Inode for TmpSysInode {
             stx_atomic_write_segments_max: 0,
             stx_dio_read_offset_align: 0,
         }
+    }
+
+    fn is_unlinkable(&self) -> Result<(), SysError> {
+        Err(SysError::EPERM)
     }
 }

@@ -460,7 +460,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
 
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let dentry = file.dentry().unwrap();
-    log::info!("reading dentry path {}", dentry.path());
+    // log::info!("reading dentry path {}", dentry.path());
     let mut buf_it = buf_slice;
     let mut writen_len = 0;
 
@@ -481,7 +481,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         //     child.name().to_string()
         // };
         let name = child.name().to_string();
-        log::info!("[{idx}] loading child {}", name);
+        // log::info!("[{idx}] loading child {}", name);
 
         // align to 8 bytes
         let c_name_len = name.len() + 1;
@@ -512,9 +512,9 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         buf_it[LEN_BEFORE_NAME + c_name_len - 1] = b'\0';
         buf_it = &mut buf_it[rec_len..];
         writen_len += rec_len;
-        log::info!("[{idx}] end");
+        // log::info!("[{idx}] end");
     }
-    log::info!("writen_len: {}", writen_len);
+    // log::info!("writen_len: {}", writen_len);
     return Ok(writen_len as isize);
 }
 
@@ -545,6 +545,7 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
         return Err(SysError::ENOENT);
     }
     let inode = dentry.inode().unwrap();
+    inode.is_unlinkable()?;
     let inode_mode = inode.inode_inner().mode();
     let is_dir = inode_mode == InodeMode::DIR;
     if flags == AT_REMOVEDIR && !is_dir {
@@ -1270,7 +1271,7 @@ pub async fn sys_splice(in_fd: usize, in_off_ptr: usize, out_fd: usize, out_off_
         if out_off_ptr != 0 {
             return Err(SysError::ESPIPE);
         }
-        out_file.write(&mut buf).await?
+        out_file.write(&mut buf[..read_size]).await?
     } else {
         if out_off_ptr == 0 {
             out_file.write(&buf[..read_size]).await?
@@ -1318,7 +1319,7 @@ pub async fn sys_copy_file_range(in_fd: usize, in_off_ptr: usize, out_fd: usize,
     };
 
     let write_size = if out_off_ptr == 0{
-        out_file.write(&buf).await?
+        out_file.write(&buf[..read_size]).await?
     } else {
         let out_off_ptr = UserPtrRaw::new(out_off_ptr as *mut isize)
             .ensure_write(&mut task.get_vm_space().lock())
@@ -1327,7 +1328,7 @@ pub async fn sys_copy_file_range(in_fd: usize, in_off_ptr: usize, out_fd: usize,
         if *out_off < 0 {
             return Err(SysError::EINVAL);
         }
-        let write_size = out_file.write_at(*out_off as usize, &buf).await?;
+        let write_size = out_file.write_at(*out_off as usize, &buf[..read_size]).await?;
         *out_off += write_size as isize;
         write_size
     };

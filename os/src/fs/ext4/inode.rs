@@ -318,6 +318,7 @@ impl Inode for Ext4Inode {
         file.file_open(path, O_RDWR).expect("file open failed");
         let t = file.file_truncate(size as _).map_err(|e| SysError::from_i32(e))?;
         let _ = file.file_close();
+        self.cache.truncate(size);
         Ok(t)
     }
 

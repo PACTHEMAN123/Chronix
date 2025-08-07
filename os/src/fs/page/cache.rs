@@ -6,7 +6,7 @@
 use core::{cmp, sync::atomic::{AtomicUsize, Ordering}};
 
 use crate::{fs::vfs::Inode, sync::mutex::SpinNoIrqLock};
-use alloc::{collections::btree_map::BTreeMap, sync::Arc};
+use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 // use hashbrown::HashMap;
 use log::info;
 
@@ -65,6 +65,24 @@ impl PageCache {
                 continue;
             }
             inode.write_at(offset, page.get_slice::<u8>()).expect("[PageCache]: failed at flush");
+        }
+    }
+
+    /// truncate the cache
+    /// reduce the cache size if given size is smaller
+    pub fn truncate(&self, tsize: usize) {
+        if self.end() > tsize {
+            let mut remove_page_idxs = Vec::new();
+            let mut pages =  self.pages.lock();
+            for (&offset, _) in pages.iter() {
+                if offset >= tsize {
+                    remove_page_idxs.push(offset);
+                }
+            }
+            for page_idx in remove_page_idxs {
+                pages.remove(&page_idx);
+            }
+            self.end.store(tsize, Ordering::Release);
         }
     }
 }

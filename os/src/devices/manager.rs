@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::Transport;
 
-use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -226,6 +226,7 @@ impl DeviceManager {
         }
         unsafe { Instruction::disable_interrupt() };
         if let Some(irq_num) = self.irq_ctrl().claim_irq(irq_ctx()) {
+            IRQ_COUNTER.lock().add_irq(irq_num);
             if let Some(dev) = self.irq_map.get(&irq_num) {
                 dev.handle_irq();
                 self.irq_ctrl().complete_irq(irq_num, irq_ctx());
