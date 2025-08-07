@@ -6,7 +6,7 @@ use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
 
-use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::file::open_file, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::{encode, AlgInstance, AlgType, SockAddrAlg}, socket::{self, Sock, SockResult}, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
+use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::{file::open_file, File}, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::{encode, AlgInstance, AlgType, SockAddrAlg}, socket::{self, Sock, SockResult}, socketpair::make_socketpair, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
 use super::{IoVec, SysError, SysResult};
 
@@ -78,6 +78,7 @@ pub enum Protocol{
     ICMPv6       = 58,
     IPPROTO_UDPLITE = 136,
     IPPROTO_SCTP = 132,
+    ALG_OP_AEAD = 768,
 }
 
 impl TryFrom<usize> for Protocol {
@@ -98,6 +99,7 @@ impl TryFrom<usize> for Protocol {
             58 => Ok(Self::ICMPv6),
             136 => Ok(Self::IPPROTO_UDPLITE),
             132 => Ok(Self::IPPROTO_SCTP),
+            768 => Ok(Self::ALG_OP_AEAD),
             _ => Err(Self::Error::EINVAL),
         }
     }
@@ -477,6 +479,8 @@ pub enum SocketLevel {
     IpprotoTcp = 6,
     /// IPv6-in-IPv4 tunnelling
     IpprotoIpv6 = 41,
+    /// Packet sockets
+    SolPacket = 263,
     /// set alg key
     SolAlg = 279,
 }
@@ -556,6 +560,7 @@ impl TryFrom<usize> for SocketLevel {
             1 => Ok(SocketLevel::SolSocket),
             6 => Ok(SocketLevel::IpprotoTcp),
             41 => Ok(SocketLevel::IpprotoIpv6),
+            263 => Ok(SocketLevel::SolPacket),
             279 => Ok(SocketLevel::SolAlg),
             _ => Err(SysError::EINVAL),
         }
@@ -594,6 +599,7 @@ pub enum SocketOption {
     DetachFilter = 27,
     SNDBUFFORCE = 32,
     RCVBUFFORCE = 33,
+    SO_ATTACH_BPF =  50,
 }
 
 impl TryFrom<usize> for SocketOption {
@@ -630,6 +636,7 @@ impl TryFrom<usize> for SocketOption {
             27 => Ok(Self::DetachFilter),
             32 => Ok(Self::SNDBUFFORCE),
             33 => Ok(Self::RCVBUFFORCE), 
+            50 => Ok(Self::SO_ATTACH_BPF),
             opt => {
                 log::warn!("[SocketOpt] unsupported option: {opt}");
                 Ok(Self::DEBUG)
@@ -942,9 +949,6 @@ impl TcpSocketOption {
                                 opt_len_w.write(len as u32);
                                 Ok(0)
                             },
-                            _=> {
-                                Ok(0)
-                            }
                         }
                     });
                     res
@@ -1036,6 +1040,85 @@ impl AlgOption {
         }
     }
 }
+
+///SolPacketOption
+pub enum SolPacketOption {
+    V3 = 2,
+    FanOutRollOver = 3,
+    RxRing = 5,
+    Version = 10,
+    Reserve = 12,
+    VnetHdr = 15,
+    FanOut = 18,
+}
+
+impl TryFrom<usize> for SolPacketOption {
+    type Error = SysError;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            2 => Ok(SolPacketOption::V3),
+            3 => Ok(SolPacketOption::FanOutRollOver),
+            5 => Ok(SolPacketOption::RxRing),
+            10 => Ok(SolPacketOption::Version),
+            12 => Ok(SolPacketOption::Reserve),
+            15 => Ok(SolPacketOption::VnetHdr),
+            18 => Ok(SolPacketOption::FanOut),
+            _ => {  
+                log::warn!("[SolPacketOption] unsupported option: {value}");
+                Err(Self::Error::EINVAL)
+            }
+        }
+    }
+}
+
+/// tpacket version
+const TPACKET_V1: i32 = 0;
+const TPACKET_V2: i32 = 1;
+const TPACKET_V3: i32 = 2;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct TpacketReq3 {
+    tp_block_size:      u32,
+    tp_block_nr:        u32,
+    tp_frame_size:      u32,
+    tp_frame_nr:        u32,
+    tp_retire_blk_tov:  u32,
+    tp_sizeof_priv:     u32,
+    tp_feature_req_word:u32,
+}
+
+impl SolPacketOption {
+    pub fn set(&self, socket: &crate::net::socket::Socket, opt: &[u8]) -> SockResult<isize> {
+        match self {
+            SolPacketOption::RxRing => {
+                let expect = size_of::<TpacketReq3>();
+                if opt.len() < expect {
+                    return Err(SysError::EINVAL);
+                }
+                log::info!("set rx ring: {:x?}", opt);
+                let req: &TpacketReq3 = unsafe {
+                    &*(opt.as_ptr() as *const TpacketReq3)
+                };
+                if req.tp_sizeof_priv >= req.tp_block_size {
+                    return Err(SysError::EINVAL);
+                }
+                Ok(0)
+            },
+            SolPacketOption::Version => {
+                let version = i32::from_ne_bytes(opt.try_into().unwrap());
+                if version < TPACKET_V1 || version > TPACKET_V3 {
+                    return Err(SysError::EINVAL);
+                }
+                socket.set_packet_version(version as u32);
+                Ok(0)
+            }
+            _ => {
+                Ok(0)
+            }
+        }
+    }
+}
 // ============================== 
 /// socket configure interface for user
 /// level: protocel level at which the option resides,
@@ -1102,8 +1185,11 @@ pub fn sys_setsockopt  (
             kernel_opt.copy_from_slice(opt_val_alg_r.to_ref());
             alg_op.set(&socket_file, &kernel_opt.as_slice())
         }
-        _ => {
-            Ok(0)
+        SocketLevel::SolPacket => {
+            let Ok(sol_packet_op) = SolPacketOption::try_from(option_name) else {
+                return Err(SysError::ENOPROTOOPT);
+            };
+            sol_packet_op.set(&socket_file, &kernel_opt.as_slice())
         }
     }
 
@@ -1180,28 +1266,95 @@ pub fn sys_shutdown(fd: usize, how: usize) -> SysResult {
     Ok(0)
 }
 /// create a pair of connected sockets
-pub fn sys_socketpair(_domain: usize, _types: usize, _protocol: usize, sv: usize) -> SysResult {
+pub fn sys_socketpair(domain: usize, types: usize, protocol: usize, sv: usize) -> SysResult {
+    let proto=match Protocol::try_from(protocol) {
+        Ok(res) => res,
+        Err(_align) => {
+            return Err(SysError::EINVAL);
+        }
+    };
+
+    let domain = match SaFamily::try_from(domain as u16) {
+        Ok(d) => d,
+        Err(_) => {
+            return Err(SysError::EAFNOSUPPORT);
+        },
+    };
+
+    let sock_type = match SocketType::try_from(types as i32) {
+        Ok(socktype) => socktype,
+        Err(e) => return Err(e), 
+    };
+
     let task = current_task().unwrap();
-    let (pipe_read, pipe_write) = pipefs::make_pipe(PAGE_SIZE);
-    let pipe = task.with_mut_fd_table(|table| {
-        let fd_read = table.alloc_fd()?;
-        let fd_info_read = FdInfo {
-            file: pipe_read,
-            flags: FdFlags::empty(),
+
+    let sv = UserPtrRaw::new(sv as *mut [u32; 2])
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    if domain == SaFamily::AfInet {
+        match sock_type {
+            SocketType::RAW => {
+                return Err(SysError::EPROTONOSUPPORT);
+            },
+            SocketType::DGRAM => {
+                if proto == Protocol::UDP {
+                    return Err(SysError::EOPNOTSUPP);
+                }else {
+                    return Err(SysError::EPROTONOSUPPORT);
+                }
+            },
+            SocketType::STREAM => {
+                if proto == Protocol::TCP {
+                    return Err(SysError::EOPNOTSUPP);
+                }else {
+                    return Err(SysError::EPROTONOSUPPORT);
+                }
+            },
+            _ => {
+                return Err(SysError::EPROTONOSUPPORT);
+            }   
+        }
+    }
+
+    else if domain != SaFamily::AfUnix {
+        return Err(SysError::EAFNOSUPPORT);
+    }
+
+    let mut flags = OpenFlags::empty();
+    let mut nonblock = false;
+    if types & (SOCK_NONBLOCK as usize) != 0 {
+        flags |= OpenFlags::O_NONBLOCK;
+        nonblock = true;
+    }
+    if types & (SOCK_CLOEXEC as usize) != 0 {
+        flags |= OpenFlags::O_CLOEXEC;
+    }
+    let (raw1, raw2) = make_socketpair(domain, sock_type, 16 * 4096, nonblock);
+    *raw1.file_inner().flags.lock() |= flags;
+    *raw2.file_inner().flags.lock() |= flags;
+    
+    task.with_mut_fd_table(|table| -> SockResult <()> {
+        // put first file
+        let fd1 = table.alloc_fd()?;
+        log::warn!("fd1: {}", fd1);
+        let fdinfo1 = FdInfo{
+            file:raw1,
+            flags: FdFlags::from(flags),
         };
-        table.put_file(fd_read, fd_info_read)?;
-        let fd_write = table.alloc_fd()?;
-        let fd_info_write = FdInfo {
-            file: pipe_write,
-            flags: FdFlags::empty(),    
+        table.put_file(fd1, fdinfo1)?;
+        
+        // put second file
+        let fd2 = table.alloc_fd()?;
+        log::warn!("fd2: {}", fd2);
+        let fdinfo2 = FdInfo{
+            file:raw2,
+            flags:FdFlags::from(flags)
         };
-        table.put_file(fd_write, fd_info_write)?;
-        Ok([fd_read as u32, fd_write as u32])
+        table.put_file(fd2, fdinfo2)?;
+        sv.write([fd1 as u32, fd2 as u32]);
+        Ok(())
     })?;
-    let sv = UserPtrRaw::new(sv as *mut [u32;2])
-    .ensure_write(&mut task.get_vm_space().lock())
-    .ok_or(SysError::EFAULT)?;
-    sv.write(pipe);
     Ok(0)
 }
 

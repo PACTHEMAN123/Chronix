@@ -3,7 +3,7 @@
 
 需要标注出哪些可以通过，但是没有 Summary
 
-- [ ] abort01
+- [x] abort01
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
@@ -25,10 +25,10 @@
 - [ ] add_key05
 - [x] adjtimex01
 - [x] adjtimex02: pass 5 failed 2 skip 1
-- [ ] adjtimex03: broken
+- [x] adjtimex03: broken
 - [x] af_alg01: p14
 - [x] af_alg02
-- [ ] af_alg03
+- [x] af_alg03
 - [ ] af_alg04
 - [ ] af_alg05
 - [ ] af_alg06
@@ -53,13 +53,13 @@
 - [ ] autogroup01
 - [x] bind01
 - [ ] bind02: /etc/group not exist
-- [ ] bind03: /unix broken
+- [x] bind03: 
 - [x] bind04: pass 9 failed 7 , failed ipv6 handle
 - [ ] bind05: still broken in ipv6
 - [ ] bind06
 - [ ] block_dev
 - [x] bpf_map01: pass 5 faile 4 broken 1
-- [ ] bpf_prog01
+- [ ] bpf_prog01 
 - [ ] bpf_prog02
 - [ ] bpf_prog03
 - [ ] bpf_prog04
@@ -500,9 +500,9 @@
 - [ ] futex_cmp_requeue02
 - [x] futex_wait01
 - [ ] futex_wait02: 卡住
-- [ ] futex_wait03
-- [ ] futex_wait04
-- [ ] futex_wait05
+- [ ] futex_wait03: /proc/pid/stat
+- [x] futex_wait04
+- [ ] futex_wait05: /proc/cpuinfo
 - [ ] futex_wait_bitset01
 - [ ] futex_waitv01
 - [ ] futex_waitv02
@@ -1566,7 +1566,7 @@
 
 ======sockopts======
 - [x] setsockopt01: p6 f2
-- [ ] setsockopt02
+- [x] setsockopt02
 - [x] setsockopt03: 
 - [x] setsockopt04: p1 s1
 - [ ] setsockopt05: .config same as follows
@@ -1650,11 +1650,11 @@
 ======= socket ======= (not tested)
 - [x] socket01 : pass 6 failed 2
 - [x] socket02: pass 4
-- [ ] socketcall01
+- [ ] socketcall01 : 32位系统调用
 - [ ] socketcall02
 - [ ] socketcall03
-- [x] socketpair01 : pass 3 failed 7
-- [x] socketpair02 : pass 2 failed 2
+- [x] socketpair01 : 
+- [x] socketpair02 :
 - [ ] sockioctl01: f
 
 ======= splice =======
@@ -1689,7 +1689,7 @@
 - [ ] statvfs02 : f
 - [x] statx01 : pass 6 failed 2
 - [x] statx02
-- [x] statx03 : pass 5 failed 2
+- [x] statx03 : pass 5 failed 2 :似乎连着跑会寄
 - [ ] statx04 : no dev
 - [ ] statx05 : tconf
 - [ ] statx06 : no dev

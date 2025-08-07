@@ -22,6 +22,8 @@ pub mod tcp;
 pub mod udp;
 /// A Listen Table for Server to allocte port
 pub mod listen_table;
+/// socketpair concerning
+pub mod socketpair;
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, FromRepr, PartialEq, Eq, PartialOrd, Ord)]
 /// socket address family, used for syscalls

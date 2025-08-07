@@ -1,6 +1,7 @@
 use core::str::from_utf8;
 use alloc::sync::Arc;
 use alloc::{boxed::Box, string::{String, ToString}, vec::Vec,vec};
+use hal::println;
 use polyval::{Polyval, Key as PolyvalKey};
 use aes::Aes128;
 use aes::cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray};
@@ -43,7 +44,6 @@ impl SockAddrAlg {
             Ok(string) => string,
             Err(_) => return Err(SysError::EINVAL),
         };
-
         /// check name
         let name_end =  self.salg_name
             .iter().position(|&bytes| bytes == 0)
@@ -63,7 +63,8 @@ impl SockAddrAlg {
             }
         }
 
-        if alg_type == "ahead" {
+        if alg_type == "aead" {
+            println!("alg_name: {}", alg_name);
             if alg_name.starts_with("rfc7539(") && alg_name.ends_with(')') {
                 let inner = &alg_name[8.. alg_name.len()-1];
                 let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();

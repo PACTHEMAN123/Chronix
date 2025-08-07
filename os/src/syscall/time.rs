@@ -491,7 +491,7 @@ pub fn sys_adjtimex(timex: usize) -> SysResult {
     .ok_or(SysError::EFAULT)?
     .to_ref();
     let modes = r_timex.kt_modes; 
-    if modes == 0x80000 {
+    if modes == 0x8000 {
         return Err(SysError::EINVAL);
     }
     let w_timex = UserPtrRaw::new(timex as *mut KernTimex)
