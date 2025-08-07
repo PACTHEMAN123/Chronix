@@ -4,7 +4,7 @@ use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use fatfs::info;
 use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, Dentry, File, FileInner}, OpenFlags}, net::{addr::ZERO_IPV4_ENDPOINT, crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, socketpair::{SocketPairConnection, SocketPairInternal}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use crate::{fs::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, OpenFlags}, net::{addr::ZERO_IPV4_ENDPOINT, crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, socketpair::{SocketPairConnection, SocketPairInternal}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -419,6 +419,72 @@ impl File for Socket {
 
     fn dentry(&self) -> Option<Arc<dyn Dentry>> {
         None
+    }
+}
+
+
+// ugly, now use empty inode and dentry 
+// to compatiable with file system
+// TODO: change Socket to inode
+// use SocketFile to provide file interface for Socket
+
+pub struct SocketInode {
+    inode_inner: InodeInner,
+}
+
+impl SocketInode {
+    pub fn new() -> Self {
+        Self {
+            inode_inner: InodeInner::new(None, InodeMode::SOCKET, 0)
+        }
+    }
+}
+
+impl Inode for SocketInode {
+    fn inode_inner(&self) -> &InodeInner {
+        &self.inode_inner
+    }
+}
+
+pub struct SocketDentry {
+    dentry_inner: DentryInner,
+}
+
+impl SocketDentry {
+    pub fn new(name: &str, parent: Option<Arc<dyn Dentry>>) -> Self {
+        Self {
+            dentry_inner: DentryInner::new(name, parent)
+        }
+    }
+}
+
+unsafe impl Sync for SocketDentry {}
+unsafe impl Send for SocketDentry {}
+
+impl Dentry for SocketDentry {
+    fn new(
+            &self,
+            name: &str,
+            parent: Option<Arc<dyn Dentry>>,
+        ) -> Arc<dyn Dentry> {
+        Arc::new(SocketDentry::new(name, parent))
+    }
+
+    fn dentry_inner(&self) -> &DentryInner {
+        &self.dentry_inner
+    }
+
+    // open a socket file
+    fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
+        Some(
+            Arc::new(
+                Socket::new(
+                    SaFamily::AfUnix, 
+                    SocketType::RAW, 
+                    false
+                )
+            )
+        )
     }
 }
 

@@ -334,6 +334,11 @@ pub fn global_update_dentry(path: &str, inode: Arc<dyn Inode>) -> Result<(), Sys
     return Ok(())
 }
 
+pub fn global_update_path(path: &str, dentry: Arc<dyn Dentry>) {
+    let mut cache = DCACHE.lock();
+    cache.insert(path.to_string(), dentry);
+}
+
 impl<T: Send + Sync + 'static> Dentry for MaybeUninit<T> {
     fn dentry_inner(&self) -> &DentryInner {
         todo!()

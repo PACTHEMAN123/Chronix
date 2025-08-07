@@ -47,7 +47,18 @@ pub fn get_serial(stdout: &FdtNode) -> Serial {
     let base_paddr = reg.starting_address as usize;
     let size = reg.size.unwrap();
     let base_vaddr = base_paddr | Constant::KERNEL_ADDR_SPACE.start;
+
+    #[cfg(target_arch="riscv64")]
     let irq_number = stdout.property("interrupts").unwrap().as_usize().unwrap();
+
+    #[cfg(target_arch="loongarch64")]
+    let irq_number = {
+        let irq_nos = stdout.property("interrupts").unwrap().as_str().unwrap();
+        log::info!("irq no: {}", irq_nos);
+        2
+    };
+
+
     log::info!("[device tree]: Serial IRQ number: {}", irq_number);
     let first_compatible = stdout.compatible().unwrap().first();
     match first_compatible {
