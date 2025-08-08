@@ -64,7 +64,7 @@ impl Sock {
                 }
             }
             // todo: suit for most cases
-            Sock::Unix(_) => {Ok(())},
+            Sock::Unix(_) => Err(SysError::ENOTDIR),
             _ => {
                 Err(SysError::EAFNOSUPPORT)
             }

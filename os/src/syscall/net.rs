@@ -639,8 +639,7 @@ impl TryFrom<usize> for SocketOption {
             50 => Ok(Self::SO_ATTACH_BPF),
             opt => {
                 log::warn!("[SocketOpt] unsupported option: {opt}");
-                Ok(Self::DEBUG)
-                // Err(Self::Error::EINVAL)
+                Err(Self::Error::EINVAL)
             }
         }
     }
