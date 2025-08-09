@@ -42,6 +42,7 @@ disk-img: user
 	sudo mkdir mnt/usr/lib64
 
 	sudo cp -r attach mnt/
+	sudo cp -r etc mnt/
 
 	sudo umount mnt
 	sudo rm -rf mnt

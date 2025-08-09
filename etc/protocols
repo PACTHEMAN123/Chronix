@@ -1,0 +1,4 @@
+ip      0       IP      # Internet protocol
+icmp    1       ICMP    # Internet Control Message Protocol
+tcp     6       TCP     # Transmission Control Protocol
+udp     17      UDP     # User Datagram Protocol

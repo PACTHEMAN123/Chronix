@@ -13,9 +13,7 @@ ifneq ($(SMP),)
 KERNEL_FEATURES += smp
 endif
 
-ifeq ($(NET_C),y)
 KERNEL_FEATURES += net
-endif
 
 ifeq ($(AUTOTEST),y)
 KERNEL_FEATURES += autotest

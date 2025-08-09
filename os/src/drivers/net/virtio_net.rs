@@ -1,11 +1,11 @@
 use core::any::Any;
 
-use crate::devices::{as_dev_err, net::{NetBufBox, NetBufPool, NetBuf, NET_BUF_LEN}, DevError, DevResult, NetBufPtrTrait, NetDevice};
+use crate::devices::{as_dev_err, net::{NetBuf, NetBufBox, NetBufPool, NetBufPtr, NET_BUF_LEN}, DevError, DevResult, NetBufPtrTrait, NetDevice};
 use fatfs::warn;
 use log::info;
 use smoltcp::phy::{DeviceCapabilities, Medium};
 use crate::drivers::dma::VirtioHal;
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc, vec::Vec};
 use smoltcp::phy::Device;
 use virtio_drivers::{
     device::net::VirtIONetRaw,
@@ -31,7 +31,7 @@ impl<T: Transport> VirtIoNetDev<T> {
         let rx_buf = [NONE_BUF; NET_QUEUE_SIZE];
         let tx_buf = [NONE_BUF; NET_QUEUE_SIZE]; 
         let free_tx_bufs = Vec::with_capacity(NET_QUEUE_SIZE); 
-        let buf_pool = NetBufPool::new( 2*NET_QUEUE_SIZE, NET_BUF_LEN);
+        let buf_pool = NetBufPool::new( 2*NET_QUEUE_SIZE, NET_BUF_LEN)?;
         let raw = VirtIONetRaw::new(transport).map_err(as_dev_err)?;
         let mut inner_self = Self {
             rx_buffers: rx_buf,
@@ -42,9 +42,11 @@ impl<T: Transport> VirtIoNetDev<T> {
         };
         // for rx_buffer: allocate all
         for (i,rx_buf_place) in inner_self.rx_buffers.iter_mut().enumerate() {
-            let rx_buf = inner_self.buf_pool.alloc_boxed().unwrap();
+            let mut rx_buf = inner_self.buf_pool.alloc_boxed().ok_or(DevError::NoMemory)?;
+            // log::warn!("[VirtioNetDev::new] Ok to allocate memory to rx buffer");
             let token = unsafe{inner_self.raw_device
-                .receive_begin(rx_buf.as_mut_slice()).map_err(as_dev_err)?
+                .receive_begin(rx_buf.as_mut_slice())
+                .map_err(as_dev_err)?
             };
             assert_eq!(token, i as u16);
             *rx_buf_place = Some(rx_buf);
@@ -79,18 +81,26 @@ impl<T: Transport> VirtIoNetDev<T> {
     fn receive(&mut self) ->  DevResult<Box<dyn NetBufPtrTrait>> {
         if let Some(token) = self.raw_device.poll_receive() {
             log::warn!("[VirtioNetDev::receive] token {}", token);
-            let mut rx_buf = self.rx_buffers[token as usize]
-            .take().ok_or(DevError::BadState)?;
-            log::info!("[VirtioNetDev::receive] rx_buf: {:p}", &rx_buf);
+            log::warn!("[VirtioNetDev::receive] rx_buffers: {:?}", &self.rx_buffers[token as usize]);
+            let mut rx_buf = match self.rx_buffers[token as usize]
+            .take() {
+                Some(rx_buf) => {
+                    log::warn!("[VirtioNetDev::receive] Ok to take rx buffer");
+                    rx_buf
+                },
+                None => {
+                    return Err(DevError::BadState);
+                }
+            };
             let (head_len, packet_len) = unsafe {
                 self.raw_device
                 .receive_complete(token, rx_buf.as_mut_slice())
                 .map_err(as_dev_err)?
             };
-            log::info!("[VirtioNetDev::receive] packet len {}, head len {}", packet_len, head_len);
+            log::info!("[VirtioNetDev::receive] now set packet len {}, head len {}", packet_len, head_len);
             rx_buf.set_header_len(head_len);
             rx_buf.set_packet_len(packet_len);
-            Ok(rx_buf)
+            Ok(rx_buf.into_buf_ptr())
         }else {
             Err(DevError::Again)
         }
@@ -99,12 +109,12 @@ impl<T: Transport> VirtIoNetDev<T> {
         let tx_buf =
             unsafe { core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(tx_buf) };
         let tx_buf = unsafe {
-            tx_buf.downcast::<NetBuf>().unwrap()
+            NetBuf::from_buf_ptr(tx_buf.downcast::<NetBufPtr>().unwrap())
         };
         let token = unsafe {
             self.raw_device.transmit_begin(tx_buf.packet_with_header()).map_err(as_dev_err)?
         };
-        log::info!("[VirtioNetDev::transmit] packet len {}",tx_buf.get_packet_len() );
+    log::warn!("[VirtioNetDev::transmit] head_len {}, packet len {}",tx_buf.header_len(),tx_buf.get_packet_len() );
         self.tx_buffers[token as usize] = Some(tx_buf);
         Ok(())
     }
@@ -118,25 +128,28 @@ impl<T: Transport> VirtIoNetDev<T> {
             return Err(DevError::InvalidParam);
         }
         net_buf.set_packet_len(packet_len);
-        Ok(net_buf)
+        log::warn!("VirtioNetDev::alloc_tx_buffer: Ok to allocate tx buffer, head_len: {head_len}, packet_len: {packet_len}");
+        Ok(net_buf.into_buf_ptr())
     }
     ///recycle buf when rx complete
     fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) -> DevResult {
         let rx_buf_ptr = unsafe {
             core::mem::transmute::<Box<dyn NetBufPtrTrait>, Box<dyn Any + Send>>(rx_buf)
         };
-        let rx_buf = unsafe {
-            rx_buf_ptr.downcast::<NetBuf>().unwrap()
+        let mut rx_buf = unsafe {
+            NetBuf::from_buf_ptr(rx_buf_ptr.downcast::<NetBufPtr>().unwrap())
         };
         let new_token = unsafe {
             self.raw_device.receive_begin(rx_buf.as_mut_slice())
         }
         .map_err(as_dev_err)?;
-    if self.rx_buffers[new_token as usize].is_some() {
-        log::warn!("rx buffer already in use");
-        return Err(DevError::BadState);
-    }
+        log::warn!("[VirtioNetDev::recycle_rx_buffer] new_token {}", new_token);
+        if self.rx_buffers[new_token as usize].is_some() {
+            log::warn!("rx buffer already in use");
+            return Err(DevError::BadState);
+        }
         self.rx_buffers[new_token as usize] = Some(rx_buf);
+        log::warn!("[VirtioNetDev] Ok to recycle rx buffer");
         Ok(())
     }
     /// recycle used tx buffer
@@ -144,13 +157,28 @@ impl<T: Transport> VirtIoNetDev<T> {
         while let Some(token) = self.raw_device.poll_transmit() {
             let tx_buf = self.tx_buffers[token as usize].take().ok_or(DevError::BadState)?;
             unsafe {
-                let __= self.raw_device.transmit_complete(token, tx_buf.packet_with_header()).map_err(as_dev_err)?;
+                self.raw_device.transmit_complete(token, tx_buf.packet_with_header()).map_err(as_dev_err)?;
             };
             self.free_tx_bufs.push(tx_buf);
         }
+        log::warn!("[VirtioNetDev] Ok to recycle tx buffer");
         Ok(())
     }
     fn mac_address(&self) -> EthernetAddress {
         EthernetAddress(self.raw_device.mac_address())
     }
+    fn can_transmit(&self) -> bool {
+        !self.free_tx_bufs.is_empty() && self.raw_device.can_send()
+    }
+    fn can_receive(&self) -> bool {
+        self.raw_device.poll_receive().is_some()
+    }
+    fn rx_queue_size(&self) -> usize {
+        NET_QUEUE_SIZE
+    }
+    fn tx_queue_size(&self) -> usize {
+        NET_QUEUE_SIZE
+    }
  }
+
+ pub type VirtIoNetDevImpl = VirtIoNetDev<MmioTransport>;

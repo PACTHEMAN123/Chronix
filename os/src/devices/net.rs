@@ -1,10 +1,10 @@
 use core::{panic, ptr::NonNull};
 
-use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
+use alloc::{boxed::Box, fmt, sync::Arc, vec::{self, Vec}};
 use log::info;
 use smoltcp::{phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken}, time::Instant};
 
-use crate::{net::modify_packet, sync::{mutex::SpinLock, UPSafeCell}};
+use crate::{devices::DevResult, net::modify_packet, sync::{mutex::SpinLock, UPSafeCell}};
 
 use super::{DevError, NetBufPtrTrait, NetDevice};
 /// NET_BUF_LEN
@@ -25,6 +25,37 @@ pub struct NetBufPtr {
     len: usize,
 }
 
+impl NetBufPtr {
+    /// Create a new NetBufPtr.
+    pub fn new(raw_ptr: NonNull<u8>, buf_ptr: NonNull<u8>, len: usize) -> Self {
+        Self {
+            raw_ptr,
+            buf_ptr,
+            len,
+        }
+    }
+}
+
+impl NetBufPtrTrait for NetBufPtr {
+    fn packet_len(&self) -> usize {
+        self.len
+    }
+    
+    fn packet(&self) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(self.buf_ptr.as_ptr() as *const u8, self.len)
+        }
+    }
+    
+    fn packet_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(self.buf_ptr.as_ptr(), self.len)
+        }
+    }
+    
+}
+
+
 #[repr(C)]
 pub struct NetBuf {
     /// the header part bytes length
@@ -40,6 +71,20 @@ pub struct NetBuf {
     /// the buffer pool pointer
     pool: Arc<NetBufPool>,
 }
+
+impl fmt::Debug for NetBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "NetBuf {{ header_len: {}, packet_len: {}, capacity: {}, buf_ptr: {:p}, pool_offset: {}}}",
+            self.header_len,
+            self.packet_len,
+            self.capacity,
+            self.buf_ptr.as_ptr(),
+            self.pool_offset,
+        )
+    }
+}
 /// whole buffer pool
 pub struct NetBufPool {
     /// nums of buf
@@ -54,25 +99,34 @@ pub struct NetBufPool {
 
 impl NetBufPool {
     /// creates a new NetBufPool given the capacity and buffer size
-    pub fn new(capacity: usize, buf_len: usize) -> Arc<Self> {
+    pub fn new(capacity: usize, buf_len: usize) -> DevResult<Arc<Self>> {
+        if capacity == 0 {
+            return Err(DevError::InvalidParam);
+        }
+        if !(MIN_BUFFER_LEN..= MAX_BUFFER_LEN).contains(&buf_len) {
+            return Err(DevError::InvalidParam);
+        }
+        log::warn!("[NetBufPool]: Ok to create a new NetBufPool with capacity: {capacity}, buf_len: {buf_len}");
         // buf_len should between MIN_BUFFER_LEN and MAX_BUFFER_LEN
         let pool = alloc::vec![0; capacity * buf_len];
         let mut free_list = Vec::with_capacity(capacity);
         for i in 0..capacity {
             free_list.push(i * buf_len);
         }
-        Arc::new(Self {
+        Ok(Arc::new(Self {
             capacity,
             buf_len,
             pool,
             free_list: SpinLock::new(free_list),
-        })
+        }))
     }
     /// allocates a new buffer from the pool
     pub fn alloc(self: &Arc<Self>) -> Option<NetBuf> {
         let mut free_list = self.free_list.lock();
         if let Some(idx) = free_list.pop() {
-            let ptr = NonNull::new(unsafe{self.pool.as_ptr().add(idx) }as *mut u8).unwrap();
+            let ptr = NonNull::new(
+                unsafe{self.pool.as_ptr().add(idx) }as *mut u8)
+                .unwrap();
             Some(NetBuf {
                 header_len: 0,
                 packet_len: 0,
@@ -164,7 +218,7 @@ impl NetBuf {
         self.get_slice(0, self.capacity)
     }
     /// returns the whole mutable buffer
-    pub const fn as_mut_slice(&self) -> &mut [u8] {
+    pub const fn as_mut_slice(&mut self) -> &mut [u8] {
         self.get_mut_slice(0, self.capacity)
     }
     /// returns buffer's header length
@@ -174,6 +228,20 @@ impl NetBuf {
     /// returns buffer's capacity
     pub fn capacity(&self) -> usize {
         self.capacity
+    }
+
+    pub unsafe fn from_buf_ptr(ptr: Box<NetBufPtr>) -> Box<Self> {
+        Box::from_raw(ptr.raw_ptr.as_ptr() as *mut Self)
+    }
+
+    pub fn into_buf_ptr(mut self: Box<Self>) -> Box<NetBufPtr> {
+        let buf_ptr = self.packet_mut().as_mut_ptr();
+        let len = self.packet_len;
+        Box::new(NetBufPtr::new(
+            NonNull::new(Box::into_raw(self) as *mut u8).unwrap(),
+            NonNull::new(buf_ptr).unwrap(),
+            len,
+        ))
     }
 }
 
@@ -211,17 +279,17 @@ impl <'a> RxToken for NetRxToken<'a> {
     {
         // need preprocess
         let mut rx_buf = self.1;
-        // log::warn!(
-        //     "[RxToken::consume] RECV {} bytes",
-        //     rx_buf.packet_len(),
-            // rx_buf.packet()
-        // );
+        log::warn!(
+            "[RxToken::consume] RECV {} bytes",
+            rx_buf.packet_len(),
+        );
         let result = f(rx_buf.packet_mut());
         self.0.exclusive_access().recycle_rx_buffer(rx_buf).unwrap();
         result
     }
 
     fn preprocess(&self, sockets: &mut smoltcp::iface::SocketSet<'_>) {
+        log::warn!("[RxToken::preprocess] in preprocess step");
         let medium = self.0.exclusive_access().capabilities().medium;
         let is_ethernet = medium == Medium::Ethernet;
         modify_packet(self.1.packet(),sockets,is_ethernet).ok();
@@ -236,11 +304,10 @@ impl <'a> TxToken for NetTxToken<'a> {
     {
         let mut tx_buf = self.0.exclusive_access().alloc_tx_buffer(len).unwrap();
         let result = f(tx_buf.packet_mut());
-        // log::warn!(
-        //     "[TxToken::consume] SEND {} bytes",
-        //     len,
-             // tx_buf.packet()
-        // );
+        log::warn!(
+            "[TxToken::consume] SEND {} bytes",
+            len,
+        );
         self.0.exclusive_access().transmit(tx_buf).unwrap();
         result
     }
@@ -259,6 +326,10 @@ impl Device for NetDeviceWrapper {
             log::warn!("recycle_tx_buffers failed: {:?}", e);
             return None;
         };
+        if !inner.can_transmit(){
+            log::warn!("[NetDeviceWrapper::reeceive] can't receive because of inner can't transmit");
+            return None;
+        }
         let rx_buf = match inner.receive(){
             Ok(buf) => buf,
             Err(e) => {
@@ -278,7 +349,11 @@ impl Device for NetDeviceWrapper {
                 return None;    
             }
             Ok(_) => {
-                Some(NetTxToken(&self.inner))
+                if inner.can_transmit() {
+                    Some(NetTxToken(&self.inner))
+                }else {
+                    None
+                }
             },
         }
     }

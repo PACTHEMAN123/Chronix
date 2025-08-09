@@ -264,14 +264,21 @@ pub fn get_ephemeral_port() -> SockResult<u16> {
     const PORT_END: u16 = 0xffff;
     static CURR: SpinNoIrqLock<u16> = SpinNoIrqLock::new(PORT_START);
     let mut curr = CURR.lock();
-
-    let port = *curr;
-    if *curr == PORT_END {
-        *curr = PORT_START;
-    } else {
-        *curr += 1;
+    let mut tries = 0;
+    while tries <= PORT_END - PORT_START {
+        let port = *curr;
+        if *curr == PORT_END {
+            *curr = PORT_START;
+        } else {
+            *curr += 1;
+        }
+        if LISTEN_TABLE.can_listen(port) {
+            return Ok(port);
+        }
+        tries += 1;
     }
-    Ok(port)
+    log::warn!("no avaliable ports!");
+    Err(SysError::EADDRINUSE)
 }
 
 impl <'a> SocketSetWrapper<'a> {
@@ -350,20 +357,28 @@ pub fn poll_interfaces() -> smoltcp::time::Instant {
 /// modify the socket first, a helper method for use smoltcp consume
 pub fn modify_packet(buf: &[u8], sockets: &mut SocketSet<'_>, is_ethernet: bool) ->Result<(), smoltcp::wire::Error>{
     use smoltcp::wire::{EthernetFrame, IpProtocol, Ipv4Packet, TcpPacket};
-    // log::info!("[modify packet]receive packet");
+    log::warn!("[modify packet]receive packet");
     let ipv4_packet = if is_ethernet {
         let ether_frame = EthernetFrame::new_checked(buf)?;
-        Ipv4Packet::new_checked(ether_frame.payload())?
+        let ipv4_packet = Ipv4Packet::new_checked(ether_frame.payload())?;
+        log::warn!("[modify packet] check IPV4 Packet ehternet frame");
+        ipv4_packet
     }else {
         Ipv4Packet::new_checked(buf)?
     };
+    log::warn!("  Source IP: {}", ipv4_packet.src_addr());
+    log::warn!("  Destination IP: {}", ipv4_packet.dst_addr());
+    log::warn!("  Next Header (Protocol): {:?}", ipv4_packet.next_header());
+    log::warn!("  Payload length: {} bytes", ipv4_packet.payload().len());
     if ipv4_packet.next_header() == IpProtocol::Tcp {
+        log::warn!("[modify packet] ipv4 packet.next_header() == IpProtocol::Tcp");
         let tcp_packet = TcpPacket::new_checked(ipv4_packet.payload())?;
         let src_addr = (ipv4_packet.src_addr(), tcp_packet.src_port()).into();
         let dst_addr = (ipv4_packet.dst_addr(),tcp_packet.dst_port()).into();
+        log::warn!(" tcp_packet.syn(): {}, tcp_packet.ack(): {}",tcp_packet.syn(), tcp_packet.ack());
         let first_flag = tcp_packet.syn() && !tcp_packet.ack();
         if first_flag {
-            // info!("[modify packet]receive packet");
+            info!("[modify packet] tcp_packet.syn() && !tcp_packet.ack() == true ");
             LISTEN_TABLE.handle_coming_packet(src_addr, dst_addr, sockets);
         }
     }
@@ -407,9 +422,8 @@ pub fn smol_dur_to_core_cur(duration: smoltcp::time::Duration) -> core::time::Du
     core::time::Duration::from_micros(duration.micros())
 }
 
-pub fn init_network() {
+pub fn init_network(dev: Box<dyn NetDevice>, dev_flag: bool) {
     info!("Initialize network");
-    let (dev, dev_flag) = init_network_device();
     let ehter_addr = EthernetAddress(dev.mac_address().0);
     let eth0 = InterfaceWrapper::new("eth0", dev, ehter_addr);
     let gateway: IpAddress = match option_env!("GATEWAY") {
@@ -456,6 +470,7 @@ pub struct UnixSocket {}
 pub const LOCAL_IPS: &[IpAddress] = &[
     IpAddress::v4(127, 0, 0, 1),
     IpAddress::v4(0, 0, 0, 0),
+    IpAddress::v4(10,0,2,15)
     //  // IPv6 loopback (::1)
     // IpAddress::Ipv6(smoltcp::wire::Ipv6Address::LOOPBACK),
     

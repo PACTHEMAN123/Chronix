@@ -263,7 +263,7 @@ impl TcpSocket {
         self.update_state(SocketState::Closed, SocketState::Closed,||{
             // info!("new end point port {}", new_endpoint.port);
             if new_endpoint.port == 0 {
-                let port = get_ephemeral_port().unwrap();
+                let port = get_ephemeral_port()?;
                 new_endpoint.port = port;
                 // info!("[TcpSocket::bind] local port is 0, use port {}",port);
             }

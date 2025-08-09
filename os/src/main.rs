@@ -90,12 +90,11 @@ fn main(id: usize, first: bool) -> bool {
     if first {
         info!("id: {id}");
         banner::print_banner();
-        devices::init();
         processor::processor::init(id);
-        hal::trap::init();
+        hal::trap::init();       
+        devices::init();
         fs::init();
         // fs::vfs::file::list_apps(); 
-        net::init_network();
         // fs::ext4::page_cache_test();       
         #[cfg(not(feature = "smp"))]
         executor::init();

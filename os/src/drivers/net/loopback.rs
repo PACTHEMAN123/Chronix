@@ -1,3 +1,5 @@
+use core::usize;
+
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, sync::Arc, vec,vec::Vec};
 use fatfs::{info, warn};
 use smoltcp::phy::{DeviceCapabilities, Medium};
@@ -80,5 +82,18 @@ impl NetDevice for LoopbackDevice {
 
     fn mac_address(&self) -> crate::devices::net::EthernetAddress {
         EthernetAddress([0; 6])
+    }
+
+    fn can_transmit(&self) -> bool {
+        true
+    }
+    fn can_receive(&self) -> bool {
+        true
+    }
+    fn rx_queue_size(&self) -> usize {
+        usize::MAX
+    }
+    fn tx_queue_size(&self) -> usize {
+        usize::MAX
     }
 }

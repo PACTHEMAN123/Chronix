@@ -40,29 +40,6 @@ fn init_env() {
     #[cfg(target_arch="loongarch64")]
     run_cmd("/loongarch/musl/busybox --install /bin");
     run_cmd("rm /bin/sh");
-    run_cmd("mkdir -p /etc");
-    
-    // 创建 /etc/protocols 文件
-    run_cmd("echo 'ip      0       IP      # Internet protocol' > /etc/protocols");
-    run_cmd("echo 'icmp    1       ICMP    # Internet Control Message Protocol' >> /etc/protocols");
-    run_cmd("echo 'tcp     6       TCP     # Transmission Control Protocol' >> /etc/protocols");
-    run_cmd("echo 'udp     17      UDP     # User Datagram Protocol' >> /etc/protocols");
-    
-    // 创建 /etc/nsswitch.conf 文件
-    run_cmd("echo 'hosts: files dns' > /etc/nsswitch.conf");
-    run_cmd("echo 'networks: files' >> /etc/nsswitch.conf");
-    run_cmd("echo 'protocols: files' >> /etc/nsswitch.conf");
-    run_cmd("echo 'services: files' >> /etc/nsswitch.conf");
-
-    // /etc/passwd
-    run_cmd("echo 'root:x:0:0:root:/root:/bin/bash' > /etc/passwd");
-    run_cmd("echo 'nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin' >/etc/passwd ");
-
-    // /etc/hostname
-    run_cmd("touch /etc/hostname");
-    run_cmd("touch /etc/domainname");
-    run_cmd("touch /etc/group");
-    run_cmd("echo 'nogroup:x:65534:' >> /etc/group");
 }
 
 fn term_sig_handler(_signo: i32) {

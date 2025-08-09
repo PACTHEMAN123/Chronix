@@ -9,8 +9,7 @@ AUTOTEST :=
 # smp
 export SMP := 
 
-# net
-NET_C ?=n
+
 IP_C ?= 10.0.2.15
 GW ?= 10.0.2.2
 export GATEWAY=$(GW)

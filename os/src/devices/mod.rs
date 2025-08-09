@@ -172,9 +172,16 @@ pub trait NetDevice: Send + Sync + Any {
     fn recycle_rx_buffer(&mut self, rx_buf: Box<dyn NetBufPtrTrait>) -> DevResult;
     /// recycle used tx buffer
     fn recycle_tx_buffer(&mut self) -> DevResult;
-    #[allow(dead_code)]
     /// ethernet address of the NIC
     fn mac_address(&self) -> EthernetAddress;
+     /// Whether can transmit packets.
+    fn can_transmit(&self) -> bool;
+    /// Whether can receive packets.
+    fn can_receive(&self) -> bool;
+    /// Size of the receive queue.
+    fn rx_queue_size(&self) -> usize;
+    /// Size of the transmit queue.
+    fn tx_queue_size(&self) -> usize;
 }
 
 pub trait NetBufPtrTrait: Any {
@@ -249,4 +256,6 @@ pub fn init() {
     // #[cfg(not(feature="smp"))]
     DEVICE_MANAGER.lock().enable_irq();
     log::info!("External interrupts enabled");
+    
+    DEVICE_MANAGER.lock().init_net();
 }
