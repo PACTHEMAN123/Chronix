@@ -5,7 +5,7 @@ use core::{ops::Range, sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Orderin
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 
 use super::SuperBlock;
-use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, generate_atomic_accessors, generate_lock_accessors, generate_with_methods, sync::mutex::SpinNoIrqLock, syscall::SysError, timer::ffi::TimeSpec};
+use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, generate_atomic_accessors, generate_lock_accessors, generate_with_methods, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_REALTIME}, ffi::TimeSpec, get_current_time, get_current_time_duration}};
 use crate::fs::Kstat;
 
 /// the base Inode of all file system
@@ -36,6 +36,10 @@ pub struct InodeInner {
 impl InodeInner {
     /// create a inner using super block
     pub fn new(super_block: Option<Weak<dyn SuperBlock>>, mode: InodeMode, size: usize) -> Self {
+        let current = get_current_time_duration();
+        let ts: TimeSpec = unsafe {
+            (CLOCK_DEVIATION[CLOCK_REALTIME] + current).into()
+        };
         Self {
             ino: inode_alloc(),
             super_block: super_block,
@@ -44,10 +48,26 @@ impl InodeInner {
             uid: AtomicU32::new(0),
             gid: AtomicU32::new(0),
             mode: SpinNoIrqLock::new(mode),
-            atime: SpinNoIrqLock::new(TimeSpec::default()),
-            mtime: SpinNoIrqLock::new(TimeSpec::default()),
-            ctime: SpinNoIrqLock::new(TimeSpec::default()),
+            atime: SpinNoIrqLock::new(ts),
+            mtime: SpinNoIrqLock::new(ts),
+            ctime: SpinNoIrqLock::new(ts),
         }
+    }
+    /// update access time
+    pub fn update_atime(&self) {
+        let current = get_current_time_duration();
+        let ts: TimeSpec = unsafe {
+            (CLOCK_DEVIATION[CLOCK_REALTIME] + current).into()
+        };
+        self.set_atime(ts);
+    }
+    /// update modified time
+    pub fn update_mtime(&self) {
+        let current = get_current_time_duration();
+        let ts: TimeSpec = unsafe {
+            (CLOCK_DEVIATION[CLOCK_REALTIME] + current).into()
+        };
+        self.set_mtime(ts);
     }
     generate_atomic_accessors!(
         uid: u32,
@@ -159,6 +179,20 @@ pub trait Inode {
     /// set all cached pages clean when unlink
     fn clean_cached(&self) {
         // do nothing
+    }
+}
+
+impl dyn Inode {
+    pub fn access(&self) -> Result<(), SysError> {
+        // TODO: add owner check
+        self.inode_inner().update_atime();
+        Ok(())
+    }
+
+    pub fn modified(&self) -> Result<(), SysError> {
+        self.inode_inner().update_atime();
+        self.inode_inner().update_mtime();
+        Ok(())
     }
 }
 

@@ -52,7 +52,16 @@ impl Ext4Inode {
         let mut file  = Ext4File::new(path, types);
         // (todo) notice that lwext4 mention in file_size(): should open file as RDONLY first 
         // may be a bug in the future
-        let size = file.file_size();
+        let size = if mode.get_type() == InodeMode::FILE {
+            let path = file.get_path();
+            file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
+            let fsize = file.file_size() as usize;
+            file.file_close().expect("failed to close");
+            fsize
+        } else {
+            0
+        };
+
         Self {
             inner: InodeInner::new(Some(super_block.clone()), mode, size as usize),
             file: SpinNoIrqLock::new(file),
@@ -367,25 +376,23 @@ impl Inode for Ext4Inode {
 
     fn getattr(&self) -> Kstat {
         let inner = self.inode_inner();
-        let mut file = self.file.lock();
+        let file = self.file.lock();
         let ty = file.get_type();
 
-        let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
-            let path = file.get_path();
-            file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
-            let fsize = file.file_size() as usize;
-            file.file_close().expect("failed to close");
-            if let Some(cache) = self.cache() {
-                let page_cache_end = cache.end();
-                cmp::max(page_cache_end, fsize)
-            } else {
-                fsize
+        let size = match ty {
+            InodeTypes::EXT4_DE_REG_FILE => {
+                let fsize = inner.size();
+                if let Some(cache) = self.cache() {
+                    let page_cache_end = cache.end();
+                    cmp::max(page_cache_end, fsize)
+                } else {
+                    fsize
+                }
             }
-        } else {
-            // DIR size should be 0
-            0
+            InodeTypes::EXT4_DE_DIR => 1000, // TODOs: empty dir size should be 0?
+            _ => 0
         };
-        log::debug!("file size: {}", size);
+        // log::info!("file size: {}", size);
         Kstat {
             st_dev: 0,
             st_ino: inner.ino as u64,
@@ -424,9 +431,7 @@ impl Inode for Ext4Inode {
         let mut file = self.file.lock();
         let ty = file.get_type();
         let size = if ty == InodeTypes::EXT4_DE_REG_FILE {
-            let path = file.get_path();
-            file.file_open(&path.to_str().unwrap(), O_RDONLY).expect("failed to open");
-            let fsize = file.file_size() as usize;
+            let fsize = inner.size();
             file.file_close().expect("failed to close");
             if let Some(cache) = self.cache() {
                 let page_cache_end = cache.end();

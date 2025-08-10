@@ -266,13 +266,12 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     log::debug!("fstatat dirfd {}, at_flags {:?}, oflags {:?}", dirfd, at_flags, o_flags);
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-    log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
-    let inode = dentry.inode();
-    if inode.is_none() {
-        return Err(SysError::ENOENT)
-    }
+    log::info!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
+    let inode = dentry.inode().ok_or(SysError::ENOENT)?;
     // debug_assert!(dentry.is_negative() == false);
-    let stat = inode.unwrap().getattr();
+    inode.clone().access()?;
+    let stat = inode.getattr();
+    log::info!("[sys_fstatat]: {} size {}", dentry.path(), stat.st_size);
     let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
@@ -1346,7 +1345,7 @@ pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, n
     let at_flags = AtFlags::from_bits_truncate(flags);
     let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, at_flags)?;
     let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, at_flags)?;
-    log::debug!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
+    log::info!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
     let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     old_inode.link(&new_dentry.path())?;
     new_dentry.set_inode(old_inode);
@@ -1421,7 +1420,7 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 
     let old_path = user_path_to_string(UserPtrRaw::new(old_path), &mut task.vm_space.lock())?;
     let new_path = user_path_to_string(UserPtrRaw::new(new_path), &mut task.vm_space.lock())?;
-    info!(" rename {} -> {}", old_path, new_path);
+    info!(" rename {} -> {}, using flags {:?}", old_path, new_path, flags);
 
     if flags.contains(RenameFlags::RENAME_EXCHANGE)
             && (flags.contains(RenameFlags::RENAME_NOREPLACE)
@@ -1446,8 +1445,14 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 
     let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     let new_inode = new_dentry.inode();
+    log::info!("old inode size {}", old_inode.getattr().st_size);
     old_inode.rename(&new_dentry.path(), new_inode)?;
-    new_dentry.set_inode(old_inode);
+    new_dentry.set_inode(old_inode.clone());
+    let parent = new_dentry.parent().unwrap();
+    parent.add_child(new_dentry.clone());
+
+    log::info!("old dentry {}, old inode size {}; new dentry {}, new inode size {}", old_dentry.path(), old_inode.getattr().st_size, new_dentry.path(), new_dentry.inode().unwrap().getattr().st_size);
+
     // warning: due to lwext4 unsupport for RENAME_EXCHANGE
     if flags.contains(RenameFlags::RENAME_EXCHANGE) {
         old_dentry.set_inode(new_dentry.inode().unwrap());
