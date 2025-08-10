@@ -279,14 +279,22 @@ impl UdpSocket {
         const PORT_END: u16 = 0xffff;
         static CURR: SpinNoIrqLock<u16> = SpinNoIrqLock::new(PORT_START);
         let mut curr = CURR.lock();
-
-        let port = *curr;
-        if *curr == PORT_END {
-            *curr = PORT_START;
-        } else {
-            *curr += 1;
+        let mut tries = 0;
+        // TODO: more robust
+        while tries <= PORT_END - PORT_START {
+            let port = *curr;
+            if *curr == PORT_END {
+                *curr = PORT_START;
+            } else {
+                *curr += 1;
+            }
+            if LISTEN_TABLE.can_listen(port) {
+                return Ok(port);
+            }
+            tries += 1;
         }
-        Ok(port)
+        log::warn!("no avaliable ports!");
+        Err(SysError::EADDRINUSE)
     }
 
     async fn block_on<F, R>(&self, mut f: F) -> SockResult<R>

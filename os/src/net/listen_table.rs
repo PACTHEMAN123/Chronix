@@ -166,6 +166,8 @@ impl ListenTable {
                 log::info!("TCP socket {}: prepare for connection {} -> {}", handle, src, entry.listen_endpoint);
                 entry.syn_queue.push_back(handle);
             }
+        }else {
+            log::warn!("[ListenTable::incoming_tcp_packet] not listening on port {}", dst.port);
         }
     } 
 

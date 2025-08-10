@@ -1,11 +1,11 @@
 //! Device Manager 
 
-use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{collections::btree_map::BTreeMap, string::ToString, sync::Arc, vec::Vec,vec};
 use fdt::Fdt;
-use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
-use virtio_drivers::transport::Transport;
+use hal::{addr::PhysAddr, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
+use virtio_drivers::transport::{mmio::{MmioTransport, VirtIOHeader}, Transport};
 
-use crate::{drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, processor::processor::PROCESSORS};
+use crate::{devices::DeviceMeta, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::PROCESSORS};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -26,7 +26,9 @@ pub struct DeviceManager {
     /// mapping from device id to device instance
     pub devices: BTreeMap<DevId, Arc<dyn Device>>,
     /// mapping from irq no to device instance
-    pub irq_map: BTreeMap<IrqNo, Arc<dyn Device>>
+    pub irq_map: BTreeMap<IrqNo, Arc<dyn Device>>,
+    /// net device meta
+    pub net_meta: Option<DeviceMeta>,
 }
 
 impl DeviceManager {
@@ -38,6 +40,7 @@ impl DeviceManager {
             mmio: None,
             devices: BTreeMap::new(),
             irq_map: BTreeMap::new(),
+            net_meta: None,
         }
     }
 
@@ -104,13 +107,40 @@ impl DeviceManager {
                 self.devices.insert(dev.dev_id(), dev);
             }
         }
+        for device in mmio.enumerate_devices() {
+            let mmio_ranges = &device.mmio_region;
+            if let Ok(mmio_transport) = device.transport() {
+                match mmio_transport.device_type() {
+                    virtio_drivers::transport::DeviceType::Network => {
+                        log::warn!("find a virtio-net device, use it");
+                        self.net_meta = Some(
+                            DeviceMeta {
+                                dev_id: DevId {
+                                    major: DeviceMajor::Net,
+                                    minor: 0,
+                                },
+                                name: "virtio-blk".to_string(),
+                                need_mapping: false,
+                                mmio_ranges: vec!(mmio_ranges.clone()),
+                                irq_no: None,
+                                dtype: crate::devices::DeviceType::Net,  
+                            }
+                        )
+                    }
+                    _ => continue,
+                }
+                if self.net_meta.is_some() {
+                    break;
+                }
+            }
+        }
         self.mmio = Some(mmio);
 
         // let plic = scan_plic_device(device_tree);
         // if let Some(plic) = plic {
         //     self.plic = Some(plic);
         // }
-        // TODO
+        // TODO 
     }
 
     /// Device Init Stage2: map the mmio region
@@ -233,5 +263,25 @@ impl DeviceManager {
                 return;
             }
         } 
+    }
+
+    pub fn init_net(&self) {
+        if let Some(meta) = self.net_meta.as_ref() {
+            let addr_range = &meta.mmio_ranges[0];
+            let paddr = addr_range.start;
+            let vaddr = paddr | Constant::KERNEL_ADDR_SPACE.start;
+            let size = addr_range.clone().count();
+            let header = core::ptr::NonNull::new(vaddr as *mut VirtIOHeader).unwrap();
+            let transport = unsafe {
+                MmioTransport::new(header, size)
+            }.unwrap();
+            let _dev = VirtIoNetDevImpl::new(transport).unwrap();
+            log::warn!("use virtio-net device");
+            // init_network(dev, true);
+            init_network(LoopbackDevice::new(),false);
+        }else  {
+            log::warn!("use loopback device");
+            init_network(LoopbackDevice::new(),false);
+        }
     }
 }

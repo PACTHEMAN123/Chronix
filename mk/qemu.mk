@@ -44,13 +44,11 @@ QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x1
 QEMU_ARGS += -device virtio-blk-pci,drive=x1
 endif
 
-ifeq ($(NET_C),y)
 $(info "enable qemu net device")
 QEMU_ARGS += -device virtio-net-device,bus=virtio-mmio-bus.2,netdev=net0\
              -netdev user,id=net0,hostfwd=tcp::5555-:5555,hostfwd=udp::5555-:5555
 QEMU_ARGS += -d guest_errors\
 			 -d unimp
-endif
 
 # device tree
 DT := $(ARCH)-$(BOARD)
