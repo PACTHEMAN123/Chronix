@@ -50,6 +50,7 @@ impl File for TmpFile {
     }
     async fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
+        inode.access()?;
         let size = if inode.cache().is_some() {
             inode.cache_read_at(offset, buf).unwrap()
         } else {
@@ -59,6 +60,7 @@ impl File for TmpFile {
     }
     async fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
+        inode.modified()?;
         let size = if inode.cache().is_some() {
             inode.cache_write_at(offset, buf).unwrap()
         } else {
@@ -68,6 +70,7 @@ impl File for TmpFile {
     }
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
         let inode = self.dentry().unwrap().inode().unwrap();
+        inode.access()?;
         log::info!("[Tmp file] read start from pos {}", self.pos());
         let size = if inode.cache().is_some() {
             inode.cache_read_at(self.pos(), buf).unwrap()
@@ -85,6 +88,7 @@ impl File for TmpFile {
         let pos = self.pos();
         log::debug!("[Tmp file] writing {}, state: {:?}", self.dentry().unwrap().path(), self.dentry().unwrap().state());
         let inode = self.dentry().unwrap().inode().unwrap();
+        inode.modified()?;
         let size = if inode.cache().is_some() {
             inode.cache_write_at(pos, buf).unwrap()
         } else {

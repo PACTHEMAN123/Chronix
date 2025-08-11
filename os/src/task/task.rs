@@ -136,8 +136,12 @@ pub struct TaskControlBlock {
     pub processor_id: AtomicUsize,
     /// the priority of the task
     pub priority: AtomicI32,
-    /// effective user ID
-    pub uid: AtomicI32,
+    pub ruid: AtomicI32,
+    pub euid: AtomicI32,
+    pub suid: AtomicI32,
+    pub rgid: AtomicI32,
+    pub egid: AtomicI32,
+    pub sgid: AtomicI32,
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -239,7 +243,12 @@ impl TaskControlBlock {
         sig_ucontext_ptr: usize,
         cpu_allowed: usize,
         processor_id: usize,
-        uid: i32
+        euid: i32,
+        ruid: i32,
+        suid: i32,
+        rgid: i32,
+        egid: i32,
+        sgid: i32
     );
     generate_state_methods!(
         Ready,
@@ -407,7 +416,12 @@ impl TaskControlBlock {
             cpu_allowed: AtomicUsize::new(15),
             processor_id: AtomicUsize::new(current_processor().id()),
             priority: AtomicI32::new(20),
-            uid: AtomicI32::new(0),
+            suid: AtomicI32::new(0),
+            euid: AtomicI32::new(0),
+            ruid: AtomicI32::new(0),
+            sgid: AtomicI32::new(0),
+            rgid: AtomicI32::new(0),
+            egid: AtomicI32::new(0),
         });
         // info!("in new");
         // task_control_block.get_trap_cx().set_arg_nth(0, user_sp); // set a0 to user_sp
@@ -572,7 +586,12 @@ impl TaskControlBlock {
             cpu_allowed: AtomicUsize::new(15),
             processor_id: AtomicUsize::new(self.processor_id()),
             priority: self.priority(),
-            uid: AtomicI32::new(self.uid())
+            suid: AtomicI32::new(self.suid()),
+            euid: AtomicI32::new(self.euid()),
+            ruid: AtomicI32::new(self.ruid()),
+            sgid: AtomicI32::new(self.sgid()),
+            rgid: AtomicI32::new(self.rgid()),
+            egid: AtomicI32::new(self.egid()),
         });
         // add child except when creating a thread
         if !flag.contains(CloneFlags::THREAD) {

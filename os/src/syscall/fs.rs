@@ -534,8 +534,11 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
         )?;
+    if path == "." {
+        return Err(SysError::EINVAL)
+    }
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
-    let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    let dentry = at_helper(task.clone(), dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
@@ -552,6 +555,17 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     } else if flags != AT_REMOVEDIR && is_dir {
         // return Err(SysError::EPERM);
     }
+
+    // further error check
+    if is_dir {
+        if dentry.path() == task.cwd().path() {
+            return Err(SysError::EINVAL)
+        }
+        if !dentry.children().is_empty() {
+            return Err(SysError::ENOTEMPTY)
+        }
+    }
+
     // should clear inode first to drop inode (flush datas to disk)
     dentry.clear_inode();
     inode.clean_cached();
@@ -1606,4 +1620,18 @@ pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: 
 pub fn sys_umask(_mask: i32) -> SysResult {
     // TODO: implement this
     Ok(0x777)
+}
+
+pub fn sys_fadvise(fd: usize, _offset: usize, _len: usize, advice: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let inode = file.inode().ok_or(SysError::EINVAL)?;
+    match advice {
+        0..=5 => {}
+        _ => return Err(SysError::EINVAL) 
+    }
+    if inode.inode_type() == InodeMode::FIFO {
+        return Err(SysError::ESPIPE);
+    }
+    Ok(0)
 }

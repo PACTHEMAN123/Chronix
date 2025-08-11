@@ -142,7 +142,7 @@
 - [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
 - [ ] copy_file_range01 : no dev
 - [ ] copy_file_range02 : no dev
-- [ ] copy_file_range03
+- [x] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
 - [ ] cpuctl_def_task02
@@ -552,7 +552,7 @@
 - [ ] getcontext01
 - [ ] getcpu01
 - [x] getcwd01
-- [ ] getcwd02 : should support /proc/self/fd
+- [x] getcwd02 : p3
 - [ ] getcwd03 : failed
 - [x] getcwd04 : 压测
 - [ ] getdents01 : some entries not found
@@ -561,11 +561,12 @@
 
 ======== gid & uid ========
 - [ ] getegid01 : /proc/self/status
-- [ ] getegid02 : f
+- [x] getegid02
 - [x] geteuid01
 - [x] geteuid02 : /proc/self/status pass1 failed 1
-- [ ] getgid01 : f
-- [ ] getgid03 : f
+- [x] getgid01
+- [x] getgid03
+
 - [ ] getgroups01: f no summary
 - [ ] getgroups03
 - [ ] gethostbyname_r01:faild
@@ -593,18 +594,14 @@
 - [x] getrandom03
 - [x] getrandom04
 - [x] getrandom05: failed 1:  flag is invalid succeeded
-- [ ] getresgid01: fail no summary 150
-- [ ] getresgid01_16
-- [ ] getresgid02
-- [ ] getresgid02_16
-- [ ] getresgid03
-- [ ] getresgid03_16
-- [ ] getresuid01
-- [ ] getresuid01_16 fail no 148
-- [ ] getresuid02
-- [ ] getresuid02_16
-- [ ] getresuid03
-- [ ] getresuid03_16
+
+- [x] getresgid01 : no sum
+- [ ] getresgid02 : f
+- [x] getresgid03 : no sum
+- [x] getresuid01 : no sum
+- [ ] getresuid02 : f
+- [x] getresuid03 : no sum
+
 - [x] getrlimit01
 - [x] getrlimit02
 - [ ] getrlimit03: all failed
@@ -623,10 +620,10 @@
 - [x] gettid02
 - [x] gettimeofday01: pass2 failed 1
 - [x] gettimeofday02
+
 - [x] getuid01
-- [ ] getuid01_16: skip
 - [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
-- [ ] getuid03_16  skip
+
 - [ ] getxattr01: failed
 - [ ] getxattr02 : no dev
 - [ ] getxattr03 : no dev
@@ -1182,19 +1179,19 @@
 ======= pipe ======
 - [x] pipe01
 - [ ] pipe02 : f
-- [ ] pipe03 : f
+- [x] pipe03
 - [x] pipe04 : no sum
 - [x] pipe05 : no sum
 - [x] pipe06
-- [ ] pipe07 : proc/
+- [x] pipe07
 - [ ] pipe08 : f
 - [x] pipe09 : no sum 
 - [x] pipe10
 - [x] pipe11 : 70 pass!
 - [ ] pipe12 : ioctl p 1 f 1 b 1
-- [ ] pipe13 : /proc
+- [ ] pipe13 : /proc/pid/stat
 - [x] pipe14
-- [ ] pipe15 : /proc
+- [ ] pipe15 : /proc/sys/fs/pipe-user-pages-soft
 - [x] pipe2_01 : pass 4 failed 3
 - [ ] pipe2_02 : copy failed
 - [ ] pipe2_04 : tconf
@@ -1205,19 +1202,21 @@
 - [ ] pkey01
 - [ ] pm_get_sched_values
 - [x] poll01
-- [ ] poll02 : /proc
+- [ ] poll02 : /proc/cpuinfo
 
 ======= fadvise =======
 - [x] posix_fadvise01
 - [x] posix_fadvise01_64
-- [ ] posix_fadvise02 : f
-- [ ] posix_fadvise02_64
-- [ ] posix_fadvise03 : p6 f26
-- [ ] posix_fadvise03_64
-- [ ] posix_fadvise04 : f
-- [ ] posix_fadvise04_64
+- [x] posix_fadvise02
+- [x] posix_fadvise02_64
+- [x] posix_fadvise03 : p32
+- [x] posix_fadvise03_64
+- [x] posix_fadvise04 : p6
+- [x] posix_fadvise04_64
 
 - [x] ppoll01 : p 15 f 5: still remains problem :-(
+
+======= prctl ====== (lots of check points!)
 - [x] prctl01 : p1 f1
 - [ ] prctl02 : f
 - [x] prctl03: p2 f3
@@ -1259,7 +1258,7 @@
 - [ ] prot_hsymlinks : abort
 
 ======= pselect ======
-- [ ] pselect01 : /proc
+- [ ] pselect01 : /proc/cpuinfo
 - [ ] pselect01_64
 - [x] pselect02
 - [x] pselect02_64
@@ -1367,9 +1366,9 @@
 - [ ] request_key04
 - [ ] request_key05
 
-- [ ] rmdir01 : f
-- [ ] rmdir02 : f
-- [x] rmdir03 : p1 f1
+- [x] rmdir01
+- [x] rmdir02 : p6 f3
+- [ ] rmdir03 : f2
 
 - [ ] rtc01 : no sum
 - [x] rtc02
@@ -1377,7 +1376,7 @@
 ======== rt sig ========
 - [x] rt_sigaction01 : no sum
 - [x] rt_sigaction02 : no sum
-- [ ] rt_sigaction03 : f
+- [ ] rt_sigaction03 : f no sum
 - [ ] rt_sigprocmask01 : f
 - [ ] rt_sigprocmask02 : f
 - [ ] rt_sigqueueinfo01 : missing syscall
@@ -1418,9 +1417,9 @@
 
 ====== select ======
 - [ ] select01 : mknodat
-- [ ] select02 : /proc
+- [ ] select02 : /proc/cpuinfo
 - [x] select03 : p14 failed 2 b 2 s 24
-- [ ] select04
+- [ ] select04 : stuck
 
 ======= sem ========
 - [ ] sem_comm
@@ -1475,9 +1474,9 @@
 - [ ] setdomainname02: 
 - [ ] setdomainname03
 
+- [x] setegid01 : p4
+- [ ] setegid02 : f1
 
-- [ ] setegid01
-- [ ] setegid02
 - [ ] setfsgid01
 - [ ] setfsgid02
 - [ ] setfsgid03
@@ -1485,9 +1484,11 @@
 - [ ] setfsuid02
 - [ ] setfsuid03
 - [ ] setfsuid04
+
 - [x] setgid01
-- [ ] setgid02： broken
-- [x] setgid03: 1p 1f
+- [ ] setgid02 : f 
+- [x] setgid03 : p2
+
 - [x] setgroups01
 - [x] setgroups02: 2fail
 - [ ] setgroups03
@@ -1513,46 +1514,29 @@
 - [x] setpgrp02
 - [x] setpriority01: 2
 - [x] setpriority02: 2
-- [x] setregid01
-- [ ] setregid01_16
+
+- [x] setregid01 : p5
 - [ ] setregid02: failed 12
-- [ ] setregid02_16
-- [x] setregid03: p 8 failed 14
-- [ ] setregid03_16
-- [x] setregid04: p 5 failed 4
-- [ ] setregid04_16
-- [ ] setresgid01
-- [ ] setresgid01_16
-- [ ] setresgid02
-- [ ] setresgid02_16
-- [ ] setresgid03
-- [ ] setresgid03_16
-- [ ] setresgid04
-- [ ] setresgid04_16: above all broke & failed
-- [ ] setresuid01
-- [ ] setresuid01_16
-- [ ] setresuid02
-- [ ] setresuid02_16
-- [ ] setresuid03
-- [ ] setresuid03_16
+- [x] setregid03: p 16 failed 6
+- [x] setregid04: p 9
+
+- [x] setresgid01 : no sum
+- [x] setresgid02 : p6
+- [ ] setresgid03 : f4
+- [ ] setresgid04 : f
+- [x] setresuid01 : p9
+- [x] setresuid02 : p4
+- [ ] setresuid03 : f3
 - [x] setresuid04: p1 fail 2
-- [ ] setresuid04_16
 - [x] setresuid05: p 1 f 1
-- [ ] setresuid05_16
-- [x] setreuid01
-- [ ] setreuid01_16
-- [ ] setreuid02: f
-- [ ] setreuid02_16
-- [x] setreuid03: 1 b
-- [ ] setreuid03_16
-- [x] setreuid04: 2 fail
-- [ ] setreuid04_16
-- [x] setreuid05: 1 b
-- [ ] setreuid05_16
-- [ ] setreuid06: 3 failed
-- [ ] setreuid06_16
-- [x] setreuid07: 1 p 2 f
-- [ ] setreuid07_16
+
+- [x] setreuid01 : p7
+- [x] setreuid02 : p7
+- [x] setreuid03 : p4 f10
+- [x] setreuid04 : p3
+- [x] setreuid05 : p11 f4
+- [ ] setreuid06 : f3
+- [x] setreuid07 : p1 f2
 
 ====== rlimit ======
 - [ ] setrlimit01 : p2 f2 no sum
@@ -1580,9 +1564,11 @@
 - [x] set_tid_address01 : no sum
 - [x] settimeofday01 : p1 f1
 - [x] settimeofday02 : p2 f1
+
 - [x] setuid01
-- [ ] setuid03 : f
-- [ ] setuid04 : f
+- [ ] setuid03 : f1
+- [ ] setuid04 : f2
+
 - [ ] setxattr01 : no dev
 - [x] setxattr02 : p2 f5
 - [ ] setxattr03 : f
@@ -1845,7 +1831,7 @@
 - [ ] waitid11
 - [x] waitpid01
 - [x] waitpid03
-- [ ] waitpid04 : wrong error code
+- [x] waitpid04 : p3 f1
 - [ ] waitpid06 : loop or stuck, failed the check
 - [ ] waitpid07 : same
 - [ ] waitpid08 : same

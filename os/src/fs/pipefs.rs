@@ -229,7 +229,10 @@ impl File for PipeFile {
     }
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
-        assert!(self.operate == true);
+        // assert!(self.operate == true);
+        if self.operate == false {
+            return Err(SysError::EBADF)
+        }
         let pipe = self.pipe.clone();
         let events = PollEvents::IN;
         let revents = PipeReadFuture::new(pipe.clone(), events).await;
@@ -248,7 +251,10 @@ impl File for PipeFile {
     }
 
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
-        assert!(self.operate == false);
+        // assert!(self.operate == false);
+        if self.operate == true {
+            return Err(SysError::EBADF)
+        }
         let pipe = self.pipe.clone();
         let revents = PipeWriteFuture::new(pipe.clone(), PollEvents::OUT).await;
         if revents.contains(PollEvents::ERR) {

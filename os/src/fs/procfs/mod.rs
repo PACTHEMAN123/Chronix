@@ -1,15 +1,14 @@
 //! proc file system
 
 use alloc::sync::{Arc, Weak};
-use self_::ExeInode;
 
-use crate::fs::{fs::CNXFS, procfs::{interrupt::Interrupts, meminfo::{MemInfo, MEM_INFO}, mounts::{list_mounts, MountInfo}, sys::kernel::PidMax}, tmpfs::{dentry::TmpDentry, inode::{InodeContent, TmpInode, TmpSysInode}}, vfs::{inode::InodeMode, Inode}, SuperBlock};
+use crate::fs::{fs::CNXFS, procfs::{interrupt::Interrupts, meminfo::{MemInfo, MEM_INFO}, mounts::{list_mounts, MountInfo}, selfdir::{exe::ExeInode, fd::FdDentry}, sys::kernel::PidMax}, tmpfs::{dentry::TmpDentry, inode::{InodeContent, TmpInode, TmpSysInode}}, vfs::{inode::InodeMode, Inode}, SuperBlock};
 
 use super::vfs::{Dentry, DCACHE};
 
 pub mod fstype;
 pub mod superblock;
-pub mod self_;
+pub mod selfdir;
 pub mod mounts;
 pub mod meminfo;
 pub mod sys;
@@ -28,6 +27,13 @@ pub fn init_procfs(root_dentry: Arc<dyn Dentry>) {
     exe_dentry.set_inode(exe_inode);
     self_dentry.add_child(exe_dentry.clone());
     DCACHE.lock().insert(exe_dentry.path(), exe_dentry.clone());
+
+    // touch /proc/self/fd
+    let fd_dentry = FdDentry::new("fd", Some(root_dentry.clone()));
+    let fd_dir_inode = TmpInode::new(sb.clone().unwrap(), InodeMode::DIR);
+    fd_dentry.set_inode(fd_dir_inode);
+    self_dentry.add_child(fd_dentry);
+
 
     // touch /proc/meminfo
     CNXFS::create_sys_file(Arc::new(MemInfo::new()), "meminfo", root_dentry.clone());
