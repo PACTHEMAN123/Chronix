@@ -326,7 +326,7 @@ pub fn sys_fchdir(fd: usize) -> SysResult {
 }
 
 
-const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
+pub const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
 /// pipe() creates a pipe, a unidirectional data channel 
 /// that can be used for interprocess communication. 
 /// The array pipefd is used to return two file descriptors 
@@ -373,7 +373,22 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
 
 /// syscall statfs
 /// TODO
-pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
+pub fn sys_statfs(path: usize, buf_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let path = user_path_to_string(
+        UserPtrRaw::new(path as *const u8),
+        &mut task.get_vm_space().lock()
+    )?;
+    let dentry = global_find_dentry(&path)?;
+    if dentry.path() != path {
+        return Err(SysError::ENOTDIR)
+    }
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT)
+    }
+    let buf_ptr = UserPtrRaw::new(buf_ptr as *mut StatFs)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
     let info = StatFs {
         f_type: 0x2011BAB0 as i64,
         f_bsize: BLOCK_SIZE as i64,
@@ -388,10 +403,7 @@ pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
         f_flags: 1 << 1 as i64,
         f_spare: [0; 4],
     };
-    unsafe {
-        Instruction::set_sum();
-        (buf as *mut StatFs).write(info);
-    }
+    buf_ptr.write(info);
     Ok(0)
 }
 
@@ -835,7 +847,6 @@ pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
 #[repr(isize)]
 pub enum FcntlOp {
     F_DUPFD = 0,
-    F_DUPFD_CLOEXEC = 1030,
     F_GETFD = 1,
     F_SETFD = 2,
     F_GETFL = 3,
@@ -853,6 +864,9 @@ pub enum FcntlOp {
     F_SETOWN_EX = 15,
     F_GETOWN_EX	= 16,
     F_GETOWNER_UIDS	= 17,
+    F_DUPFD_CLOEXEC = 1030,
+    F_SETPIPE_SZ = 1031,
+    F_GETPIPE_SZ = 1032,
     #[default]
     F_UNIMPL,
 }

@@ -38,5 +38,10 @@ pub const CLOCK_REALTIME_COARSE: usize = 5;
 /// Use when you need very fast, but not fine-grained timestamps.
 pub const CLOCK_MONOTONIC_COARSE: usize = 6;
 
+/// A nonsettable system-wide clock that is identical to
+/// CLOCK_MONOTONIC, except that it also includes any time that
+/// the system is suspended.
+pub const CLOCK_BOOTTIME: usize = 7;
+
 /// global clocks
 pub static mut CLOCK_DEVIATION: [Duration; SUPPORT_CLOCK_NUM] = [Duration::ZERO; SUPPORT_CLOCK_NUM];
