@@ -112,7 +112,120 @@ pub fn sys_gettid() -> SysResult {
 pub fn sys_setuid(uid: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     log::warn!("task {} set its uid to {}", task.tid(), uid);
-    task.set_uid(uid);
+    task.set_euid(uid);
+    task.set_suid(uid);
+    task.set_ruid(uid);
+    Ok(0)
+}
+
+pub fn sys_setgid(gid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    task.set_rgid(gid);
+    task.set_egid(gid);
+    task.set_sgid(gid);
+    Ok(0)
+}
+
+pub fn sys_setresgid(rgid: i32, egid: i32, sgid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    if rgid != -1 {
+        task.set_rgid(rgid);
+    }
+    if egid != -1 {
+        task.set_egid(egid);
+    }
+    if sgid != -1 {
+        task.set_sgid(sgid);
+    }
+    Ok(0)
+}
+
+pub fn sys_setregid(rgid: i32, egid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let old_rgid = task.rgid();
+    let old_egid = task.egid();
+    if rgid != -1 {
+        task.set_rgid(rgid);
+    }
+    if egid != -1 {
+        task.set_egid(egid);
+    }
+    if rgid != -1 || (egid != -1 && egid != old_rgid) {
+        if egid == -1 {
+            task.set_sgid(old_egid);
+        } else {
+            task.set_sgid(egid);
+        }
+    }
+    Ok(0)
+}
+
+
+pub fn sys_setresuid(ruid: i32, euid: i32, suid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    if ruid != -1 {
+        task.set_ruid(ruid);
+    }
+    if euid != -1 {
+        task.set_euid(euid);
+    }
+    if suid != -1 {
+        task.set_suid(suid);
+    }
+    Ok(0)
+}
+
+pub fn sys_setreuid(ruid: i32, euid: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let old_ruid = task.ruid();
+    let old_euid = task.euid();
+    if ruid != -1 {
+        task.set_ruid(ruid);
+    }
+    if euid != -1 {
+        task.set_euid(euid);
+    }
+    if ruid != -1 || (euid != -1 && euid != old_ruid) {
+        if euid == -1 {
+            task.set_suid(old_euid);
+        } else {
+            task.set_suid(euid);
+        }
+    }
+    Ok(0)
+}
+
+pub fn sys_getresuid(ruid_ptr: usize, euid_ptr: usize, suid_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let ruid_ptr = UserPtrRaw::new(ruid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    ruid_ptr.write(task.ruid());
+    let euid_ptr = UserPtrRaw::new(euid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    euid_ptr.write(task.euid());
+    let suid_ptr = UserPtrRaw::new(suid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    suid_ptr.write(task.suid());
+    Ok(0)
+}
+
+pub fn sys_getresgid(rgid_ptr: usize, egid_ptr: usize, sgid_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let rgid_ptr = UserPtrRaw::new(rgid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    rgid_ptr.write(task.rgid());
+    let egid_ptr = UserPtrRaw::new(egid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    egid_ptr.write(task.egid());
+    let sgid_ptr = UserPtrRaw::new(sgid_ptr as *mut i32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    sgid_ptr.write(task.sgid());
     Ok(0)
 }
 
@@ -561,21 +674,29 @@ pub fn sys_exit_group(exit_code: i32) -> SysResult {
 /// These functions are always successful and never modify errno.
 /// todo
 pub fn sys_getuid() -> SysResult {
-    Ok(0)
+    let task = current_task().unwrap().clone();
+    Ok(task.ruid() as isize)
 }
 
 /// syscall: geteuid
 /// returns the effective user ID of the calling process.
 /// todo
 pub fn sys_geteuid() -> SysResult {
-    Ok(0)
+    let task = current_task().unwrap().clone();
+    Ok(task.euid() as isize)
+}
+
+pub fn sys_getgid() -> SysResult {
+    let task = current_task().unwrap().clone();
+    Ok(task.rgid() as isize)
 }
 
 /// syscall: getegid
 /// getegid() returns the effective group ID of the calling process.
 /// todo
 pub fn sys_getegid() -> SysResult {
-    Ok(0)
+    let task = current_task().unwrap().clone();
+    Ok(task.egid() as isize)
 }
 
 ///

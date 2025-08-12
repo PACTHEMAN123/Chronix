@@ -33,5 +33,19 @@ impl InodeContent for PidMax {
     }
 }
 
+pub struct Tainted;
+
+impl Tainted {
+    pub const fn new() -> Self { Self {} }
+}
+
+impl InodeContent for Tainted {
+    fn serialize(&self) -> alloc::string::String {
+        "0".to_string()
+    }
+}
+
+
+
 
 

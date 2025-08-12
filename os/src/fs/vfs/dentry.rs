@@ -311,12 +311,12 @@ pub static DCACHE: SpinNoIrqLock<BTreeMap<String, Arc<dyn Dentry>>> =
 /// if not found, search from root
 pub fn global_find_dentry(path: &str) -> Result<Arc<dyn Dentry>, SysError> {
     log::debug!("global find dentry: {}", path);
-    {
-        let cache = DCACHE.lock();
-        if let Some(dentry) = cache.get(path) {
-            return Ok(dentry.clone());
-        }
-    }
+    // {
+    //     let cache = DCACHE.lock();
+    //     if let Some(dentry) = cache.get(path) {
+    //         return Ok(dentry.clone());
+    //     }
+    // }
     // get the root dentry
     let root_dentry = {
         let dcache = DCACHE.lock();

@@ -25,7 +25,7 @@ kernel-rv-test: setup
 	make -f Makefile.sub kernel-bin ARCH=riscv64 AUTOTEST=y
 	cp ./target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
 
-PHONY_TARGET += kernel-la
+PHONY_TARGET += kernel-la-test
 kernel-la-test: setup
 	make -f Makefile.sub kernel ARCH=loongarch64 AUTOTEST=y
 	cp ./target/loongarch64-unknown-none/release/os ./kernel-la

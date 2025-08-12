@@ -266,13 +266,12 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     log::debug!("fstatat dirfd {}, at_flags {:?}, oflags {:?}", dirfd, at_flags, o_flags);
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
-    log::debug!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
-    let inode = dentry.inode();
-    if inode.is_none() {
-        return Err(SysError::ENOENT)
-    }
+    log::info!("fstatat dirfd {}, path {}, at_flags {:?}, oflags {:?}", dirfd, dentry.path(), at_flags, o_flags);
+    let inode = dentry.inode().ok_or(SysError::ENOENT)?;
     // debug_assert!(dentry.is_negative() == false);
-    let stat = inode.unwrap().getattr();
+    inode.clone().access()?;
+    let stat = inode.getattr();
+    log::info!("[sys_fstatat]: {} size {}", dentry.path(), stat.st_size);
     let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
@@ -327,7 +326,7 @@ pub fn sys_fchdir(fd: usize) -> SysResult {
 }
 
 
-const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
+pub const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
 /// pipe() creates a pipe, a unidirectional data channel 
 /// that can be used for interprocess communication. 
 /// The array pipefd is used to return two file descriptors 
@@ -374,7 +373,22 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
 
 /// syscall statfs
 /// TODO
-pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
+pub fn sys_statfs(path: usize, buf_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let path = user_path_to_string(
+        UserPtrRaw::new(path as *const u8),
+        &mut task.get_vm_space().lock()
+    )?;
+    let dentry = global_find_dentry(&path)?;
+    if dentry.path() != path {
+        return Err(SysError::ENOTDIR)
+    }
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT)
+    }
+    let buf_ptr = UserPtrRaw::new(buf_ptr as *mut StatFs)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
     let info = StatFs {
         f_type: 0x2011BAB0 as i64,
         f_bsize: BLOCK_SIZE as i64,
@@ -389,10 +403,7 @@ pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
         f_flags: 1 << 1 as i64,
         f_spare: [0; 4],
     };
-    unsafe {
-        Instruction::set_sum();
-        (buf as *mut StatFs).write(info);
-    }
+    buf_ptr.write(info);
     Ok(0)
 }
 
@@ -535,8 +546,11 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
         )?;
+    if path == "." {
+        return Err(SysError::EINVAL)
+    }
     log::info!("[sys_unlinkat]: task {} unlink {}", task.tid(), path);
-    let dentry = at_helper(task, dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
+    let dentry = at_helper(task.clone(), dirfd, pathname, AtFlags::AT_SYMLINK_NOFOLLOW)?;
     if dentry.parent().is_none() {
         warn!("cannot unlink root!");
         return Err(SysError::ENOENT);
@@ -553,6 +567,17 @@ pub fn sys_unlinkat(dirfd: isize, pathname: *const u8, flags: i32) -> SysResult 
     } else if flags != AT_REMOVEDIR && is_dir {
         // return Err(SysError::EPERM);
     }
+
+    // further error check
+    if is_dir {
+        if dentry.path() == task.cwd().path() {
+            return Err(SysError::EINVAL)
+        }
+        if !dentry.children().is_empty() {
+            return Err(SysError::ENOTEMPTY)
+        }
+    }
+
     // should clear inode first to drop inode (flush datas to disk)
     dentry.clear_inode();
     inode.clean_cached();
@@ -822,7 +847,6 @@ pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
 #[repr(isize)]
 pub enum FcntlOp {
     F_DUPFD = 0,
-    F_DUPFD_CLOEXEC = 1030,
     F_GETFD = 1,
     F_SETFD = 2,
     F_GETFL = 3,
@@ -840,6 +864,9 @@ pub enum FcntlOp {
     F_SETOWN_EX = 15,
     F_GETOWN_EX	= 16,
     F_GETOWNER_UIDS	= 17,
+    F_DUPFD_CLOEXEC = 1030,
+    F_SETPIPE_SZ = 1031,
+    F_GETPIPE_SZ = 1032,
     #[default]
     F_UNIMPL,
 }
@@ -1346,7 +1373,7 @@ pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, n
     let at_flags = AtFlags::from_bits_truncate(flags);
     let old_dentry = at_helper(task.clone(), old_dirfd, old_pathname, at_flags)?;
     let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, at_flags)?;
-    log::debug!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
+    log::info!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
     let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     old_inode.link(&new_dentry.path())?;
     new_dentry.set_inode(old_inode);
@@ -1421,7 +1448,7 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 
     let old_path = user_path_to_string(UserPtrRaw::new(old_path), &mut task.vm_space.lock())?;
     let new_path = user_path_to_string(UserPtrRaw::new(new_path), &mut task.vm_space.lock())?;
-    info!(" rename {} -> {}", old_path, new_path);
+    info!(" rename {} -> {}, using flags {:?}", old_path, new_path, flags);
 
     if flags.contains(RenameFlags::RENAME_EXCHANGE)
             && (flags.contains(RenameFlags::RENAME_NOREPLACE)
@@ -1446,8 +1473,14 @@ pub fn sys_renameat2(old_dirfd: isize, old_path: *const u8, new_dirfd: isize, ne
 
     let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
     let new_inode = new_dentry.inode();
+    log::info!("old inode size {}", old_inode.getattr().st_size);
     old_inode.rename(&new_dentry.path(), new_inode)?;
-    new_dentry.set_inode(old_inode);
+    new_dentry.set_inode(old_inode.clone());
+    let parent = new_dentry.parent().unwrap();
+    parent.add_child(new_dentry.clone());
+
+    log::info!("old dentry {}, old inode size {}; new dentry {}, new inode size {}", old_dentry.path(), old_inode.getattr().st_size, new_dentry.path(), new_dentry.inode().unwrap().getattr().st_size);
+
     // warning: due to lwext4 unsupport for RENAME_EXCHANGE
     if flags.contains(RenameFlags::RENAME_EXCHANGE) {
         old_dentry.set_inode(new_dentry.inode().unwrap());
@@ -1601,4 +1634,18 @@ pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: 
 pub fn sys_umask(_mask: i32) -> SysResult {
     // TODO: implement this
     Ok(0x777)
+}
+
+pub fn sys_fadvise(fd: usize, _offset: usize, _len: usize, advice: i32) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let inode = file.inode().ok_or(SysError::EINVAL)?;
+    match advice {
+        0..=5 => {}
+        _ => return Err(SysError::EINVAL) 
+    }
+    if inode.inode_type() == InodeMode::FIFO {
+        return Err(SysError::ESPIPE);
+    }
+    Ok(0)
 }

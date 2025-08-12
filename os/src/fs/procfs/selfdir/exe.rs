@@ -1,9 +1,6 @@
-//! /proc/self
-
 use alloc::{string::String, sync::{Arc, Weak}};
 
-use crate::{fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError, task::current_task};
-
+use crate::{fs::{vfs::{inode::InodeMode, Inode, InodeInner}, Kstat, StatxTimestamp, SuperBlock, Xstat, XstatMask}, syscall::SysError, task::current_task};
 
 /// exe inode
 pub struct ExeInode {

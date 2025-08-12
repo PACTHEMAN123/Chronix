@@ -113,9 +113,9 @@
 - [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
 - [x] clock_gettime02: 
 - [ ] clock_gettime03: TBROK: Cannot parse kernel .config
-- [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
+- [x] clock_gettime04 : p6
 - [x] clock_nanosleep01: passed 8 failed 2 skipped 2 
-- [ ] clock_nanosleep02: TBROK: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
+- [x] clock_nanosleep02: stress, p1 f6
 - [ ] clock_nanosleep03: .config not exist
 - [x] clock_nanosleep04: pass 4 failed 4
 - [x] clock_settime01: all pass
@@ -139,10 +139,10 @@
 - [ ] close_range02：TCONF
 - [x] confstr01
 - [ ] connect01: no_summary
-- [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
+- [ ] connect02: f
 - [ ] copy_file_range01 : no dev
 - [ ] copy_file_range02 : no dev
-- [ ] copy_file_range03
+- [x] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
 - [ ] cpuctl_def_task02
@@ -390,8 +390,8 @@
 - [ ] fcntl27_64: flock
 - [x] fcntl29
 - [x] fcntl29_64
-- [ ] fcntl30: /proc/sys/fs/pipe-max-size
-- [ ] fcntl30_64: /proc/sys/fs/pipe-max-size
+- [x] fcntl30 : p3 f1
+- [x] fcntl30_64 : p3 f1
 - [ ] fcntl31: missing fcntlop
 - [ ] fcntl31_64
 - [ ] fcntl32: missing fcntlop
@@ -404,8 +404,8 @@
 - [ ] fcntl35_64
 - [x] fcntl36
 - [x] fcntl36_64
-- [ ] fcntl37: /proc/sys/fs/pipe-max-size
-- [ ] fcntl37_64
+- [ ] fcntl37 : f3
+- [ ] fcntl37_64 : f3
 - [ ] fcntl38: Cannot parse kernel .config
 - [ ] fcntl38_64
 - [ ] fcntl39: Cannot parse kernel .config
@@ -477,7 +477,7 @@
 - [x] fstatfs02_64
 - [ ] fsx-linux : not support tmp file truncate
 - [ ] fsync01 : no dev
-- [ ] fsync02 : /proc/cpuinfo
+- [x] fsync02
 - [ ] fsync03 : no mknod
 - [ ] fsync04 : no dev
 - [ ] ftest01 : failed, no sum
@@ -502,7 +502,7 @@
 - [ ] futex_wait02: 卡住
 - [ ] futex_wait03: /proc/pid/stat
 - [x] futex_wait04
-- [ ] futex_wait05: /proc/cpuinfo
+- [x] futex_wait05: stress, p1 f6
 - [ ] futex_wait_bitset01
 - [ ] futex_waitv01
 - [ ] futex_waitv02
@@ -550,9 +550,9 @@
 - [ ] geny1
 - [ ] getaddrinfo_01
 - [ ] getcontext01
-- [ ] getcpu01
+- [ ] getcpu01 : f
 - [x] getcwd01
-- [ ] getcwd02 : should support /proc/self/fd
+- [x] getcwd02 : p3
 - [ ] getcwd03 : failed
 - [x] getcwd04 : 压测
 - [ ] getdents01 : some entries not found
@@ -561,11 +561,12 @@
 
 ======== gid & uid ========
 - [ ] getegid01 : /proc/self/status
-- [ ] getegid02 : f
+- [x] getegid02
 - [x] geteuid01
 - [x] geteuid02 : /proc/self/status pass1 failed 1
-- [ ] getgid01 : f
-- [ ] getgid03 : f
+- [x] getgid01
+- [x] getgid03
+
 - [ ] getgroups01: f no summary
 - [ ] getgroups03
 - [ ] gethostbyname_r01:faild
@@ -593,18 +594,14 @@
 - [x] getrandom03
 - [x] getrandom04
 - [x] getrandom05: failed 1:  flag is invalid succeeded
-- [ ] getresgid01: fail no summary 150
-- [ ] getresgid01_16
-- [ ] getresgid02
-- [ ] getresgid02_16
-- [ ] getresgid03
-- [ ] getresgid03_16
-- [ ] getresuid01
-- [ ] getresuid01_16 fail no 148
-- [ ] getresuid02
-- [ ] getresuid02_16
-- [ ] getresuid03
-- [ ] getresuid03_16
+
+- [x] getresgid01 : no sum
+- [ ] getresgid02 : f
+- [x] getresgid03 : no sum
+- [x] getresuid01 : no sum
+- [ ] getresuid02 : f
+- [x] getresuid03 : no sum
+
 - [x] getrlimit01
 - [x] getrlimit02
 - [ ] getrlimit03: all failed
@@ -613,7 +610,7 @@
 - [x] getrusage02: 1skip
 - [ ] getrusage03: Failed to copy
 - [ ] getrusage03_child
-- [ ] getrusage04: cannot open /proc/cpuinfo, not exist
+- [x] getrusage04 : no sum
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
 - [ ] getsid02: no syscall 156
 - [x] getsockname01:pass 5 failed 1  
@@ -623,10 +620,10 @@
 - [x] gettid02
 - [x] gettimeofday01: pass2 failed 1
 - [x] gettimeofday02
+
 - [x] getuid01
-- [ ] getuid01_16: skip
 - [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
-- [ ] getuid03_16  skip
+
 - [ ] getxattr01: failed
 - [ ] getxattr02 : no dev
 - [ ] getxattr03 : no dev
@@ -723,7 +720,7 @@
 
 ======= ioctl =========
 - [ ] ioctl01 : no dev
-- [ ] ioctl02 : f
+- [ ] ioctl02 : b
 - [ ] ioctl03 : tun
 - [ ] ioctl04 : no dev
 - [ ] ioctl05 : no dev
@@ -738,13 +735,13 @@
 - [ ] ioctl_loop05 : no dev
 - [ ] ioctl_loop06 : no dev
 - [ ] ioctl_loop07 : no dev
-- [ ] ioctl_ns01 : /proc
-- [ ] ioctl_ns02 : /proc
-- [ ] ioctl_ns03 : /proc
-- [ ] ioctl_ns04 : /proc
-- [ ] ioctl_ns05 : /proc
-- [ ] ioctl_ns06 : /proc
-- [ ] ioctl_ns07 : /proc
+- [ ] ioctl_ns01 : /proc/ns/pid
+- [ ] ioctl_ns02 : /proc/ns/pid
+- [ ] ioctl_ns03 : /proc/ns/pid
+- [ ] ioctl_ns04 : /proc/ns/pid
+- [ ] ioctl_ns05 : /proc/ns/pid
+- [ ] ioctl_ns06 : /proc/ns/pid
+- [ ] ioctl_ns07 : /proc/ns/pid
 - [ ] ioctl_sg01 : tconf
 - [ ] io_destroy01 : tconf
 - [ ] io_destroy02 : .config
@@ -767,14 +764,14 @@
 - [ ] io_submit03 : tconf
 - [x] io_uring01 : p1 f1
 - [ ] io_uring02 : tconf
-- [ ] kallsyms : /proc
+- [ ] kallsyms : /proc/kallsyms
 - [x] kcmp01 : p4 f1
-- [ ] kcmp02 : /proc
+- [ ] kcmp02 : f6
 - [x] kcmp03 : p3 f1
 
 ====== keyctl ======
 - [ ] keyctl01 : dead loop
-- [ ] keyctl02 : /proc
+- [ ] keyctl02 : /proc/sys/kernel/keys/root_maxkeys
 - [ ] keyctl03
 - [x] keyctl04
 - [ ] keyctl05 : /lib/module
@@ -812,7 +809,7 @@
 - [x] lchown02 : no sum
 - [ ] lchown03 : no dev
 
-- [ ] leapsec01 : syscall 112 we can support
+- [ ] leapsec01 : b
 - [x] lftest
 - [ ] lgetxattr01 : f
 - [ ] lgetxattr02 : f
@@ -844,15 +841,15 @@
 - [ ] lseek11 : seek hole .. we can support
 - [ ] lstat01 : f
 - [ ] lstat01_64 : f
-- [ ] lstat02 : f
-- [ ] lstat02_64 : f
+- [x] lstat02 : p4 f2
+- [x] lstat02_64 : p4 f2
 
 ======= madvise ========
 - [x] madvise01 : p 20
 - [ ] madvise02 : hang
 - [ ] madvise03 : f
 - [x] madvise05
-- [ ] madvise06 : /proc
+- [ ] madvise06 : /proc/self/mounts
 - [ ] madvise07 : f
 - [ ] madvise08 : tconf
 - [ ] madvise09 : tconf
@@ -930,8 +927,8 @@
 - [ ] mlock02 : f
 - [ ] mlock03 : f
 - [x] mlock04
-- [ ] mlock05 : /proc
-- [ ] mlock201 : /proc
+- [ ] mlock05 : /proc/self/smaps
+- [ ] mlock201 : /proc/self/status
 - [ ] mlock202 : f
 - [ ] mlock203 : f
 - [x] mlockall01 : no sum
@@ -943,7 +940,7 @@
 - [x] mmap01 : no sum
 - [x] mmap02 
 - [ ] mmap03 : page fault
-- [ ] mmap04 : /proc
+- [ ] mmap04 : /proc/self/maps
 - [x] mmap05
 - [x] mmap06 : p 2 f 6
 - [x] mmap08 : f
@@ -951,7 +948,7 @@
 - [ ] mmap1 : 压测?
 - [ ] mmap10 : /dev/zero panic
 - [x] mmap11 : no sum
-- [ ] mmap12 : /proc
+- [ ] mmap12 : /proc/self/pagemap
 - [ ] mmap13 : f
 - [ ] mmap14 : f
 - [ ] mmap15 : panic
@@ -1061,7 +1058,7 @@
 
 - [x] munlock01
 - [ ] munlock02 : f
-- [ ] munlockall01 : /proc
+- [ ] munlockall01 : /proc/self/status
 
 - [x] munmap01 : no sum
 - [ ] munmap02 : no sum
@@ -1070,7 +1067,7 @@
 - [x] name_to_handle_at01 : p1 f1
 - [ ] name_to_handle_at02 : f
 
-- [ ] nanosleep01 : /proc
+- [x] nanosleep01 : stress, p1 f6
 - [ ] nanosleep02 : f
 - [x] nanosleep04
 
@@ -1182,19 +1179,19 @@
 ======= pipe ======
 - [x] pipe01
 - [ ] pipe02 : f
-- [ ] pipe03 : f
+- [x] pipe03
 - [x] pipe04 : no sum
 - [x] pipe05 : no sum
 - [x] pipe06
-- [ ] pipe07 : proc/
+- [x] pipe07
 - [ ] pipe08 : f
 - [x] pipe09 : no sum 
 - [x] pipe10
 - [x] pipe11 : 70 pass!
 - [ ] pipe12 : ioctl p 1 f 1 b 1
-- [ ] pipe13 : /proc
+- [ ] pipe13 : /proc/pid/stat
 - [x] pipe14
-- [ ] pipe15 : /proc
+- [ ] pipe15 : /proc/sys/fs/pipe-user-pages-soft
 - [x] pipe2_01 : pass 4 failed 3
 - [ ] pipe2_02 : copy failed
 - [ ] pipe2_04 : tconf
@@ -1205,19 +1202,21 @@
 - [ ] pkey01
 - [ ] pm_get_sched_values
 - [x] poll01
-- [ ] poll02 : /proc
+- [ ] poll02 : stress p1 f6
 
 ======= fadvise =======
 - [x] posix_fadvise01
 - [x] posix_fadvise01_64
-- [ ] posix_fadvise02 : f
-- [ ] posix_fadvise02_64
-- [ ] posix_fadvise03 : p6 f26
-- [ ] posix_fadvise03_64
-- [ ] posix_fadvise04 : f
-- [ ] posix_fadvise04_64
+- [x] posix_fadvise02
+- [x] posix_fadvise02_64
+- [x] posix_fadvise03 : p32
+- [x] posix_fadvise03_64
+- [x] posix_fadvise04 : p6
+- [x] posix_fadvise04_64
 
 - [x] ppoll01 : p 15 f 5: still remains problem :-(
+
+======= prctl ====== (lots of check points!)
 - [x] prctl01 : p1 f1
 - [ ] prctl02 : f
 - [x] prctl03: p2 f3
@@ -1259,8 +1258,8 @@
 - [ ] prot_hsymlinks : abort
 
 ======= pselect ======
-- [ ] pselect01 : /proc
-- [ ] pselect01_64
+- [x] pselect01 : p1 f6
+- [x] pselect01_64
 - [x] pselect02
 - [x] pselect02_64
 - [x] pselect03
@@ -1367,9 +1366,9 @@
 - [ ] request_key04
 - [ ] request_key05
 
-- [ ] rmdir01 : f
-- [ ] rmdir02 : f
-- [x] rmdir03 : p1 f1
+- [x] rmdir01
+- [x] rmdir02 : p6 f3
+- [ ] rmdir03 : f2
 
 - [ ] rtc01 : no sum
 - [x] rtc02
@@ -1377,7 +1376,7 @@
 ======== rt sig ========
 - [x] rt_sigaction01 : no sum
 - [x] rt_sigaction02 : no sum
-- [ ] rt_sigaction03 : f
+- [ ] rt_sigaction03 : f no sum
 - [ ] rt_sigprocmask01 : f
 - [ ] rt_sigprocmask02 : f
 - [ ] rt_sigqueueinfo01 : missing syscall
@@ -1418,9 +1417,9 @@
 
 ====== select ======
 - [ ] select01 : mknodat
-- [ ] select02 : /proc
+- [x] select02 : stress p4 f10
 - [x] select03 : p14 failed 2 b 2 s 24
-- [ ] select04
+- [ ] select04 : stuck
 
 ======= sem ========
 - [ ] sem_comm
@@ -1475,9 +1474,9 @@
 - [ ] setdomainname02: 
 - [ ] setdomainname03
 
+- [x] setegid01 : p4
+- [ ] setegid02 : f1
 
-- [ ] setegid01
-- [ ] setegid02
 - [ ] setfsgid01
 - [ ] setfsgid02
 - [ ] setfsgid03
@@ -1485,9 +1484,11 @@
 - [ ] setfsuid02
 - [ ] setfsuid03
 - [ ] setfsuid04
+
 - [x] setgid01
-- [ ] setgid02： broken
-- [x] setgid03: 1p 1f
+- [ ] setgid02 : f 
+- [x] setgid03 : p2
+
 - [x] setgroups01
 - [x] setgroups02: 2fail
 - [ ] setgroups03
@@ -1513,46 +1514,29 @@
 - [x] setpgrp02
 - [x] setpriority01: 2
 - [x] setpriority02: 2
-- [x] setregid01
-- [ ] setregid01_16
+
+- [x] setregid01 : p5
 - [ ] setregid02: failed 12
-- [ ] setregid02_16
-- [x] setregid03: p 8 failed 14
-- [ ] setregid03_16
-- [x] setregid04: p 5 failed 4
-- [ ] setregid04_16
-- [ ] setresgid01
-- [ ] setresgid01_16
-- [ ] setresgid02
-- [ ] setresgid02_16
-- [ ] setresgid03
-- [ ] setresgid03_16
-- [ ] setresgid04
-- [ ] setresgid04_16: above all broke & failed
-- [ ] setresuid01
-- [ ] setresuid01_16
-- [ ] setresuid02
-- [ ] setresuid02_16
-- [ ] setresuid03
-- [ ] setresuid03_16
+- [x] setregid03: p 16 failed 6
+- [x] setregid04: p 9
+
+- [x] setresgid01 : no sum
+- [x] setresgid02 : p6
+- [ ] setresgid03 : f4
+- [ ] setresgid04 : f
+- [x] setresuid01 : p9
+- [x] setresuid02 : p4
+- [ ] setresuid03 : f3
 - [x] setresuid04: p1 fail 2
-- [ ] setresuid04_16
 - [x] setresuid05: p 1 f 1
-- [ ] setresuid05_16
-- [x] setreuid01
-- [ ] setreuid01_16
-- [ ] setreuid02: f
-- [ ] setreuid02_16
-- [x] setreuid03: 1 b
-- [ ] setreuid03_16
-- [x] setreuid04: 2 fail
-- [ ] setreuid04_16
-- [x] setreuid05: 1 b
-- [ ] setreuid05_16
-- [ ] setreuid06: 3 failed
-- [ ] setreuid06_16
-- [x] setreuid07: 1 p 2 f
-- [ ] setreuid07_16
+
+- [x] setreuid01 : p7
+- [x] setreuid02 : p7
+- [x] setreuid03 : p4 f10
+- [x] setreuid04 : p3
+- [x] setreuid05 : p11 f4
+- [ ] setreuid06 : f3
+- [x] setreuid07 : p1 f2
 
 ====== rlimit ======
 - [ ] setrlimit01 : p2 f2 no sum
@@ -1580,9 +1564,11 @@
 - [x] set_tid_address01 : no sum
 - [x] settimeofday01 : p1 f1
 - [x] settimeofday02 : p2 f1
+
 - [x] setuid01
-- [ ] setuid03 : f
-- [ ] setuid04 : f
+- [ ] setuid03 : f1
+- [ ] setuid04 : f2
+
 - [ ] setxattr01 : no dev
 - [x] setxattr02 : p2 f5
 - [ ] setxattr03 : f
@@ -1629,11 +1615,11 @@
 - [x] sigaltstack01 : no sum
 - [x] sigaltstack02 : no sum
 - [ ] sighold02 : f
-- [ ] signal01 : /proc/...
-- [x] signal02 : pass 1 failed 2 (long syscall?)
-- [x] signal03
-- [x] signal04
-- [x] signal05
+- [x] signal01 : p3 b1 /proc/pid/stat
+- [x] signal02 : p3
+- [x] signal03 : p31
+- [x] signal04 : p28
+- [x] signal05 : p31
 - [ ] signalfd01 : syscall 74
 - [ ] signalfd4_01 : we can support this
 - [ ] signalfd4_02 : we can support this
@@ -1644,8 +1630,8 @@
 - [ ] sigtimedwait01 : panic
 - [x] sigwait01
 - [ ] sigwaitinfo01 : panic
-- [ ] snd_seq01 : /proc/sys
-- [ ] snd_timer01 : /proc/sys
+- [ ] snd_seq01 : /dev/snd/seq
+- [ ] snd_timer01 : /dev/snd/timer
 
 ======= socket ======= (not tested)
 - [x] socket01 : pass 6 failed 2
@@ -1681,12 +1667,12 @@
 - [x] stat03_64 : p4 f2
 - [ ] statfs01 : dev
 - [ ] statfs01_64 : no dev
-- [ ] statfs02 : f
-- [ ] statfs02_64 : f
+- [x] statfs02 : p4 f2
+- [x] statfs02_64 : p4 f2
 - [ ] statfs03 : f
 - [ ] statfs03_64 : f
 - [ ] statvfs01 : no dev
-- [ ] statvfs02 : f
+- [x] statvfs02 : p3 f2
 - [x] statx01 : pass 6 failed 2
 - [x] statx02
 - [x] statx03 : pass 5 failed 2 :似乎连着跑会寄
@@ -1748,7 +1734,7 @@
 - [ ] timerfd_create01 : 85
 - [ ] timerfd_gettime01 : 85
 - [ ] timerfd_settime01 : 85
-- [ ] timerfd_settime02 : /proc/sys/kernel/tainted
+- [ ] timerfd_settime02 : 85
 - [ ] timer_getoverrun01 : 107
 - [ ] timer_gettime01 : 107
 - [ ] timer_settime01 : 107
@@ -1831,7 +1817,7 @@
 - [x] wait02
 - [x] wait401 : pass 2 failed 1
 - [x] wait402
-- [ ] wait403 : /proc/...
+- [ ] wait403 : f
 - [ ] waitid01
 - [ ] waitid02
 - [ ] waitid03
@@ -1845,7 +1831,7 @@
 - [ ] waitid11
 - [x] waitpid01
 - [x] waitpid03
-- [ ] waitpid04 : wrong error code
+- [x] waitpid04 : p3 f1
 - [ ] waitpid06 : loop or stuck, failed the check
 - [ ] waitpid07 : same
 - [ ] waitpid08 : same
