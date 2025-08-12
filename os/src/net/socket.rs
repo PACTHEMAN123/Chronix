@@ -3,8 +3,8 @@ use core::{sync::atomic::{self, AtomicBool, AtomicU32, AtomicUsize, Ordering}, t
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use fatfs::info;
-use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint}};
-use crate::{fs::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, OpenFlags}, net::{addr::ZERO_IPV4_ENDPOINT, crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, socketpair::{SocketPairConnection, SocketPairInternal}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
+use smoltcp::{socket::udp, wire::{IpAddress, IpEndpoint, IpListenEndpoint, IpProtocol}};
+use crate::{fs::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, OpenFlags}, net::{addr::ZERO_IPV4_ENDPOINT, crypto::{encode_raw, AlgInstance, AlgType, SockAddrAlg}, raw::RawSocket, socketpair::{SocketPairConnection, SocketPairInternal}, LOCAL_IPS}, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::sys_error::SysError, task::current_task, timer::ffi::TimeSpec};
 use crate::syscall::net::SocketType;
 use super::{addr::{SockAddr, SockAddrIn4, ZERO_IPV4_ADDR}, poll_interfaces, tcp::TcpSocket, udp::UdpSocket, SaFamily, UnixSocket};
 pub type SockResult<T> = Result<T, SysError>;
@@ -24,6 +24,7 @@ pub enum Sock {
     UDP(UdpSocket),
     Unix(UnixSocket),
     SocketPair(SocketPairConnection),
+    Raw(RawSocket),
 }
 impl Sock {
     /// connect method for socket connect to remote socket, for user socket
@@ -124,6 +125,7 @@ impl Sock {
                     None => udp_socket.send(data).await,
                 }
             },
+            Sock::Raw(raw) => raw.send(data, remote_addr).await,
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
             Sock::SocketPair(socket_pair) => socket_pair.send(data).await,
         }
@@ -138,6 +140,7 @@ impl Sock {
                 let res = pair.recv(data).await?;
                 Ok((res, ZERO_IPV4_ENDPOINT))
             },
+            Sock::Raw(raw) => raw.recv(data).await.map(|len|(len,ZERO_IPV4_ENDPOINT)),
         }
     }
     /// shutdown a connection
@@ -147,6 +150,7 @@ impl Sock {
             Sock::UDP(udp_socket) => udp_socket.shutdown(),
             Sock::Unix(_) =>  Err(SysError::EAFNOSUPPORT),
             Sock::SocketPair(pair) => Ok(pair.close()),
+            Sock::Raw(raw) => raw.shutdown(),
         }
     }
     /// poll the socket for events
@@ -219,12 +223,13 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(domain: SaFamily, sk_type: SocketType, non_block: bool) -> Self {
+    pub fn new(domain: SaFamily, sk_type: SocketType, non_block: bool, protocol: u8) -> Self {
         let sk = match domain {
             SaFamily::AfInet | SaFamily::AfInet6 => {
                 match sk_type {
                     SocketType::STREAM => Sock::TCP(TcpSocket::new_v4_without_handle()),
                     SocketType::DGRAM => Sock::UDP(UdpSocket::new()),
+                    SocketType::RAW => Sock::Raw(RawSocket::new(protocol.into())),
                     _ => Sock::TCP(TcpSocket::new_v4_without_handle()),
                 }
             },
@@ -481,7 +486,8 @@ impl Dentry for SocketDentry {
                 Socket::new(
                     SaFamily::AfUnix, 
                     SocketType::RAW, 
-                    false
+                    false,
+                    1
                 )
             )
         )
