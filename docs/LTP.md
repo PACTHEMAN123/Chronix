@@ -1640,7 +1640,7 @@
 - [ ] snd_timer01 : /dev/snd/timer
 
 ======= socket ======= (not tested)
-- [x] socket01 : pass 6 failed 2
+- [x] socket01 
 - [x] socket02: pass 4
 - [ ] socketcall01 : 32位系统调用
 - [ ] socketcall02
