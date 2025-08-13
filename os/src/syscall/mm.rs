@@ -368,7 +368,7 @@ pub fn sys_process_vm_readv(
     let caller_vec: &[IoVec] = lvec_slice_raw.to_ref();
     let target_vec: &[IoVec] = rvec_slice_raw.to_ref();
     
-    // 预先检查所有内存区域的有效性，确保原子性
+    
     for iov in caller_vec.iter() {
         if iov.len > 0 {
             let _ = UserSliceRaw::new(iov.base as *mut u8, iov.len)
@@ -386,8 +386,8 @@ pub fn sys_process_vm_readv(
 
     let mut caller_idx = 0;
     let mut target_idx = 0;
-    let mut caller_offset: usize = 0; // 类型修正为 usize
-    let mut target_offset: usize = 0; // 类型修正为 usize
+    let mut caller_offset: usize = 0; 
+    let mut target_offset: usize = 0; 
 
     while caller_idx < liovcnt && target_idx < riovcnt {
         let current_caller_iov = &caller_vec[caller_idx];
@@ -438,7 +438,6 @@ fn copy_from_userspace_unsafe(target: &Arc<TaskControlBlock>, caller: &Arc<TaskC
         let target_page_offset = target_va.page_offset();
         let caller_page_offset = caller_va.page_offset();
 
-        // find_pte(vpn) 是一种常见实现，而不是 find_pte(va)
         let (target_pte, _) = target_page_table.find_pte(target_va.floor()).ok_or(SysError::EFAULT)?;
         if !target_pte.is_valid() {
             return Err(SysError::EFAULT);
@@ -461,8 +460,8 @@ fn copy_from_userspace_unsafe(target: &Arc<TaskControlBlock>, caller: &Arc<TaskC
         let target_phys_addr = target_ppn.0 << 12;
         let caller_phys_addr = caller_ppn.0 << 12;
 
-        let target_ptr = unsafe { (target_phys_addr + kernel_direct_map_offset) as *const u8 };
-        let caller_ptr = unsafe { (caller_phys_addr + kernel_direct_map_offset) as *mut u8 };
+        let target_ptr = (target_phys_addr + kernel_direct_map_offset) as *const u8 ;
+        let caller_ptr =  (caller_phys_addr + kernel_direct_map_offset) as *mut u8 ;
 
         unsafe {
             let src = target_ptr.add(target_page_offset);
