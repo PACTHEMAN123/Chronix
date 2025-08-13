@@ -167,6 +167,9 @@ pub trait Inode {
     fn is_unlinkable(&self) -> Result<(), SysError> {
         Ok(())
     }
+    fn support_splice(&self) -> Result<(), SysError> {
+        Ok(())
+    }
     /// remove inode current inode
     fn remove(&self, _name: &str, _mode: InodeMode) -> Result<usize, i32> {
         todo!()

@@ -64,7 +64,7 @@ impl KernVmSpaceHal for KernVmSpace {
     }
 
     fn mmap(&mut self, file: Arc<dyn File>) -> Result<VirtAddr, ()> {
-        let len = file.inode().ok_or(())?.getattr().st_size as usize;
+        let len = file.inode().map_err(|_|())?.getattr().st_size as usize;
         if len == 0 {
             return Err(());
         }
@@ -96,7 +96,7 @@ impl KernVmSpaceHal for KernVmSpace {
                     return Err(())
                 }
                 let file = area.file.clone().ok_or(())?;
-                let inode = file.inode().ok_or(())?;
+                let inode = file.inode().map_err(|_|())?;
                 let vpn = va.floor();
                 let offset = (vpn.0 - area.range_vpn().start.0) * Constant::PAGE_SIZE;
                 let page = inode.read_page_at(offset).ok_or(())?;

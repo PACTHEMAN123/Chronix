@@ -29,6 +29,7 @@ pub enum SyscallId {
     SYSCALL_LREMOVEXATTR = 15,
     SYSCALL_FREMOVEXATTR = 16,
     SYSCALL_GETCWD = 17,
+    SYSCALL_EVENTFD = 19,
     SYSCALL_EPOLL_CREATE1 = 20,
     SYSCALL_EPOLL_CTL = 21,
     SYSCALL_EPOLL_PWAIT = 22,
@@ -78,6 +79,7 @@ pub enum SyscallId {
     SYSCALL_SENDFILE = 71,
     SYSCALL_PSELECT6 = 72,
     SYSCALL_PPOLL = 73,
+    SYSCALL_SIGNALFD = 74,
     SYSCALL_VMSPLICE = 75,
     SYSCALL_SPLICE = 76,
     SYSCALL_TEE = 77,
@@ -87,6 +89,7 @@ pub enum SyscallId {
     SYSCALL_SYNC = 81,
     SYSCALL_FSYNC = 82,
     SYSCALL_FDATASYNC = 83,
+    SYSCALL_TIMERFD = 85,
     SYSCALL_UTIMENSAT = 88,
     SYSCALL_ACCT = 89,
     SYSCALL_CAPGET = 90,
@@ -202,6 +205,7 @@ pub enum SyscallId {
     SYSCALL_MINCORE = 232,
     SYSCALL_MADSIVE = 233,
     SYSCALL_GET_MEMPOLICY = 236,
+    SYSCALL_PERF_EVENT_OPEN = 241,
     SYSCALL_WAITPID = 260,
     SYSCALL_PRLIMIT64 = 261,
     SYSCALL_FANOTIFY_INIT = 262,
@@ -215,6 +219,7 @@ pub enum SyscallId {
     SYSCALL_SCHED_GETATTR = 275,
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_GETRANDOM = 278,
+    SYSCALL_MEMFD_CREATE = 279,
     SYSCALL_BPF = 280,
     SYSCALL_USERFAULTFD = 282,
     SYSCALL_MEMBARRIER = 283,
@@ -224,6 +229,10 @@ pub enum SyscallId {
     SYSCALL_PWRITEV2 = 287,
     SYSCALL_STATX = 291,
     SYSCALL_IO_URING_SETUP = 425,
+    SYSCALL_OPEN_TREE = 428,
+    SYSCALL_FSOPEN = 430,
+    SYSCALL_FSPICK = 433,
+    SYSCALL_PIDFD_OPEN = 434,
     SYSCALL_CLONE3 = 435,
     SYSCALL_FACCESSAT2 = 439,
     SYSCALL_EPOLL_PWAIT2 = 441,
@@ -239,6 +248,7 @@ pub mod signal;
 pub mod misc;
 pub mod mm;
 pub mod io;
+pub mod fd;
 /// syscall concerning scheduler
 pub mod sche;
 /// syscall error code
@@ -264,7 +274,7 @@ pub use signal::*;
 pub use sche::*;
 pub use reboot::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
+use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, syscall::fd::sys_allocfd, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -293,12 +303,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FREMOVEXATTR => sys_temp(syscall_id),
         SYSCALL_IO_GETEVENTS => sys_temp(syscall_id),
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
+        SYSCALL_EVENTFD => sys_allocfd(syscall_id),
         SYSCALL_EPOLL_CREATE1 => sys_epoll_create1(args[0]),
         SYSCALL_EPOLL_CTL => sys_epoll_ctl(args[0], args[1], args[2], args[3]),
         SYSCALL_EPOLL_PWAIT => sys_epoll_pwait(args[0], args[1], args[2], args[3], args[4]).await,
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
-        SYSCALL_INOTIFY_INIT1 => sys_temp(syscall_id),
+        SYSCALL_INOTIFY_INIT1 => sys_allocfd(syscall_id),
         SYSCALL_INOTIFY_ADD_WATCH => sys_temp(syscall_id),
         SYSCALL_INOTIFY_RM_WATCH => sys_temp(syscall_id),
         SYSCALL_FCNTL => sys_fnctl(args[0], args[1] as isize, args[2]),
@@ -341,6 +352,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_PWRITEV => sys_pwritev(args[0], args[1], args[2], args[3]).await,
         SYSCALL_SENDFILE => sys_sendfile(args[0], args[1], args[2], args[3]).await,
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_SIGNALFD => sys_allocfd(syscall_id),
         SYSCALL_PSELECT6 => sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await,
         SYSCALL_VMSPLICE => sys_vmsplice(args[0], args[1], args[2], args[3] as u32).await,
         SYSCALL_SPLICE => sys_splice(args[0], args[1], args[2], args[3], args[4], args[5] as i32).await,
@@ -431,7 +443,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MMAP => sys_mmap(VirtAddr::from(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_FADVISE64 => sys_fadvise(args[0], args[1], args[2], args[3] as i32),
         SYSCALL_MREMAP => sys_mremap(VirtAddr::from(args[0]), args[1], args[2], args[3] as i32, args[4]),
-        SYSCALL_FANOTIFY_INIT => sys_temp(syscall_id),
+        SYSCALL_FANOTIFY_INIT => sys_allocfd(syscall_id),
         SYSCALL_FANOTIFY_MARK => sys_temp(syscall_id),
         SYSCALL_NAME_TO_HANDLE_AT => sys_temp(syscall_id),
         SYSCALL_OPEN_BY_HANDLE_AT => sys_temp(syscall_id),
@@ -469,15 +481,17 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MINCORE => sys_temp(syscall_id),
         SYSCALL_MADSIVE =>  sys_temp(syscall_id),
         SYSCALL_GET_MEMPOLICY => sys_temp(syscall_id),
+        SYSCALL_PERF_EVENT_OPEN => sys_allocfd(syscall_id),
         SYSCALL_SYNC => sys_temp(syscall_id),
         SYSCALL_FSYNC => sys_temp(syscall_id),
         SYSCALL_FDATASYNC => sys_fdatasync(args[0]),
+        SYSCALL_TIMERFD => sys_allocfd(syscall_id),
         SYSCALL_MSYNC => sys_temp(syscall_id),
         SYSCALL_MLOCK => sys_temp(syscall_id),
         SYSCALL_MEMBARRIER => sys_temp(syscall_id),
         SYSCALL_MLOCK2 => sys_temp(syscall_id),
         SYSCALL_COPY_FILE_RANGE => sys_copy_file_range(args[0], args[1], args[2], args[3], args[4], args[5] as u32).await,
-        SYSCALL_IO_URING_SETUP => sys_temp(syscall_id),
+        SYSCALL_IO_URING_SETUP => sys_allocfd(syscall_id),
         SYSCALL_SETREGID => sys_setregid(args[0] as i32, args[1] as i32),
         SYSCALL_SETGID => sys_setgid(args[0] as i32),
         SYSCALL_SETREUID => sys_setreuid(args[0] as i32, args[1] as i32),
@@ -487,10 +501,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_KEYCTL => sys_temp(syscall_id),
         SYSCALL_ACCT => sys_temp(syscall_id),
         SYSCALL_ADJTIMEX => sys_adjtimex(args[0]),
-        SYSCALL_BPF => sys_temp(syscall_id),
-        SYSCALL_USERFAULTFD => sys_temp(syscall_id),
+        SYSCALL_BPF => sys_allocfd(syscall_id),
+        SYSCALL_USERFAULTFD => sys_allocfd(syscall_id),
         SYSCALL_FACCESSAT2 => sys_faccessat2(args[0] as isize, args[1] as *const u8, args[2] as i32, args[3] as i32),
         SYSCALL_EPOLL_PWAIT2 => sys_temp(syscall_id),
+        SYSCALL_FSOPEN => sys_allocfd(syscall_id),
+        SYSCALL_PIDFD_OPEN => sys_allocfd(syscall_id),
+        SYSCALL_FSPICK => sys_allocfd(syscall_id),
+        SYSCALL_MEMFD_CREATE => sys_allocfd(syscall_id),
+        SYSCALL_OPEN_TREE => sys_allocfd(syscall_id),
         /* 
         _ => { 
             log::warn!("Unsupported syscall_id: {:?}", syscall_id);

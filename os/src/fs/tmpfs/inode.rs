@@ -391,4 +391,17 @@ impl Inode for TmpSysInode {
     fn is_unlinkable(&self) -> Result<(), SysError> {
         Err(SysError::EPERM)
     }
+
+    fn support_splice(&self) -> Result<(), SysError> {
+        Err(SysError::EINVAL)
+    }
+}
+
+// example inode
+pub struct EmptyFile;
+
+impl InodeContent for EmptyFile {
+    fn serialize(&self) -> String {
+        "".to_string()
+    }
 }

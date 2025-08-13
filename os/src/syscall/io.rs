@@ -9,7 +9,7 @@ use log::SetLoggerError;
 use smoltcp::time;
 use virtio_drivers::device::socket::SocketError;
 
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
+use crate::{fs::{tmpfs::dentry::TmpDentry, vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
 
 use super::{SysError, SysResult};
 
@@ -531,7 +531,7 @@ impl EPollInstance  {
             interest: SpinNoIrqLock::new(BTreeMap::new()),
             ready: SpinNoIrqLock::new(Vec::new()),
             file_inner: FileInner { 
-                dentry: Arc::<usize>::new_zeroed(),
+                dentry: TmpDentry::new("", None),
                 offset: AtomicUsize::new(0),
                 flags: SpinNoIrqLock::new(o_flags)
             }
@@ -710,7 +710,7 @@ pub async fn sys_epoll_pwait(epfd: usize, events_ptr: usize, maxenvets: usize, t
         Ok(inst) => inst,
         _ => return Err(SysError::EINVAL)
     };
-    if (maxenvets as isize) < 0 {
+    if (maxenvets as isize) <= 0 {
         return Err(SysError::EINVAL)
     }
     let events = UserSliceRaw::new(events_ptr as *mut EPollEvent, maxenvets)
@@ -728,6 +728,86 @@ pub async fn sys_epoll_pwait(epfd: usize, events_ptr: usize, maxenvets: usize, t
         0 => return Ok(0), // return immediately, even no ready event
         -1 => None,
         t => Some(TimeSpec::from_ms(t)),
+    };
+
+    let old_sigmask = task.sig_manager.lock().get_sigmask();
+    let mut new_sigmask = old_sigmask;
+    if sigmask_ptr != 0 {
+        let sigmask_ptr = UserPtrRaw::new(sigmask_ptr as *const SigSet)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+        new_sigmask = *sigmask_ptr.to_ref();
+    }
+    task.sig_manager.lock().set_sigmask(new_sigmask);
+    
+    let intr_future = IntrBySignalFuture { task: task.clone(), mask: new_sigmask };
+    let epoll_future = EPollFuture { epoll_inst: ep_inst.clone() };
+
+    task.set_interruptable();
+    task.set_wake_up_sigs(!new_sigmask);
+
+    if let Some(timeout) = timeout {
+        // select from intr and timedtask and epoll event
+        let timed_future = TimedTaskFuture::new(
+            timeout.into(), 
+            epoll_future
+        );
+        let sel_res = Select2Futures::new(timed_future, intr_future).await;
+        // wake up, should restore states before return to user
+        task.set_running();
+        task.sig_manager.lock().set_sigmask(old_sigmask);
+        match sel_res {
+            SelectOutput::Output1(_) => {
+                let nfds = ep_inst.get_ready(events.to_mut());
+                return Ok(nfds as isize)
+            }
+            SelectOutput::Output2(_) => return Err(SysError::EINTR)
+        }
+    } else {
+        // select from intr and epoll event
+        let sel_res = Select2Futures::new(epoll_future, intr_future).await;
+        task.set_running();
+        task.sig_manager.lock().set_sigmask(old_sigmask);
+        match sel_res {
+            SelectOutput::Output1(_) => {
+                let nfds = ep_inst.get_ready(events.to_mut());
+                return Ok(nfds as isize)
+            }
+            SelectOutput::Output2(_) => return Err(SysError::EINTR)
+        }
+    }
+}
+
+
+pub async fn sys_epoll_pwait2(epfd: usize, events_ptr: usize, maxenvets: usize, timeout_ptr: usize, sigmask_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let ep_inst_file = task.with_fd_table(|t| t.get_file(epfd))?;
+    let ep_inst = match ep_inst_file.downcast_arc::<EPollInstance>() {
+        Ok(inst) => inst,
+        _ => return Err(SysError::EINVAL)
+    };
+    if (maxenvets as isize) <= 0 {
+        return Err(SysError::EINVAL)
+    }
+    let events = UserSliceRaw::new(events_ptr as *mut EPollEvent, maxenvets)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    // check the ready list, if not empty, return immediately
+    match ep_inst.clone().get_ready(events.to_mut()) {
+        0 => {},
+        nfds => return Ok(nfds as isize)
+    }
+     
+    // no ready events, start to wait
+    let timeout = match timeout_ptr {
+        0 => None, // return immediately, even no ready event
+        _ => {
+            let ts_ptr = UserPtrRaw::new(timeout_ptr as *const TimeSpec)
+                .ensure_read(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+            Some(*ts_ptr.to_ref())
+        }
     };
 
     let old_sigmask = task.sig_manager.lock().get_sigmask();
