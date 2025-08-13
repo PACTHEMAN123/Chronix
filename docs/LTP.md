@@ -229,12 +229,14 @@
 - [ ] ebizzy: no summary, 性能测试
 - [ ] eject_check_tray
 - [ ] endian_switch01
-- [x] epoll_create01: no syscall, p 2 b 2 skip 1
+
+======= epoll =======
+- [x] epoll_create01: p2 skip 1
 - [ ] epoll_create02: failed
-- [x] epoll_create1_01: p1 failed 1
-- [ ] epoll_create1_02: failed
+- [x] epoll_create1_01
+- [x] epoll_create1_02
 - [ ] epoll_ctl01: failed
-- [ ] epoll_ctl02: failed
+- [x] epoll_ctl02: p7 f2
 - [x] epoll_ctl03: do nothing but pass 256 :(
 - [ ] epoll_ctl04： failed
 - [ ] epoll_ctl05: failed
@@ -251,6 +253,7 @@
 - [ ] epoll_wait05
 - [ ] epoll_wait06
 - [ ] epoll_wait07
+
 - [ ] eventfd01: can't locate kernel config
 - [ ] eventfd02
 - [ ] eventfd03
@@ -1470,9 +1473,10 @@
 - [ ] sendto01: no sum
 - [x] sendto02
 - [ ] sendto03
-- [ ] setdomainname01: 162
-- [ ] setdomainname02: 
-- [ ] setdomainname03
+
+- [x] setdomainname01 : p2
+- [x] setdomainname02 : p6
+- [ ] setdomainname03 : f2
 
 - [x] setegid01 : p4
 - [ ] setegid02 : f1
@@ -1493,9 +1497,11 @@
 - [x] setgroups02: 2fail
 - [ ] setgroups03
 - [ ] setgroups04
+
 - [x] sethostname01
 - [x] sethostname02
 - [ ] sethostname03 : should failed
+
 - [ ] set_ipv4addr
 - [x] setitimer01: 1 broken timedout
 - [x] setitimer02

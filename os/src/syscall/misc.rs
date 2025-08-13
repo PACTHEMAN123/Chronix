@@ -430,3 +430,30 @@ pub fn sys_uname(uname_buf: usize) -> SysResult {
     uname_ptr.write(uname);
     Ok(0)
 }
+
+pub fn sys_getdomainname(buf_ptr: usize, len: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let buf = UserSliceRaw::new(buf_ptr as *mut u8, len)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let domainname = UTS.lock().get_utsname().domainname;
+    buf.to_mut().copy_from_slice(&domainname[..len]);
+    Ok(0)
+}
+
+pub fn sys_setdomainname(buf_ptr: usize, len: usize) -> SysResult {
+    log::info!("buf_ptr {:#x}, len {}", buf_ptr, len);
+    if (len as isize) < 0 || (len as isize) > 64 {
+        return Err(SysError::EINVAL);
+    }
+    if buf_ptr == 0 {
+        return Err(SysError::EFAULT)
+    }
+    let task = current_task().unwrap().clone();
+    let buf = UserSliceRaw::new(buf_ptr as *const u8, len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let domainname = String::from_utf8(buf.to_ref().to_vec()).map_err(|_| SysError::EINVAL)?;
+    UTS.lock().set_domainname(&domainname);
+    Ok(0)
+}

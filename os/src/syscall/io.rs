@@ -1,14 +1,15 @@
 //! io related syscall
 
-use core::{future::Future, mem, pin::Pin, ptr::read, task::{Context, Poll}, time::Duration, usize};
-
-use alloc::{sync::Arc, vec::Vec};
+use core::{cmp, future::Future, mem, pin::Pin, ptr::read, sync::atomic::AtomicUsize, task::{Context, Poll}, time::Duration, usize};
+use alloc::boxed::Box;
+use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
+use async_trait::async_trait;
 use hal::instruction::{Instruction, InstructionHal};
 use log::SetLoggerError;
 use smoltcp::time;
 use virtio_drivers::device::socket::SocketError;
 
-use crate::{fs::vfs::{file::PollEvents, File}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, task::{current_task, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
 
 use super::{SysError, SysResult};
 
@@ -456,6 +457,323 @@ impl Future for PSelectFuture {
             Poll::Ready(ret_vec)
         } else {
             Poll::Pending
+        }
+    }
+}
+
+
+bitflags! {
+    // define in <uapi/linux/eventpoll.h>
+    pub struct EPollEvents: u32 {
+        const EPOLLIN	    = 0x00000001;
+        const EPOLLPRI	    = 0x00000002;
+        const EPOLLOUT	    = 0x00000004;
+        const EPOLLERR	    = 0x00000008;
+        const EPOLLHUP	    = 0x00000010;
+        const EPOLLNVAL	    = 0x00000020;
+        const EPOLLRDNORM	= 0x00000040;
+        const EPOLLRDBAND	= 0x00000080;
+        const EPOLLWRNORM	= 0x00000100;
+        const EPOLLWRBAND	= 0x00000200;
+        const EPOLLMSG	    = 0x00000400;
+        const EPOLLRDHUP	= 0x00002000;
+        // input flags
+        const EPOLL_URING_WAKE  = 0x08000000;
+        const EPOLLEXCLUSIVE    = 0x10000000;
+        const EPOLLWAKEUP       = 0x20000000;
+        const EPOLLONESHOT      = 0x40000000;
+        const EPOLLET           = 0x80000000;
+    }
+}
+
+impl EPollEvents {
+    // remove the input flags
+    pub fn remove_input(&mut self) -> Self {
+        let mut ret = *self;
+        ret.remove(
+            EPollEvents::EPOLL_URING_WAKE |
+            EPollEvents::EPOLLEXCLUSIVE |
+            EPollEvents::EPOLLWAKEUP |
+            EPollEvents::EPOLLONESHOT |
+            EPollEvents::EPOLLET
+        );
+        ret
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct EPollEvent {
+    events: EPollEvents,
+    data: usize,
+}
+
+pub struct EPollFd {
+    file:  Arc<dyn File>,
+    event: EPollEvent,
+}
+
+// for the epoll machamic
+pub struct EPollInstance {
+    interest: SpinNoIrqLock<BTreeMap<usize, EPollFd>>,
+    ready: SpinNoIrqLock<Vec<(usize, EPollEvent)>>,
+    file_inner: FileInner, 
+}
+
+impl EPollInstance  {
+    pub fn new(fd_flags: FdFlags) -> Self {
+        let o_flags = match fd_flags {
+            FdFlags::CLOEXEC => OpenFlags::O_CLOEXEC,
+            _  => OpenFlags::empty(),
+        };
+
+        Self { 
+            interest: SpinNoIrqLock::new(BTreeMap::new()),
+            ready: SpinNoIrqLock::new(Vec::new()),
+            file_inner: FileInner { 
+                dentry: Arc::<usize>::new_zeroed(),
+                offset: AtomicUsize::new(0),
+                flags: SpinNoIrqLock::new(o_flags)
+            }
+        }
+    }
+
+    pub fn add(&self, fd: usize, event: EPollEvent, file: Arc<dyn File>) -> Result<(), SysError> {
+        let mut list = self.interest.lock();
+        if list.contains_key(&fd) {
+            return Err(SysError::EEXIST)
+        }
+        list.insert(fd, EPollFd { file, event });
+        Ok(()) 
+    }
+
+    pub fn remove(&self, fd: usize) -> Result<(), SysError> {
+        let mut list = self.interest.lock();
+        if !list.contains_key(&fd) {
+            return Err(SysError::ENOENT)
+        }
+        list.remove(&fd);
+        Ok(())
+    }
+
+    pub fn modify(&self, fd: usize, event: EPollEvent) -> Result<(), SysError> {
+        let mut list = self.interest.lock();
+        if !list.contains_key(&fd) {
+            return Err(SysError::ENOENT)
+        }
+        if let Some(epoll_fd) = list.get_mut(&fd) {
+            epoll_fd.event = event;
+        } else {
+            return Err(SysError::ENOENT)
+        }
+        Ok(())
+    }
+    /// try to fill the event vec as much as possible
+    pub fn get_ready(&self, event_vec: &mut [EPollEvent]) -> usize {
+        let ready_list = self.ready.lock();
+        let get_size = cmp::min(event_vec.len(), ready_list.len());
+        for i in 0..get_size {
+            event_vec[i] = ready_list[i].1;
+        }
+        get_size
+    }
+}
+
+unsafe impl Send for EPollInstance {}
+unsafe impl Sync for EPollInstance {}
+
+#[async_trait]
+impl File for EPollInstance {
+    async fn read(&self, _buf: &mut [u8]) -> Result<usize, SysError> {
+        Err(SysError::EBADF)
+    }
+    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
+        Err(SysError::EBADF)
+    }
+    async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> Result<usize, SysError> {
+        Err(SysError::EBADF)
+    }
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, SysError> {
+        let inode = self.dentry().unwrap().inode().unwrap();
+        let size = inode.cache_write_at(offset, buf).unwrap();
+        Ok(size)
+    }
+    fn readable(&self) -> bool { false }
+    fn writable(&self) -> bool { false }
+    fn file_inner(&self) -> &FileInner { &self.file_inner }
+}
+
+
+pub fn sys_epoll_create(size: isize) -> SysResult {
+    if size < 0 {
+        return Err(SysError::EINVAL)
+    }
+    let task = current_task().unwrap().clone();
+    let fd = task.with_mut_fd_table(|t| t.alloc_fd())?;
+    let epoll_inst = Arc::new(EPollInstance::new(FdFlags::empty()));
+    let fd_info = FdInfo {
+        file: epoll_inst,
+        flags: FdFlags::empty(),
+    };
+    task.with_mut_fd_table(|t| t.put_file(fd, fd_info))?;
+    log::info!("task {} get epoll instance fd {}", task.tid(), fd);
+    Ok(fd as isize)
+}
+
+pub fn sys_epoll_create1(flags: usize) -> SysResult {
+    const EPOLL_CLOEXEC: usize = OpenFlags::O_CLOEXEC.bits() as usize;
+    match flags {
+        0 => sys_epoll_create(1),
+        EPOLL_CLOEXEC => {
+            let task = current_task().unwrap().clone();
+            let fd = task.with_mut_fd_table(|t| t.alloc_fd())?;
+            let epoll_inst = Arc::new(EPollInstance::new(FdFlags::CLOEXEC));
+            let fd_info = FdInfo {
+                file: epoll_inst,
+                flags: FdFlags::CLOEXEC,
+            };
+            task.with_mut_fd_table(|t| t.put_file(fd, fd_info))?;
+            log::info!("task {} get epoll instance fd {}", task.tid(), fd);
+            Ok(fd as isize)
+        }
+        _ => Err(SysError::EINVAL)
+    }
+}
+
+const EPOLL_CTL_ADD: usize = 1;
+const EPOLL_CTL_DEL: usize = 2;
+const EPOLL_CTL_MOD: usize = 3;
+
+
+pub fn sys_epoll_ctl(epfd: usize, op: usize, fd: usize, event_ptr: usize) -> SysResult {
+    if fd == epfd || event_ptr == 0 {
+        return Err(SysError::EINVAL)
+    }
+    let task = current_task().unwrap().clone();
+    let epoll_inst = task.with_fd_table(|t| t.get_file(epfd))?;
+    let epoll_inst = epoll_inst.downcast_ref::<EPollInstance>().ok_or(SysError::EINVAL)?;
+    let file = task.with_fd_table(|t| t.get_file(fd))?;
+    let event_ptr = UserPtrRaw::new(event_ptr as *const EPollEvent)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let event = *event_ptr.to_ref();
+    match op {
+        EPOLL_CTL_ADD => {
+            epoll_inst.add(fd, event, file)?;
+        }
+        EPOLL_CTL_DEL => {
+            epoll_inst.remove(fd)?;
+        }
+        EPOLL_CTL_MOD => {
+            epoll_inst.modify(fd, event)?;
+        }
+        _ => return Err(SysError::EINVAL)
+    }
+    Ok(0)
+}
+
+/// poll the fds from epoll instance
+/// poll from the interest list,
+/// once the fd is finish, place it in ready list 
+pub struct EPollFuture {
+    epoll_inst: Arc<EPollInstance>,
+}
+
+impl Future for EPollFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        for (fd, epoll_fd) in self.epoll_inst.interest.lock().iter() {
+            let file = epoll_fd.file.clone();
+            let events = epoll_fd.event.events;
+            let r = unsafe {
+                Pin::new_unchecked(&mut file.epoll(events))
+                .poll(cx)
+            };
+            match r {
+                Poll::Pending => unreachable!(),
+                Poll::Ready(result) => {
+                    let mut ret_event = epoll_fd.event;
+                    ret_event.events = result;
+                    self.epoll_inst.ready.lock().push((*fd, ret_event));
+                }
+            }
+        }
+        Poll::Ready(())
+    }
+}
+
+pub async fn sys_epoll_pwait(epfd: usize, events_ptr: usize, maxenvets: usize, timeout: usize, sigmask_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let ep_inst_file = task.with_fd_table(|t| t.get_file(epfd))?;
+    let ep_inst = match ep_inst_file.downcast_arc::<EPollInstance>() {
+        Ok(inst) => inst,
+        _ => return Err(SysError::EINVAL)
+    };
+    if (maxenvets as isize) < 0 {
+        return Err(SysError::EINVAL)
+    }
+    let events = UserSliceRaw::new(events_ptr as *mut EPollEvent, maxenvets)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    // check the ready list, if not empty, return immediately
+    match ep_inst.clone().get_ready(events.to_mut()) {
+        0 => {},
+        nfds => return Ok(nfds as isize)
+    }
+     
+    // no ready events, start to wait
+    let timeout = match timeout {
+        0 => return Ok(0), // return immediately, even no ready event
+        -1 => None,
+        t => Some(TimeSpec::from_ms(t)),
+    };
+
+    let old_sigmask = task.sig_manager.lock().get_sigmask();
+    let mut new_sigmask = old_sigmask;
+    if sigmask_ptr != 0 {
+        let sigmask_ptr = UserPtrRaw::new(sigmask_ptr as *const SigSet)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+        new_sigmask = *sigmask_ptr.to_ref();
+    }
+    task.sig_manager.lock().set_sigmask(new_sigmask);
+    
+    let intr_future = IntrBySignalFuture { task: task.clone(), mask: new_sigmask };
+    let epoll_future = EPollFuture { epoll_inst: ep_inst.clone() };
+
+    task.set_interruptable();
+    task.set_wake_up_sigs(!new_sigmask);
+
+    if let Some(timeout) = timeout {
+        // select from intr and timedtask and epoll event
+        let timed_future = TimedTaskFuture::new(
+            timeout.into(), 
+            epoll_future
+        );
+        let sel_res = Select2Futures::new(timed_future, intr_future).await;
+        // wake up, should restore states before return to user
+        task.set_running();
+        task.sig_manager.lock().set_sigmask(old_sigmask);
+        match sel_res {
+            SelectOutput::Output1(_) => {
+                let nfds = ep_inst.get_ready(events.to_mut());
+                return Ok(nfds as isize)
+            }
+            SelectOutput::Output2(_) => return Err(SysError::EINTR)
+        }
+    } else {
+        // select from intr and epoll event
+        let sel_res = Select2Futures::new(epoll_future, intr_future).await;
+        task.set_running();
+        task.sig_manager.lock().set_sigmask(old_sigmask);
+        match sel_res {
+            SelectOutput::Output1(_) => {
+                let nfds = ep_inst.get_ready(events.to_mut());
+                return Ok(nfds as isize)
+            }
+            SelectOutput::Output2(_) => return Err(SysError::EINTR)
         }
     }
 }

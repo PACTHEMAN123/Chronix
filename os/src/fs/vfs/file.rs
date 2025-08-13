@@ -3,7 +3,7 @@
 use core::{any::Any, sync::atomic::{AtomicUsize, Ordering}, task::Poll};
 
 
-use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, sync::mutex::{spin_mutex::SpinMutex, SpinNoIrqLock}, syscall::{SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
+use crate::{fs::{page::page::PAGE_SIZE, vfs::{dentry::global_find_dentry, inode::InodeMode, DentryState}, OpenFlags}, sync::mutex::{spin_mutex::SpinMutex, SpinNoIrqLock}, syscall::{io::EPollEvents, SysError, SysResult}, utils::{abs_path_to_name, abs_path_to_parent}};
 use async_trait::async_trait;
 
 use alloc::{
@@ -95,7 +95,7 @@ pub trait File: Send + Sync + DowncastSync {
         Err(SysError::ENOTTY)
     }
     /// base poll 
-    async fn base_poll(&self, events: PollEvents) -> PollEvents{
+    async fn base_poll(&self, events: PollEvents) -> PollEvents {
         let mut res = PollEvents::empty();
         if events.contains(PollEvents::IN) {
             res |= PollEvents::IN
@@ -104,6 +104,12 @@ pub trait File: Send + Sync + DowncastSync {
             res |= PollEvents::OUT;
         }
         res
+    }
+    /// fake epoll, normal files are always ready
+    async fn epoll(&self, events: EPollEvents) -> EPollEvents {
+        let mut ret = events;
+        ret.remove_input();
+        ret
     }
     /// get the file flags
     fn flags(&self) -> OpenFlags {

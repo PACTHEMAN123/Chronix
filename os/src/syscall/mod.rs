@@ -226,6 +226,7 @@ pub enum SyscallId {
     SYSCALL_IO_URING_SETUP = 425,
     SYSCALL_CLONE3 = 435,
     SYSCALL_FACCESSAT2 = 439,
+    SYSCALL_EPOLL_PWAIT2 = 441,
 }
 
 
@@ -292,9 +293,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_FREMOVEXATTR => sys_temp(syscall_id),
         SYSCALL_IO_GETEVENTS => sys_temp(syscall_id),
         SYSCALL_GETCWD => sys_getcwd(args[0] as usize, args[1] as usize),
-        SYSCALL_EPOLL_CREATE1 => sys_temp(syscall_id),
-        SYSCALL_EPOLL_CTL => sys_temp(syscall_id),
-        SYSCALL_EPOLL_PWAIT => sys_temp(syscall_id),
+        SYSCALL_EPOLL_CREATE1 => sys_epoll_create1(args[0]),
+        SYSCALL_EPOLL_CTL => sys_epoll_ctl(args[0], args[1], args[2], args[3]),
+        SYSCALL_EPOLL_PWAIT => sys_epoll_pwait(args[0], args[1], args[2], args[3], args[4]).await,
         SYSCALL_DUP => sys_dup(args[0] as usize),
         SYSCALL_DUP3 => sys_dup3(args[0] as usize, args[1] as usize, args[2] as u32),
         SYSCALL_INOTIFY_INIT1 => sys_temp(syscall_id),
@@ -421,7 +422,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_CLONE3 => sys_clone3(args[0], args[1]),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_SETHOSTNAME => sys_sethostname(args[0], args[1]).await,
-        SYSCALL_SETDOMAINNAME =>  sys_temp(syscall_id),
+        SYSCALL_SETDOMAINNAME =>  sys_setdomainname(args[0], args[1]),
         SYSCALL_PRLIMIT64 => sys_prlimit64(args[0], args[1] as i32, args[2], args[3]),
         SYSCALL_GETRUSAGE => sys_getrusage(args[0] as i32, args[1]),
         SYSCALL_EXEC => sys_execve(args[0] , args[1], args[2]).await,
@@ -489,6 +490,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_BPF => sys_temp(syscall_id),
         SYSCALL_USERFAULTFD => sys_temp(syscall_id),
         SYSCALL_FACCESSAT2 => sys_faccessat2(args[0] as isize, args[1] as *const u8, args[2] as i32, args[3] as i32),
+        SYSCALL_EPOLL_PWAIT2 => sys_temp(syscall_id),
         /* 
         _ => { 
             log::warn!("Unsupported syscall_id: {:?}", syscall_id);
