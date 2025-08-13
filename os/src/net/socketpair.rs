@@ -262,7 +262,7 @@ impl Drop for SocketPairConnection {
     }
 }
 
-pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<Socket>) {
+pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, non_block: bool, protocol: u8) -> (Arc<Socket>, Arc<Socket>) {
     let internal = SocketPairInternal::new(capacity);
 
     let conn1 = SocketPairConnection {
@@ -274,6 +274,7 @@ pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, n
             domain,
             sk_type,
             non_block,
+            protocol
         );
     socket1.sk = super::socket::Sock::SocketPair(conn1);
     
@@ -285,6 +286,7 @@ pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, n
         domain,
         sk_type,
         non_block,
+        protocol
     );
     socket2.sk = super::socket::Sock::SocketPair(conn2);
 

@@ -277,7 +277,7 @@ impl DeviceManager {
             }.unwrap();
             let _dev = VirtIoNetDevImpl::new(transport).unwrap();
             log::warn!("use virtio-net device");
-            // init_network(dev, true);
+            // init_network(_dev, true);
             init_network(LoopbackDevice::new(),false);
         }else  {
             log::warn!("use loopback device");
