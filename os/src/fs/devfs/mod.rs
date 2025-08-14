@@ -11,7 +11,7 @@ use tty::{TtyDentry, TtyFile, TtyInode, TTY};
 use urandom::UrandomInode;
 use zero::ZeroInode;
 
-use crate::{fs::{devfs::cpu_dma_latency::{CpuDmaLatencyInode}, tmpfs::{dentry::TmpDentry, inode::TmpInode}}, sync::mutex::SpinNoIrqLock};
+use crate::{fs::{devfs::{cpu_dma_latency::CpuDmaLatencyInode, loop_dev::{LoopDevDentry, LoopDevInode}}, tmpfs::{dentry::TmpDentry, inode::TmpInode}}, sync::mutex::SpinNoIrqLock};
 
 use super::{vfs::{inode::InodeMode, Dentry, DentryInner, DentryState, Inode, InodeInner, DCACHE}, OpenFlags, SuperBlock};
 
@@ -23,6 +23,7 @@ pub mod rtc;
 pub mod urandom;
 pub mod zero;
 pub mod cpu_dma_latency;
+pub mod loop_dev;
 
 /// init the whole /dev
 pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
@@ -77,6 +78,12 @@ pub fn init_devfs(root_dentry: Arc<dyn Dentry>) {
     root_dentry.add_child(cpu_dma_latency_dentry.clone());
     log::debug!("dcache insert: {}", cpu_dma_latency_dentry.path());
     DCACHE.lock().insert(cpu_dma_latency_dentry.path(), cpu_dma_latency_dentry.clone());
+
+    // add /dev/loop0
+    let loop_dev = LoopDevDentry::new("loop0", Some(root_dentry.clone()));
+    let loop_dev_inode = LoopDevInode::new();
+    loop_dev.set_inode(loop_dev_inode);
+    root_dentry.add_child(loop_dev);
 
     // add /dev/shm
     // TODO: now only implement by tmp file

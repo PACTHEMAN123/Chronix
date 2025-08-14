@@ -48,12 +48,12 @@ pub fn list_mounts() -> String {
     let fs_manager = FS_MANAGER.lock();
     for (_, fs) in fs_manager.iter() {
         let sbs = fs.inner().supers.lock();
-        for (mount_path, _) in sbs.iter() {
+        for (_mount_path, _) in sbs.iter() {
             // device name: (todo)
             res += "device";
             res += " ";
             // mount point
-            res += mount_path;
+            res += "/fake";
             res += " ";
             // fs type name
             res += fs.name();

@@ -1,4 +1,5 @@
 use alloc::string::ToString;
+use hal::timer::{Timer, TimerHal};
 
 use crate::fs::tmpfs::inode::InodeContent;
 
@@ -13,6 +14,7 @@ impl CpuInfo {
 
 impl InodeContent for CpuInfo {
     fn serialize(&self) -> alloc::string::String {
+        let cpu_freq_mhz = Timer::get_timer_freq() / 1_000_000;
         let mut res = "".to_string();
         res += &"processor\t: 0\n".to_string();
         res += &"vendor_id\t: Intel\n".to_string();
@@ -20,7 +22,11 @@ impl InodeContent for CpuInfo {
         res += &"model\t: 44\n".to_string();
         res += &"model name\t: Intel Sucks\n".to_string();
         res += &"stepping\t: 2\n".to_string();
-        res += &"MHz\t: 2392\n".to_string();
+
+        res += &"MHz\t: ".to_string();
+        res += &cpu_freq_mhz.to_string();
+        res += &"\n".to_string();
+
         res += &"cache size\t: 512 KB\n".to_string();
         res += &"physical id\t: 0\n".to_string();
         res += &"siblings\t: 1\n".to_string();

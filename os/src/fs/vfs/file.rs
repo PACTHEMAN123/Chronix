@@ -87,8 +87,8 @@ pub trait File: Send + Sync + DowncastSync {
     }
     /// quicker way to get the inode it points to
     /// notice that maybe unsafe!
-    fn inode(&self) -> Option<Arc<dyn Inode>> {
-        self.dentry().unwrap().inode().clone()
+    fn inode(&self) -> Result<Arc<dyn Inode>, SysError> {
+        Ok(self.dentry().ok_or(SysError::EINVAL)?.inode().ok_or(SysError::EINVAL)?)
     }
     /// call by ioctl syscall
     fn ioctl(&self, _cmd: usize, _arg: usize) -> SysResult {
@@ -105,12 +105,12 @@ pub trait File: Send + Sync + DowncastSync {
         }
         res
     }
-    /// fake epoll, normal files are always ready
-    async fn epoll(&self, events: EPollEvents) -> EPollEvents {
-        let mut ret = events;
-        ret.remove_input();
-        ret
-    }
+    // /// fake epoll, normal files are always ready
+    // async fn epoll(&self, events: EPollEvents) -> EPollEvents {
+    //     let mut ret = events;
+    //     ret.remove_input();
+    //     ret
+    // }
     /// get the file flags
     fn flags(&self) -> OpenFlags {
         self.file_inner().flags.lock().clone()
@@ -189,6 +189,23 @@ impl dyn File {
     // given the event and track the event async, returns the event if is ready
     pub async fn poll(&self, events: PollEvents) -> PollEvents {
         self.base_poll(events).await
+    }
+    // translate base poll into epoll
+    pub async fn epoll(&self, events: EPollEvents) -> EPollEvents {
+        let mut in_event = PollEvents::empty();
+        if events.contains(EPollEvents::EPOLLIN) {
+            in_event |= PollEvents::IN;
+        }
+        if events.contains(EPollEvents::EPOLLOUT) {
+            in_event |= PollEvents::OUT;
+        }
+        let revent = self.base_poll(in_event).await;
+        let mut res = events;
+        res.remove_input();
+        if revent.contains(PollEvents::ERR) {
+            res |= EPollEvents::EPOLLERR
+        }
+        res
     }
 }
 

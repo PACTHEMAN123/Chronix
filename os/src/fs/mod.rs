@@ -4,7 +4,6 @@
 //! impl Stdin and Stdout in `stdio.rs`
 #![allow(missing_docs)]
 pub mod stdio;
-pub mod fat32;
 pub mod ext4;
 pub mod vfs;
 pub mod pipefs;
@@ -48,10 +47,6 @@ type DiskFSType = Ext4FSType;
 
 #[cfg(feature = "fat32")]
 pub const DISK_FS_NAME: &str = "fat32";
-
-use crate::fs::fat32::fstype::Fat32FSType;
-#[cfg(feature = "fat32")]
-type DiskFSType = Fat32FSType;
 
 
 /// register all filesystem
@@ -501,3 +496,5 @@ pub struct StatFs {
     pub f_flags: isize,
     pub f_spare: [isize; 4],
 }
+
+pub const BLKSSZGET: usize = 0x1268;

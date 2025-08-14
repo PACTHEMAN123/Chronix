@@ -241,17 +241,17 @@
 - [ ] epoll_ctl04： failed
 - [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
-- [ ] epoll_pwait01: panic
-- [ ] epoll_pwait02: failed ,441, same as follows
+- [ ] epoll_pwait01 : stuck, need /proc/pid
+- [x] epoll_pwait02 : stuck
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
-- [ ] epoll_wait01
-- [ ] epoll_wait02
-- [ ] epoll_wait03
-- [ ] epoll_wait04
+- [x] epoll_wait01 : p2 f1, get wrong fd
+- [ ] epoll_wait02 : f7
+- [x] epoll_wait03
+- [x] epoll_wait04
 - [ ] epoll_wait05
-- [ ] epoll_wait06
+- [x] epoll_wait06 : p2 f7, need to support pipe resize and ET
 - [ ] epoll_wait07
 
 - [ ] eventfd01: can't locate kernel config
@@ -317,6 +317,7 @@
 - [ ] fanotify06：需要设备
 - [ ] fanotify07：可能需要正确实现该系统调用
 - [x] fanotify08：试图关闭 fd0
+- [ ] fanotify16
 - [ ] fanotify09-23：需要设备/关闭fd0/管道问题？
 - [ ] fanout01
 - [x] fchdir01
@@ -1009,8 +1010,8 @@
 - [x] mprotect05
 
 - [ ] mq_notify01
-- [ ] mq_notify02
-- [ ] mq_notify03
+- [x] mq_notify02
+- [x] mq_notify03
 - [ ] mqns_01
 - [ ] mqns_02
 - [ ] mqns_03
@@ -1656,7 +1657,7 @@
 - [x] splice04
 - [ ] splice05 : f, now not consider socket file
 - [ ] splice06 : tconf
-- [ ] splice07 : f
+- [x] splice07 : p556, s25
 - [ ] splice08 : tconf
 - [ ] splice09 : tconf
 

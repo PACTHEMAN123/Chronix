@@ -22,7 +22,7 @@ pub struct FileReader {
 impl FileReader {
     pub fn new(file: Arc<dyn File>) -> Result<Self, ()> {
         let va = KVMSPACE.lock().mmap(file.clone())?;
-        let inode = file.inode().ok_or(())?;
+        let inode = file.inode().map_err(|_| ())?;
         let len = inode.getattr().st_size as usize;
         let vpn_range = va.floor().0..(va + len).ceil().0;
         Ok(Self { 

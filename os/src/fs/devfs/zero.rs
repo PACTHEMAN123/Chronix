@@ -115,4 +115,8 @@ impl Inode for ZeroInode {
             stx_dio_read_offset_align: 0,
         }
     }
+
+    fn support_splice(&self) -> Result<(), SysError> {
+        Err(SysError::EINVAL)
+    }
 }
