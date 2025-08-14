@@ -496,3 +496,5 @@ pub struct StatFs {
     pub f_flags: isize,
     pub f_spare: [isize; 4],
 }
+
+pub const BLKSSZGET: usize = 0x1268;

@@ -6,29 +6,42 @@ use async_trait::async_trait;
 use alloc::boxed::Box;
 use strum::FromRepr;
 
-use crate::{config::BLOCK_SIZE, devices::BlockDevice, drivers::block, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, Xstat, XstatMask}, mm::UserPtrRaw, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::block_on};
+use crate::{config::BLOCK_SIZE, devices::BlockDevice, drivers::block, fs::{vfs::{inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, StatxTimestamp, Xstat, XstatMask, BLKSSZGET}, mm::UserPtrRaw, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, task::current_task, utils::block_on};
 
 
 pub struct LoopDevInode {
     inner: InodeInner,
     file: SpinNoIrqLock<Option<Arc<dyn File>>>,
-    loop_info: SpinNoIrqLock<Option<LoopInfo>>
+    loop_info: SpinNoIrqLock<Option<LoopInfo>>,
+    loop_info64: SpinNoIrqLock<Option<LoopInfo64>>,
+
 }
 
 impl LoopDevInode {
     pub fn new() -> Arc<Self> {
         let file = SpinNoIrqLock::new(None);
         let loop_info = SpinNoIrqLock::new(None);
+        let loop_info64 = SpinNoIrqLock::new(None);
         Arc::new(Self {
             inner: InodeInner::new(None, InodeMode::BLOCK, 0),
             file,
-            loop_info
+            loop_info,
+            loop_info64
         })
     }
-
     
     pub fn add_file(&self, file: Arc<dyn File>) -> Result<(), SysError> {
         *self.file.lock() = Some(file);
+        Ok(())
+    }
+
+    pub fn clear(&self) -> Result<(), SysError> {
+        if self.file.lock().is_none() {
+            return Err(SysError::ENXIO)
+        }
+        *self.file.lock() = None;
+        *self.loop_info.lock() = None;
+        *self.loop_info64.lock() = None;
         Ok(())
     }
 
@@ -57,13 +70,13 @@ impl Inode for LoopDevInode {
         let size = self.file_size();
         let inner = self.inode_inner();
         Kstat {
-            st_dev: 0,
+            st_dev: 10, // random device id to bybass the mounted check
             st_ino: inner.ino as u64,
             st_mode: inner.mode().bits() as _,
             st_nlink: inner.nlink() as u32,
             st_uid: 0,
             st_gid: 0,
-            st_rdev: 0,
+            st_rdev: 10,
             _pad0: 0,
             st_size: size as _,
             _pad1: 0,
@@ -120,11 +133,11 @@ impl Inode for LoopDevInode {
                 tv_sec: inner.mtime().tv_sec as _,
                 tv_nsec: inner.mtime().tv_nsec as _,
             },
-            stx_rdev_major: 0,
-            stx_rdev_minor: 0,
-            stx_dev_major: 0,
-            stx_dev_minor: 0,
-            stx_mnt_id: 0,
+            stx_rdev_major: 10,
+            stx_rdev_minor: 10,
+            stx_dev_major: 10,
+            stx_dev_minor: 10,
+            stx_mnt_id: 10,
             stx_dio_mem_align: 0,
             std_dio_offset_align: 0,
             stx_subvol: 0,
@@ -268,11 +281,30 @@ impl File for LoopDevFile {
                 let file = task.with_fd_table(|t| t.get_file(arg))?;
                 let _ = self.inode_dev().add_file(file);
             }
+            LoopIoctlCmd::LOOP_CLR_FD => {
+                let _ = self.inode_dev().clear()?;
+            }
             LoopIoctlCmd::LOOP_SET_STATUS => {
                 let status_ptr = UserPtrRaw::new(arg as *const LoopInfo)
                     .ensure_read(&mut task.get_vm_space().lock())
                     .ok_or(SysError::EFAULT)?;
                 *self.inode_dev().loop_info.lock() = Some(*status_ptr.to_ref())
+            }
+            LoopIoctlCmd::LOOP_GET_STATUS64 => {
+                let status_ptr = UserPtrRaw::new(arg as *mut LoopInfo64)
+                    .ensure_write(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                let info = self.inode_dev().loop_info64.lock().clone();
+                match info {
+                    Some(info) => status_ptr.write(info),
+                    None => return Err(SysError::ENXIO),
+                }
+            }
+            LoopIoctlCmd::LOOP_SET_STATUS64 => {
+                let status_ptr = UserPtrRaw::new(arg as *const LoopInfo64)
+                    .ensure_read(&mut task.get_vm_space().lock())
+                    .ok_or(SysError::EFAULT)?;
+                *self.inode_dev().loop_info64.lock() = Some(*status_ptr.to_ref())
             }
             _ => todo!()
         }
@@ -313,6 +345,24 @@ pub struct LoopInfo {
     encrypt_key: [u8; 32], /* LO_KEY_SIZE = 32 */
     init: [usize; 2],
     reserved: [u8; 4],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct LoopInfo64 {
+    device: u64,
+    inode: u64,
+    rdev: u64,
+    offset: u64,
+    sizelimit: u64,
+    number: u32,
+    encrypt_type: u32,
+    encrypt_key_size: u32,
+    flags: u32,
+    file_name: [u8; 64],        /* LO_NAME_SIZE = 64 */
+    crypt_name: [u8; 64], /* LO_KEY_SIZE = 32 */
+    crypt_key: [u8; 32],
+    init: [u64; 2],
 }
 
 #[derive(Debug)]

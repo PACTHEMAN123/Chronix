@@ -7,7 +7,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask
+    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask, BLKSSZGET
 }, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
 use crate::utils::{
     path::*,
@@ -807,12 +807,26 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
 /// syscall: mount
 /// (todo)
 pub fn sys_mount(
-    _source: *const u8,
-    _target: *const u8,
-    _fstype: *const u8,
+    source: *const u8,
+    target: *const u8,
+    fstype: *const u8,
     _flags: u32,
     _data: usize,
 ) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let source_path = user_path_to_string(
+        UserPtrRaw::new(source),
+        &mut task.get_vm_space().lock()
+    )?;
+    let target_path = user_path_to_string(
+        UserPtrRaw::new(target),
+        &mut task.get_vm_space().lock()
+    )?;
+    let fs_type = user_path_to_string(
+        UserPtrRaw::new(fstype),
+        &mut task.get_vm_space().lock()
+    )?;
+    log::info!("source {}, target {}, fstype {}", source_path, target_path, fs_type);
     /*
     let _source_path = user_path_to_string(source).unwrap();
     let target_path = user_path_to_string(target).unwrap();
@@ -836,6 +850,11 @@ pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
 /// syscall: ioctl
 pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
     let task = current_task().unwrap().clone();
+    // early match
+    match cmd {
+        BLKSSZGET => return Ok(BLOCK_SIZE as isize),
+        _ => {}
+    }
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     file.ioctl(cmd, arg)
 }

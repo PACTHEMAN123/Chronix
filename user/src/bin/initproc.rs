@@ -39,7 +39,7 @@ fn init_env() {
     run_cmd("/riscv/musl/busybox --install /bin");
     #[cfg(target_arch="loongarch64")]
     run_cmd("/loongarch/musl/busybox --install /bin");
-    run_cmd("rm /bin/sh");
+    // run_cmd("rm /bin/sh");
 }
 
 fn term_sig_handler(_signo: i32) {
