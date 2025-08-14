@@ -271,6 +271,9 @@ pub struct TmpSysInode {
     content: Arc<dyn InodeContent>,
 }
 
+unsafe impl Send for TmpSysInode {}
+unsafe impl Sync for TmpSysInode {}
+
 impl TmpSysInode {
     pub fn new(mode: InodeMode, content: Arc<dyn InodeContent>) -> Arc<Self> {
         let inner = InodeInner::new(

@@ -3,6 +3,7 @@
 use core::{ops::Range, sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering}};
 
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 
 use super::SuperBlock;
 use crate::{fs::{page::{cache::PageCache, page::Page}, Xstat, XstatMask}, generate_atomic_accessors, generate_lock_accessors, generate_with_methods, sync::mutex::SpinNoIrqLock, syscall::{SysError, SysResult}, timer::{clock::{CLOCK_DEVIATION, CLOCK_MONOTONIC, CLOCK_REALTIME}, ffi::TimeSpec, get_current_time, get_current_time_duration}};
@@ -84,7 +85,7 @@ impl InodeInner {
 }
 
 /// Inode trait for all file system to implement
-pub trait Inode {
+pub trait Inode: DowncastSync {
     /// return inner
     fn inode_inner(&self) -> &InodeInner {
         todo!()
@@ -198,6 +199,8 @@ impl dyn Inode {
         Ok(())
     }
 }
+
+impl_downcast!(sync Inode);
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 

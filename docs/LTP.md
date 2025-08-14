@@ -317,6 +317,7 @@
 - [ ] fanotify06：需要设备
 - [ ] fanotify07：可能需要正确实现该系统调用
 - [x] fanotify08：试图关闭 fd0
+- [ ] fanotify16
 - [ ] fanotify09-23：需要设备/关闭fd0/管道问题？
 - [ ] fanout01
 - [x] fchdir01
