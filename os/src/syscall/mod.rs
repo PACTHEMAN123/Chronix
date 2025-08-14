@@ -214,6 +214,8 @@ pub enum SyscallId {
     SYSCALL_OPEN_BY_HANDLE_AT = 265,
     SYSCALL_CLOCKADJTIME= 266,
     SYSCALL_SENDMMSG = 269,
+    SYSCALL_PROCESS_VM_READV = 270,
+    SYSCALL_PROCESS_VM_WRITEV = 271,
     SYSCALL_KCMP = 272,
     SYSCALL_SCHED_SETATTR = 274,
     SYSCALL_SCHED_GETATTR = 275,
@@ -227,6 +229,9 @@ pub enum SyscallId {
     SYSCALL_COPY_FILE_RANGE = 285,
     SYSCALL_PREADV2 = 286,
     SYSCALL_PWRITEV2 = 287,
+    SYSCALL_PKEY_DISABLEACCESS = 288,
+    SYSCALL_PKEYALLOC = 289,
+    SYSCALL_PKEYFREE = 290,
     SYSCALL_STATX = 291,
     SYSCALL_IO_URING_SETUP = 425,
     SYSCALL_OPEN_TREE = 428,
@@ -274,7 +279,7 @@ pub use signal::*;
 pub use sche::*;
 pub use reboot::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, syscall::fd::sys_allocfd, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
+use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, syscall::{fd::sys_allocfd, mm::{sys_process_vm_readv, sys_process_vm_writev}}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -449,6 +454,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_OPEN_BY_HANDLE_AT => sys_temp(syscall_id),
         SYSCALL_CLOCKADJTIME => sys_clock_adjtime(args[0], args[1]),
         SYSCALL_SENDMMSG => sys_temp(syscall_id),
+        SYSCALL_PROCESS_VM_READV => sys_process_vm_readv(args[0] as i32, args[1], args[2], args[3], args[4], args[5]),
+        SYSCALL_PROCESS_VM_WRITEV => sys_process_vm_writev(args[0] as i32, args[1], args[2], args[3], args[4], args[5]),
         SYSCALL_KCMP => sys_temp(syscall_id),
         SYSCALL_SCHED_GETATTR => sys_temp(syscall_id),
         SYSCALL_SCHED_SETATTR => sys_temp(syscall_id),
@@ -457,6 +464,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETRLIMIT => sys_temp(syscall_id),
         SYSCALL_PREADV2 => sys_preadv2(args[0], args[1], args[2], args[3], args[4] as i32).await,
         SYSCALL_PWRITEV2 => sys_pwritev2(args[0], args[1], args[2], args[3], args[4] as i32).await,
+        SYSCALL_PKEY_DISABLEACCESS => sys_temp(syscall_id),
+        SYSCALL_PKEYALLOC => sys_temp(syscall_id),
+        SYSCALL_PKEYFREE => sys_temp(syscall_id),
         SYSCALL_STATX => sys_statx(args[0] as _, args[1] as _, args[2] as _, args[3] as _, args[4].into()),
         SYSCALL_SOCKET => sys_socket(args[0], args[1] as i32, args[2]),
         SYSCALL_SOCKETPAIR => sys_socketpair(args[0], args[1],  args[2], args[3]),
