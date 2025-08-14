@@ -1,15 +1,19 @@
 //! io related syscall
 
-use core::{cmp, future::Future, mem, pin::Pin, ptr::read, sync::atomic::AtomicUsize, task::{Context, Poll}, time::Duration, usize};
-use alloc::boxed::Box;
+use core::{cmp, future::Future, mem, num::NonZeroI64, pin::Pin, ptr::read, sync::atomic::AtomicUsize, task::{Context, Poll}, time::Duration, usize};
+use alloc::{boxed::Box, string::ToString};
 use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use hal::instruction::{Instruction, InstructionHal};
 use log::SetLoggerError;
+use lwext4_rust::bindings::PRIX16;
 use smoltcp::time;
+use spin::{Lazy, Mutex};
+use universal_hash::generic_array::functional;
 use virtio_drivers::device::socket::SocketError;
+use xmas_elf::reader;
 
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::SigSet, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{Select2Futures, SelectOutput}};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::{msg_queue::{MessageQueue, MqAttr, MqError, NotifyRegistration, Sigevent, MQ_FLAG_NONBLOCK, SIGEV_NONE, SIGEV_SIGNAL}, SigSet}, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, get_current_time_duration, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{suspend_now, Select2Futures, SelectOutput}};
 
 use super::{SysError, SysResult};
 
@@ -774,6 +778,335 @@ pub async fn sys_epoll_pwait(epfd: usize, events_ptr: usize, maxenvets: usize, t
                 return Ok(nfds as isize)
             }
             SelectOutput::Output2(_) => return Err(SysError::EINTR)
+        }
+    }
+}
+
+/// msg queue concernign
+type MqName = alloc::string::String;
+
+struct MqRegistry {
+    queues: BTreeMap<MqName, Arc<MessageQueue>>,
+}
+
+static MQ_REGISTRY: Lazy<Mutex<MqRegistry>> = Lazy::new(|| Mutex::new(MqRegistry {
+    queues: BTreeMap::new(),
+}));
+
+
+pub fn sys_mq_open(name_ptr: usize, oflag: i32, _mode: u32, attr_ptr: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let mut vm = task.get_vm_space().lock();
+
+    let name_user_ptr = UserPtrRaw::new(name_ptr as *const u8)
+        .ensure_read(&mut vm)
+        .ok_or(SysError::EFAULT)?;
+
+    let name = name_user_ptr.to_ref().to_string();
+    log::info!("[mq] open: name='{}', oflag={}", name, oflag);
+
+    let mut registry = MQ_REGISTRY.lock();
+    let queue_exists = registry.queues.contains_key(&name);
+    let create = (oflag & OpenFlags::O_CREAT.bits()) != 0;
+
+    let queue = if create {
+        // --- 创建新队列的逻辑 ---
+        // if queue_exists && (oflag & OpenFlags::O_EXCL.bits()) != 0 {
+        //     return Err(SysError::EEXIST); // 队列已存在且指定了 O_EXCL
+        // }
+        if queue_exists {
+            // 直接打开现有队列
+            registry.queues.get(&name).unwrap().clone()
+        } else {
+            // 创建新队列
+            let attr = if attr_ptr != 0 {
+                let attr_user = UserPtrRaw::new(attr_ptr as *const MqAttr)
+                    .ensure_read(&mut vm)
+                    .ok_or(SysError::EFAULT)?;
+                *attr_user.to_ref()
+            } else {
+                // 如果 O_CREAT 但未提供 attr，使用默认值
+                MqAttr { mq_flags: 0, mq_maxmsg: 10, mq_msgsize: 256 }
+            };
+            
+            // 将 O_NONBLOCK 标志从 oflag 同步到队列属性中
+            let mut final_attr = attr;
+            if (oflag & OpenFlags::O_NONBLOCK.bits()) != 0 {
+                final_attr.mq_flags |= OpenFlags::O_NONBLOCK.bits() as i64;
+            }
+            if !final_attr.is_valid(){
+                return Err(SysError::EINVAL);
+            }
+            let new_queue = Arc::new(MessageQueue::new(final_attr));
+            registry.queues.insert(name, new_queue.clone());
+            new_queue
+        }
+    } else {
+        if !queue_exists {
+            return Err(SysError::ENOENT); // 队列不存在且未指定 O_CREAT
+        }
+        registry.queues.get(&name).unwrap().clone()
+    };
+    let fd = task.with_mut_fd_table(|table| -> SysResult{
+        // Arc<MessageQueue> 实现了 File trait，可以被当作 Arc<dyn File>
+        let fd = table.alloc_fd()?;
+        table.put_file(fd, FdInfo {
+            file: queue.clone(),
+            flags: FdFlags::empty(),
+        })?;
+        Ok(fd as isize)
+    })?;
+    Ok(fd as isize)
+}
+
+
+// ------------------------ sys_mq_unlink ------------------------
+pub fn sys_mq_unlink(name_ptr: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let user_name_ptr = UserPtrRaw::new(name_ptr as *const u8) 
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let name = user_name_ptr.to_ref().to_string();
+    let mut registry = MQ_REGISTRY.lock();
+    if registry.queues.remove(&name).is_some() {
+        Ok(0)
+    } else {
+        Err(SysError::ENOENT)
+    }
+}
+
+// Helper to map MqError to SysError
+fn map_mq_error(e: MqError) -> SysError {
+    match e {
+        MqError::TimedOut => SysError::ETIMEOUT,
+        MqError::MsgTooBig => SysError::EMSGSIZE,
+        MqError::WouldBlock => SysError::EAGAIN,
+        MqError::InvalidHandle => SysError::EBADF,
+        MqError::PermissionDenied => SysError::EACCES,
+    }
+}
+
+// --- 1. mq_getsetattr ---
+// POSIX has mq_getattr and mq_setattr. We can combine them.
+// Note: POSIX mq_setattr can only change mq_flags. Other changes are ignored.
+pub fn sys_mq_getsetattr(handle: usize, new_attr_ptr: usize, old_attr_ptr: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let queue = task.with_fd_table(|table|{
+        table.get_file(handle)})?
+    .downcast_arc::<MessageQueue>().map_err(|_| SysError::EINVAL)?;
+    let mut vm = task.get_vm_space().lock(); 
+
+    // 如果 old_attr_ptr 非空, 获取当前属性并写入用户空间。
+    if old_attr_ptr != 0 {
+        let old_attr_user_ptr = UserPtrRaw::new(old_attr_ptr as *mut MqAttr)
+            .ensure_write(&mut vm) // 修正了笔误 ensure_writee
+            .ok_or(SysError::EFAULT)?;
+        
+        let current_attr = queue.inner.lock().attr;
+
+        old_attr_user_ptr.write(current_attr);
+    }
+
+    // 如果 new_attr_ptr 非空, 从用户空间读取新属性并设置。
+    if new_attr_ptr != 0 {
+        let new_attr_user_ptr = UserPtrRaw::new(new_attr_ptr as *const MqAttr)
+            .ensure_read(&mut vm)
+            .ok_or(SysError::EFAULT)?;
+        
+        let new_attr = *new_attr_user_ptr.to_ref();
+        
+        let mut inner = queue.inner.lock();
+        inner.attr.mq_flags = new_attr.mq_flags;
+    }
+
+    Ok(0)
+}
+
+pub fn sys_mq_notify(handle: usize, sevp_ptr: usize) -> SysResult {
+    let task = current_task().unwrap();
+    let queue = task.with_fd_table(|table|{
+        table.get_file(handle)})?
+    .downcast_arc::<MessageQueue>().map_err(|_| SysError::EINVAL)?;
+    
+    if sevp_ptr == 0 {
+        queue.inner.lock().notify = None;
+    } else {
+        // 注册通知，需要读取 sigevent 结构体
+        let mut vm = task.get_vm_space().lock();
+
+        // 1. 创建读指针并校验 sigevent 结构
+        let sevp_user_ptr = UserPtrRaw::new(sevp_ptr as *const Sigevent) // 使用 libc::sigevent
+            .ensure_read(&mut vm)
+            .ok_or(SysError::EFAULT)?;
+
+        // 2. 安全地读取 sigevent 内容
+        let event = *sevp_user_ptr.to_ref();
+        
+        match event.sigev_notify {
+            SIGEV_SIGNAL | SIGEV_NONE => {}
+            _ => {
+                log::warn!("unsupported sigev_notify: {}", event.sigev_notify);
+                return Err(SysError::EINVAL);
+            }
+        }
+
+        // 3. 创建并存储注册信息
+        let registration = NotifyRegistration {
+            task: task.clone(),
+            event,
+        };
+
+        let mut inner = queue.inner.lock();
+        if inner.notify.is_some() {
+            return Err(SysError::EBUSY);
+        }
+        inner.notify = Some(registration);
+    }
+
+    Ok(0)
+}
+
+fn abs_timespec_to_rel_timeout(ts: &TimeSpec) -> Option<Duration> {
+    let abs: Duration = (*ts).into();
+    let now = get_current_time_duration(); 
+
+    if abs <= now {
+        Some(Duration::from_secs(0))
+    } else {
+        Some(abs - now)
+    }
+}
+
+const MSG_MAX_SIZE: usize = 8192;
+pub async fn sys_mq_timedsend(handle: usize, msg_ptr: usize, msg_len: usize, msg_prio: usize, timeout_ptr: usize) -> SysResult {
+    log::warn!("handle: {}, msg_ptr: {:#x}, msg_len: {}, msg_prio: {}, timeout_ptr: {:#x}", handle, msg_ptr, msg_len, msg_prio, timeout_ptr);
+    let task = current_task().unwrap();
+    let queue = task.with_fd_table(|table|{
+        table.get_file(handle)})?
+    .downcast_arc::<MessageQueue>().map_err(|_| SysError::EBADF)?;
+    
+    let attr_len = queue.inner.lock().attr.mq_msgsize;
+    if msg_len >  MSG_MAX_SIZE{
+        log::warn!("[sys_mq_timedsend] msg_len: {}, queue.attr.mq_msgsize: {}", msg_len, attr_len);
+        return Err(SysError::EMSGSIZE);
+    }
+    
+    let msg_user_slice = UserSliceRaw::new(msg_ptr as *const u8, msg_len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+
+    let msg_data = msg_user_slice.to_ref();
+
+    // 2. 确定超时时间
+    let timeout = if timeout_ptr == 0 {
+        None
+    } else {
+        let timeout_user_ptr = UserPtrRaw::new(timeout_ptr as *const TimeSpec)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let timespec = timeout_user_ptr.to_ref();
+        if !timespec.is_valid() {
+            log::warn!("[sys_mq_timedsend] invalid timeout: {:?}", timespec);
+            return Err(SysError::EINVAL);
+        }
+        match abs_timespec_to_rel_timeout(&timespec) {
+            Some(d) => Some(d),
+            None    => Some(Duration::from_secs(0)), // 立即超时
+        }
+    };
+    log::warn!("timeout: {:?}", timeout);
+    // 3. 阻塞并执行异步操作 (这部分逻辑不变)
+    // let future = queue.mq_timedsend(&msg_data, msg_prio, timeout);
+    // match block_on_mq(future) {
+    //     Ok(()) => Ok(0),
+    //     Err(e) => Err(map_mq_error(e)),
+    // }
+    block_on_mq(
+        queue.mq_timedsend(&msg_data, msg_prio as u32, timeout)
+    ).await?;
+    Ok(0)
+
+}
+
+// --- 4. sys_mq_timedreceive / sys_mq_receive (重构) ---
+pub async fn sys_mq_timedreceive(handle: usize, msg_ptr: usize, msg_len: usize, msg_prio_ptr: usize, timeout_ptr: usize) -> SysResult {
+        log::warn!("handle: {}, msg_ptr: {:#x}, msg_len: {}, msg_prio: {}, timeout_ptr: {:#x}", handle, msg_ptr, msg_len, msg_prio_ptr, timeout_ptr);
+    let task = current_task().unwrap();
+    let queue = task.with_fd_table(|table|{
+        table.get_file(handle)})?
+    .downcast_arc::<MessageQueue>().map_err(|_| SysError::EBADF)?;
+    
+    // 检查用户缓冲区大小
+    let attr_len = queue.inner.lock().attr.mq_msgsize;
+    if msg_len >  MSG_MAX_SIZE {
+        log::warn!("[sys_mq_timedreceive] msg_len: {}, queue.attr.mq_msgsize: {}", msg_len, attr_len);
+        return Err(SysError::EMSGSIZE);
+    }
+
+    // 1. 确定超时时间 (逻辑与 send 相同)
+    let timeout = if timeout_ptr == 0 {
+        None
+    } else {
+        let timeout_user_ptr = UserPtrRaw::new(timeout_ptr as *const TimeSpec)
+            .ensure_read(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        let timespec = timeout_user_ptr.to_ref();
+        if !timespec.is_valid() {
+            log::warn!("[sys_mq_timedsend] invalid timeout: {:?}", timespec);
+            return Err(SysError::EINVAL);
+        }
+        match abs_timespec_to_rel_timeout(&timespec) {
+            Some(d) => Some(d),
+            None    => Some(Duration::from_secs(0)), // 立即超时
+        }
+    };
+    log::warn!("timeout: {:?}", timeout);
+    let (data, priority) = block_on_mq(
+        queue.mq_timedreceive(timeout)
+    ).await?;
+    let msg_buf_user_slice = UserSliceRaw::new(msg_ptr as *mut u8, data.len())
+                .ensure_write(&mut task.get_vm_space().lock())
+                .ok_or(SysError::EFAULT)?;
+    msg_buf_user_slice.to_mut().copy_from_slice(&data);
+
+    // 3.2 如果需要，写入消息优先级
+    if msg_prio_ptr != 0 {
+        let prio_user_ptr = UserPtrRaw::new(msg_prio_ptr as *mut u32)
+            .ensure_write(&mut task.get_vm_space().lock())
+            .ok_or(SysError::EFAULT)?;
+        prio_user_ptr.write(priority);
+    }
+
+    // 成功时返回消息的长度
+    Ok(data.len() as isize)
+
+}
+
+
+async fn block_on_mq<T, F>(fut: F ) -> Result<T, SysError>
+where
+    F: core::future::Future<Output = Result<T, MqError>> + Send ,    
+{
+    let mut fut = Box::pin(fut);// 固定 future 的位置
+    loop {
+        match fut.as_mut().await {
+            Ok(res) => return Ok(res),
+            Err(MqError::WouldBlock) => {
+                log::warn!("[MQ_block_on] EAGAIN");
+                suspend_now().await;
+
+                let task = current_task().unwrap();
+                let has_signal_flag = task.with_sig_manager(|sig_manager| {
+                    let block_sig = sig_manager.blocked_sigs;
+                    sig_manager.check_pending_flag(!block_sig)
+                });
+
+                if has_signal_flag {
+                    log::warn!("[block_on] has signal flag, return EINTR");
+                    return Err(SysError::EINTR);
+                }
+            }
+            Err(e) => return Err(map_mq_error(e)),
         }
     }
 }

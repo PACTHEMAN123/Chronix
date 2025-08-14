@@ -159,6 +159,12 @@ pub enum SyscallId {
     SYSCALL_GETEGID = 177,
     SYSCALL_GETTID = 178,
     SYSCALL_SYSINFO = 179,
+    SYSCALL_MQ_OPEN = 180,
+    SYSCALL_MQ_UNLINK = 181,
+    SYSCALL_MQ_TIMEDSEND = 182,
+    SYSCALL_MQ_TIMEDRECEIVE = 183,
+    SYSCALL_MQ_NOTIFY = 184,
+    SYSCALL_MQ_GETSETATTR = 185,
     SYSCALL_MSGGET = 186,
     SYSCALL_MSGCTL = 187,
     SYSCALL_MSGRCV = 188,
@@ -282,7 +288,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
+    // log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_SETXATTR => sys_temp(syscall_id),
@@ -414,6 +420,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GETGROUPS => sys_temp(syscall_id),
         SYSCALL_SETGROUPS => sys_temp(syscall_id),
         SYSCALL_SYSINFO => sys_sysinfo(args[0]),
+        SYSCALL_MQ_GETSETATTR => sys_mq_getsetattr(args[0], args[1], args[2]),
+        SYSCALL_MQ_NOTIFY => sys_mq_notify(args[0], args[1]),
+        SYSCALL_MQ_OPEN => sys_mq_open(args[0], args[1] as i32, args[2] as u32, args[3]),
+        SYSCALL_MQ_TIMEDSEND => sys_mq_timedsend(args[0], args[1], args[2], args[3],args[4]).await,
+        SYSCALL_MQ_TIMEDRECEIVE => sys_mq_timedreceive(args[0], args[1], args[2], args[3], args[4]).await,
+        SYSCALL_MQ_UNLINK => sys_mq_unlink(args[0]),
         SYSCALL_MSGGET => sys_temp(syscall_id),
         SYSCALL_MSGCTL => sys_temp(syscall_id),
         SYSCALL_MSGRCV => sys_temp(syscall_id),

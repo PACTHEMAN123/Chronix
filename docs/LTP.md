@@ -1015,10 +1015,10 @@
 - [ ] mqns_02
 - [ ] mqns_03
 - [ ] mqns_04
-- [ ] mq_open01
+- [x] mq_open01
 - [ ] mq_timedreceive01
 - [ ] mq_timedsend01
-- [ ] mq_unlink01
+- [x] mq_unlink01
 
 - [ ] mremap01 : f
 - [x] mremap02 : no sum
