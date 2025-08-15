@@ -13,7 +13,7 @@ use universal_hash::generic_array::functional;
 use virtio_drivers::device::socket::SocketError;
 use xmas_elf::reader;
 
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::{msg_queue::{MessageQueue, MqAttr, MqError, NotifyRegistration, Sigevent, MQ_FLAG_NONBLOCK, SIGEV_NONE, SIGEV_SIGNAL}, SigSet}, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, get_current_time_duration, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{suspend_now, Select2Futures, SelectOutput}};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::{msg_queue::{MessageQueue, MqAttr, MqError, NotifyRegistration, Sigevent, MQ_FLAG_NONBLOCK, SIGEV_NONE, SIGEV_SIGNAL}, SigSet}, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, get_current_time_duration, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{suspend_now, user_path_to_string, Select2Futures, SelectOutput}};
 use crate::fs::tmpfs::dentry::TmpDentry;
 use super::{SysError, SysResult};
 
@@ -796,32 +796,48 @@ static MQ_REGISTRY: Lazy<Mutex<MqRegistry>> = Lazy::new(|| Mutex::new(MqRegistry
 
 pub fn sys_mq_open(name_ptr: usize, oflag: i32, _mode: u32, attr_ptr: usize) -> SysResult {
     let task = current_task().unwrap();
-    let mut vm = task.get_vm_space().lock();
+    let current_uid = task.euid();
+    log::info!("curent_uid: {}", current_uid);
+    let name_user_ptr = UserPtrRaw::new(name_ptr as *const u8);
 
-    let name_user_ptr = UserPtrRaw::new(name_ptr as *const u8)
-        .ensure_read(&mut vm)
-        .ok_or(SysError::EFAULT)?;
-
-    let name = name_user_ptr.to_ref().to_string();
-    log::info!("[mq] open: name='{}', oflag={}", name, oflag);
+    let name = user_path_to_string(name_user_ptr, &mut task.get_vm_space().lock())?;
+    log::info!("paramter name: {}", name);
+    if name.is_empty() || name[1..].contains('/'){ 
+        return Err(SysError::EINVAL);
+    }
+    log::info!("name start ok");
+    const NAME_MAX: usize = 255;
+    if name.len() > NAME_MAX {
+        return Err(SysError::ENAMETOOLONG);
+    }
+    log::info!("name length ok");
+    // log::info!("[mq] open: name='{}', oflag={}", name, oflag);
 
     let mut registry = MQ_REGISTRY.lock();
     let queue_exists = registry.queues.contains_key(&name);
     let create = (oflag & OpenFlags::O_CREAT.bits()) != 0;
 
     let queue = if create {
-        // --- 创建新队列的逻辑 ---
-        // if queue_exists && (oflag & OpenFlags::O_EXCL.bits()) != 0 {
-        //     return Err(SysError::EEXIST); // 队列已存在且指定了 O_EXCL
-        // }
+        log::info!("have create flag");
         if queue_exists {
+            let queue = registry.queues.get(&name).unwrap().clone();
+            if current_uid != 0 && queue.owner_uid != current_uid {
+                log::info!("current_uid: {}, queue.owner_uid: {}", current_uid, queue.owner_uid);
+                return Err(SysError::EACCES);
+            }
+            // --- 创建新队列的逻辑 ---
+            if oflag & OpenFlags::O_EXCL.bits() != 0 {
+                log::warn!("[mq] open: queue '{}' already exists, have oEXL flag", name);
+                return Err(SysError::EEXIST); // 队列已存在且指定了 O_EXCL
+            }
             // 直接打开现有队列
-            registry.queues.get(&name).unwrap().clone()
-        } else {
+            queue
+        }
+         else {
             // 创建新队列
             let attr = if attr_ptr != 0 {
                 let attr_user = UserPtrRaw::new(attr_ptr as *const MqAttr)
-                    .ensure_read(&mut vm)
+                    .ensure_read(&mut task.get_vm_space().lock())
                     .ok_or(SysError::EFAULT)?;
                 *attr_user.to_ref()
             } else {
@@ -837,15 +853,23 @@ pub fn sys_mq_open(name_ptr: usize, oflag: i32, _mode: u32, attr_ptr: usize) -> 
             if !final_attr.is_valid(){
                 return Err(SysError::EINVAL);
             }
-            let new_queue = Arc::new(MessageQueue::new(final_attr));
+            log::info!("final attr ok");
+            let new_queue = Arc::new(MessageQueue::new(final_attr, current_uid));
             registry.queues.insert(name, new_queue.clone());
             new_queue
         }
     } else {
         if !queue_exists {
+            log::warn!("have no create flag, but queue '{}' not exists", name);
             return Err(SysError::ENOENT); // 队列不存在且未指定 O_CREAT
         }
-        registry.queues.get(&name).unwrap().clone()
+        let queue = registry.queues.get(&name).unwrap().clone();
+        let queue_owner_uid = queue.owner_uid;
+        if current_uid != 0 && current_uid != queue_owner_uid {
+            log::info!("current_uid: {}, queue.owner_uid: {}", current_uid, queue_owner_uid);
+            return Err(SysError::EACCES);
+        }
+        queue
     };
     let fd = task.with_mut_fd_table(|table| -> SysResult{
         // Arc<MessageQueue> 实现了 File trait，可以被当作 Arc<dyn File>
@@ -863,13 +887,23 @@ pub fn sys_mq_open(name_ptr: usize, oflag: i32, _mode: u32, attr_ptr: usize) -> 
 // ------------------------ sys_mq_unlink ------------------------
 pub fn sys_mq_unlink(name_ptr: usize) -> SysResult {
     let task = current_task().unwrap();
-    let user_name_ptr = UserPtrRaw::new(name_ptr as *const u8) 
-        .ensure_read(&mut task.get_vm_space().lock())
-        .ok_or(SysError::EFAULT)?;
-    let name = user_name_ptr.to_ref().to_string();
+   let name_user_ptr = UserPtrRaw::new(name_ptr as *const u8);
+
+    let name = user_path_to_string(name_user_ptr, &mut task.get_vm_space().lock())?;
+    const NAME_MAX: usize = 255;
+    if name.len() > NAME_MAX {
+        return Err(SysError::ENAMETOOLONG);
+    }
+    let current_uid = task.euid();
+    log::info!("unlink paramter name: {}", name);
     let mut registry = MQ_REGISTRY.lock();
-    if registry.queues.remove(&name).is_some() {
-        Ok(0)
+    if let Some(queue) = registry.queues.get(&name) {
+        if current_uid != 0 && queue.owner_uid != current_uid {
+            return Err(SysError::EACCES);
+        }else {
+            registry.queues.remove(&name);
+            return Ok(0);
+        }
     } else {
         Err(SysError::ENOENT)
     }
@@ -1030,7 +1064,7 @@ pub async fn sys_mq_timedsend(handle: usize, msg_ptr: usize, msg_len: usize, msg
 
 // --- 4. sys_mq_timedreceive / sys_mq_receive (重构) ---
 pub async fn sys_mq_timedreceive(handle: usize, msg_ptr: usize, msg_len: usize, msg_prio_ptr: usize, timeout_ptr: usize) -> SysResult {
-        log::warn!("handle: {}, msg_ptr: {:#x}, msg_len: {}, msg_prio: {}, timeout_ptr: {:#x}", handle, msg_ptr, msg_len, msg_prio_ptr, timeout_ptr);
+    log::warn!("handle: {}, msg_ptr: {:#x}, msg_len: {}, msg_prio: {}, timeout_ptr: {:#x}", handle, msg_ptr, msg_len, msg_prio_ptr, timeout_ptr);
     let task = current_task().unwrap();
     let queue = task.with_fd_table(|table|{
         table.get_file(handle)})?

@@ -52,7 +52,7 @@ pub struct MqAttr {
 
 impl MqAttr {
     pub fn is_valid(&self) -> bool {
-        self.mq_flags >= 0 && self.mq_maxmsg > 0 && self.mq_msgsize > 0 && self.mq_maxmsg < 65536 && self.mq_msgsize < 8192
+        self.mq_flags >= 0 && self.mq_maxmsg > 0 && self.mq_msgsize > 0 && self.mq_maxmsg <= 65536 && self.mq_msgsize <= 16384
     }
 }
 
@@ -87,6 +87,7 @@ pub struct NotifyRegistration {
 #[derive(Clone)]
 pub struct MessageQueue {
     pub inner: Arc<SpinNoIrqLock<MessageQueueInner>>,
+    pub owner_uid: i32,
 }
 
 unsafe impl Send for MessageQueue {}
@@ -95,7 +96,7 @@ unsafe impl Sync for MessageQueue {}
 
 impl MessageQueue {
     /// Creates a new message queue with the given attributes.
-    pub fn new(attr: MqAttr) -> Self {
+    pub fn new(attr: MqAttr, owner_uid: i32) -> Self {
         log::warn!("[mq_open] attr: mq_flags={}, mq_maxmsg={}, mq_msgsize={}",
            attr.mq_flags, attr.mq_maxmsg, attr.mq_msgsize);
         Self {
@@ -106,6 +107,7 @@ impl MessageQueue {
                 receiver_wakers: None,
                 notify: None,
             })),
+            owner_uid
         }
     }
 
