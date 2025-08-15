@@ -299,7 +299,7 @@ pub async fn sys_pselect6(
         }else {
             // Instruction::set_sum();
             // Some(&mut *(exceptfds_ptr as *mut FdSet))
-            Some(UserPtrRaw::new(writefds_ptr as *mut FdSet)
+            Some(UserPtrRaw::new(exceptfds_ptr as *mut FdSet)
                .ensure_write(&mut task.get_vm_space().lock())
                .ok_or(SysError::EFAULT)?
             )
@@ -426,6 +426,7 @@ pub async fn sys_pselect6(
             res += 1;
         }
     }
+    log::info!("select finish");
     Ok(res)
 }
 

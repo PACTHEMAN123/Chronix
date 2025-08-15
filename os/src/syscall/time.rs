@@ -154,7 +154,8 @@ pub fn sys_clock_settime(clock_id: usize, ts_ptr: usize) -> SysResult {
                 return Err(SysError::EINVAL);
             }
             unsafe {
-                CLOCK_DEVIATION[clock_id] = duration - get_current_time_duration();
+                // CLOCK_DEVIATION[clock_id] = duration - get_current_time_duration();
+                CLOCK_DEVIATION[clock_id] = duration.saturating_sub(get_current_time_duration());
             }
         }
         _ => {
