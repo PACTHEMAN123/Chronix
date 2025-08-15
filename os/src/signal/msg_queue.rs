@@ -354,7 +354,7 @@ pub union Sigval {
 pub struct Sigevent {
     pub sigev_notify: i32,
     pub sigev_signo: i32,
-    pub sigev_value: Sigval, // todo: kernel now ignore this field
+    pub sigev_value: Sigval, // todo: kernel now ignore this field expect PosixTimer
     // 以下字段因不支持 SIGEV_THREAD 而被忽略
     pub sigev_notify_function: usize,
     pub sigev_notify_attributes: usize,

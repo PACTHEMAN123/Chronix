@@ -5,7 +5,7 @@ use log::info;
 
 use super::{ffi::TimeVal, get_current_time_duration};
 use spin::Lazy;
-use crate::{processor::processor::current_processor, signal::{SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock};
+use crate::{devices::net::NetRxToken, processor::processor::current_processor, signal::{msg_queue::{Sigevent, SIGEV_SIGNAL}, SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock, timer::ffi::TimeSpec};
 use hal::{board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}};
 /// A trait that defines the event to be triggered when a timer expires.
 /// The TimerEvent trait requires a callback method to be implemented,
@@ -184,6 +184,19 @@ impl ITimerVal {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Default, Debug)]
+pub struct ITimerSpec {
+    pub it_interval: TimeSpec,
+    pub it_value: TimeSpec,
+}
+
+impl ITimerSpec {
+    pub fn is_valid(&self) -> bool {
+        self.it_interval.is_valid() && self.it_value.is_valid()
+    }
+}
+
 #[derive (Default, Debug)]
 /// based on real time no matter the task is running the timer will work
 /// poll by SIGALRM
@@ -223,3 +236,103 @@ impl TimerEvent for RealITimer {
         })
     }
 }
+
+pub type TimerId = usize;
+
+pub struct PosixTimer {
+    /// tcb in PosixTimer 
+    pub task: Weak<TaskControlBlock>,
+    pub sigevent: Sigevent,
+    pub interval: Duration,
+    pub next_expire: Duration,
+    /// check if has been replace
+    pub interval_id: TimerId,
+    /// last 'sent' signo orverun count
+    pub last_overrun: usize,
+}
+
+
+impl TimerEvent for PosixTimer {
+    fn callback(mut self: Box<Self>) -> Option<Timer> {
+        let task = match self.task.upgrade() {
+            Some(t) => t,
+            None => return None,
+        };
+
+        let mut posix_timers = task.posix_timers.lock();
+
+        let timer_id = unsafe { self.sigevent.sigev_value.sival_ptr } as TimerId;
+
+        // 定时器可能已被删除
+        let timer_entry = match posix_timers.get_mut(&timer_id) {
+            Some(t) => t,
+            None => return None,
+        };
+
+        // 版本号不一致：旧回调，直接失效
+        if timer_entry.interval_id != self.interval_id {
+            return None;
+        }
+
+        let now = get_current_time_duration();
+        let mut overrun = 0usize;
+
+        // 仅当当前确实到期（或已过期）才投递信号
+        if now >= self.next_expire {
+            // 计算错过了多少个周期（k-1）
+            if self.interval > Duration::ZERO {
+                let late = now.saturating_sub(self.next_expire);
+                // k = floor(late/interval) + 1   （至少为 1）
+                let k = (late.as_nanos() / self.interval.as_nanos() as u128) as usize + 1;
+                overrun = k.saturating_sub(1);
+
+                // 刷新下一次到期（跳过多个周期）
+                self.next_expire = self.next_expire + self.interval * (k as u32);
+            } else {
+                // one-shot：下一次到期清零（不再重启）
+                self.next_expire = Duration::ZERO;
+            }
+
+            // 记录 overrun 到 map，符合 “最近一次已投递信号的 overrun”
+            timer_entry.last_overrun = overrun;
+
+            // 同步 map 中的 next_expire
+            timer_entry.next_expire = self.next_expire;
+
+            // 发送信号（仅支持 SIGEV_SIGNAL）
+            match self.sigevent.sigev_notify {
+                SIGEV_SIGNAL => {
+                    let sig_info = SigInfo {
+                        si_signo: self.sigevent.sigev_signo as usize,
+                        si_code: SigInfo::KERNEL,
+                        si_pid: None,
+                    };
+                    task.recv_sigs_process_level(sig_info);
+                }
+                _ => {
+                    log::warn!(
+                        "Unsupported sigev_notify value: {}",
+                        self.sigevent.sigev_notify
+                    );
+                }
+            }
+
+            // 若为周期定时器，则把“下一次”重新入队；否则结束
+            if self.interval > Duration::ZERO && self.next_expire > Duration::ZERO {
+                // 递归沿用同一 interval_id，直到下一次 settime/disarm 才会递增
+                let next = Timer {
+                    expire: self.next_expire,
+                    data: self,
+                };
+                return Some(next);
+            } else {
+                return None;
+            }
+        }
+
+        // 未到期则不应被调用（正常不会进入这里；守稳返回 None）。
+        None
+    }
+}
+
+

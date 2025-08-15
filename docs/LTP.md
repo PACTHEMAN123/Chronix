@@ -1576,7 +1576,7 @@
 - [ ] setuid03 : f1
 - [ ] setuid04 : f2
 
-- [ ] setxattr01 : no dev
+- [x] setxattr01 : no dev
 - [x] setxattr02 : p2 f5
 - [ ] setxattr03 : f
 - [ ] sgetmask01 : tconf
@@ -1733,8 +1733,8 @@
 ======== time ========
 - [x] time01
 - [ ] timens01 : .config
-- [ ] timer_delete01 : 107 syscall
-- [ ] timer_delete02 : 111
+- [x] timer_delete01 
+- [x] timer_delete02 : 111
 - [ ] timerfd01 : 85
 - [ ] timerfd02 : 85
 - [ ] timerfd04 : .config
@@ -1742,10 +1742,10 @@
 - [ ] timerfd_gettime01 : 85
 - [ ] timerfd_settime01 : 85
 - [ ] timerfd_settime02 : 85
-- [ ] timer_getoverrun01 : 107
-- [ ] timer_gettime01 : 107
+- [x] timer_getoverrun01 : 107
+- [x] timer_gettime01 : 107
 - [ ] timer_settime01 : 107
-- [ ] timer_settime02 : 107
+- [x] timer_settime02 
 - [ ] timer_settime03 : 107
 - [x] times01
 - [ ] times03 : tms_time wrong
