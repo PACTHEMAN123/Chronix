@@ -13,7 +13,7 @@ use universal_hash::generic_array::functional;
 use virtio_drivers::device::socket::SocketError;
 use xmas_elf::reader;
 
-use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::{msg_queue::{MessageQueue, MqAttr, MqError, NotifyRegistration, Sigevent, MQ_FLAG_NONBLOCK, SIGEV_NONE, SIGEV_SIGNAL}, SigSet}, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, get_current_time_duration, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{suspend_now, user_path_to_string, Select2Futures, SelectOutput}};
+use crate::{fs::{vfs::{file::PollEvents, File, FileInner}, OpenFlags}, mm::{UserPtrRaw, UserSliceRaw}, signal::{msg_queue::{MessageQueue, MqAttr, MqError, NotifyRegistration, Sigevent, MQ_FLAG_NONBLOCK, SIGEV_NONE, SIGEV_SIGNAL}, SigSet, SIGKILL}, sync::mutex::SpinNoIrqLock, task::{current_task, fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture}, timer::{ffi::TimeSpec, get_current_time_duration, timed_task::{PendingFuture, TimedTaskFuture, TimedTaskOutput}}, utils::{suspend_now, user_path_to_string, Select2Futures, SelectOutput}};
 use crate::fs::tmpfs::dentry::TmpDentry;
 use super::{SysError, SysResult};
 
@@ -1132,7 +1132,7 @@ where
                 let task = current_task().unwrap();
                 let has_signal_flag = task.with_sig_manager(|sig_manager| {
                     let block_sig = sig_manager.blocked_sigs;
-                    sig_manager.check_pending_flag(!block_sig)
+                    sig_manager.check_pending_flag(!block_sig | SigSet::SIGKILL | SigSet::SIGALRM)
                 });
 
                 if has_signal_flag {

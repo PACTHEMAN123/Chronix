@@ -66,13 +66,58 @@ pub enum MqError {
     WouldBlock,       // Placeholder for non-blocking operations
 }
 
+const MAX_WAKERS: usize = 64; 
+
 /// The internal state of a message queue, protected by a lock.
 pub struct MessageQueueInner {
     pub attr: MqAttr,
     pub messages: BinaryHeap<Message>,
-    sender_wakers: Option<Waker>,
-    receiver_wakers: Option<Waker>,
+    sender_wakers: VecDeque<Waker>,
+    receiver_wakers: VecDeque<Waker>,
     pub notify: Option<NotifyRegistration>, 
+}
+
+impl MessageQueueInner {
+    pub fn push_sender_waker(&mut self, waker: &Waker) {
+        // 避免重复添加相同 waker
+        if !self.sender_wakers.iter().any(|w| w.will_wake(waker)) {
+            if self.sender_wakers.len() < MAX_WAKERS {
+                self.sender_wakers.push_back(waker.clone());
+            }
+        }
+    }
+
+    pub fn push_receiver_waker(&mut self, waker: &Waker) {
+        if !self.receiver_wakers.iter().any(|w| w.will_wake(waker)) {
+            if self.receiver_wakers.len() < MAX_WAKERS {
+                self.receiver_wakers.push_back(waker.clone());
+            }
+        }
+    }
+
+    pub fn wake_one_sender(&mut self) {
+        if let Some(waker) = self.sender_wakers.pop_front() {
+            waker.wake();
+        }
+    }
+
+    pub fn wake_one_receiver(&mut self) {
+        if let Some(waker) = self.receiver_wakers.pop_front() {
+            waker.wake();
+        }
+    }
+
+    pub fn wake_all_senders(&mut self) {
+        while let Some(waker) = self.sender_wakers.pop_front() {
+            waker.wake();
+        }
+    }
+
+    pub fn wake_all_receivers(&mut self) {
+        while let Some(waker) = self.receiver_wakers.pop_front() {
+            waker.wake();
+        }
+    }
 }
 
 unsafe impl  Send for MessageQueueInner {}
@@ -103,8 +148,8 @@ impl MessageQueue {
             inner: Arc::new(SpinNoIrqLock::new(MessageQueueInner {
                 attr,
                 messages: BinaryHeap::with_capacity(attr.mq_maxmsg),
-                sender_wakers: None,
-                receiver_wakers: None,
+                sender_wakers: VecDeque::with_capacity(MAX_WAKERS),
+                receiver_wakers: VecDeque::with_capacity(MAX_WAKERS),
                 notify: None,
             })),
             owner_uid
@@ -136,8 +181,13 @@ impl MessageQueue {
                 }
             },
             None => {
-                send_future.await?;
-                Ok(0)
+                 match TimedTaskFuture::new(Duration::from_secs(2), send_future).await {
+                    TimedTaskOutput::OK(result) => match result{
+                        Ok(()) => Ok(0),
+                        Err(e) => Err(e),
+                    },
+                    TimedTaskOutput::TimedOut => Err(MqError::TimedOut),
+                }
             }
         }
         
@@ -224,9 +274,7 @@ impl Future for SendFuture {
             if inner.attr.mq_flags & MQ_FLAG_NONBLOCK as i64 != 0{
                 return Poll::Ready(Err(MqError::WouldBlock));
             }
-           if inner.sender_wakers.as_ref().map_or(true, |w| !w.will_wake(cx.waker())){
-                inner.sender_wakers = Some(cx.waker().clone());
-           }
+            inner.push_sender_waker(cx.waker());
             Poll::Pending
         } else {
             let was_empty = inner.messages.is_empty();
@@ -237,13 +285,13 @@ impl Future for SendFuture {
             };
             inner.messages.push(message);
 
-            // After sending, check if there's a receiver waiting.
-            // If so, wake them up!
-            if let Some(waker) = inner.receiver_wakers.take() {
-                waker.wake();
-            }else if was_empty {
+            // wake one receiver
+            inner.wake_one_receiver();
+
+            if was_empty {
                 if let Some(registration) = inner.notify.take() {
                     let sender_task = current_task().unwrap();
+                    // todo check pid or tid
                     let sender_pid = sender_task.pid();
                     dispatch_notification(&registration, sender_pid);
                 }
@@ -272,9 +320,7 @@ impl Future for ReceiveFuture {
             // Queue has a message, proceed to receive.
             // After receiving, there is now space in the queue.
             // Check if there's a sender waiting for space.
-            if let Some(waker) = inner.sender_wakers.take() {
-                waker.wake();
-            }
+            inner.wake_one_sender();
             Poll::Ready(Ok((message.data, message.priority)))
         } else {
             if inner.attr.mq_flags & MQ_FLAG_NONBLOCK as i64 != 0{
@@ -282,9 +328,7 @@ impl Future for ReceiveFuture {
             }
             // Queue is empty, we need to wait.
             // Store the waker so we can be woken up when a message arrives.
-            if inner.receiver_wakers.as_ref().map_or(true, |w| !w.will_wake(cx.waker())){
-                inner.receiver_wakers = Some(cx.waker().clone());
-            }        
+            inner.push_receiver_waker(cx.waker());      
             Poll::Pending
         }
     }

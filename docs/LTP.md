@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [x] accept03 : p4 f1
+- [x] accept03 : 
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -1009,7 +1009,7 @@
 - [x] mprotect04 : no sum
 - [x] mprotect05
 
-- [ ] mq_notify01
+- [x] mq_notify01
 - [x] mq_notify02
 - [x] mq_notify03
 - [ ] mqns_01
@@ -1018,7 +1018,7 @@
 - [ ] mqns_04
 - [x] mq_open01
 - [ ] mq_timedreceive01
-- [ ] mq_timedsend01
+- [x] mq_timedsend01
 - [x] mq_unlink01
 
 - [ ] mremap01 : f
