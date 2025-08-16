@@ -107,6 +107,11 @@ impl TimeSpec {
         }
     }
 
+    /// check if is zero
+    pub fn is_zero(&self) -> bool {
+        self.tv_sec == 0 && self.tv_nsec == 0
+    }
+
 }
 
 impl From<Duration> for TimeSpec {

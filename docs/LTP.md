@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [x] accept03 : p4 f1
+- [x] accept03 : 
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -242,7 +242,7 @@
 - [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
 - [ ] epoll_pwait01 : stuck, need /proc/pid
-- [ ] epoll_pwait02 : stuck
+- [x] epoll_pwait02 : stuck
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
@@ -1010,17 +1010,17 @@
 - [x] mprotect04 : no sum
 - [x] mprotect05
 
-- [ ] mq_notify01
-- [ ] mq_notify02
-- [ ] mq_notify03
+- [x] mq_notify01
+- [x] mq_notify02
+- [x] mq_notify03
 - [ ] mqns_01
 - [ ] mqns_02
 - [ ] mqns_03
 - [ ] mqns_04
-- [ ] mq_open01
+- [x] mq_open01
 - [ ] mq_timedreceive01
-- [ ] mq_timedsend01
-- [ ] mq_unlink01
+- [x] mq_timedsend01
+- [x] mq_unlink01
 
 - [ ] mremap01 : f
 - [x] mremap02 : no sum
@@ -1577,7 +1577,7 @@
 - [ ] setuid03 : f1
 - [ ] setuid04 : f2
 
-- [x] setxattr01 : p6 f21
+- [x] setxattr01 : no dev
 - [x] setxattr02 : p2 f5
 - [ ] setxattr03 : f
 - [ ] sgetmask01 : tconf
@@ -1734,19 +1734,19 @@
 ======== time ========
 - [x] time01
 - [ ] timens01 : .config
-- [ ] timer_delete01 : 107 syscall
-- [ ] timer_delete02 : 111
-- [ ] timerfd01 : 85
-- [ ] timerfd02 : 85
+- [x] timer_delete01 
+- [x] timer_delete02 : 111
+- [x] timerfd01 : 85
+- [x] timerfd02 : 85
 - [ ] timerfd04 : .config
-- [ ] timerfd_create01 : 85
-- [ ] timerfd_gettime01 : 85
-- [ ] timerfd_settime01 : 85
-- [ ] timerfd_settime02 : 85
-- [ ] timer_getoverrun01 : 107
-- [ ] timer_gettime01 : 107
+- [x] timerfd_create01 : 85
+- [x] timerfd_gettime01 : 85
+- [x] timerfd_settime01 : 85
+- [x] timerfd_settime02 : 85
+- [x] timer_getoverrun01 : 107
+- [x] timer_gettime01 : 107
 - [ ] timer_settime01 : 107
-- [ ] timer_settime02 : 107
+- [x] timer_settime02 
 - [ ] timer_settime03 : 107
 - [x] times01
 - [ ] times03 : tms_time wrong
