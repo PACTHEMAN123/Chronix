@@ -11,7 +11,7 @@ use xmas_elf::program::Flags;
 
 use super::{SysError, SysResult};
 use crate::{
-    fs::{procfs::interrupt, vfs::{File, FileInner}, OpenFlags}, mm::UserPtrRaw, processor::context::SumGuard, signal::msg_queue::Sigevent, sync::mutex::SpinNoIrqLock, task::{
+    fs::{procfs::interrupt, tmpfs::{dentry::TmpDentry, inode::{EmptyFile, TmpSysInode}}, vfs::{inode::InodeMode, File, FileInner}, OpenFlags}, mm::UserPtrRaw, processor::context::SumGuard, signal::msg_queue::Sigevent, sync::mutex::SpinNoIrqLock, task::{
         current_task, fs::{FdFlags, FdInfo}, task::{new_shared, Shared}
     }, timer::{
         clock::{
@@ -717,9 +717,12 @@ pub fn sys_timerfd_create(clockid: usize, flags: usize) -> SysResult {
     let nonblock = (flags as i32 & TFD_NONBLOCK) != 0;
     let cloexec = (flags as i32 & TFD_CLOEXEC) != 0;
     // Create a new file object for timerfd
+    let dentry = TmpDentry::new("", None);
+    let inode = TmpSysInode::new(InodeMode::FILE, Arc::new(EmptyFile {}));
+    dentry.set_inode(inode);
     let file = Arc::new(TimerFdFile {
          file_inner: FileInner {
-                dentry: Arc::<usize>::new_zeroed(),
+                dentry: dentry,
                 offset: AtomicUsize::new(0),
                 flags: SpinNoIrqLock::new({
                     let mut oflags = OpenFlags::empty();

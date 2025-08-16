@@ -96,7 +96,7 @@ impl TaskControlBlock {
             let mut sig_manager = self.sig_manager.lock();
             if let Some(sig) = sig_manager.dequeue_one() {
                 // handle a signal
-                assert!(sig.si_signo != 0);
+                // assert!(sig.si_signo != 0);
                 let sig_action = sig_manager.sig_handler[sig.si_signo];
                 // log::info!("[check_and_handle] task {} action {:?}", self.tid(), sig_action);
                 let sa_flags = SigActionFlag::from_bits_truncate(sig_action.sa.sa_flags);

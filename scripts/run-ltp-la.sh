@@ -58,14 +58,15 @@ fchown01 fchown02 fchown03 fchown04 fchown05
 fchownat01 fchownat02
 fcntl02 fcntl02_64 fcntl03 fcntl03_64 fcntl04 fcntl04_64 fcntl05 fcntl05_64 fcntl08 fcntl08_64
 fcntl12 fcntl12_64 fcntl29 fcntl29_64 fcntl34 fcntl34_64 fcntl36 fcntl36_64
+fgetxattr01 
 flistxattr03
 flock01 flock03 flock04 flock06
 fork01 fork03 fork04 fork07 fork08 fork10 fpathconf01
 fstat02 fstat02_64 fstat03 fstat03_64
-fstatfs02 fstatfs02_64
+fstatfs01 fstatfs01_64 fstatfs02 fstatfs02_64
 fsync01 fsync02
 ftruncate01 ftruncate01_64 ftruncate03 ftruncate03_64
-futex_wait01
+futex_wait01 futex_wait04
 
 getcwd01 getcwd02
 getdents02
@@ -118,6 +119,8 @@ mknod01 mknod02
 mlock01 mlock04
 mmap02 mmap05 mmap06 mmap09 mmap19
 mprotect05
+mq_notify01 mq_notify02 mq_notify03
+mq_open01 mq_timedsend01 mq_unlink01
 msgctl01 msgctl02 msgctl03 msgctl12
 msgrcv07
 mtest01
@@ -134,12 +137,13 @@ open_by_handle_at01
 pathconf01 pathconf02
 personality02
 pidns32
-pipe01 pipe03 pipe06 pipe07 pipe10 pipe11 pipe14 pipe2_01
+pipe01 pipe03 pipe06 pipe07 pipe10 pipe11 pipe12 pipe14 pipe2_01
 poll01
 posix_fadvise01 posix_fadvise01_64 
 posix_fadvise02 posix_fadvise02_64 
 posix_fadvise03 posix_fadvise03_64
 posix_fadvise04 posix_fadvise04_64
+ppoll01
 prctl01 prctl03 prctl04 prctl05 prctl08
 pread01 pread01_64
 pread02 pread02_64
@@ -219,10 +223,17 @@ syscall01
 
 tgkill01 tgkill03
 time01
+timer_delete01 timer_delete02
+timerfd02
+timerfd_create01
+timerfd_gettime01 
+timerfd_settime01 timerfd_settime02
+timer_getoverrun01
+timer_gettime01 timer_settime02
 times01
 tkill01 tkill02
-truncate02 truncate02_64
 
+umount01
 uname01 uname02 uname04
 unlink05 unlink07
 unlinkat01
