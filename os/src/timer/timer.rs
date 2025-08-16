@@ -1,12 +1,44 @@
-use core::{cmp::Reverse, sync::atomic::{AtomicUsize, Ordering}, task::Waker, time::Duration};
+use core::{
+    cmp::Reverse,
+    future::Future,
+    pin::Pin,
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 extern crate alloc;
-use alloc::{boxed::Box, collections::BinaryHeap, sync::{Arc, Weak}};
+use alloc::{
+    boxed::Box,
+    collections::BinaryHeap,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
+use async_trait::async_trait;
+use downcast_rs::DowncastSync;
 use log::info;
 
 use super::{ffi::TimeVal, get_current_time_duration};
-use spin::Lazy;
-use crate::{devices::net::NetRxToken, processor::processor::current_processor, signal::{msg_queue::{Sigevent, SIGEV_SIGNAL}, SigInfo, SIGALRM}, sync::mutex::SpinNoIrqLock, task::task::TaskControlBlock, timer::ffi::TimeSpec};
-use hal::{board::MAX_PROCESSORS, instruction::{Instruction, InstructionHal}};
+use crate::{
+    devices::net::NetRxToken,
+    fs::vfs::{File, FileInner},
+    processor::processor::current_processor,
+    signal::{
+        msg_queue::{Sigevent, SIGEV_SIGNAL},
+        SigInfo, SIGALRM,
+    },
+    sync::mutex::SpinNoIrqLock,
+    syscall::{SysError, SysResult},
+    task::task::TaskControlBlock,
+    timer::{
+        ffi::TimeSpec,
+        timed_task::{PendingFuture, TimedTaskFuture},
+    },
+};
+use hal::{
+    board::MAX_PROCESSORS,
+    instruction::{Instruction, InstructionHal},
+};
+use spin::{Lazy, Mutex};
 /// A trait that defines the event to be triggered when a timer expires.
 /// The TimerEvent trait requires a callback method to be implemented,
 /// which will be called when the timer expires.
@@ -110,13 +142,13 @@ impl TimerManager {
                 let current_time = get_current_time_duration();
                 if current_time >= timer.0.expire {
                     log::trace!("timers len {}", timers.len());
-                    
+
                     // info!(
                     //     "[Timer Manager] there is a timer expired, current:{:?}, expire:{:?}",
                     //     current_time,
                     //     timer.0.expire
                     // );
-                    
+
                     let timer = timers.pop().unwrap().0;
                     drop(timers);
                     if let Some(new_timer) = timer.callback() {
@@ -162,7 +194,7 @@ pub fn alloc_timer_id() -> usize {
     TIMER_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
-/// a timer mechanism called itimer for implementing interval timers. 
+/// a timer mechanism called itimer for implementing interval timers.
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct ITimerVal {
@@ -197,11 +229,11 @@ impl ITimerSpec {
     }
 }
 
-#[derive (Default, Debug)]
+#[derive(Default, Debug)]
 /// based on real time no matter the task is running the timer will work
 /// poll by SIGALRM
 pub struct RealITimer {
-    /// tcb in RealITimer 
+    /// tcb in RealITimer
     pub task: Weak<TaskControlBlock>,
     /// id of the timer
     pub id: usize,
@@ -209,30 +241,29 @@ pub struct RealITimer {
 
 impl TimerEvent for RealITimer {
     fn callback(self: Box<Self>) -> Option<Timer> {
-        self.task.upgrade()
-        .and_then(|task|{
-              task.with_mut_itimers(|itimers| {
-                    let real_timer = &mut itimers[0];
-                    if real_timer.id != self.id {
-                        log::warn!("check failed!");
-                        return None
-                    }
-                    task.recv_sigs_process_level(
-                        SigInfo { si_signo: SIGALRM, si_code: SigInfo::KERNEL, si_pid: None }
-                    );
-                    let real_timer_interval = real_timer.interval;
-                    if real_timer_interval == Duration::ZERO {
-                        return None;
-                    }
-                    let next_expire = get_current_time_duration() + real_timer_interval; 
-                    real_timer.next_expire = next_expire;
-                    Some(
-                        Timer {
-                            expire: next_expire,
-                            data: self,
-                        }
-                    )
-              })
+        self.task.upgrade().and_then(|task| {
+            task.with_mut_itimers(|itimers| {
+                let real_timer = &mut itimers[0];
+                if real_timer.id != self.id {
+                    log::warn!("check failed!");
+                    return None;
+                }
+                task.recv_sigs_process_level(SigInfo {
+                    si_signo: SIGALRM,
+                    si_code: SigInfo::KERNEL,
+                    si_pid: None,
+                });
+                let real_timer_interval = real_timer.interval;
+                if real_timer_interval == Duration::ZERO {
+                    return None;
+                }
+                let next_expire = get_current_time_duration() + real_timer_interval;
+                real_timer.next_expire = next_expire;
+                Some(Timer {
+                    expire: next_expire,
+                    data: self,
+                })
+            })
         })
     }
 }
@@ -240,7 +271,7 @@ impl TimerEvent for RealITimer {
 pub type TimerId = usize;
 
 pub struct PosixTimer {
-    /// tcb in PosixTimer 
+    /// tcb in PosixTimer
     pub task: Weak<TaskControlBlock>,
     pub sigevent: Sigevent,
     pub interval: Duration,
@@ -250,7 +281,6 @@ pub struct PosixTimer {
     /// last 'sent' signo orverun count
     pub last_overrun: usize,
 }
-
 
 impl TimerEvent for PosixTimer {
     fn callback(mut self: Box<Self>) -> Option<Timer> {
@@ -335,4 +365,139 @@ impl TimerEvent for PosixTimer {
     }
 }
 
+pub struct TimerFdFile {
+    pub file_inner: FileInner,
+    pub timer: Arc<Mutex<TimerFd>>,
+}
 
+unsafe impl Send for TimerFdFile {}
+unsafe impl Sync for TimerFdFile {}
+
+#[derive(Clone)]
+pub struct TimerFd {
+    pub task: Weak<TaskControlBlock>,
+    pub interval: Duration,
+    pub next_expire: Duration,
+    pub interval_id: TimerId,
+    pub expirations: u64,
+    // 当 poll 被调用时，waker 会被设置。
+    pub wait_future: Option<TimerFdReadFuture>,
+}
+
+#[async_trait]
+impl File for TimerFdFile {
+    fn file_inner(&self) -> &FileInner {
+        &self.file_inner
+    }
+
+    fn readable(&self) -> bool {
+        self.timer.lock().expirations > 0
+    }
+
+    fn writable(&self) -> bool {
+        false
+    }
+
+    async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {
+        let expirations;
+        {
+            let mut inner = self.timer.lock();
+            if inner.expirations == 0 {
+                let fut = inner
+                    .wait_future
+                    .get_or_insert_with(|| TimerFdReadFuture::new(Arc::clone(&self.timer)))
+                    .clone();
+                drop(inner); 
+                fut.await;
+                inner = self.timer.lock(); 
+            }
+            expirations = inner.expirations;
+            inner.expirations = 0;
+        } 
+        if buf.len() < 8 {
+            return Err(SysError::EINVAL);
+        }
+        buf[..8].copy_from_slice(&expirations.to_ne_bytes());
+        Ok(8)
+    }
+    async fn write(&self, _buf: &[u8]) -> Result<usize, SysError> {
+        Err(SysError::EINVAL)
+    }
+}
+
+#[derive(Clone)]
+pub struct TimerFdReadFuture {
+    timer: Arc<Mutex<TimerFd>>,
+    waker: Option<Waker>,
+}
+
+impl TimerFdReadFuture {
+    pub fn new(timer: Arc<Mutex<TimerFd>>) -> Self {
+        Self { timer, waker: None }
+    }
+
+    /// Called by timer callback to wake up the future
+    pub fn wake(&self) {
+        if let Some(w) = &self.waker {
+            w.wake_by_ref();
+        }
+    }
+}
+
+impl Future for TimerFdReadFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let inner = self.timer.lock();
+
+        // 检查是否有到期事件
+        if inner.expirations > 0 {
+            // 如果有，就绪
+            Poll::Ready(())
+        } else {
+            // 没有到期事件，并且定时器未设置，则立即就绪
+            // 这对应于 timerfd_settime 设置 it_value 为 0 的情况。
+            if inner.next_expire.is_zero() {
+                Poll::Ready(())
+            } else {
+                // 定时器已设置但未到期，我们需要等待
+                // 更新 Waker
+                if self.waker.as_ref().map(|w| !w.will_wake(cx.waker())).unwrap_or(true) {
+                    drop(inner);
+                    self.waker = Some(cx.waker().clone());
+                }
+                // 将 Waker 注册到全局定时器管理器
+                // 确保在到期时会唤醒当前任务
+                // 注意：这里需要确保 TIMER_MANAGER.add_timer 是幂等的，
+                // 避免每次 poll 都添加新的定时器。
+                // 如果 TIMER_MANAGER 内部是基于堆的，会处理重复注册。
+                TIMER_MANAGER.add_timer(Timer::new_waker_timer(
+                    self.timer.lock().next_expire,
+                    cx.waker().clone(),
+                ));
+
+                Poll::Pending
+            }
+        }
+    }
+}
+
+pub struct TimerFdEvent(pub Arc<Mutex<TimerFd>>);
+impl TimerEvent for TimerFdEvent {
+    fn callback(self: Box<Self>) -> Option<Timer> {
+        let mut inner = self.0.lock();
+        inner.expirations += 1;
+        if let Some(fut) = &inner.wait_future {
+            fut.wake();
+        }
+        if inner.interval > Duration::ZERO {
+            let next_expire = get_current_time_duration() + inner.interval;
+            inner.next_expire = next_expire;
+            drop(inner); // 释放锁
+            Some(Timer::new(next_expire, self)) // 再次将自己放回 TIMER_MANAGER
+        } else {
+            inner.next_expire = Duration::ZERO;
+            None
+        }
+    }
+}

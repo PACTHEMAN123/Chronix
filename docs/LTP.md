@@ -1735,13 +1735,13 @@
 - [ ] timens01 : .config
 - [x] timer_delete01 
 - [x] timer_delete02 : 111
-- [ ] timerfd01 : 85
-- [ ] timerfd02 : 85
+- [x] timerfd01 : 85
+- [x] timerfd02 : 85
 - [ ] timerfd04 : .config
-- [ ] timerfd_create01 : 85
-- [ ] timerfd_gettime01 : 85
-- [ ] timerfd_settime01 : 85
-- [ ] timerfd_settime02 : 85
+- [x] timerfd_create01 : 85
+- [x] timerfd_gettime01 : 85
+- [x] timerfd_settime01 : 85
+- [x] timerfd_settime02 : 85
 - [x] timer_getoverrun01 : 107
 - [x] timer_gettime01 : 107
 - [ ] timer_settime01 : 107
