@@ -1569,7 +1569,7 @@ pub fn sys_fdatasync(fd: usize) -> SysResult {
 pub fn sys_readahead(fd: usize, _offset: usize, _count: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|f| f.get_file(fd))?;
-    let dentry = file.dentry().unwrap();
+    let dentry = file.dentry().ok_or(SysError::ENOENT)?;
     if dentry.inode().is_none() {
         return Err(SysError::EINVAL);
     }

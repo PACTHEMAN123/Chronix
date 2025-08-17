@@ -86,7 +86,7 @@
 - [ ] cgroup_regression_fork_processes
 - [ ] cgroup_regression_getdelays
 - [ ] cgroup_xattr
-- [ ] chdir01: TBROK: Failed to acquire device
+- [x] chdir01: f13 f3 b1
 - [x] chdir04
 - [ ] check_envval
 - [ ] check_icmpv4_connectivity
@@ -135,13 +135,13 @@
 - [ ] clone303: /proc/self/mounts
 - [x] close01
 - [x] close02
-- [ ] close_range01：No Free Device
+- [ ] close_range01：436
 - [ ] close_range02：TCONF
 - [x] confstr01
 - [ ] connect01: no_summary
 - [ ] connect02: f
-- [ ] copy_file_range01 : no dev
-- [ ] copy_file_range02 : no dev
+- [x] copy_file_range01 : p12 (heavy read/write)
+- [ ] copy_file_range02 : b
 - [x] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
@@ -172,7 +172,7 @@
 - [ ] creat07: failed to copy
 - [ ] creat07_child: failed
 - [x] creat08: pass 2 faild 7 
-- [ ] creat09: no device
+- [ ] creat09: TBROK: Group ID lookup failed: EINVAL (22)
 - [ ] crypto_user01: socket(16, 524290, 21) failed: EINVAL (22)
 - [ ] crypto_user02
 - [ ] cve-2014-0196
@@ -306,17 +306,18 @@
 - [ ] fallocate01：需要支持 fallocate: 调整文件在内存分布？且没有 summary
 - [ ] fallocate02：没有 summary
 - [x] fallocate03
-- [ ] fallocate04：似乎需要 /dev/ 支持？
+- [ ] fallocate04 : p1 b1 lseek not sopport hole
 - [ ] fallocate05：同上
 - [ ] fallocate06：同上
-- [ ] fanotify01：需要设备
-- [ ] fanotify02：卡死
-- [ ] fanotify03：需要设备
+- [x] fanotify01 : p18 f256
+- [ ] fanotify02 : f8
+- [ ] fanotify03 : f
 - [x] fanotify04：有概率卡住
-- [ ] fanotify05：需要设备
+- [ ] fanotify05 : dead loop
 - [ ] fanotify06：需要设备
 - [ ] fanotify07：可能需要正确实现该系统调用
 - [x] fanotify08：试图关闭 fd0
+- [x] fanotify14 : p69 f51
 - [ ] fanotify16
 - [ ] fanotify09-23：需要设备/关闭fd0/管道问题？
 - [ ] fanout01
@@ -418,7 +419,7 @@
 
 - [x] fdatasync01: no sum
 - [ ] fdatasync02: no sum
-- [ ] fdatasync03: no device
+- [ ] fdatasync03: /sys/block/
 - [ ] fgetxattr01: no device
 - [ ] fgetxattr02: mountpoint?
 - [ ] fgetxattr03: ?
@@ -456,14 +457,14 @@
 ===== fsxxx ==========
 - [ ] fptest01 : failed without reason?
 - [ ] fptest02
-- [ ] fremovexattr01 : no device
-- [ ] fremovexattr02 : no device
-- [ ] fsconfig01 : no device
-- [ ] fsconfig02 : no device
-- [ ] fsconfig03 : no device
-- [ ] fsetxattr01 : no device
-- [ ] fsetxattr02 : no device
-- [ ] fs_fill : no device
+- [ ] fremovexattr01 : f
+- [ ] fremovexattr02 : f
+- [ ] fsconfig01 : no syscall 431
+- [ ] fsconfig02 : no syscall 431
+- [ ] fsconfig03 : no syscall 431
+- [ ] fsetxattr01 : p6 f21
+- [ ] fsetxattr02 : tconf
+- [ ] fs_fill : panic
 - [ ] fsmount01 : no device
 - [ ] fsmount02 : no device
 - [ ] fsopen01 : no device
@@ -480,10 +481,10 @@
 - [x] fstatfs02 : pass 1 failed 1
 - [x] fstatfs02_64
 - [ ] fsx-linux : not support tmp file truncate
-- [ ] fsync01 : no dev
+- [x] fsync01 : p30 f1
 - [x] fsync02
 - [ ] fsync03 : no mknod
-- [ ] fsync04 : no dev
+- [ ] fsync04 : b
 - [ ] ftest01 : failed, no sum
 - [ ] ftest02 : failed
 - [ ] ftest03 : failed
@@ -629,9 +630,9 @@
 - [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
 
 - [ ] getxattr01: failed
-- [ ] getxattr02 : no dev
-- [ ] getxattr03 : no dev
-- [ ] getxattr04 : no dev
+- [ ] getxattr02 : f12
+- [ ] getxattr03 : f
+- [ ] getxattr04 : tconf
 - [ ] getxattr05 : tconf
 - [ ] growfiles
 - [ ] hackbench
@@ -723,12 +724,12 @@
 - [ ] io_control01: Failed to acquire device
 
 ======= ioctl =========
-- [ ] ioctl01 : no dev
+- [ ] ioctl01 : /dev/ptmx
 - [ ] ioctl02 : b
 - [ ] ioctl03 : tun
-- [ ] ioctl04 : no dev
-- [ ] ioctl05 : no dev
-- [ ] ioctl06 : no dev
+- [ ] ioctl04 : b
+- [ ] ioctl05 : b
+- [ ] ioctl06 : b
 - [ ] ioctl07 : f
 - [ ] ioctl08 : tconf
 - [ ] ioctl09 : tconf
@@ -811,7 +812,7 @@
 ====== lxxx =======
 - [x] lchown01 : no sum
 - [x] lchown02 : no sum
-- [ ] lchown03 : no dev
+- [ ] lchown03 : no sum
 
 - [ ] leapsec01 : b
 - [x] lftest
@@ -824,7 +825,7 @@
 - [x] link05
 - [ ] link08 : expected: 40 - ELOOP: ENAMETOOLONG (36)
 - [ ] linkat01 : pass lot f 3, no sum
-- [ ] linkat02 : no dev
+- [ ] linkat02 : f
 
 - [x] listen01 : no sum
 - [ ] listxattr01 : f
@@ -838,10 +839,10 @@
 - [x] llseek01 : pass 1 f 1
 - [x] llseek02
 - [x] llseek03
-- [ ] lremovexattr01 : no dev
+- [ ] lremovexattr01 : f
 - [x] lseek01
 - [ ] lseek02 : mknodat
-- [ ] lseek07 : no dev
+- [x] lseek07
 - [ ] lseek11 : seek hole .. we can support
 - [ ] lstat01 : f
 - [ ] lstat01_64 : f
@@ -909,7 +910,7 @@
 - [x] mkdir03 : passed 7 failed 4
 - [ ] mkdir04 : f 1
 - [x] mkdir05
-- [ ] mkdir09 : no dev
+- [x] mkdir09 : p6 b1
 - [x] mkdirat01 : no sum
 - [ ] mkdirat02 : failed 4, failed unexpectedly; expected: 40 - ELOOP: ENAMETOOLONG
 
@@ -1121,13 +1122,13 @@
 - [ ] open09 : f 
 - [x] open10 : pass 2 failed 7
 - [x] open11 : pass 19 failed 9
-- [ ] open12 : no dev
+- [ ] open12 : no sum
 - [ ] open13 : f
 - [ ] open14 : f
 - [x] openat01
 - [ ] openat02 : no sum
 - [ ] openat03 : f
-- [ ] openat04 : no dev
+- [ ] openat04 : b
 - [ ] openat201 : no openat2
 - [ ] openat202 : f
 - [ ] openat203 : no openat2
@@ -1229,7 +1230,7 @@
 - [ ] prctl06
 - [ ] prctl06_execve
 - [ ] prctl07
-- [ ] prctl08: p6 f4 s1
+- [x] prctl08 : p6 f4 s1
 - [ ] prctl09
 - [ ] prctl10
 
@@ -1242,13 +1243,13 @@
 - [x] preadv01_64
 - [x] preadv02 : p7 f1 todo: check read/write of stdin stdout
 - [x] preadv02_64
-- [ ] preadv03 : no dev
+- [ ] preadv03 : b
 - [ ] preadv03_64
 - [x] preadv201
 - [x] preadv201_64
 - [x] preadv202 : pass 6 failed 2 (should not success)
 - [x] preadv202_64 : 
-- [ ] preadv203 : no dev
+- [ ] preadv203 : b
 - [ ] preadv203_64
 
 - [ ] proc01
@@ -1307,8 +1308,8 @@
 - [x] pwritev01_64
 - [x] pwritev02 : p6 f1
 - [x] pwritev02_64 : p6 f1
-- [ ] pwritev03 : no dev
-- [ ] pwritev03_64 : no dev
+- [ ] pwritev03 : b
+- [ ] pwritev03_64 : b
 - [x] pwritev201
 - [x] pwritev201_64
 - [x] pwritev202 : p5 f2
@@ -1320,7 +1321,7 @@
 - [ ] read03 : mknodat
 - [x] read04
 - [x] readahead01 : p4 f1
-- [ ] readahead02 : no dev
+- [ ] readahead02 : tconf
 - [ ] read_all : brok The directory argument (-d) is required
 - [x] readdir01
 - [ ] readdir21 : tconf
@@ -1347,20 +1348,20 @@
 - [ ] removexattr02 : f
 
 ====== rename ======
-- [ ] rename01 : no dev
-- [ ] rename03 : no dev
-- [ ] rename04 : no dev
-- [ ] rename05 : no dev
-- [ ] rename06 : no dev
-- [ ] rename07 : no dev
-- [ ] rename08 : no dev
+- [ ] rename01 : f2 b1
+- [ ] rename03 : p2 f6 b1
+- [ ] rename04 : b
+- [ ] rename05 : b
+- [ ] rename06 : b
+- [ ] rename07 : b
+- [x] rename08 : p6
 - [ ] rename09 : f
-- [ ] rename10 : f
-- [ ] rename11 : no dev
-- [ ] rename12 : no dev
-- [ ] rename13 : no dev
+- [x] rename10 : p6
+- [ ] rename11 : b
+- [ ] rename12 : b
+- [ ] rename13 : b
 - [x] rename14 : no sum
-- [ ] renameat01 : no dev
+- [ ] renameat01 : no sum
 - [x] renameat201 : no sum
 - [ ] renameat202 : f
 
@@ -1672,26 +1673,26 @@
 - [x] stat02_64 : pass 2
 - [x] stat03 : pass4 failed 2
 - [x] stat03_64 : p4 f2
-- [ ] statfs01 : dev
-- [ ] statfs01_64 : no dev
+- [ ] statfs01 : b
+- [ ] statfs01_64 : b
 - [x] statfs02 : p4 f2
 - [x] statfs02_64 : p4 f2
 - [ ] statfs03 : f
 - [ ] statfs03_64 : f
-- [ ] statvfs01 : no dev
+- [ ] statvfs01 : b
 - [x] statvfs02 : p3 f2
 - [x] statx01 : pass 6 failed 2
 - [x] statx02
 - [x] statx03 : pass 5 failed 2 :似乎连着跑会寄
-- [ ] statx04 : no dev
+- [ ] statx04 : b
 - [ ] statx05 : tconf
-- [ ] statx06 : no dev
+- [ ] statx06 : tconf
 - [ ] statx07 : tconf
-- [ ] statx08 : no dev
+- [ ] statx08 : b
 - [ ] statx09 : .config
-- [ ] statx10 : no dev
-- [ ] statx11 : no dev
-- [ ] statx12 : no dev
+- [ ] statx10 : tconf
+- [ ] statx11 : stuck
+- [ ] statx12 : skip
 - [x] stime01 : p1 f1 b1 
 - [ ] stime02 : should failed
 - [ ] stream01 : no sum
@@ -1705,10 +1706,10 @@
 - [ ] symlink03 : pass 4 failed 2 error code
 - [x] symlink04
 - [x] symlinkat01 : no sum
-- [ ] sync01 :  no dev
+- [ ] sync01 :  b
 - [ ] sync_file_range01
 - [ ] sync_file_range02
-- [ ] syncfs01 : no dev
+- [ ] syncfs01 : b
 - [x] syscall01
 - [x] sysconf01 : no sum
 - [ ] sysctl01 : tconf
@@ -1790,14 +1791,14 @@
 - [ ] userns08 : .config
 - [ ] ustat01 : tconf
 - [ ] ustat02 : tconf
-- [ ] utime01 : no dev
-- [ ] utime02 : no dev
-- [ ] utime03 : no dev
-- [ ] utime04 : no dev
-- [ ] utime05 : no dev
+- [x] utime01 : p4 f2
+- [x] utime02 : p4 f2
+- [ ] utime03 : f
+- [x] utime04 : p4 f2
+- [x] utime05 : p4 f2
 - [x] utime06 : pass 1 failed 3
 - [x] utime07 : pass 3 failed 1
-- [ ] utimensat01 : no dev
+- [x] utimensat01 : p8 f17
 - [x] utimes01: pass 2 failed 1
 - [x] utsname01
 - [x] utsname02
@@ -1869,7 +1870,7 @@
 - [x] writetest: no sum
 - [x] writev01
 - [x] writev02 : no sum
-- [ ] writev03: no device
+- [ ] writev03: dead loop?
 - [x] writev05: no sum
 - [x] writev06: no sum
 - [x] writev07: pass 2 faied 6 (should support truncate in tmp)

@@ -473,7 +473,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_MMAP => sys_mmap(VirtAddr::from(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
         SYSCALL_FADVISE64 => sys_fadvise(args[0], args[1], args[2], args[3] as i32),
         SYSCALL_MREMAP => sys_mremap(VirtAddr::from(args[0]), args[1], args[2], args[3] as i32, args[4]),
-        SYSCALL_FANOTIFY_INIT => sys_allocfd(syscall_id),
+        SYSCALL_FANOTIFY_INIT => sys_fanotify_init(args[0] as u32, args[1] as u32),
         SYSCALL_FANOTIFY_MARK => sys_temp(syscall_id),
         SYSCALL_NAME_TO_HANDLE_AT => sys_temp(syscall_id),
         SYSCALL_OPEN_BY_HANDLE_AT => sys_temp(syscall_id),
@@ -560,6 +560,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             ret
         }
         Err(err) => {
+            // log::info!("syscall {:?} failed with error {:?}", syscall_id, err);
             -err.code() 
         }
     }

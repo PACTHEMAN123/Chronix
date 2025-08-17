@@ -26,7 +26,7 @@ use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::{String, ToStr
 use tmpfs::{fstype::TmpFSType, init_tmpfs};
 use vfs::{fstype::{FSType, MountFlags}, DCACHE};
 
-use crate::{devices::{DeviceMajor, DEVICE_MANAGER}, drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}};
+use crate::{devices::{DeviceMajor, DEVICE_MANAGER}, drivers::BLOCK_DEVICE, sync::mutex::{SpinNoIrq, SpinNoIrqLock}, syscall::SysError};
 pub use ext4::Ext4SuperBlock;
 pub use vfs::{SuperBlock, SuperBlockInner};
 
@@ -498,3 +498,108 @@ pub struct StatFs {
 }
 
 pub const BLKSSZGET: usize = 0x1268;
+
+
+bitflags! {
+    pub struct FanotifyFlags: u32 {
+        // Notification classes
+        const FAN_CLASS_PRE_CONTENT = 0x00000008;
+        const FAN_CLASS_CONTENT = 0x00000004;
+        const FAN_CLASS_NOTIF = 0x00000000; // Default
+        
+        // Additional flags
+        const FAN_CLOEXEC = 0x00000001;
+        const FAN_NONBLOCK = 0x00000002;
+        const FAN_UNLIMITED_QUEUE = 0x00000010;
+        const FAN_UNLIMITED_MARKS = 0x00000020;
+        const FAN_REPORT_TID = 0x00000100;
+        const FAN_ENABLE_AUDIT = 0x00000040;
+        const FAN_REPORT_FID = 0x00000200;
+        const FAN_REPORT_DIR_FID = 0x00000400;
+        const FAN_REPORT_NAME = 0x00000800;
+        const FAN_REPORT_TARGET_FID = 0x00001000;
+        const FAN_REPORT_PIDFD = 0x00002000;
+    }
+}
+
+impl FanotifyFlags {
+    /// Get the notification class part of the flags
+    /// should report error if specific multi class
+    pub fn fan_class(&self) -> Result<FanotifyFlags, SysError> {
+        if self.contains(Self::FAN_CLASS_CONTENT) && self.contains(Self::FAN_CLASS_PRE_CONTENT) {
+            return Err(SysError::EINVAL)
+        }
+        Ok(*self & (Self::FAN_CLASS_PRE_CONTENT | Self::FAN_CLASS_CONTENT))
+    }
+
+    /// Validate flag combinations
+    pub fn validate(&self) -> Result<(), SysError> {
+        // Check notification class
+        let class = self.fan_class()?;
+        if class != Self::FAN_CLASS_PRE_CONTENT && 
+           class != Self::FAN_CLASS_CONTENT && 
+           class != Self::FAN_CLASS_NOTIF {
+            return Err(SysError::EINVAL)
+        }
+
+        // Check FAN_REPORT_FID conflicts
+        if self.contains(Self::FAN_REPORT_FID) {
+            if self.contains(Self::FAN_CLASS_CONTENT) || 
+               self.contains(Self::FAN_CLASS_PRE_CONTENT) {
+                return Err(SysError::EINVAL);
+            }
+        }
+
+        // Check FAN_REPORT_NAME requires FAN_REPORT_DIR_FID
+        if self.contains(Self::FAN_REPORT_NAME) && !self.contains(Self::FAN_REPORT_DIR_FID) {
+            return Err(SysError::EINVAL);
+        }
+
+        // Check FAN_REPORT_TARGET_FID requirements
+        if self.contains(Self::FAN_REPORT_TARGET_FID) {
+            if !self.contains(Self::FAN_REPORT_FID) || 
+               !self.contains(Self::FAN_REPORT_DIR_FID) || 
+               !self.contains(Self::FAN_REPORT_NAME) {
+                return Err(SysError::EINVAL);
+            }
+        }
+
+        // Check FAN_REPORT_PIDFD conflicts
+        if self.contains(Self::FAN_REPORT_PIDFD) && self.contains(Self::FAN_REPORT_TID) {
+            return Err(SysError::EINVAL);
+        }
+
+        Ok(())
+    }
+}
+
+bitflags! {
+    // fanotify mark flags
+    pub struct FanotifyMarkFlags: u32 {
+        // Primary operation flags (mutually exclusive)
+        const FAN_MARK_ADD = 0x00000001;
+        const FAN_MARK_REMOVE = 0x00000002;
+        const FAN_MARK_FLUSH = 0x00000080;
+        
+        // Additional flags
+        const FAN_MARK_DONT_FOLLOW = 0x00000004;
+        const FAN_MARK_ONLYDIR = 0x00000008;
+        // const FAN_MARK_MOUNT = 0x00000010;
+        // const FAN_MARK_FILESYSTEM = 0x000000100;
+        const FAN_MARK_IGNORED_MASK = 0x00000020;
+        const FAN_MARK_IGNORE = 0x00000400;
+        const FAN_MARK_IGNORED_SURV_MODIFY = 0x00000040;
+        const FAN_MARK_EVICTABLE = 0x00000200;
+    }
+}
+
+impl FanotifyMarkFlags {
+    pub fn is_valid(&self) -> Result<(), SysError> {
+        // the must contain flags
+        let op = *self & (Self::FAN_MARK_ADD | Self::FAN_MARK_REMOVE | Self::FAN_MARK_FLUSH);
+        if op.bits().count_ones() != 1 {
+            return Err(SysError::EINVAL)
+        } 
+        Ok(())
+    }
+}

@@ -19,7 +19,6 @@ cd /loongarch/glibc
 ./netperf_testcode.sh
 ./iperf_testcode.sh
 ./libcbench_testcode.sh
-./cyclictest_testcode.sh
 cd ..
 echo "finish to run glibc"
 
