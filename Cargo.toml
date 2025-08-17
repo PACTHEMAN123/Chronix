@@ -69,3 +69,6 @@ features = [
     # "reassembly-buffer-size-65536", "reassembly-buffer-count-32",
     # "assembler-max-segment-count-32",
 ]
+
+[profile.release]
+debug = true

@@ -19,6 +19,10 @@ ifeq ($(AUTOTEST),y)
 KERNEL_FEATURES += autotest
 endif
 
+ifeq ($(VF2),y)
+KERNEL_FEATURES += vf2
+endif
+
 # kernel target
 ifeq ($(ARCH), riscv64)
 KERNEL_TARGET := riscv64gc-unknown-none-elf

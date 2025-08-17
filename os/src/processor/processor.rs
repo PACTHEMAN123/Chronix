@@ -271,6 +271,10 @@ pub fn current_processor() -> &'static mut Processor {
     get_processor(Instruction::get_tp())
 } 
 
+pub fn current_processor_id() -> usize {
+    Instruction::get_tp()
+}
+
 pub fn init(id: usize){
     info!("init processor {}", id);
     set_processor(id);
