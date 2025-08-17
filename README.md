@@ -18,6 +18,20 @@
 
 ![leader-board](./docs/assets/leader-board-6-30.png)
 
+### 决赛情况
+
+截至8月17日18点，Chronix 已经满分通过全部决赛线上测例：
+
+![leader-board-prefinal1](./docs/assets/leaderboard-prefinal1.png)
+
+![leader-board-prefinal2](./docs/assets/leaderboard-prefinal2.png)
+
+截至8月17日18点，Chronix 在初赛测例上的得分提高了近一倍，排名靠前：
+
+![leader-board-final-basic1](./docs/assets/leaderboard-final-basic1.png)
+
+![leader-board-final-basic2](./docs/assets/leaderboard-final-basic2.png)
+
 
 
 ### Chronix 内核介绍
@@ -35,9 +49,9 @@
 
 ### 文档
 
-- [初赛文档](https://github.com/PACTHEMAN123/Chronix/blob/main/Chronix-%E5%88%9D%E8%B5%9B%E6%96%87%E6%A1%A3.pdf)
-- [初赛总结幻灯片](https://github.com/PACTHEMAN123/Chronix/blob/main/Chronix-%E5%88%9D%E8%B5%9BPPT.pdf)
-- [初赛演示视频](https://pan.baidu.com/s/1byWv4IZ0vpMvu4rNXoEllA) 提取码：xvru
+- [决赛阶段文档](./Chronix-决赛文档.pdf)
+- [项目开发简介幻灯片](./Chronix-决赛PPT.pdf)
+- [演示视频](https://pan.baidu.com/s/1byWv4IZ0vpMvu4rNXoEllA) 提取码：xvru
 
 ### 项目结构
 
