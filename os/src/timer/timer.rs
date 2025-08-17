@@ -468,9 +468,7 @@ impl Future for TimerFdReadFuture {
                 }
                 // 将 Waker 注册到全局定时器管理器
                 // 确保在到期时会唤醒当前任务
-                // 注意：这里需要确保 TIMER_MANAGER.add_timer 是幂等的，
                 // 避免每次 poll 都添加新的定时器。
-                // 如果 TIMER_MANAGER 内部是基于堆的，会处理重复注册。
                 TIMER_MANAGER.add_timer(Timer::new_waker_timer(
                     self.timer.lock().next_expire,
                     cx.waker().clone(),

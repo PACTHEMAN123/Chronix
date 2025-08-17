@@ -699,7 +699,7 @@ pub fn sys_timerfd_create(clockid: usize, flags: usize) -> SysResult {
     if clockid != CLOCK_MONOTONIC && clockid != CLOCK_REALTIME && clockid != CLOCK_BOOTTIME{
         return Err(SysError::EINVAL);
     }
-    if flags < 0 {
+    if (flags as isize) < 0 {
         return Err(SysError::EINVAL);
     }
     const TFD_NONBLOCK: i32= 0x800;

@@ -20,7 +20,6 @@ use crate::timer::timed_task::{TimedTaskFuture, TimedTaskOutput}; // Using your 
 
 /// Represents a message in the queue.
 /// We derive Ord, PartialOrd, etc., to make it work in a BinaryHeap.
-/// Note: BinaryHeap is a max-heap, which aligns with POSIX priorities (higher number is higher priority).
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[repr(C)]
 pub struct Message {
@@ -61,9 +60,9 @@ impl MqAttr {
 pub enum MqError {
     TimedOut,
     MsgTooBig,
-    PermissionDenied, // Placeholder for future extensions
-    InvalidHandle,    // Placeholder
-    WouldBlock,       // Placeholder for non-blocking operations
+    PermissionDenied, 
+    InvalidHandle,    
+    WouldBlock,       
 }
 
 const MAX_WAKERS: usize = 64; 
@@ -163,8 +162,6 @@ impl MessageQueue {
         priority: u32,
         timeout: Option<Duration>,
     ) -> Result<isize, MqError> {
-        // Wrap the core logic (SendFuture) with your TimedTaskFuture.
-        // This beautifully handles the timeout.
         let send_future = SendFuture {
             queue: self.clone(),
             message_data: data.to_vec(),

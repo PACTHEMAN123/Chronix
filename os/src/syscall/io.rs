@@ -872,7 +872,6 @@ pub fn sys_mq_open(name_ptr: usize, oflag: i32, _mode: u32, attr_ptr: usize) -> 
         queue
     };
     let fd = task.with_mut_fd_table(|table| -> SysResult{
-        // Arc<MessageQueue> 实现了 File trait，可以被当作 Arc<dyn File>
         let fd = table.alloc_fd()?;
         table.put_file(fd, FdInfo {
             file: queue.clone(),
@@ -933,7 +932,7 @@ pub fn sys_mq_getsetattr(handle: usize, new_attr_ptr: usize, old_attr_ptr: usize
     // 如果 old_attr_ptr 非空, 获取当前属性并写入用户空间。
     if old_attr_ptr != 0 {
         let old_attr_user_ptr = UserPtrRaw::new(old_attr_ptr as *mut MqAttr)
-            .ensure_write(&mut vm) // 修正了笔误 ensure_writee
+            .ensure_write(&mut vm) 
             .ok_or(SysError::EFAULT)?;
         
         let current_attr = queue.inner.lock().attr;
@@ -1049,7 +1048,7 @@ pub async fn sys_mq_timedsend(handle: usize, msg_ptr: usize, msg_len: usize, msg
         }
     };
     log::warn!("timeout: {:?}", timeout);
-    // 3. 阻塞并执行异步操作 (这部分逻辑不变)
+    // 3. 阻塞并执行异步操作 
     // let future = queue.mq_timedsend(&msg_data, msg_prio, timeout);
     // match block_on_mq(future) {
     //     Ok(()) => Ok(0),
@@ -1077,7 +1076,7 @@ pub async fn sys_mq_timedreceive(handle: usize, msg_ptr: usize, msg_len: usize, 
         return Err(SysError::EMSGSIZE);
     }
 
-    // 1. 确定超时时间 (逻辑与 send 相同)
+    // 1. 确定超时时间 
     let timeout = if timeout_ptr == 0 {
         None
     } else {
@@ -1121,7 +1120,7 @@ async fn block_on_mq<T, F>(fut: F ) -> Result<T, SysError>
 where
     F: core::future::Future<Output = Result<T, MqError>> + Send ,    
 {
-    let mut fut = Box::pin(fut);// 固定 future 的位置
+    let mut fut = Box::pin(fut);
     loop {
         match fut.as_mut().await {
             Ok(res) => return Ok(res),
