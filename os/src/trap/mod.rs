@@ -82,6 +82,7 @@ pub async fn user_trap_handler() -> bool {
             // cx.save_to(0, cx.ret_nth(0));
             // report that the syscall is interrupt
             cx.set_ret_nth(0, result as usize);
+            // warn!("syscall {} ret {}", cx.syscall_id(), cx.ret_nth(0));
             if result == -(SysError::EINTR as isize) && syscall_id != SYSCALL_GETPRIORITY as usize {
                 log::warn!("[user_trap_handler] task {} syscall is interrupted", cx.syscall_id());
                 return true;

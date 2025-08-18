@@ -146,7 +146,7 @@ pub fn sys_socket(domain: usize, types: i32, protocol: usize) -> SysResult {
     }
     log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, protocol);
     let domain = SaFamily::try_from(domain as u16)?;
-    let s_type = SocketType::try_from(types as i32)?;
+    // let s_type = SocketType::try_from(types as i32)?;
     // if s_type == SocketType::RAW && domain!= SaFamily::Packet {
     //     return Err(SysError::EPROTONOSUPPORT);
     // }
@@ -165,7 +165,7 @@ pub fn sys_socket(domain: usize, types: i32, protocol: usize) -> SysResult {
     }
     let types = SocketType::try_from(types as i32)?;
     let _protocol_inner = Protocol::try_from(protocol)?;
-    protocol_check(protocol as u8, s_type)?;
+    protocol_check(protocol as u8, types)?;
     let socket = socket::Socket::new(domain,types, nonblock, protocol as u8);
     let fd_info = FdInfo {
         file: Arc::new(socket),
