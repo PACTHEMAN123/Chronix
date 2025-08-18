@@ -10,8 +10,8 @@ AUTOTEST :=
 export SMP := 
 
 
-IP_C ?= 10.0.2.15
-GW ?= 10.0.2.2
+IP_C ?= 10.250.225.200
+GW ?= 10.250.0.1
 export GATEWAY=$(GW)
 export IP=$(IP_C)
 export NT :=
