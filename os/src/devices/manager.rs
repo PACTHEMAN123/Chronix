@@ -224,7 +224,7 @@ impl DeviceManager {
         for i in 0..MAX_PROCESSORS * 2 {
             for dev in self.devices.values() {
                 if let Some(irq) = dev.irq_no() {
-                    self.irq_ctrl().enable_irq(irq);
+                    self.irq_ctrl().enable_irq(irq, i);
                     log::info!("Enable external interrupt:{irq}, context:{i}");
                 }
             }
@@ -251,7 +251,7 @@ impl DeviceManager {
             }
             #[cfg(feature="smp")]
             {
-                todo!()
+                1
             }
         }
         unsafe { Instruction::disable_interrupt() };
