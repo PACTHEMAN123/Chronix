@@ -501,7 +501,7 @@ impl Inode for Ext4Inode {
     fn link(&self, target_path: &str) -> Result<usize, SysError> {
         let file = self.file.lock();
         // create hard link
-        file.link_create(target_path).expect("link create failed");
+        file.link_create(target_path).map_err(|e| SysError::from_i32(e))?;
         Ok(0)
     }
 

@@ -23,3 +23,6 @@ plic.workspace = true
 
 [target.'cfg(target_arch = "loongarch64")'.dependencies]
 loongArch64 = "0.2.4"
+
+[features]
+vf2 = []
