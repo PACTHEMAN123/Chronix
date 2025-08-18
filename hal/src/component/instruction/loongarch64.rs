@@ -2,8 +2,8 @@ use loongArch64::register::{self, ecfg::LineBasedInterrupt};
 
 use crate::{constant::{Constant, ConstantsHal}, println, trap::FP_REG_DIRTY};
 
-const POWEROFF_REG_MMIO: usize = 0x8000_0000_100e_001c;
-const POWEROFF_VALUE: u8 = 0x34;
+const POWEROFF_REG_MMIO: usize = 0x8000_0000_1fe2_7014;
+const POWEROFF_VALUE: u16 = 0x3c00;
 
 
 use super::{Instruction, InstructionHal};
@@ -39,11 +39,12 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_timer_interrupt() {
-        register::ecfg::set_lie(LineBasedInterrupt::TIMER);
+        let lie = register::ecfg::read().lie();
+        register::ecfg::set_lie(lie | LineBasedInterrupt::TIMER);
     }
     
     unsafe fn is_interrupt_enabled() -> bool {
-        register::crmd::read().ie()
+        register::crmd::read().ie() 
     }
     
     unsafe fn clear_sum() {
@@ -57,7 +58,7 @@ impl InstructionHal for Instruction {
     unsafe fn shutdown(failure: bool) -> ! {
         Instruction::disable_interrupt();
         println!("[CINPHAL] system shutdown, failure: {}", failure);
-        (POWEROFF_REG_MMIO as *mut u8).write_volatile(POWEROFF_VALUE);
+        (POWEROFF_REG_MMIO as *mut u16).write_volatile(POWEROFF_VALUE);
         loop {}
     }
     
@@ -100,11 +101,9 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_external_interrupt() {
+        let lie = register::ecfg::read().lie();
         register::ecfg::set_lie(
-            LineBasedInterrupt::HWI0 | LineBasedInterrupt::HWI1 |
-            LineBasedInterrupt::HWI2 | LineBasedInterrupt::HWI3 |
-            LineBasedInterrupt::HWI4 | LineBasedInterrupt::HWI5 |
-            LineBasedInterrupt::HWI6 | LineBasedInterrupt::HWI7 
+            lie | LineBasedInterrupt::HWI0 | LineBasedInterrupt::HWI1
         );
     }
 }

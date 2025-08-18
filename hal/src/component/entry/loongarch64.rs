@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{constant::{Constant, ConstantsHal}, entry::BOOT_STACK, println, timer::{Timer, TimerHal}, instruction::{Instruction, InstructionHal}};
+use crate::{board::{get_device_tree_addr, set_device_tree_addr}, constant::{Constant, ConstantsHal}, entry::BOOT_STACK, instruction::{Instruction, InstructionHal}, println, timer::{Timer, TimerHal}};
 
 use super::RUNNING_PROCESSOR;
 
@@ -49,11 +49,15 @@ unsafe extern "C" fn _start() -> ! {
 }
 
 pub(crate) fn rust_main(id: usize) {
+    unsafe extern "C" {
+        unsafe fn _dtb_start();
+    }
     let is_first = RUNNING_PROCESSOR.fetch_add(1, Ordering::AcqRel) == 0;
     Instruction::set_tp(id);
     tlb_init();
     if is_first {
         super::clear_bss();
+        set_device_tree_addr(_dtb_start as usize);
         crate::console::init();
         print_info();
         let _ = unsafe { super::_main_for_arch(id, true) };
@@ -74,13 +78,14 @@ fn print_info() {
     println!("[CINPHAL] VA_LEN: {}", loongArch64::cpu::get_valen());
     println!("[CINPHAL] Frequency: {} Hz", Timer::get_timer_freq());
     println!("[CINPHAL] start address: {:#x}", _start as usize);
+    println!("[CINPHAL] dtb address: {:#x}", get_device_tree_addr());
     println!("");
 }
 
 core::arch::global_asm!(
     r"
-    .equ LA_CSR_PGDL,          0x19    /* Page table base address when VA[47] = 0 */
-    .equ LA_CSR_PGDH,          0x1a    /* Page table base address when VA[47] = 1 */
+    .equ LA_CSR_PGDL,          0x19    /* Page table base address when VA[38] = 0 */
+    .equ LA_CSR_PGDH,          0x1a    /* Page table base address when VA[38] = 1 */
     .equ LA_CSR_PGD,           0x1b    /* Page table base */
     .equ LA_CSR_TLBRENTRY,     0x88    /* TLB refill exception entry */
     .equ LA_CSR_TLBRBADV,      0x89    /* TLB refill badvaddr */
@@ -94,8 +99,6 @@ core::arch::global_asm!(
     _tlb_fill:
         csrwr   $t0, LA_CSR_TLBRSAVE
         csrrd   $t0, LA_CSR_PGD
-        lddir   $t0, $t0, 3
-        beqz    $t0, _break
         lddir   $t0, $t0, 2
         beqz    $t0, _break
         lddir   $t0, $t0, 1
@@ -131,10 +134,11 @@ fn tlb_init() {
     pwcl::set_dir1_width(9);
     pwcl::set_dir2_base(30);
     pwcl::set_dir2_width(9);
-    pwch::set_dir3_base(39);
-    pwch::set_dir3_width(9);
+    pwch::set_dir3_base(0);
+    pwch::set_dir3_width(0);
     pwch::set_dir4_base(0);
     pwch::set_dir4_width(0);
+    rvacfg::set_rbits(1);
     unsafe extern "C" {
         fn _tlb_fill();
     }

@@ -128,9 +128,28 @@ impl Termios {
         }
     }
 
+    /// iflags
     pub fn is_icrnl(&self) -> bool {
         const ICRNL: u32 = 0o0000400;
         self.iflag & ICRNL != 0
+    }
+    pub fn is_igncr(&self) -> bool {
+        const IGNCR: u32 = 0o0000200;
+        self.iflag & IGNCR != 0
+    }
+    pub fn is_inlcr(&self) -> bool {
+        const INLCR: u32 = 0o0000100;
+        self.iflag & INLCR != 0
+    }
+
+    /// oflags
+    pub fn is_onlcr(&self) -> bool {
+        const ONLCR: u32 = 0o0000004;
+        self.oflag & ONLCR != 0
+    }
+    pub fn is_ocrnl(&self) -> bool {
+        const OCRNL: u32 = 0o0000010;
+        self.oflag & OCRNL != 0
     }
 
     pub fn is_echo(&self) -> bool {
@@ -235,6 +254,26 @@ impl File for TtyFile {
 
     async fn write(&self, buf: &[u8]) -> Result<usize, SysError> {
         let char_dev = UART0.clone();
+        let terminos = self.meta.lock().termios;
+        log::debug!("[tty] output flags {} {}", terminos.is_ocrnl(), terminos.is_onlcr());
+
+        if terminos.is_onlcr() {
+            // convert '\n' to '\r''\n'
+            let mut len = 0;
+            let mut l = 0;
+            for i in 0..buf.len() {
+                if buf[i] == '\n' as u8 {
+                    len += char_dev.write(&buf[l..i]).await + 1;
+                    char_dev.write(&[b'\r', b'\n']).await;
+                    l = i + 1;
+                }
+            }
+            if (l != buf.len()) {
+                len += char_dev.write(&buf[l..]).await;
+            }
+            return Ok(len)
+        }
+
         let len = char_dev.write(buf).await;
         Ok(len)
     }
@@ -433,11 +472,3 @@ impl Dentry for TtyDentry {
         Some(TtyFile::new(self.clone()))
     }
 }
-
-
-
-
-
-
-
-

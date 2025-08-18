@@ -443,7 +443,7 @@ impl UserVmSpace {
             return Err(());
         }
         let mut vpn = va.floor();
-        let end = (va+len).ceil();
+        let end = VirtAddr::from(va.0.checked_add(len).ok_or(())?).ceil();
         while vpn < end {
             if access_type.contains(PageFaultAccessType::WRITE) {
                 let ret = unsafe { 

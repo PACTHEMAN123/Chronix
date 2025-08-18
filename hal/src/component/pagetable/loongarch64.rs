@@ -11,16 +11,14 @@ use super::{MapPerm, PageTableEntryHal, PageTableHal};
 pub enum PageLevel {
     Huge = 0,
     Big = 1,
-    Middle = 2,
-    Small = 3
+    Small = 2
 }
 
 impl PageLevel {
     pub const fn page_count(self) -> usize {
         match self {
-            PageLevel::Huge => 512 * 512 * 512,
-            PageLevel::Big => 512 * 512,
-            PageLevel::Middle => 512,
+            PageLevel::Huge => 512 * 512,
+            PageLevel::Big => 512,
             PageLevel::Small => 1,
         }
     }
@@ -28,8 +26,7 @@ impl PageLevel {
     pub const fn lower(self) -> Self {
         match self {
             PageLevel::Huge => PageLevel::Big,
-            PageLevel::Big => PageLevel::Middle,
-            PageLevel::Middle => PageLevel::Small,
+            PageLevel::Big  => PageLevel::Small,
             PageLevel::Small => PageLevel::Small,
         }
     }
@@ -38,8 +35,7 @@ impl PageLevel {
         match self {
             PageLevel::Huge => PageLevel::Huge,
             PageLevel::Big => PageLevel::Huge,
-            PageLevel::Middle => PageLevel::Big,
-            PageLevel::Small => PageLevel::Middle,
+            PageLevel::Small => PageLevel::Big,
         }
     }
 
@@ -60,9 +56,8 @@ impl PageLevel {
     pub const fn from_count(count: usize) -> Option<Self> {
         match count {
             0x1 => Some(Self::Small),
-            0x200 => Some(Self::Middle),
-            0x40000 => Some(Self::Big),
-            0x8000000 => Some(Self::Huge),
+            0x200 => Some(Self::Big),
+            0x40000 => Some(Self::Huge),
             _ => None
         }
     }
@@ -73,8 +68,7 @@ impl From<usize> for PageLevel {
         match value {
             0 => Self::Huge,
             1 => Self::Big,
-            2 => Self::Middle,
-            3 => Self::Small,
+            2 => Self::Small,
             _ => panic!("unsupport Page Level")
         }
     }
@@ -376,7 +370,7 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
             pte.bits |= PTEFlags::MAT_L.bits; // Coherent Cached
             Ok(pte)
         } else {
-            log::warn!("vpn {} has been mapped", vpn.0);
+            log::warn!("vpn {:#x} has been mapped", vpn.0);
             Err(())
         }
     }
@@ -389,7 +383,7 @@ impl<A: FrameAllocatorHal + Clone> PageTableHal<PageTableEntry, A> for PageTable
                 Ok(ret)
             },
             None => {
-                log::warn!("vpn {} is not mapped", vpn.0);
+                log::warn!("vpn {:#x} is not mapped", vpn.0);
                 Err(())
             }
         }

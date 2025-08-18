@@ -7,7 +7,7 @@ use core::task::Waker;
 
 use alloc::{boxed::Box, collections::vec_deque::VecDeque, string::ToString, sync::Arc, vec::Vec};
 use async_trait::async_trait;
-use hal::constant::{Constant, ConstantsHal};
+use hal::{constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, println};
 use lazy_static::lazy_static;
 use uart::{Uart, UART_BAUD_RATE, UART_BUF_LEN};
 use alloc::vec;
@@ -84,6 +84,9 @@ impl Serial {
 #[async_trait]
 impl CharDevice for Serial {
     async fn read(&self, buf: &mut [u8]) -> usize {
+        if !unsafe { Instruction::is_interrupt_enabled() } {
+            panic!("async read when interrupt disabled");
+        }
         while !self.poll_in().await {
             suspend_now().await
         }

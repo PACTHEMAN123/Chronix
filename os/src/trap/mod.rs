@@ -131,6 +131,10 @@ pub async fn user_trap_handler() -> bool {
         TrapType::ExternalInterrupt => {
             let manager = crate::devices::DEVICE_MANAGER.lock();
             manager.handle_irq();
+        },
+        TrapType::AddressNotAligned(_) => {
+            let cx = current_task().unwrap().get_trap_cx();
+            unsafe { hal::trap::emulate_load_store_insn(cx) };
         }
         TrapType::Processed => {}
         trap => {
@@ -217,7 +221,6 @@ fn kernel_trap_handler() {
             };
         }
         TrapType::Timer => {
-            // println!("interrupt: supervisor timer");
             IRQ_COUNTER.lock().add_timer_irq_cnt();
             crate::timer::timer::TIMER_MANAGER.check();
             set_next_trigger();

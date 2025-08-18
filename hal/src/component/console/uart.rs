@@ -1,7 +1,7 @@
 use core::cell::SyncUnsafeCell;
 
 #[cfg(target_arch="loongarch64")]
-const UART_ADDR: usize = 0x8000_0000_1fe0_01e0;
+const UART_ADDR: usize = 0x8000_0000_1fe2_0000;
 
 // ugly: os kernel need to map this address
 #[cfg(target_arch="riscv64")]

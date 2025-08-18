@@ -1,0 +1,6 @@
+[build]
+target = ["loongarch64-unknown-linux-musl"]
+rustflags = ["-C", "target-feature=-ual,-lsx,-lasx,-lvz"]
+
+[target.loongarch64-unknown-linux-musl]
+linker = "loongarch64-unknown-linux-musl-gcc"

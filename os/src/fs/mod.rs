@@ -101,20 +101,20 @@ pub fn init() {
             .as_blk()
             .unwrap();
 
-    let sdcard_device = DEVICE_MANAGER.lock()
-            .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
-            .as_blk()
-            .unwrap();
+    // let sdcard_device = DEVICE_MANAGER.lock()
+    //         .find_dev_by_name(sdcard_dev_name, DeviceMajor::Block)
+    //         .as_blk()
+    //         .unwrap();
 
     // create the ext4 file system using the block device
     let diskfs = get_filesystem(DISK_FS_NAME);
     let diskfs_root = diskfs.mount("/", None, MountFlags::empty(), Some(disk_device)).unwrap();
 
-    let sdcard = get_filesystem(SDCARD_NAME);
-    let sdcard_root = sdcard.mount("sdcard", Some(diskfs_root.clone()), MountFlags::empty(), Some(sdcard_device)).unwrap();
-    diskfs_root.add_child(sdcard_root.clone());
-    log::info!("[FS] insert path: {}", sdcard_root.path());
-    DCACHE.lock().insert(sdcard_root.path(), sdcard_root);
+    // let sdcard = get_filesystem(SDCARD_NAME);
+    // let sdcard_root = sdcard.mount("sdcard", Some(diskfs_root.clone()), MountFlags::empty(), Some(sdcard_device)).unwrap();
+    // diskfs_root.add_child(sdcard_root.clone());
+    // log::info!("[FS] insert path: {}", sdcard_root.path());
+    // DCACHE.lock().insert(sdcard_root.path(), sdcard_root);
 
     // mount the dev file system under diskfs
     let devfs = get_filesystem("devfs");

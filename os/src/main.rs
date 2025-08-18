@@ -39,6 +39,7 @@ extern crate bitflags;
 
 extern crate hal;
 
+
 use hal::{board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, define_entry, instruction::{Instruction, InstructionHal}, pagetable::PageTableHal, println};
 use log::*;
 use mm::{vm::KernVmSpaceHal, KVMSPACE};

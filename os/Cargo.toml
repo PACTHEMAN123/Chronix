@@ -42,6 +42,10 @@ range-map = { path = "../utils/range-map" }
 segment-tree = { path = "../utils/segment-tree" }
 hal = { path = "../hal" }
 
+[target.'cfg(target_arch = "loongarch64")'.dependencies]
+ls2k1000_ahci_driver.workspace = true
+
+
 
 [features]
 smp = []

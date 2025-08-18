@@ -17,18 +17,23 @@ kernel-rv: setup
 
 PHONY_TARGET += kernel-la
 kernel-la: setup
-	make -f Makefile.sub kernel ARCH=loongarch64
-	cp ./target/loongarch64-unknown-none/release/os ./kernel-la
+	make -f Makefile.sub kernel-bin ARCH=loongarch64
+	cp ./target/loongarch64-unknown-none/release/os.bin ./kernel-la
 
 PHONY_TARGET += kernel-rv-test
 kernel-rv-test: setup
 	make -f Makefile.sub kernel-bin ARCH=riscv64 AUTOTEST=y
 	cp ./target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
 
-PHONY_TARGET += kernel-la-test
+PHONY_TARGET += kernel-la
 kernel-la-test: setup
 	make -f Makefile.sub kernel ARCH=loongarch64 AUTOTEST=y
 	cp ./target/loongarch64-unknown-none/release/os ./kernel-la
+
+PHONY_TARGET += kernel-rv-vf2
+kernel-rv-vf2: setup
+	make -f Makefile.sub kernel-bin ARCH=riscv64 VF2=y
+	cp ./target/riscv64gc-unknown-none-elf/release/os.bin ./kernel-rv
 
 
 PHONY_TARGET += disk-img
@@ -61,10 +66,16 @@ debug-la: kernel-la
 	make -f Makefile.sub debug ARCH=loongarch64 GDB=loongarch64-linux-gnu-gdb
 
 PHONY_TARGET += zImage-rv
-zImage-rv: kernel-rv
+zImage-rv: kernel-rv-vf2
 #	gzip -f kernel-rv
 #	mkimage -A riscv -O linux -C gzip -T kernel -a 0x80200000 -e 0x80200000 -n Chronix -d kernel-rv.gz zImage
 	mkimage -A riscv -O linux -C none -T kernel -a 0x80200000 -e 0x80200000 -n Chronix -d kernel-rv zImage
+
+PHONY_TARGET += zImage-la
+zImage-la: kernel-la
+#	gzip -f kernel-rv
+#	mkimage -A riscv -O linux -C gzip -T kernel -a 0x80200000 -e 0x80200000 -n Chronix -d kernel-rv.gz zImage
+	mkimage -A loongarch -O linux -C none -T kernel -a 0x80000000 -e 0x80000000 -n Chronix -d kernel-la zImage
 
 PHONY_TARGET += clean
 clean:

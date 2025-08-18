@@ -5,10 +5,10 @@ mod riscv64;
 pub use riscv64::*;
 
 #[cfg(target_arch = "loongarch64")]
-mod loongarch64;
+mod la2k1000;
 
 #[cfg(target_arch = "loongarch64")]
-pub use loongarch64::*;
+pub use la2k1000::*;
 
 pub trait IrqCtrlHal {
     fn from_dt(device_tree: &fdt::Fdt, mmio: impl crate::mapper::MmioMapperHal) -> Option<Self> where Self: Sized;

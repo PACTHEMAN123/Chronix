@@ -27,7 +27,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult {
             .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_ref();
     let ret = file.write(buf).await?;
-
     // let start = buf & !(Constant::PAGE_SIZE - 1);
     // let end = buf + len;
     // let mut ret = 0;

@@ -4,6 +4,7 @@
 mod pci_blk;
 mod mmio_blk;
 mod mmc;
+pub mod loongarch;
 
 use core::sync::atomic::AtomicUsize;
 

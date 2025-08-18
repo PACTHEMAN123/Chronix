@@ -1,3 +1,5 @@
+mod unaligned;
+
 use core::{arch::asm, fmt::Debug};
 
 use log::{info, warn};
@@ -6,6 +8,8 @@ use loongArch64::register::{self, estat::{Exception, Interrupt, Trap}};
 use crate::{addr::{VirtAddr, VirtAddrHal, VirtPageNum}, allocator::FakeFrameAllocator, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, pagetable::{MapPerm, PTEFlags, PageTable, PageTableEntryHal, PageTableHal}, println};
 
 use super::{FloatContextHal, TrapContextHal, TrapType, TrapTypeHal};
+
+pub use unaligned::emulate_load_store_insn;
 
 core::arch::global_asm!(include_str!("trap.S"));
 
@@ -511,10 +515,14 @@ fn get_trap_type() -> TrapType {
             unsafe { FP_REG_DIRTY[cpuid] = true; }
             TrapType::Processed
         },
+        Trap::Exception(Exception::AddressNotAligned) => {
+            TrapType::AddressNotAligned(badv)
+        }
         _ => {
             log::error!( 
-                "TrapType::Other cause: {:?} badv: {:#x} badi: {:#x} era: {:#x}", 
-                estat.cause(), 
+                "TrapType::Other cause: {:?} {:#x} badv: {:#x} badi: {:#x} era: {:#x}", 
+                estat.cause(),
+                estat.raw(),
                 badv, 
                 register::badi::read().inst(),
                 register::era::read().raw()

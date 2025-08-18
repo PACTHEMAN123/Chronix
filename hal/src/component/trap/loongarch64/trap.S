@@ -20,6 +20,7 @@
     .globl __trap_from_kernel
     .globl __user_rw_exception_entry
     .globl __user_rw_trap_vector
+
     .align 12
 __trap_from_user:
     csrwr $sp, KSAVE_CTX
@@ -113,10 +114,53 @@ __restore:
     ld.d $sp, $sp, 3*8
     ertn
 
+__kernel_ale_handler:
+    addi.d $sp, $sp, -34*8
+    st.d $r0, $sp, 0*8
+    st.d $r1, $sp, 1*8
+    st.d $r2, $sp, 2*8
+    # skip sp(r3), save it later
+    .set n, 4
+    .rept 28
+        SAVE_GP %n
+        .set n, n+1
+    .endr
+    csrrd $t0, PRMD
+    csrrd $t1, ERA
+    st.d $t0, $sp, 32*8
+    st.d $t1, $sp, 33*8
+    addi.d $t0, $sp, 34*8
+    st.d $t0, $sp, 3*8
+    move $a0, $sp
+    bl kernel_ale_handler
+    ld.d $t0, $sp, 32*8
+    ld.d $t1, $sp, 33*8
+    csrwr $t0, PRMD
+    csrwr $t1, ERA
+    ld.d $r0, $sp, 0*8
+    ld.d $r1, $sp, 1*8
+    ld.d $r2, $sp, 2*8
+    # skip sp(r3), load it later
+    .set n, 4
+    .rept 28
+        LOAD_GP %n
+        .set n, n+1
+    .endr
+    ld.d $sp, $sp, 3*8
+    ertn
+
     .align 12
 __trap_from_kernel:
-    # need to save caller-saved regs
     st.d $t0, $sp, -11*8
+    csrrd $t0, ESTAT
+    srli.d $t0, $t0, 16
+    andi $t0, $t0, 0x3f
+    xori $t0, $t0, 0x9
+    bne  $t0, $zero, 1f
+    ld.d $t0, $sp, -11*8
+    b __kernel_ale_handler
+1:
+    # need to save caller-saved regs
     st.d $t1, $sp, -10*8
     csrrd $t0, PRMD
     csrrd $t1, ERA
@@ -173,7 +217,6 @@ __trap_from_kernel:
     addi.d $sp, $sp, 24*8
     ertn
 
-
 __user_rw_exception_entry:
     csrrd   $a0, ERA
     addi.d  $a0, $a0, 4
@@ -197,7 +240,7 @@ __user_rw_trap_vector:
     nop
     b __user_rw_exception_entry
     nop
-    .rept 123
+    .rept 71
         b __trap_from_kernel
         nop
     .endr

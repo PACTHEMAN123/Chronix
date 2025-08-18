@@ -47,6 +47,8 @@ xmas-elf = { git = "https://github.com/zlc-dev/xmas-elf", branch = "master" }
 lwext4_rust = { git = "https://github.com/PACTHEMAN123/ext4fs.git", default-features = false, branch = "main" }
 # lwext4_rust = { path = "../ext4fs", default-features = false }
 
+ls2k1000_ahci_driver = { path = "vendor/ls2k1000_ahci_driver" }
+
 [workspace.dependencies.smoltcp]
 git = "https://github.com/lullabyeoytl/smoltcp_chronix.git"
 rev = "5ac01e106e3ec6daac84bba40510cf1791f0396c"  

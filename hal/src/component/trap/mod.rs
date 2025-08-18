@@ -10,6 +10,7 @@ pub enum TrapType {
     LoadPageFault(usize),
     InstructionPageFault(usize),
     IllegalInstruction(usize),
+    AddressNotAligned(usize),
 }
 
 pub trait TrapTypeHal: Sized {
@@ -91,6 +92,11 @@ macro_rules! define_user_trap_handler {
     };
 }
 
+// #[linkage = "weak"]
+// #[unsafe(export_name = "get_trap_context")]
+// unsafe fn default_get_trap_context() -> &'static mut TrapContext {
+//     todo!()
+// }
 
 #[cfg(target_arch = "riscv64")]
 mod riscv64;

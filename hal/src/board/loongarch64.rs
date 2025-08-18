@@ -12,6 +12,7 @@ core::arch::global_asm!{
     .global _dtb_start
     .global _dtb_end
     _dtb_start:
+    .align 12
         .incbin \"hal/src/board/dtbs/loongarch64-qemu.dtb\"
     _end_end:
     "

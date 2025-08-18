@@ -10,7 +10,7 @@ impl VirtAddrHal for VirtAddr {
     }
 
     fn ceil(&self) -> VirtPageNum {
-        if self.0 == 0{
+        if self.0 == 0 {
             VirtPageNum(0)
         } else {
             VirtPageNum(((self.0 - 1 + Constant::PAGE_SIZE) >> Constant::PAGE_SIZE_BITS) & ((1usize << Constant::VPN_WIDTH) - 1))

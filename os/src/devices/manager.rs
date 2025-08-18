@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{addr::PhysAddr, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::{mmio::{MmioTransport, VirtIOHeader}, Transport};
 
-use crate::{devices::DeviceMeta, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::PROCESSORS};
+use crate::{devices::DeviceMeta, drivers::{block::{loongarch::ahci_blk::AchiBlock, VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::PROCESSORS};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -64,77 +64,79 @@ impl DeviceManager {
         let serial = scan_char_device(device_tree);
         self.devices.insert(serial.dev_id(), serial.clone());
         self.irq_map.insert(serial.irq_no().unwrap(), serial.clone());
+        let ahci = Arc::new(AchiBlock::new());
+        self.devices.insert(ahci.dev_id(), ahci.clone());
 
         if let Some(irq_ctrl) = IrqCtrl::from_dt(device_tree, MmioMapper) {
             self.irq_ctrl = Some(irq_ctrl);
         }
         
-        if let Some(mut pci) = PciManager::scan_pcie_root(device_tree) {
-            for mut device in pci.enumerate_devices() {
-                // pci bus has an advantage: no need to map or allocate 
-                // memory to recognize the device type.
-                let dev_class: PciDeviceClass = device.func_info.class.into();
-                let dev = match dev_class {
-                    PciDeviceClass::MassStorageContorller => {
-                        pci.init_device(&mut device).unwrap();
-                        Arc::new(VirtIOPCIBlock::new(device))
-                    }
-                    _ => continue
-                };
+        // if let Some(mut pci) = PciManager::scan_pcie_root(device_tree) {
+        //     for mut device in pci.enumerate_devices() {
+        //         // pci bus has an advantage: no need to map or allocate 
+        //         // memory to recognize the device type.
+        //         let dev_class: PciDeviceClass = device.func_info.class.into();
+        //         let dev = match dev_class {
+        //             PciDeviceClass::MassStorageContorller => {
+        //                 pci.init_device(&mut device).unwrap();
+        //                 Arc::new(VirtIOPCIBlock::new(device))
+        //             }
+        //             _ => continue
+        //         };
 
-                if let Some(irq_no) = dev.irq_no() {
-                    self.irq_map.insert(irq_no, dev.clone());
-                }
-                self.devices.insert(dev.dev_id(), dev);
-            }
-            self.pci = Some(pci);
-        }
+        //         if let Some(irq_no) = dev.irq_no() {
+        //             self.irq_map.insert(irq_no, dev.clone());
+        //         }
+        //         self.devices.insert(dev.dev_id(), dev);
+        //     }
+        //     self.pci = Some(pci);
+        // }
         
-        let mmio = MmioManager::scan_mmio_root(device_tree);
-        for deivce in mmio.enumerate_devices() {
-            if let Ok(mmio_transport) = deivce.transport() {
+        // let mmio = MmioManager::scan_mmio_root(device_tree);
+        // for deivce in mmio.enumerate_devices() {
+        //     if let Ok(mmio_transport) = deivce.transport() {
 
-                let dev = match mmio_transport.device_type() {
-                    virtio_drivers::transport::DeviceType::Block => {
-                        Arc::new(VirtIOMMIOBlock::new(deivce.clone(), mmio_transport))
-                    }
-                    _ => continue
-                };
+        //         let dev = match mmio_transport.device_type() {
+        //             virtio_drivers::transport::DeviceType::Block => {
+        //                 Arc::new(VirtIOMMIOBlock::new(deivce.clone(), mmio_transport))
+        //             }
+        //             _ => continue
+        //         };
 
-                if let Some(irq_no) = dev.irq_no() {
-                    self.irq_map.insert(irq_no, dev.clone());
-                }
-                self.devices.insert(dev.dev_id(), dev);
-            }
-        }
-        for device in mmio.enumerate_devices() {
-            let mmio_ranges = &device.mmio_region;
-            if let Ok(mmio_transport) = device.transport() {
-                match mmio_transport.device_type() {
-                    virtio_drivers::transport::DeviceType::Network => {
-                        log::warn!("find a virtio-net device, use it");
-                        self.net_meta = Some(
-                            DeviceMeta {
-                                dev_id: DevId {
-                                    major: DeviceMajor::Net,
-                                    minor: 0,
-                                },
-                                name: "virtio-blk".to_string(),
-                                need_mapping: false,
-                                mmio_ranges: vec!(mmio_ranges.clone()),
-                                irq_no: None,
-                                dtype: crate::devices::DeviceType::Net,  
-                            }
-                        )
-                    }
-                    _ => continue,
-                }
-                if self.net_meta.is_some() {
-                    break;
-                }
-            }
-        }
-        self.mmio = Some(mmio);
+        //         if let Some(irq_no) = dev.irq_no() {
+        //             self.irq_map.insert(irq_no, dev.clone());
+        //         }
+        //         self.devices.insert(dev.dev_id(), dev);
+        //     }
+        // }
+        // for device in mmio.enumerate_devices() {
+        //     let mmio_ranges = &device.mmio_region;
+        //     if let Ok(mmio_transport) = device.transport() {
+        //         match mmio_transport.device_type() {
+        //             virtio_drivers::transport::DeviceType::Network => {
+        //                 log::warn!("find a virtio-net device, use it");
+        //                 self.net_meta = Some(
+        //                     DeviceMeta {
+        //                         dev_id: DevId {
+        //                             major: DeviceMajor::Net,
+        //                             minor: 0,
+        //                         },
+        //                         name: "virtio-blk".to_string(),
+        //                         need_mapping: false,
+        //                         mmio_ranges: vec!(mmio_ranges.clone()),
+        //                         irq_no: None,
+        //                         dtype: crate::devices::DeviceType::Net,  
+        //                     }
+        //                 )
+        //             }
+        //             _ => continue,
+        //         }
+        //         if self.net_meta.is_some() {
+        //             break;
+        //         }
+        //     }
+        // }
+        // self.mmio = Some(mmio);
 
         // let plic = scan_plic_device(device_tree);
         // if let Some(plic) = plic {
@@ -217,25 +219,31 @@ impl DeviceManager {
 
     /// enable interrupt for device
     pub fn enable_irq(&mut self) {
-        #[cfg(feature="smp")]
-        use hal::board::MAX_PROCESSORS;
-        #[cfg(feature="smp")]
-        // todo!
-        for i in 0..MAX_PROCESSORS * 2 {
-            for dev in self.devices.values() {
-                if let Some(irq) = dev.irq_no() {
-                    self.irq_ctrl().enable_irq(irq);
-                    log::info!("Enable external interrupt:{irq}, context:{i}");
-                }
-            }
-        }
-        #[cfg(not(feature="smp"))]
-        for i in 0..2 {
-            for dev in self.devices.values() {
-                if let Some(irq) = dev.irq_no() {
-                    self.irq_ctrl().enable_irq(irq, i);
-                    log::info!("Enable external interrupt:{irq}, context:{i}");
-                }
+        // #[cfg(feature="smp")]
+        // use hal::board::MAX_PROCESSORS;
+        // #[cfg(feature="smp")]
+        // // todo!
+        // for i in 0..MAX_PROCESSORS * 2 {
+        //     for dev in self.devices.values() {
+        //         if let Some(irq) = dev.irq_no() {
+        //             self.irq_ctrl().enable_irq(irq);
+        //             log::info!("Enable external interrupt:{irq}, context:{i}");
+        //         }
+        //     }
+        // }
+        // #[cfg(not(feature="smp"))]
+        // for i in 0..2 {
+        //     for dev in self.devices.values() {
+        //         if let Some(irq) = dev.irq_no() {
+        //             self.irq_ctrl().enable_irq(irq, i);
+        //             log::info!("Enable external interrupt:{irq}, context:{i}");
+        //         }
+        //     }
+        // }
+        for dev in self.devices.values() {
+            if let Some(irq) = dev.irq_no() {
+                self.irq_ctrl().enable_irq(irq, 0);
+                log::info!("Enable external interrupt:{irq}, context:{}", 0);
             }
         }
         unsafe {
