@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{addr::PhysAddr, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::{mmio::{MmioTransport, VirtIOHeader}, Transport};
 
-use crate::{devices::DeviceMeta, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::PROCESSORS};
+use crate::{devices::{sdio::scan_sdio_blk, DeviceMeta}, drivers::{block::{VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::{current_processor_id, PROCESSORS}};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 

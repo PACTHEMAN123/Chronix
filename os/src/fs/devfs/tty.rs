@@ -257,6 +257,7 @@ impl File for TtyFile {
         let terminos = self.meta.lock().termios;
         log::debug!("[tty] output flags {} {}", terminos.is_ocrnl(), terminos.is_onlcr());
 
+        #[cfg(feature = "vf2")]
         if terminos.is_onlcr() {
             // convert '\n' to '\r''\n'
             let mut new_buf = Vec::new();
