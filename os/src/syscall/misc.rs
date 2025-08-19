@@ -8,8 +8,10 @@ use hal::instruction::{Instruction, InstructionHal};
 use strum::FromRepr;
 use lazy_static::lazy_static;
 
+use crate::fs::FanotifyFlags;
 use crate::mm::{UserPtrRaw, UserSliceRaw};
 use crate::sync::mutex::SpinNoIrqLock;
+use crate::syscall::fd::tmp_fd;
 use crate::syscall::SysError;
 use crate::{fs::devfs::urandom::RNG, task::{current_task, manager::TASK_MANAGER}, timer::{get_current_time,ffi::TimeVal}};
 
@@ -429,4 +431,43 @@ pub fn sys_uname(uname_buf: usize) -> SysResult {
         .ok_or(SysError::EFAULT)?;
     uname_ptr.write(uname);
     Ok(0)
+}
+
+pub fn sys_getdomainname(buf_ptr: usize, len: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let buf = UserSliceRaw::new(buf_ptr as *mut u8, len)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let domainname = UTS.lock().get_utsname().domainname;
+    buf.to_mut().copy_from_slice(&domainname[..len]);
+    Ok(0)
+}
+
+pub fn sys_setdomainname(buf_ptr: usize, len: usize) -> SysResult {
+    log::info!("buf_ptr {:#x}, len {}", buf_ptr, len);
+    if (len as isize) < 0 || (len as isize) > 64 {
+        return Err(SysError::EINVAL);
+    }
+    if buf_ptr == 0 {
+        return Err(SysError::EFAULT)
+    }
+    let task = current_task().unwrap().clone();
+    let buf = UserSliceRaw::new(buf_ptr as *const u8, len)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    let domainname = String::from_utf8(buf.to_ref().to_vec()).map_err(|_| SysError::EINVAL)?;
+    UTS.lock().set_domainname(&domainname);
+    Ok(0)
+}
+
+pub fn sys_fanotify_init(flags: u32, event_flags: u32) -> SysResult {
+    let fano_flags = FanotifyFlags::from_bits_truncate(flags);
+    fano_flags.validate()?;
+    Ok(tmp_fd()? as isize)
+}
+
+pub fn sys_fanotify_mark(fd: usize, flags: u32, mask: usize, dirfd: usize, pathname_ptr: usize) -> SysResult {
+    
+
+    return Ok(0)
 }

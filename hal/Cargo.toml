@@ -27,3 +27,4 @@ loongArch64 = "0.2.4"
 [features]
 default = ["ls2k1000"]
 ls2k1000 = []
+vf2 = []

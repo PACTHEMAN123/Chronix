@@ -4,7 +4,7 @@
 mod action;
 mod handler;
 mod manager;
-
+pub mod msg_queue;
 pub use action::*;
 pub use handler::*;
 pub use manager::*;

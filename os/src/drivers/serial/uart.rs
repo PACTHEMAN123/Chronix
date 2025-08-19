@@ -134,16 +134,27 @@ impl Uart {
     }
 
     fn init_u32(&mut self) {
+        log::info!("start to init u32");
         let reg = self.mmio_base_vaddr as *mut u32;
+        log::info!("reg at {:#x}", self.mmio_base_vaddr);
+
+        log::info!("test to read the reg");
+        let read_u32 = unsafe {
+            *reg
+        };
+        log::info!("read out data {read_u32}");
 
         unsafe {
+            log::info!("disable interrupt");
             // Disable Interrupt
             reg.byte_add(IER << self.reg_shift).write_volatile(0x00);
 
+            log::info!("enable dlab");
             // Enable DLAB
             // Enter a setting mode to set baud rate
             reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
 
+            log::info!("start to set baud_rate");
             // Set baud rate
             let divisor = self.clock_frequency / (16 * self.baud_rate);
             reg.byte_add(0 << self.reg_shift)

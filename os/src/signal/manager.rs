@@ -232,4 +232,15 @@ impl SigManager {
         // the signal mask is preserved across execve(2).
         // the pending signal set is preserved across an execve(2).
     }
+
+    pub fn get_sigmask(&self) -> SigSet {
+        self.blocked_sigs
+    }
+
+    pub fn set_sigmask(&mut self, mask: SigSet) {
+        // cannot block stop and kill
+        let mut sigmask = mask;
+        sigmask.remove(SigSet::SIGSTOP | SigSet::SIGKILL);
+        self.blocked_sigs = sigmask;
+    }
 }

@@ -4,7 +4,6 @@ use core::ops::{Add, DerefMut};
 use core::ptr::null;
 use core::sync::atomic::Ordering;
 use crate::config::PAGE_SIZE;
-use crate::fs::fat32::dentry;
 use crate::fs::utils::FileReader;
 use crate::fs::vfs::dentry::global_find_dentry;
 use crate::fs::vfs::DentryState;
@@ -507,7 +506,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
             let mut vm = task.get_vm_space().lock();
             let exit_code_ptr = UserPtrRaw::new(exit_code_ptr as *mut i32)
                 .ensure_write(vm.deref_mut())
-                .ok_or(SysError::EINVAL)?;
+                .ok_or(SysError::EFAULT)?;
             let exit_code_mut = exit_code_ptr.to_mut();
             let exit_code = res_task.exit_code();
             *exit_code_mut = exit_code as i32;
@@ -574,7 +573,7 @@ pub async fn sys_waitpid(pid: isize, exit_code_ptr: usize, option: i32) -> SysRe
                     break child.clone();
                 }
             }else {
-                log::warn!("[sys_waitpid] wake up by unexpected signal");
+                log::warn!("[sys_waitpid] task {} wake up by unexpected signal", task.tid());
                 return Err(SysError::EINTR);
             }
         };

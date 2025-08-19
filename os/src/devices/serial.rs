@@ -65,11 +65,16 @@ pub fn get_serial(stdout: &FdtNode) -> Serial {
     match first_compatible {
         "ns16550a" | "snps,dw-apb-uart" => {
             // Parse clock frequency
-            let freq_raw = stdout
+            let freq_raw = if first_compatible == "ns16550a" {
+                stdout
                 .property("clock-frequency")
                 .expect("No clock-frequency property of stdout serial device")
                 .as_usize()
-                .expect("Parse clock-frequency to usize failed");
+                .expect("Parse clock-frequency to usize failed")
+            } else {
+                // ugly: how to get clock freq?
+                500_000_000usize
+            };
             let mut reg_io_width = 1;
             if let Some(reg_io_width_raw) = stdout.property("reg-io-width") {
                 reg_io_width = reg_io_width_raw

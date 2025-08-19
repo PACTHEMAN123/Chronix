@@ -4,7 +4,7 @@ use alloc::{ffi::CString, string::{String, ToString}, sync::Arc, task, vec::Vec,
 use fatfs::{info, warn};
 use hal::{addr, instruction::{Instruction, InstructionHal}, println};
 use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
-use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, Ipv4Address}};
+use smoltcp::{socket::dns::Socket, time::Duration, wire::{IpAddress, IpProtocol, Ipv4Address}};
 
 use crate::{config::PAGE_SIZE, fs::{pipefs, vfs::{file::open_file, File}, OpenFlags}, mm::{UserPtr, UserPtrRaw, UserSliceRaw}, net::{addr::{SockAddr, SockAddrIn4, SockAddrIn6, SockAddrUn}, crypto::{encode, AlgInstance, AlgType, SockAddrAlg}, socket::{self, Sock, SockResult}, socketpair::make_socketpair, tcp::TcpSocket, SaFamily, SOCKET_SET}, signal::SigSet, syscall::{misc::UTS, process}, task::{current_task, fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::ffi::TimeSpec, utils::yield_now};
 
@@ -147,9 +147,9 @@ pub fn sys_socket(domain: usize, types: i32, protocol: usize) -> SysResult {
     log::info!("[sys_socket] domain: {:?}, types: {:?}, protocol: {:?}", domain, types, protocol);
     let domain = SaFamily::try_from(domain as u16)?;
     let s_type = SocketType::try_from(types as i32)?;
-    if s_type == SocketType::RAW && domain!= SaFamily::Packet {
-        return Err(SysError::EPROTONOSUPPORT);
-    }
+    // if s_type == SocketType::RAW && domain!= SaFamily::Packet {
+    //     return Err(SysError::EPROTONOSUPPORT);
+    // }
     let mut types = types as i32;
     let mut nonblock = false;
     // file descriptor flags
@@ -164,8 +164,9 @@ pub fn sys_socket(domain: usize, types: i32, protocol: usize) -> SysResult {
         flags |= OpenFlags::O_CLOEXEC;
     }
     let types = SocketType::try_from(types as i32)?;
-    let _protocol = Protocol::try_from(protocol)?;
-    let socket = socket::Socket::new(domain,types, nonblock);
+    let _protocol_inner = Protocol::try_from(protocol)?;
+    protocol_check(protocol as u8, s_type)?;
+    let socket = socket::Socket::new(domain,types, nonblock, protocol as u8);
     let fd_info = FdInfo {
         file: Arc::new(socket),
         flags: flags.into(),
@@ -374,6 +375,13 @@ pub async fn sys_sendto(
             }
             socket_file.sk.send(&buf_slice, None).await?
         },
+        SocketType::RAW => {
+            let remote_addr = if addr != 0 {  Some(sockaddr_reader(addr, addr_len, &task)?
+            .into_endpoint()?)}else {
+                None
+            };
+            socket_file.sk.send(&buf_slice, remote_addr).await?
+        }
         _ => todo!(),
     };
     task.set_running();
@@ -1329,7 +1337,7 @@ pub fn sys_socketpair(domain: usize, types: usize, protocol: usize, sv: usize) -
     if types & (SOCK_CLOEXEC as usize) != 0 {
         flags |= OpenFlags::O_CLOEXEC;
     }
-    let (raw1, raw2) = make_socketpair(domain, sock_type, 16 * 4096, nonblock);
+    let (raw1, raw2) = make_socketpair(domain, sock_type, 16 * 4096, nonblock, protocol as u8);
     *raw1.file_inner().flags.lock() |= flags;
     *raw2.file_inner().flags.lock() |= flags;
     
@@ -1701,5 +1709,30 @@ pub async fn sys_gethostname(hostname_ptr: usize, len: usize) -> SysResult {
         .ok_or(SysError::EFAULT)?;
     let hostname = UTS.lock().get_utsname().nodename;
     hostname_buf.to_mut().copy_from_slice(&hostname[..len]);
+    Ok(0)
+}
+
+pub fn protocol_check(protocol: u8, sk_type: SocketType) -> SysResult {
+    if protocol != 0 {
+        let protocol = IpProtocol::try_from(protocol).map_err(|_|SysError::EINVAL)?;
+        match protocol {
+            IpProtocol::Icmp => {
+                if sk_type != SocketType::RAW {
+                    return Err(SysError::EPROTONOSUPPORT);
+                }
+            },
+            IpProtocol::Tcp => {
+                if sk_type != SocketType::STREAM {
+                    return Err(SysError::EPROTONOSUPPORT);
+                }
+            },
+            IpProtocol::Udp => {
+                if sk_type != SocketType::DGRAM {
+                    return Err(SysError::EPROTONOSUPPORT);
+                }
+            },
+            _ => return Ok(0),
+        }
+    }
     Ok(0)
 }

@@ -1,7 +1,12 @@
 //! signal related syscall
 
+use core::task::Waker;
 use core::time::Duration;
 
+use alloc::collections::binary_heap::BinaryHeap;
+use alloc::collections::vec_deque::VecDeque;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
 use hal::{
@@ -11,6 +16,7 @@ use hal::{
 use log::*;
 use super::{SysError,SysResult};
 use crate::mm::UserPtrRaw;
+use crate::sync::mutex::SpinNoIrqLock;
 use crate::{processor, timer};
 use crate::processor::context::SumGuard;
 use crate::processor::processor::current_processor;
@@ -112,7 +118,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
         old_action as usize,
         core::mem::size_of::<SigAction>()
     );
-    if signo < 0 || signo as usize > SIGRTMAX {
+    if signo < 0 || signo as usize > SIGRTMAX || signo as usize == SIGKILL || signo as usize == SIGSTOP {
         info!("[sys_rt_sigaction]: error");
         return Err(SysError::EINVAL);
     }

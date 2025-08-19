@@ -7,7 +7,7 @@ use alloc::{collections::vec_deque::VecDeque, string::ToString, sync::Arc};
 use alloc::boxed::Box;
 use async_trait::async_trait;
 
-use crate::{fs::StatxTimestamp, sync::mutex::SpinNoIrqLock, syscall::SysError, utils::{get_waker, RingBuffer}};
+use crate::{fs::StatxTimestamp, sync::mutex::SpinNoIrqLock, syscall::{io::EPollEvents, SysError}, utils::{get_waker, RingBuffer}};
 
 use super::{vfs::{file::PollEvents, inode::InodeMode, Dentry, DentryInner, File, FileInner, Inode, InodeInner}, Kstat, OpenFlags, Xstat, XstatMask};
 
@@ -224,8 +224,8 @@ impl File for PipeFile {
     }
 
     /// override the inode, some test will need pipe inode
-    fn inode(&self) -> Option<Arc<dyn Inode>> {
-        Some(self.pipe.clone())
+    fn inode(&self) -> Result<Arc<dyn Inode>, SysError> {
+        Ok(self.pipe.clone())
     }
 
     async fn read(&self, buf: &mut [u8]) -> Result<usize, SysError> {

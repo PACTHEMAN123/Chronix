@@ -24,7 +24,7 @@ use crate::task::{current_task, INITPROC_PID};
 use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
-use crate::timer::timer::ITimer;
+use crate::timer::timer::{ITimer, PosixTimer, TimerId};
 use crate::utils::{suspend_forever, SendWrapper};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
@@ -127,6 +127,9 @@ pub struct TaskControlBlock {
     pub cwd: Shared<Arc<dyn Dentry>>,
     /// Interval timers for the task.
     pub itimers: Shared<[ITimer; 3]>,
+    /// posix timers
+    pub posix_timers: Shared<BTreeMap<TimerId, PosixTimer>>,
+    pub next_timer_id: AtomicUsize,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -232,7 +235,8 @@ impl TaskControlBlock {
         sig_manager: SigManager,
         cwd: Arc<dyn Dentry>,
         vm_space: UserVmSpace,
-        itimers: [ITimer;3]
+        itimers: [ITimer;3],
+        posix_timers: BTreeMap<TimerId, PosixTimer>
     );
     #[cfg(feature = "smp")]
     generate_with_methods!(
@@ -248,7 +252,8 @@ impl TaskControlBlock {
         suid: i32,
         rgid: i32,
         egid: i32,
-        sgid: i32
+        sgid: i32,
+        next_timer_id: usize
     );
     generate_state_methods!(
         Ready,
@@ -352,6 +357,10 @@ impl TaskControlBlock {
     pub fn set_priority(&self, priority: i32) {
         self.priority.store(priority, Ordering::SeqCst);
     }
+    ///
+    pub fn alloc_timer_id(&self) -> TimerId {
+        self.next_timer_id.fetch_add(1, Ordering::Relaxed)
+    }
 }
 
 impl TaskControlBlock {
@@ -410,6 +419,8 @@ impl TaskControlBlock {
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
+            posix_timers: new_shared(BTreeMap::new()),
+            next_timer_id: AtomicUsize::new(0),
             robust: UPSafeCell::new(UserPtrRaw::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
@@ -580,6 +591,8 @@ impl TaskControlBlock {
             cwd,
             elf,
             itimers,
+            posix_timers: new_shared(BTreeMap::new()),
+            next_timer_id: AtomicUsize::new(0),
             robust: UPSafeCell::new(UserPtrRaw::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),

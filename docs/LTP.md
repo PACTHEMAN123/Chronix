@@ -7,7 +7,7 @@
 - [ ] abs01
 - [x] accept01
 - [ ] accept02 ：要添加socket选项（set_sockopts）
-- [x] accept03 : p4 f1
+- [x] accept03 : 
 - [x] accept4_01 :2 pass 2 fail 2 skip
 - [x] access01: 107 pass failed 92
 - [x] access02: 12 pass failed 4
@@ -86,7 +86,7 @@
 - [ ] cgroup_regression_fork_processes
 - [ ] cgroup_regression_getdelays
 - [ ] cgroup_xattr
-- [ ] chdir01: TBROK: Failed to acquire device
+- [x] chdir01: f13 f3 b1
 - [x] chdir04
 - [ ] check_envval
 - [ ] check_icmpv4_connectivity
@@ -113,9 +113,9 @@
 - [ ] clock_gettime01: Failed to open FILE '/proc/self/stat' for reading: ENOENT (2)
 - [x] clock_gettime02: 
 - [ ] clock_gettime03: TBROK: Cannot parse kernel .config
-- [ ] clock_gettime04: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
+- [x] clock_gettime04 : p6
 - [x] clock_nanosleep01: passed 8 failed 2 skipped 2 
-- [ ] clock_nanosleep02: TBROK: fopen(/proc/cpuinfo,r) failed: ENOENT (2)
+- [x] clock_nanosleep02: stress, p1 f6
 - [ ] clock_nanosleep03: .config not exist
 - [x] clock_nanosleep04: pass 4 failed 4
 - [x] clock_settime01: all pass
@@ -135,13 +135,13 @@
 - [ ] clone303: /proc/self/mounts
 - [x] close01
 - [x] close02
-- [ ] close_range01：No Free Device
+- [ ] close_range01：436
 - [ ] close_range02：TCONF
 - [x] confstr01
 - [ ] connect01: no_summary
-- [ ] connect02: Failed to open FILE '/proc/sys/kernel/tainted
-- [ ] copy_file_range01 : no dev
-- [ ] copy_file_range02 : no dev
+- [ ] connect02: f
+- [x] copy_file_range01 : p12 (heavy read/write)
+- [ ] copy_file_range02 : b
 - [x] copy_file_range03
 - [ ] cpuacct_task
 - [ ] cpuctl_def_task01: panic
@@ -172,7 +172,7 @@
 - [ ] creat07: failed to copy
 - [ ] creat07_child: failed
 - [x] creat08: pass 2 faild 7 
-- [ ] creat09: no device
+- [ ] creat09: TBROK: Group ID lookup failed: EINVAL (22)
 - [ ] crypto_user01: socket(16, 524290, 21) failed: EINVAL (22)
 - [ ] crypto_user02
 - [ ] cve-2014-0196
@@ -229,28 +229,31 @@
 - [ ] ebizzy: no summary, 性能测试
 - [ ] eject_check_tray
 - [ ] endian_switch01
-- [x] epoll_create01: no syscall, p 2 b 2 skip 1
+
+======= epoll =======
+- [x] epoll_create01: p2 skip 1
 - [ ] epoll_create02: failed
-- [x] epoll_create1_01: p1 failed 1
-- [ ] epoll_create1_02: failed
+- [x] epoll_create1_01
+- [x] epoll_create1_02
 - [ ] epoll_ctl01: failed
-- [ ] epoll_ctl02: failed
+- [x] epoll_ctl02: p7 f2
 - [x] epoll_ctl03: do nothing but pass 256 :(
 - [ ] epoll_ctl04： failed
 - [ ] epoll_ctl05: failed
 - [ ] epoll-ltp
-- [ ] epoll_pwait01: panic
-- [ ] epoll_pwait02: failed ,441, same as follows
+- [ ] epoll_pwait01 : stuck, need /proc/pid
+- [x] epoll_pwait02 : stuck
 - [ ] epoll_pwait03
 - [ ] epoll_pwait04
 - [ ] epoll_pwait05
-- [ ] epoll_wait01
-- [ ] epoll_wait02
-- [ ] epoll_wait03
-- [ ] epoll_wait04
+- [x] epoll_wait01 : p2 f1, get wrong fd
+- [ ] epoll_wait02 : f7
+- [x] epoll_wait03
+- [x] epoll_wait04
 - [ ] epoll_wait05
-- [ ] epoll_wait06
+- [x] epoll_wait06 : p2 f7, need to support pipe resize and ET
 - [ ] epoll_wait07
+
 - [ ] eventfd01: can't locate kernel config
 - [ ] eventfd02
 - [ ] eventfd03
@@ -303,17 +306,19 @@
 - [ ] fallocate01：需要支持 fallocate: 调整文件在内存分布？且没有 summary
 - [ ] fallocate02：没有 summary
 - [x] fallocate03
-- [ ] fallocate04：似乎需要 /dev/ 支持？
+- [ ] fallocate04 : p1 b1 lseek not sopport hole
 - [ ] fallocate05：同上
 - [ ] fallocate06：同上
-- [ ] fanotify01：需要设备
-- [ ] fanotify02：卡死
-- [ ] fanotify03：需要设备
+- [x] fanotify01 : p18 f256
+- [ ] fanotify02 : f8
+- [ ] fanotify03 : f
 - [x] fanotify04：有概率卡住
-- [ ] fanotify05：需要设备
+- [ ] fanotify05 : dead loop
 - [ ] fanotify06：需要设备
 - [ ] fanotify07：可能需要正确实现该系统调用
 - [x] fanotify08：试图关闭 fd0
+- [x] fanotify14 : p69 f51
+- [ ] fanotify16
 - [ ] fanotify09-23：需要设备/关闭fd0/管道问题？
 - [ ] fanout01
 - [x] fchdir01
@@ -390,8 +395,8 @@
 - [ ] fcntl27_64: flock
 - [x] fcntl29
 - [x] fcntl29_64
-- [ ] fcntl30: /proc/sys/fs/pipe-max-size
-- [ ] fcntl30_64: /proc/sys/fs/pipe-max-size
+- [x] fcntl30 : p3 f1
+- [x] fcntl30_64 : p3 f1
 - [ ] fcntl31: missing fcntlop
 - [ ] fcntl31_64
 - [ ] fcntl32: missing fcntlop
@@ -404,8 +409,8 @@
 - [ ] fcntl35_64
 - [x] fcntl36
 - [x] fcntl36_64
-- [ ] fcntl37: /proc/sys/fs/pipe-max-size
-- [ ] fcntl37_64
+- [ ] fcntl37 : f3
+- [ ] fcntl37_64 : f3
 - [ ] fcntl38: Cannot parse kernel .config
 - [ ] fcntl38_64
 - [ ] fcntl39: Cannot parse kernel .config
@@ -414,7 +419,7 @@
 
 - [x] fdatasync01: no sum
 - [ ] fdatasync02: no sum
-- [ ] fdatasync03: no device
+- [ ] fdatasync03: /sys/block/
 - [ ] fgetxattr01: no device
 - [ ] fgetxattr02: mountpoint?
 - [ ] fgetxattr03: ?
@@ -452,14 +457,14 @@
 ===== fsxxx ==========
 - [ ] fptest01 : failed without reason?
 - [ ] fptest02
-- [ ] fremovexattr01 : no device
-- [ ] fremovexattr02 : no device
-- [ ] fsconfig01 : no device
-- [ ] fsconfig02 : no device
-- [ ] fsconfig03 : no device
-- [ ] fsetxattr01 : no device
-- [ ] fsetxattr02 : no device
-- [ ] fs_fill : no device
+- [ ] fremovexattr01 : f
+- [ ] fremovexattr02 : f
+- [ ] fsconfig01 : no syscall 431
+- [ ] fsconfig02 : no syscall 431
+- [ ] fsconfig03 : no syscall 431
+- [ ] fsetxattr01 : p6 f21
+- [ ] fsetxattr02 : tconf
+- [ ] fs_fill : panic
 - [ ] fsmount01 : no device
 - [ ] fsmount02 : no device
 - [ ] fsopen01 : no device
@@ -476,10 +481,10 @@
 - [x] fstatfs02 : pass 1 failed 1
 - [x] fstatfs02_64
 - [ ] fsx-linux : not support tmp file truncate
-- [ ] fsync01 : no dev
-- [ ] fsync02 : /proc/cpuinfo
+- [x] fsync01 : p30 f1
+- [x] fsync02
 - [ ] fsync03 : no mknod
-- [ ] fsync04 : no dev
+- [ ] fsync04 : b
 - [ ] ftest01 : failed, no sum
 - [ ] ftest02 : failed
 - [ ] ftest03 : failed
@@ -502,7 +507,7 @@
 - [ ] futex_wait02: 卡住
 - [ ] futex_wait03: /proc/pid/stat
 - [x] futex_wait04
-- [ ] futex_wait05: /proc/cpuinfo
+- [x] futex_wait05: stress, p1 f6
 - [ ] futex_wait_bitset01
 - [ ] futex_waitv01
 - [ ] futex_waitv02
@@ -550,7 +555,7 @@
 - [ ] geny1
 - [ ] getaddrinfo_01
 - [ ] getcontext01
-- [ ] getcpu01
+- [ ] getcpu01 : f
 - [x] getcwd01
 - [x] getcwd02 : p3
 - [ ] getcwd03 : failed
@@ -610,7 +615,7 @@
 - [x] getrusage02: 1skip
 - [ ] getrusage03: Failed to copy
 - [ ] getrusage03_child
-- [ ] getrusage04: cannot open /proc/cpuinfo, not exist
+- [x] getrusage04 : no sum
 - [ ] getsid01: getsid(0) failed in parent: ENOSYS (38)
 - [ ] getsid02: no syscall 156
 - [x] getsockname01:pass 5 failed 1  
@@ -625,9 +630,9 @@
 - [x] getuid03:Failed to open FILE '/proc/self/status' pass1 broken 1
 
 - [ ] getxattr01: failed
-- [ ] getxattr02 : no dev
-- [ ] getxattr03 : no dev
-- [ ] getxattr04 : no dev
+- [ ] getxattr02 : f12
+- [ ] getxattr03 : f
+- [ ] getxattr04 : tconf
 - [ ] getxattr05 : tconf
 - [ ] growfiles
 - [ ] hackbench
@@ -719,12 +724,12 @@
 - [ ] io_control01: Failed to acquire device
 
 ======= ioctl =========
-- [ ] ioctl01 : no dev
-- [ ] ioctl02 : f
+- [ ] ioctl01 : /dev/ptmx
+- [ ] ioctl02 : b
 - [ ] ioctl03 : tun
-- [ ] ioctl04 : no dev
-- [ ] ioctl05 : no dev
-- [ ] ioctl06 : no dev
+- [ ] ioctl04 : b
+- [ ] ioctl05 : b
+- [ ] ioctl06 : b
 - [ ] ioctl07 : f
 - [ ] ioctl08 : tconf
 - [ ] ioctl09 : tconf
@@ -735,13 +740,13 @@
 - [ ] ioctl_loop05 : no dev
 - [ ] ioctl_loop06 : no dev
 - [ ] ioctl_loop07 : no dev
-- [ ] ioctl_ns01 : /proc
-- [ ] ioctl_ns02 : /proc
-- [ ] ioctl_ns03 : /proc
-- [ ] ioctl_ns04 : /proc
-- [ ] ioctl_ns05 : /proc
-- [ ] ioctl_ns06 : /proc
-- [ ] ioctl_ns07 : /proc
+- [ ] ioctl_ns01 : /proc/ns/pid
+- [ ] ioctl_ns02 : /proc/ns/pid
+- [ ] ioctl_ns03 : /proc/ns/pid
+- [ ] ioctl_ns04 : /proc/ns/pid
+- [ ] ioctl_ns05 : /proc/ns/pid
+- [ ] ioctl_ns06 : /proc/ns/pid
+- [ ] ioctl_ns07 : /proc/ns/pid
 - [ ] ioctl_sg01 : tconf
 - [ ] io_destroy01 : tconf
 - [ ] io_destroy02 : .config
@@ -764,14 +769,14 @@
 - [ ] io_submit03 : tconf
 - [x] io_uring01 : p1 f1
 - [ ] io_uring02 : tconf
-- [ ] kallsyms : /proc
+- [ ] kallsyms : /proc/kallsyms
 - [x] kcmp01 : p4 f1
-- [ ] kcmp02 : /proc
+- [ ] kcmp02 : f6
 - [x] kcmp03 : p3 f1
 
 ====== keyctl ======
 - [ ] keyctl01 : dead loop
-- [ ] keyctl02 : /proc
+- [ ] keyctl02 : /proc/sys/kernel/keys/root_maxkeys
 - [ ] keyctl03
 - [x] keyctl04
 - [ ] keyctl05 : /lib/module
@@ -807,9 +812,9 @@
 ====== lxxx =======
 - [x] lchown01 : no sum
 - [x] lchown02 : no sum
-- [ ] lchown03 : no dev
+- [ ] lchown03 : no sum
 
-- [ ] leapsec01 : syscall 112 we can support
+- [ ] leapsec01 : b
 - [x] lftest
 - [ ] lgetxattr01 : f
 - [ ] lgetxattr02 : f
@@ -820,7 +825,7 @@
 - [x] link05
 - [ ] link08 : expected: 40 - ELOOP: ENAMETOOLONG (36)
 - [ ] linkat01 : pass lot f 3, no sum
-- [ ] linkat02 : no dev
+- [ ] linkat02 : f
 
 - [x] listen01 : no sum
 - [ ] listxattr01 : f
@@ -834,22 +839,22 @@
 - [x] llseek01 : pass 1 f 1
 - [x] llseek02
 - [x] llseek03
-- [ ] lremovexattr01 : no dev
+- [ ] lremovexattr01 : f
 - [x] lseek01
 - [ ] lseek02 : mknodat
-- [ ] lseek07 : no dev
+- [x] lseek07
 - [ ] lseek11 : seek hole .. we can support
 - [ ] lstat01 : f
 - [ ] lstat01_64 : f
-- [ ] lstat02 : f
-- [ ] lstat02_64 : f
+- [x] lstat02 : p4 f2
+- [x] lstat02_64 : p4 f2
 
 ======= madvise ========
 - [x] madvise01 : p 20
 - [ ] madvise02 : hang
 - [ ] madvise03 : f
 - [x] madvise05
-- [ ] madvise06 : /proc
+- [ ] madvise06 : /proc/self/mounts
 - [ ] madvise07 : f
 - [ ] madvise08 : tconf
 - [ ] madvise09 : tconf
@@ -905,7 +910,7 @@
 - [x] mkdir03 : passed 7 failed 4
 - [ ] mkdir04 : f 1
 - [x] mkdir05
-- [ ] mkdir09 : no dev
+- [x] mkdir09 : p6 b1
 - [x] mkdirat01 : no sum
 - [ ] mkdirat02 : failed 4, failed unexpectedly; expected: 40 - ELOOP: ENAMETOOLONG
 
@@ -927,8 +932,8 @@
 - [ ] mlock02 : f
 - [ ] mlock03 : f
 - [x] mlock04
-- [ ] mlock05 : /proc
-- [ ] mlock201 : /proc
+- [ ] mlock05 : /proc/self/smaps
+- [ ] mlock201 : /proc/self/status
 - [ ] mlock202 : f
 - [ ] mlock203 : f
 - [x] mlockall01 : no sum
@@ -940,7 +945,7 @@
 - [x] mmap01 : no sum
 - [x] mmap02 
 - [ ] mmap03 : page fault
-- [ ] mmap04 : /proc
+- [ ] mmap04 : /proc/self/maps
 - [x] mmap05
 - [x] mmap06 : p 2 f 6
 - [x] mmap08 : f
@@ -948,7 +953,7 @@
 - [ ] mmap1 : 压测?
 - [ ] mmap10 : /dev/zero panic
 - [x] mmap11 : no sum
-- [ ] mmap12 : /proc
+- [ ] mmap12 : /proc/self/pagemap
 - [ ] mmap13 : f
 - [ ] mmap14 : f
 - [ ] mmap15 : panic
@@ -1005,17 +1010,17 @@
 - [x] mprotect04 : no sum
 - [x] mprotect05
 
-- [ ] mq_notify01
-- [ ] mq_notify02
-- [ ] mq_notify03
+- [x] mq_notify01
+- [x] mq_notify02
+- [x] mq_notify03
 - [ ] mqns_01
 - [ ] mqns_02
 - [ ] mqns_03
 - [ ] mqns_04
-- [ ] mq_open01
+- [x] mq_open01
 - [ ] mq_timedreceive01
-- [ ] mq_timedsend01
-- [ ] mq_unlink01
+- [x] mq_timedsend01
+- [x] mq_unlink01
 
 - [ ] mremap01 : f
 - [x] mremap02 : no sum
@@ -1058,7 +1063,7 @@
 
 - [x] munlock01
 - [ ] munlock02 : f
-- [ ] munlockall01 : /proc
+- [ ] munlockall01 : /proc/self/status
 
 - [x] munmap01 : no sum
 - [ ] munmap02 : no sum
@@ -1067,7 +1072,7 @@
 - [x] name_to_handle_at01 : p1 f1
 - [ ] name_to_handle_at02 : f
 
-- [ ] nanosleep01 : /proc
+- [x] nanosleep01 : stress, p1 f6
 - [ ] nanosleep02 : f
 - [x] nanosleep04
 
@@ -1117,13 +1122,13 @@
 - [ ] open09 : f 
 - [x] open10 : pass 2 failed 7
 - [x] open11 : pass 19 failed 9
-- [ ] open12 : no dev
+- [ ] open12 : no sum
 - [ ] open13 : f
 - [ ] open14 : f
 - [x] openat01
 - [ ] openat02 : no sum
 - [ ] openat03 : f
-- [ ] openat04 : no dev
+- [ ] openat04 : b
 - [ ] openat201 : no openat2
 - [ ] openat202 : f
 - [ ] openat203 : no openat2
@@ -1202,7 +1207,7 @@
 - [ ] pkey01
 - [ ] pm_get_sched_values
 - [x] poll01
-- [ ] poll02 : /proc/cpuinfo
+- [ ] poll02 : stress p1 f6
 
 ======= fadvise =======
 - [x] posix_fadvise01
@@ -1225,7 +1230,7 @@
 - [ ] prctl06
 - [ ] prctl06_execve
 - [ ] prctl07
-- [ ] prctl08: p6 f4 s1
+- [x] prctl08 : p6 f4 s1
 - [ ] prctl09
 - [ ] prctl10
 
@@ -1238,13 +1243,13 @@
 - [x] preadv01_64
 - [x] preadv02 : p7 f1 todo: check read/write of stdin stdout
 - [x] preadv02_64
-- [ ] preadv03 : no dev
+- [ ] preadv03 : b
 - [ ] preadv03_64
 - [x] preadv201
 - [x] preadv201_64
 - [x] preadv202 : pass 6 failed 2 (should not success)
 - [x] preadv202_64 : 
-- [ ] preadv203 : no dev
+- [ ] preadv203 : b
 - [ ] preadv203_64
 
 - [ ] proc01
@@ -1258,8 +1263,8 @@
 - [ ] prot_hsymlinks : abort
 
 ======= pselect ======
-- [ ] pselect01 : /proc/cpuinfo
-- [ ] pselect01_64
+- [x] pselect01 : p1 f6
+- [x] pselect01_64
 - [x] pselect02
 - [x] pselect02_64
 - [x] pselect03
@@ -1303,8 +1308,8 @@
 - [x] pwritev01_64
 - [x] pwritev02 : p6 f1
 - [x] pwritev02_64 : p6 f1
-- [ ] pwritev03 : no dev
-- [ ] pwritev03_64 : no dev
+- [ ] pwritev03 : b
+- [ ] pwritev03_64 : b
 - [x] pwritev201
 - [x] pwritev201_64
 - [x] pwritev202 : p5 f2
@@ -1316,7 +1321,7 @@
 - [ ] read03 : mknodat
 - [x] read04
 - [x] readahead01 : p4 f1
-- [ ] readahead02 : no dev
+- [ ] readahead02 : tconf
 - [ ] read_all : brok The directory argument (-d) is required
 - [x] readdir01
 - [ ] readdir21 : tconf
@@ -1343,20 +1348,20 @@
 - [ ] removexattr02 : f
 
 ====== rename ======
-- [ ] rename01 : no dev
-- [ ] rename03 : no dev
-- [ ] rename04 : no dev
-- [ ] rename05 : no dev
-- [ ] rename06 : no dev
-- [ ] rename07 : no dev
-- [ ] rename08 : no dev
+- [ ] rename01 : f2 b1
+- [ ] rename03 : p2 f6 b1
+- [ ] rename04 : b
+- [ ] rename05 : b
+- [ ] rename06 : b
+- [ ] rename07 : b
+- [x] rename08 : p6
 - [ ] rename09 : f
-- [ ] rename10 : f
-- [ ] rename11 : no dev
-- [ ] rename12 : no dev
-- [ ] rename13 : no dev
+- [x] rename10 : p6
+- [ ] rename11 : b
+- [ ] rename12 : b
+- [ ] rename13 : b
 - [x] rename14 : no sum
-- [ ] renameat01 : no dev
+- [ ] renameat01 : no sum
 - [x] renameat201 : no sum
 - [ ] renameat202 : f
 
@@ -1417,7 +1422,7 @@
 
 ====== select ======
 - [ ] select01 : mknodat
-- [ ] select02 : /proc/cpuinfo
+- [x] select02 : stress p4 f10
 - [x] select03 : p14 failed 2 b 2 s 24
 - [ ] select04 : stuck
 
@@ -1470,9 +1475,10 @@
 - [ ] sendto01: no sum
 - [x] sendto02
 - [ ] sendto03
-- [ ] setdomainname01: 162
-- [ ] setdomainname02: 
-- [ ] setdomainname03
+
+- [x] setdomainname01 : p2
+- [x] setdomainname02 : p6
+- [ ] setdomainname03 : f2
 
 - [x] setegid01 : p4
 - [ ] setegid02 : f1
@@ -1493,9 +1499,11 @@
 - [x] setgroups02: 2fail
 - [ ] setgroups03
 - [ ] setgroups04
+
 - [x] sethostname01
 - [x] sethostname02
 - [ ] sethostname03 : should failed
+
 - [ ] set_ipv4addr
 - [x] setitimer01: 1 broken timedout
 - [x] setitimer02
@@ -1569,7 +1577,7 @@
 - [ ] setuid03 : f1
 - [ ] setuid04 : f2
 
-- [ ] setxattr01 : no dev
+- [x] setxattr01 : no dev
 - [x] setxattr02 : p2 f5
 - [ ] setxattr03 : f
 - [ ] sgetmask01 : tconf
@@ -1615,11 +1623,11 @@
 - [x] sigaltstack01 : no sum
 - [x] sigaltstack02 : no sum
 - [ ] sighold02 : f
-- [ ] signal01 : /proc/...
-- [x] signal02 : pass 1 failed 2 (long syscall?)
-- [x] signal03
-- [x] signal04
-- [x] signal05
+- [x] signal01 : p3 b1 /proc/pid/stat
+- [x] signal02 : p3
+- [x] signal03 : p31
+- [x] signal04 : p28
+- [x] signal05 : p31
 - [ ] signalfd01 : syscall 74
 - [ ] signalfd4_01 : we can support this
 - [ ] signalfd4_02 : we can support this
@@ -1630,11 +1638,11 @@
 - [ ] sigtimedwait01 : panic
 - [x] sigwait01
 - [ ] sigwaitinfo01 : panic
-- [ ] snd_seq01 : /proc/sys
-- [ ] snd_timer01 : /proc/sys
+- [ ] snd_seq01 : /dev/snd/seq
+- [ ] snd_timer01 : /dev/snd/timer
 
 ======= socket ======= (not tested)
-- [x] socket01 : pass 6 failed 2
+- [x] socket01 
 - [x] socket02: pass 4
 - [ ] socketcall01 : 32位系统调用
 - [ ] socketcall02
@@ -1650,7 +1658,7 @@
 - [x] splice04
 - [ ] splice05 : f, now not consider socket file
 - [ ] splice06 : tconf
-- [ ] splice07 : f
+- [x] splice07 : p556, s25
 - [ ] splice08 : tconf
 - [ ] splice09 : tconf
 
@@ -1665,26 +1673,26 @@
 - [x] stat02_64 : pass 2
 - [x] stat03 : pass4 failed 2
 - [x] stat03_64 : p4 f2
-- [ ] statfs01 : dev
-- [ ] statfs01_64 : no dev
-- [ ] statfs02 : f
-- [ ] statfs02_64 : f
+- [ ] statfs01 : b
+- [ ] statfs01_64 : b
+- [x] statfs02 : p4 f2
+- [x] statfs02_64 : p4 f2
 - [ ] statfs03 : f
 - [ ] statfs03_64 : f
-- [ ] statvfs01 : no dev
-- [ ] statvfs02 : f
+- [ ] statvfs01 : b
+- [x] statvfs02 : p3 f2
 - [x] statx01 : pass 6 failed 2
 - [x] statx02
 - [x] statx03 : pass 5 failed 2 :似乎连着跑会寄
-- [ ] statx04 : no dev
+- [ ] statx04 : b
 - [ ] statx05 : tconf
-- [ ] statx06 : no dev
+- [ ] statx06 : tconf
 - [ ] statx07 : tconf
-- [ ] statx08 : no dev
+- [ ] statx08 : b
 - [ ] statx09 : .config
-- [ ] statx10 : no dev
-- [ ] statx11 : no dev
-- [ ] statx12 : no dev
+- [ ] statx10 : tconf
+- [ ] statx11 : stuck
+- [ ] statx12 : skip
 - [x] stime01 : p1 f1 b1 
 - [ ] stime02 : should failed
 - [ ] stream01 : no sum
@@ -1698,10 +1706,10 @@
 - [ ] symlink03 : pass 4 failed 2 error code
 - [x] symlink04
 - [x] symlinkat01 : no sum
-- [ ] sync01 :  no dev
+- [ ] sync01 :  b
 - [ ] sync_file_range01
 - [ ] sync_file_range02
-- [ ] syncfs01 : no dev
+- [ ] syncfs01 : b
 - [x] syscall01
 - [x] sysconf01 : no sum
 - [ ] sysctl01 : tconf
@@ -1726,19 +1734,19 @@
 ======== time ========
 - [x] time01
 - [ ] timens01 : .config
-- [ ] timer_delete01 : 107 syscall
-- [ ] timer_delete02 : 111
-- [ ] timerfd01 : 85
-- [ ] timerfd02 : 85
+- [x] timer_delete01 
+- [x] timer_delete02 : 111
+- [x] timerfd01 : 85
+- [x] timerfd02 : 85
 - [ ] timerfd04 : .config
-- [ ] timerfd_create01 : 85
-- [ ] timerfd_gettime01 : 85
-- [ ] timerfd_settime01 : 85
-- [ ] timerfd_settime02 : /proc/sys/kernel/tainted
-- [ ] timer_getoverrun01 : 107
-- [ ] timer_gettime01 : 107
+- [x] timerfd_create01 : 85
+- [x] timerfd_gettime01 : 85
+- [x] timerfd_settime01 : 85
+- [x] timerfd_settime02 : 85
+- [x] timer_getoverrun01 : 107
+- [x] timer_gettime01 : 107
 - [ ] timer_settime01 : 107
-- [ ] timer_settime02 : 107
+- [x] timer_settime02 
 - [ ] timer_settime03 : 107
 - [x] times01
 - [ ] times03 : tms_time wrong
@@ -1783,14 +1791,14 @@
 - [ ] userns08 : .config
 - [ ] ustat01 : tconf
 - [ ] ustat02 : tconf
-- [ ] utime01 : no dev
-- [ ] utime02 : no dev
-- [ ] utime03 : no dev
-- [ ] utime04 : no dev
-- [ ] utime05 : no dev
+- [x] utime01 : p4 f2
+- [x] utime02 : p4 f2
+- [ ] utime03 : f
+- [x] utime04 : p4 f2
+- [x] utime05 : p4 f2
 - [x] utime06 : pass 1 failed 3
 - [x] utime07 : pass 3 failed 1
-- [ ] utimensat01 : no dev
+- [x] utimensat01 : p8 f17
 - [x] utimes01: pass 2 failed 1
 - [x] utsname01
 - [x] utsname02
@@ -1817,7 +1825,7 @@
 - [x] wait02
 - [x] wait401 : pass 2 failed 1
 - [x] wait402
-- [ ] wait403 : /proc/...
+- [ ] wait403 : f
 - [ ] waitid01
 - [ ] waitid02
 - [ ] waitid03
@@ -1862,7 +1870,7 @@
 - [x] writetest: no sum
 - [x] writev01
 - [x] writev02 : no sum
-- [ ] writev03: no device
+- [ ] writev03: dead loop?
 - [x] writev05: no sum
 - [x] writev06: no sum
 - [x] writev07: pass 2 faied 6 (should support truncate in tmp)

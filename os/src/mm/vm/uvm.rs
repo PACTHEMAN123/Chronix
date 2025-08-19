@@ -1017,7 +1017,7 @@ impl PageFaultProcessor {
         perm: MapPerm,
         frames: &mut BTreeMap<VirtPageNum, StrongArc<FrameTracker>>,
     ) -> Result<(), ()> {
-        let inode = file.inode().ok_or(())?.clone();
+        let inode = file.inode().map_err(|_|())?.clone();
         // share file mapping
         let page = match inode.read_page_at(offset) {
             Some(page) => page,

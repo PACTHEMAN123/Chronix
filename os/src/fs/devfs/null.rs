@@ -82,6 +82,12 @@ impl Dentry for NullDentry {
     fn open(self: Arc<Self>, _flags: OpenFlags) -> Option<Arc<dyn File>> {
         Some(NullFile::new(self.clone()))
     }
+
+    fn set_inode(&self, inode: Arc<dyn Inode>) {
+        if self.inode().is_none() {
+            *self.inner.inode.lock() = Some(inode);
+        }
+    }
 }
 
 pub struct NullInode {

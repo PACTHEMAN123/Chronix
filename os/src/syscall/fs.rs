@@ -7,7 +7,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask
+    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask, BLKSSZGET
 }, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
 use crate::utils::{
     path::*,
@@ -325,7 +325,7 @@ pub fn sys_fchdir(fd: usize) -> SysResult {
 }
 
 
-const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
+pub const PIPE_BUF_LEN: usize = 16 * PAGE_SIZE;
 /// pipe() creates a pipe, a unidirectional data channel 
 /// that can be used for interprocess communication. 
 /// The array pipefd is used to return two file descriptors 
@@ -372,7 +372,22 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SysResult {
 
 /// syscall statfs
 /// TODO
-pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
+pub fn sys_statfs(path: usize, buf_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let path = user_path_to_string(
+        UserPtrRaw::new(path as *const u8),
+        &mut task.get_vm_space().lock()
+    )?;
+    let dentry = global_find_dentry(&path)?;
+    if dentry.path() != path {
+        return Err(SysError::ENOTDIR)
+    }
+    if dentry.is_negative() {
+        return Err(SysError::ENOENT)
+    }
+    let buf_ptr = UserPtrRaw::new(buf_ptr as *mut StatFs)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
     let info = StatFs {
         f_type: 0x2011BAB0 as i64,
         f_bsize: BLOCK_SIZE as i64,
@@ -387,10 +402,7 @@ pub fn sys_statfs(_path: usize, buf: usize) -> SysResult {
         f_flags: 1 << 1 as i64,
         f_spare: [0; 4],
     };
-    unsafe {
-        Instruction::set_sum();
-        (buf as *mut StatFs).write(info);
-    }
+    buf_ptr.write(info);
     Ok(0)
 }
 
@@ -794,12 +806,26 @@ pub fn sys_utimensat(dirfd: isize, pathname: *const u8, times: usize, flags: i32
 /// syscall: mount
 /// (todo)
 pub fn sys_mount(
-    _source: *const u8,
-    _target: *const u8,
-    _fstype: *const u8,
+    source: *const u8,
+    target: *const u8,
+    fstype: *const u8,
     _flags: u32,
     _data: usize,
 ) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let source_path = user_path_to_string(
+        UserPtrRaw::new(source),
+        &mut task.get_vm_space().lock()
+    )?;
+    let target_path = user_path_to_string(
+        UserPtrRaw::new(target),
+        &mut task.get_vm_space().lock()
+    )?;
+    let fs_type = user_path_to_string(
+        UserPtrRaw::new(fstype),
+        &mut task.get_vm_space().lock()
+    )?;
+    log::info!("source {}, target {}, fstype {}", source_path, target_path, fs_type);
     /*
     let _source_path = user_path_to_string(source).unwrap();
     let target_path = user_path_to_string(target).unwrap();
@@ -823,6 +849,11 @@ pub fn sys_umount2(_target: *const u8, _flags: u32) -> SysResult {
 /// syscall: ioctl
 pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
     let task = current_task().unwrap().clone();
+    // early match
+    match cmd {
+        BLKSSZGET => return Ok(BLOCK_SIZE as isize),
+        _ => {}
+    }
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     file.ioctl(cmd, arg)
 }
@@ -834,7 +865,6 @@ pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> SysResult {
 #[repr(isize)]
 pub enum FcntlOp {
     F_DUPFD = 0,
-    F_DUPFD_CLOEXEC = 1030,
     F_GETFD = 1,
     F_SETFD = 2,
     F_GETFL = 3,
@@ -852,6 +882,9 @@ pub enum FcntlOp {
     F_SETOWN_EX = 15,
     F_GETOWN_EX	= 16,
     F_GETOWNER_UIDS	= 17,
+    F_DUPFD_CLOEXEC = 1030,
+    F_SETPIPE_SZ = 1031,
+    F_GETPIPE_SZ = 1032,
     #[default]
     F_UNIMPL,
 }
@@ -994,7 +1027,7 @@ pub async fn sys_pread(fd: usize, buf: usize, count: usize, offset: usize) -> Sy
     if (offset as isize) < 0 {
         return Err(SysError::EINVAL);
     }
-    if file.inode().ok_or(SysError::EINVAL)?.inode_type().contains(InodeMode::DIR) {
+    if file.inode()?.inode_type().contains(InodeMode::DIR) {
         return Err(SysError::EISDIR);
     }
     let user_buf =
@@ -1045,7 +1078,7 @@ pub async fn sys_preadv2(fd: usize, iov: usize, iovcnt: usize, offset: usize, fl
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let flags = RwfFlags::from_bits_truncate(flags);
     info!("preadv2 using flags: {:?}", flags);
-    file.inode().ok_or(SysError::EINVAL)?.inode_type().is_dir_err()?;
+    file.inode()?.inode_type().is_dir_err()?;
     if iovcnt > IOV_MAX {
         return Err(SysError::EINVAL);
     }
@@ -1098,7 +1131,7 @@ pub async fn sys_pwritev2(fd: usize, iov: usize, iovcnt: usize, offset: usize, f
     let flags = RwfFlags::from_bits_truncate(flags);
     info!("pwritev2 using flags {:?}", flags);
     
-    if file.inode().ok_or(SysError::EINVAL)?.inode_type() == InodeMode::DIR {
+    if file.inode()?.inode_type() == InodeMode::DIR {
             return Err(SysError::EISDIR);
     }
 
@@ -1157,7 +1190,7 @@ pub async fn sys_vmsplice(fd: usize, iovs_ptr: usize, nr_segs: usize, flags: u32
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
     let flags = SpliceFlags::from_bits_truncate(flags);
-    if file.inode().ok_or(SysError::ENOENT)?.inode_type() != InodeMode::FIFO {
+    if file.inode()?.inode_type() != InodeMode::FIFO {
         return Err(SysError::EBADF);
     }
     let is_read = file.readable();
@@ -1244,9 +1277,23 @@ pub async fn sys_splice(in_fd: usize, in_off_ptr: usize, out_fd: usize, out_off_
     let task = current_task().unwrap().clone();
     let in_file = task.with_fd_table(|t| t.get_file(in_fd))?;
     let out_file = task.with_fd_table(|t| t.get_file(out_fd))?;
-    let in_is_pipe = in_file.inode().ok_or(SysError::ENOENT)?.inode_type() == InodeMode::FIFO;
-    let out_is_pipe = out_file.inode().ok_or(SysError::ENOENT)?.inode_type() == InodeMode::FIFO;
+    in_file.inode()?.support_splice()?;
+    out_file.inode()?.support_splice()?;
+    let in_is_pipe = in_file.inode()?.inode_type() == InodeMode::FIFO;
+    let out_is_pipe = out_file.inode()?.inode_type() == InodeMode::FIFO;
     log::info!("in_is_pipe {in_is_pipe}, out_is_pipe {out_is_pipe}");
+
+    // cannot refer to the same pipe
+    if in_is_pipe && out_is_pipe && in_file.inode()?.inode_inner().ino == out_file.inode()?.inode_inner().ino {
+        return Err(SysError::EINVAL)
+    }
+    if out_is_pipe && !out_file.writable() {
+        return Err(SysError::EBADF);
+    }
+    if in_is_pipe && !in_file.readable() {
+        return Err(SysError::EBADF)
+    }
+
     let mut buf = vec![0u8; size];
     if !in_is_pipe && !out_is_pipe {
         return Err(SysError::EINVAL);
@@ -1521,7 +1568,7 @@ pub fn sys_fdatasync(fd: usize) -> SysResult {
 pub fn sys_readahead(fd: usize, _offset: usize, _count: usize) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|f| f.get_file(fd))?;
-    let dentry = file.dentry().unwrap();
+    let dentry = file.dentry().ok_or(SysError::ENOENT)?;
     if dentry.inode().is_none() {
         return Err(SysError::EINVAL);
     }
@@ -1624,7 +1671,7 @@ pub fn sys_umask(_mask: i32) -> SysResult {
 pub fn sys_fadvise(fd: usize, _offset: usize, _len: usize, advice: i32) -> SysResult {
     let task = current_task().unwrap().clone();
     let file = task.with_fd_table(|t| t.get_file(fd))?;
-    let inode = file.inode().ok_or(SysError::EINVAL)?;
+    let inode = file.inode()?;
     match advice {
         0..=5 => {}
         _ => return Err(SysError::EINVAL) 

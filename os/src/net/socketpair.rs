@@ -2,7 +2,7 @@ use core::{future::Future, pin::Pin, task::{Context, Poll, Waker}};
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use spin::Mutex;
-use crate::{fs::vfs::file::PollEvents, net::{socket::Socket, SaFamily}, sync::mutex::SpinNoIrqLock, syscall::{net::SocketType, SysError}, utils::{get_waker, RingBuffer}};
+use crate::{fs::vfs::{file::PollEvents, File}, net::{socket::Socket, SaFamily}, sync::mutex::SpinNoIrqLock, syscall::{net::SocketType, SysError}, utils::{get_waker, RingBuffer}};
 
 
 pub struct BufferEndpoint {
@@ -107,26 +107,28 @@ impl Future for SocketPairWriteFuture {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut meta = self.internal.meta.lock();
-        let (write_endpoint, other_end_closed_mutex) = if self.is_first_end {
-            (&meta.end1, &meta.end2_closed)
+        let (write_endpoint, peer_closed) = if self.is_first_end {
+            (&meta.end1, meta.end2_closed)
         } else {
-            (&meta.end2, &meta.end1_closed)
+            (&meta.end2, meta.end1_closed)
         };
-        let mut write_buffer = write_endpoint.buffer.lock();
 
-        if !write_buffer.is_empty() {
-            return Poll::Ready(PollEvents::IN);
+        if peer_closed {
+            // 写端对端已关闭 => 写将失败（EPIPE），poll 语义为 ERR
+            return Poll::Ready(PollEvents::ERR);
         }
-        if *other_end_closed_mutex {
-            // The peer is closed and the buffer is empty, triggering HUP
-            return Poll::Ready(PollEvents::HUP);
+
+        let mut write_buf = write_endpoint.buffer.lock();
+        if !write_buf.is_full() {
+            return Poll::Ready(PollEvents::OUT);
         }
-        
-        // The buffer is empty and the peer is not closed, register waker and wait
+
+        // 缓冲区已满且对端未关，登记写 waker
         write_endpoint.write_wakers.lock().push_back(cx.waker().clone());
         Poll::Pending
     }
 }
+
 
 
 // socketpair concerning
@@ -262,7 +264,7 @@ impl Drop for SocketPairConnection {
     }
 }
 
-pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, non_block: bool) -> (Arc<Socket>, Arc<Socket>) {
+pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, non_block: bool, protocol: u8) -> (Arc<Socket>, Arc<Socket>) {
     let internal = SocketPairInternal::new(capacity);
 
     let conn1 = SocketPairConnection {
@@ -274,6 +276,7 @@ pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, n
             domain,
             sk_type,
             non_block,
+            protocol
         );
     socket1.sk = super::socket::Sock::SocketPair(conn1);
     
@@ -285,6 +288,7 @@ pub fn make_socketpair(domain: SaFamily, sk_type: SocketType, capacity: usize, n
         domain,
         sk_type,
         non_block,
+        protocol
     );
     socket2.sk = super::socket::Sock::SocketPair(conn2);
 

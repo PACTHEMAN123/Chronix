@@ -221,3 +221,16 @@ pub fn sys_get_priority(which: usize, who: usize) -> SysResult {
     }
     Ok(0)
 }
+
+pub fn sys_getcpu(cpu_ptr: usize, node_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    let cpu_ptr = UserPtrRaw::new(cpu_ptr as *mut u32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    cpu_ptr.write(0);
+    let node_ptr = UserPtrRaw::new(node_ptr as *mut u32)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+    node_ptr.write(0);
+    Ok(0)
+}

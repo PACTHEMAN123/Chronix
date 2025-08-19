@@ -9,7 +9,7 @@ use socket::SockResult;
 use spin::{Lazy, Once};
 use strum::FromRepr;
 
-use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, net::addr::UNSPECIFIED_LISTEN_ENDPOINT, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, syscall::SysError, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
+use crate::{devices::{net::NetDeviceWrapper, NetDevice}, drivers::net::{init_network_device, loopback::LoopbackDevice}, net::addr::{LOCAL_IPV4, UNSPECIFIED_LISTEN_ENDPOINT}, sync::{mutex::{SpinNoIrq, SpinNoIrqLock}, UPSafeCell}, syscall::{net::Protocol, SysError}, timer::{get_current_time_duration, get_current_time_us, timer::{Timer, TimerEvent, TIMER_MANAGER}}};
 /// Network Address Module
 pub mod addr;
 /// alg Module
@@ -24,6 +24,8 @@ pub mod udp;
 pub mod listen_table;
 /// socketpair concerning
 pub mod socketpair;
+/// raw socket
+pub mod raw;
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, FromRepr, PartialEq, Eq, PartialOrd, Ord)]
 /// socket address family, used for syscalls
@@ -177,6 +179,8 @@ pub const TCP_RX_BUF_LEN: usize = 64 * 1024;
 pub const TCP_TX_BUF_LEN: usize = 64 * 1024;
 const UDP_RX_BUF_LEN: usize = 64 * 1024;
 const UDP_TX_BUF_LEN: usize = 64 * 1024;
+const RAW_RX_BUF_LEN: usize = 64 * 1024;
+const RAW_TX_BUF_LEN: usize = 64 * 1024;
 
 static ETH0: Once<InterfaceWrapper> = Once::new();
 /// A wrapper for interface in smoltcp
@@ -303,6 +307,19 @@ impl <'a> SocketSetWrapper<'a> {
             vec![0; UDP_TX_BUF_LEN],
         );
         smoltcp::socket::udp::Socket::new(rx_buffer, tx_buffer)
+    }
+    /// allocate a raw socket, return a Socket struct in smoltcp
+    pub fn new_raw_socket(protocol: smoltcp::wire::IpProtocol) -> smoltcp::socket::raw::Socket<'a> {
+        use smoltcp::socket::raw::{Socket, PacketBuffer, PacketMetadata};
+        let rx_buffer = PacketBuffer::new(
+        vec![PacketMetadata::EMPTY; 8],
+        vec![0; RAW_RX_BUF_LEN],
+        );
+        let tx_buffer = PacketBuffer::new(
+        vec![PacketMetadata::EMPTY; 8],
+        vec![0; RAW_TX_BUF_LEN],
+        );
+        Socket::new(smoltcp::wire::IpVersion::Ipv4, protocol, rx_buffer, tx_buffer)
     }
     /// add a socket to the set , return a socket_handle
     pub fn add_socket<T:AnySocket<'a>>(&self, socket: T) -> SocketHandle {
@@ -439,6 +456,7 @@ pub fn init_network(dev: Box<dyn NetDevice>, dev_flag: bool) {
     }else {
         "127.0.0.1".parse().unwrap()
     };
+    unsafe { LOCAL_IP = ip };
     let ip_addrs = if dev_flag {
         vec![IpCidr::new(IP.parse().unwrap(), 8),IpCidr::new(ip, IP_PREFIX)]
     }else {
@@ -470,10 +488,12 @@ pub struct UnixSocket {}
 pub const LOCAL_IPS: &[IpAddress] = &[
     IpAddress::v4(127, 0, 0, 1),
     IpAddress::v4(0, 0, 0, 0),
-    IpAddress::v4(10,0,2,15)
+    IpAddress::v4(10,250,225,200)
     //  // IPv6 loopback (::1)
     // IpAddress::Ipv6(smoltcp::wire::Ipv6Address::LOOPBACK),
     
     // // IPv6 unspecified address (::)
     // IpAddress::Ipv6(smoltcp::wire::Ipv6Address::UNSPECIFIED),
 ];
+
+pub static mut LOCAL_IP: IpAddress = LOCAL_IPV4;

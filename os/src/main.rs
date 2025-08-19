@@ -88,6 +88,7 @@ fn processor_start(id: usize) {
 /// the rust entry-point of os
 /// return true if need reboot (but not supported yet)
 fn main(id: usize, first: bool) -> bool {
+    info!("into main");
     if first {
         info!("id: {id}");
         banner::print_banner();
@@ -136,72 +137,15 @@ fn pre_main(id: usize, first: bool) -> bool {
 }
 
 #[cfg(target_arch="riscv64")]
-#[naked]
-/// set sp to higher space
-extern "C" fn pre_main(id: usize, first: bool) -> bool {
-    unsafe {
-        naked_asm!(
-            "
-            addi sp, sp, -8*2
-            sd   sp, 0*8(sp)
-            
-            addi sp, sp, -8*2
-            sd   s1, 0*8(sp)
-            sd   s2, 1*8(sp)
-            mv   s1, a0
-            mv   s2, a1
-
-            beq  a1, zero, 1f
-            addi sp, sp, -8*2
-            sd   fp, 0*8(sp)
-            sd   ra, 1*8(sp)
-            addi fp, sp, 8*2
-            jal  ra, {mm_init}
-            ld   fp, 0*8(sp)
-            ld   ra, 1*8(sp)
-            addi sp, sp, 8*2
-            j    2f
-        1:
-            addi sp, sp, -8*2
-            sd   fp, 0*8(sp)
-            sd   ra, 1*8(sp)
-            addi fp, sp, 8*2
-            jal  ra, {enable_kvm}
-            ld   fp, 0*8(sp)
-            ld   ra, 1*8(sp)
-            addi sp, sp, 8*2
-        2:
-            # kernel_stack_bottom is defined in link script
-            la   t0, kernel_stack_bottom
-            li   t1, {kernel_stack}
-            sub  t2, t1, t0
-            add  sp, sp, t2
-
-            addi sp, sp, -8*2
-            sd   fp, 0*8(sp)
-            sd   ra, 1*8(sp)
-            addi fp, sp, 8*2
-            mv   a0, s1
-            mv   a1, s2
-            jal  ra, {main}
-            ld   fp, 0*8(sp)
-            ld   ra, 1*8(sp)
-            addi sp, sp, 8*2
-
-            ld   s1, 0*8(sp)
-            ld   s2, 1*8(sp)
-            addi sp, sp, 8*2
-
-            ld   sp, 0*8(sp)
-            addi sp, sp, 8*2
-            jr   ra
-            ",
-            kernel_stack = const Constant::KERNEL_STACK_BOTTOM,
-            enable_kvm = sym enable_kvm,
-            mm_init = sym mm::init,
-            main = sym main
-        )
+fn pre_main(id: usize, first: bool) -> bool {
+    if first {
+        mm::init();
+    } else {
+        enable_kvm();
     }
+    main(id, first)
 }
+
+
 
 hal::define_entry!(pre_main);

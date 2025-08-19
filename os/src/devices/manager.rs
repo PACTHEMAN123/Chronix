@@ -60,6 +60,9 @@ impl DeviceManager {
     /// Device Init Stage1: scan the whole device tree and create instances
     /// map DevId to device, map IrqNo to device
     pub fn map_devices(&mut self, device_tree: &Fdt) {
+
+        log::info!("Device: {}", device_tree.root().model());
+
         // map char device
         let serial = scan_char_device(device_tree);
         self.devices.insert(serial.dev_id(), serial.clone());
@@ -137,6 +140,11 @@ impl DeviceManager {
         //     }
         // }
         // self.mmio = Some(mmio);
+
+        if let Some(sdio_blk) = scan_sdio_blk(device_tree) {
+            log::info!("find a sdio block device");
+            self.devices.insert(sdio_blk.dev_id(), sdio_blk);
+        }
 
         // let plic = scan_plic_device(device_tree);
         // if let Some(plic) = plic {
@@ -252,22 +260,13 @@ impl DeviceManager {
     }
     /// handle interrupt
     pub fn handle_irq(&self) {
-        fn irq_ctx() -> usize {
-            #[cfg(not(feature="smp"))]
-            {
-                1
-            }
-            #[cfg(feature="smp")]
-            {
-                todo!()
-            }
-        }
         unsafe { Instruction::disable_interrupt() };
-        if let Some(irq_num) = self.irq_ctrl().claim_irq(irq_ctx()) {
+        if let Some(irq_num) = self.irq_ctrl().claim_irq(self.irq_ctx()) {
             IRQ_COUNTER.lock().add_irq(irq_num);
+            // log::warn!("[Device manager] get irq no {irq_num}");
             if let Some(dev) = self.irq_map.get(&irq_num) {
                 dev.handle_irq();
-                self.irq_ctrl().complete_irq(irq_num, irq_ctx());
+                self.irq_ctrl().complete_irq(irq_num, self.irq_ctx());
                 return;
             }
         } 
@@ -285,11 +284,16 @@ impl DeviceManager {
             }.unwrap();
             let _dev = VirtIoNetDevImpl::new(transport).unwrap();
             log::warn!("use virtio-net device");
-            // init_network(dev, true);
+            // init_network(_dev, true);
             init_network(LoopbackDevice::new(),false);
         }else  {
             log::warn!("use loopback device");
             init_network(LoopbackDevice::new(),false);
         }
+    }
+
+    // get the current irq context id based on hart id
+    pub fn irq_ctx(&self) -> usize {
+        current_processor_id() * 2
     }
 }
