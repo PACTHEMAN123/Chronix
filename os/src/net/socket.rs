@@ -32,6 +32,7 @@ impl Sock {
         match self {
             Sock::TCP(tcp) => tcp.connect(addr).await,
             Sock::UDP(udp) => udp.connect(addr),
+            Sock::Unix(_) => {Ok(())},
             _ =>  Err(SysError::EAFNOSUPPORT),
         }
     }

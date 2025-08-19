@@ -57,7 +57,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
             .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_mut();
     let ret = file.read(buf).await?;
-
+    log::info!("[sys_read] fd {fd} len {len} ret {ret}");
     // let start = buf & !(Constant::PAGE_SIZE - 1);
     // let end = buf + len;
     // let mut ret = 0;
@@ -176,7 +176,7 @@ pub fn sys_dup3(old_fd: usize, new_fd: usize, flags: u32) -> SysResult {
 /// If pathname is relative and dirfd is the special value AT_FDCWD, 
 /// then pathname is interpreted relative to the current working directory of the calling process (like open(2)).
 /// If pathname is absolute, then dirfd is ignored.
-pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> SysResult {
+pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: i32, _mode: u32) -> SysResult {
     let open_flags = OpenFlags::from_bits(flags as i32).unwrap();
     let at_flags = AtFlags::from_bits_truncate(flags as i32);
     let task = current_task().unwrap().clone();
@@ -184,9 +184,11 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: u32, _mode: u32) -> 
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
     )?;
+    // log::warn!("path {:?}", path);
     log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if open_flags.contains(OpenFlags::O_CREAT) {
+        // log::warn!("[sys_openat]: O_CREAT met");
         // the dir may not exist
         if abs_path_to_name(&path).unwrap() != abs_path_to_name(&dentry.path()).unwrap() {
             return Err(SysError::ENOENT);
@@ -1430,15 +1432,16 @@ pub const R_OK: i32 = 4;
 /// TODO: now do nothing
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, _mode: usize, flags: i32) -> SysResult {
     let at_flags = AtFlags::from_bits_truncate(flags);
-    let task = current_task().unwrap().clone();
-    let _ = user_path_to_string(
+    let task = current_task().unwrap();
+    let path = user_path_to_string(
             UserPtrRaw::new(pathname), 
             &mut task.get_vm_space().lock()
     )?;
-
+    log::warn!("[faccessat] path {:?}",path);
     let task = current_task().unwrap().clone();
     let dentry = at_helper(task, dirfd, pathname, at_flags)?;
     if dentry.is_negative() {
+        log::warn!("[faccessat] dentry is negative");
         return Err(SysError::ENOENT);
     }
     Ok(0)

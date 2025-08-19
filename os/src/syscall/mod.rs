@@ -300,12 +300,13 @@ pub type SysResult = Result<isize, SysError>;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     use SyscallId::*;
+    // let num =  syscall_id as i32;
     let Some(syscall_id) = SyscallId::from_repr(syscall_id) else {
             log::warn!("Syscall number not included: {syscall_id}");
             return -SysError::ENOSYS.code();
     };
 
-    log::info!("task {}, syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , syscall_id, args);
+    // log::warn!("task {}, id num{},  syscall: {:?}, args: {:x?}", current_task().unwrap().tid() ,num, syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_SETXATTR => sys_temp(syscall_id),
@@ -337,7 +338,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_IOPRIO_GET => sys_temp(syscall_id),
         SYSCALL_MKNODAT => sys_temp(syscall_id),
         SYSCALL_FLOCK => sys_temp(syscall_id),
-        SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as u32, args[3] as u32),
+        SYSCALL_OPENAT => sys_openat(args[0] as isize , args[1] as *const u8, args[2] as i32, args[3] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SYSCALL_UNLINKAT => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[3] as i32),
         SYSCALL_SYMLINKAT => sys_symlinkat(args[0] as *const u8, args[1] as isize, args[2] as *const u8),
