@@ -60,9 +60,16 @@ mod riscv64;
 #[allow(unused)]
 pub use riscv64::*;
 
-#[cfg(target_arch = "loongarch64")]
+#[cfg(all(target_arch = "loongarch64", feature = "ls2k1000"))]
+mod ls2k1000;
+
+#[cfg(all(target_arch = "loongarch64", feature = "ls2k1000"))]
+#[allow(unused)]
+pub use ls2k1000::*;
+
+#[cfg(all(target_arch = "loongarch64", not(feature = "ls2k1000")))]
 mod loongarch64;
 
-#[cfg(target_arch = "loongarch64")]
+#[cfg(all(target_arch = "loongarch64", not(feature = "ls2k1000")))]
 #[allow(unused)]
 pub use loongarch64::*;
