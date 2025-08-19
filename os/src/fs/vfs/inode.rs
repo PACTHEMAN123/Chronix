@@ -300,3 +300,34 @@ impl InodeMode {
         }
     }
 }
+
+bitflags! {
+    pub struct DirentFileType: u8 {
+        const DT_UNKNOWN = 0;
+        const DT_FIFO = 1;
+        const DT_CHR = 2;
+        const DT_DIR = 4;
+        const DT_BLK = 6;
+        const DT_REG = 8;
+        const DT_LNK = 10;
+        const DT_SOCK = 12;
+        const DT_WHT = 14;
+    }
+}
+
+impl DirentFileType {
+    pub fn from_inode_mode(mode: InodeMode) -> Self {
+        let mode = mode.get_type();
+        match mode {
+            InodeMode::FIFO => Self::DT_FIFO,
+            InodeMode::CHAR => Self::DT_CHR,
+            InodeMode::DIR => Self::DT_DIR,
+            InodeMode::BLOCK => Self::DT_BLK,
+            InodeMode::FILE => Self::DT_REG,
+            InodeMode::LINK => Self::DT_LNK,
+            InodeMode::SOCKET => Self::DT_SOCK,
+            _ => Self::DT_UNKNOWN,
+        }
+    }
+}
+

@@ -7,7 +7,7 @@ use log::{info, warn};
 use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
-    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::InodeMode, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask, BLKSSZGET
+    fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::{DirentFileType, InodeMode}, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask, BLKSSZGET
 }, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
 use crate::utils::{
     path::*,
@@ -143,7 +143,7 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SysResult {
                 .ok_or(SysError::EFAULT)?;
             new_buf.to_mut()[path.len()..].fill(0 as u8);
             new_buf.to_mut()[..path.len()].copy_from_slice(path.as_bytes());
-            return Ok(buf as isize);
+            return Ok((path.len() + 1) as isize);
         }
     })
 }
@@ -499,16 +499,18 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult {
         let rec_len = (LEN_BEFORE_NAME + c_name_len + 7) & !0x7;
         // let rec_len = LEN_BEFORE_NAME + c_name_len;
         let inode = child.inode().unwrap();
+        let d_type = DirentFileType::from_inode_mode(inode.inode_inner().mode());
         let linux_dirent = LinuxDirent64 {
             d_ino: inode.inode_inner().ino as u64,
             d_off: file.pos() as u64,
-            d_type: inode.inode_inner().mode().bits() as u8,
             d_reclen: rec_len as u16,
+            d_type: d_type.bits(),
         };
 
         //info!("[sys_getdents64] linux dirent {linux_dirent:?}");
         if writen_len + rec_len > len {
             // Result buffer is too small.
+            log::info!("early break");
             // return Err(SysError::EINVAL)
             break;
         }
@@ -1408,9 +1410,13 @@ pub fn sys_linkat(old_dirfd: isize, old_pathname: *const u8, new_dirfd: isize, n
     let new_dentry = at_helper(task.clone(), new_dirfd, new_pathname, at_flags)?;
     log::info!("[sys_linkat]: try to create hard link between {} {}", old_dentry.path(), new_dentry.path());
     let old_inode = old_dentry.inode().ok_or(SysError::ENOENT)?;
+    log::info!("[sys_linkat]: old inode size {}", old_inode.inode_inner().size());
+    log::info!("[sys_linkat]: old inode getattr size {}", old_inode.getattr().st_size);
     old_inode.link(&new_dentry.path())?;
     new_dentry.set_inode(old_inode);
     new_dentry.set_state(DentryState::USED);
+    let parent = new_dentry.parent().ok_or(SysError::ENOENT)?;
+    parent.add_child(new_dentry);
     Ok(0)
 }
 

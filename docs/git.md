@@ -4,11 +4,12 @@
 ./attach/env-rv.sh
 ```
 
+sdcard/musl/usr/bin/git
 
 # operate
 
 ```bash
-mkdir tt && cd tt && git init && git config user.email "oscomp@gmail.com" && git config user.name "oscomp" && echo "hello" > README.md
+mkdir tt && cd tt && git init && git config user.email "oscomp@gmail.com" && git config user.name "oscomp" && echo "hello" > README.md && git add README.md && git commit -m "add readme"
 
 cat >README.md (hang?)
 
