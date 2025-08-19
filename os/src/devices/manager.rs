@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hal::{addr::PhysAddr, board::MAX_PROCESSORS, constant::{Constant, ConstantsHal}, instruction::{Instruction, InstructionHal}, irq::{IrqCtrl, IrqCtrlHal}, pagetable::MapPerm, println};
 use virtio_drivers::transport::{mmio::{MmioTransport, VirtIOHeader}, Transport};
 
-use crate::{devices::DeviceMeta, drivers::{block::{loongarch::ahci_blk::AchiBlock, VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::PROCESSORS};
+use crate::{devices::DeviceMeta, drivers::{block::{loongarch::ahci_blk::AchiBlock, VirtIOMMIOBlock, VirtIOPCIBlock}, net::{loopback::LoopbackDevice, virtio_net::VirtIoNetDevImpl}, serial::UART0}, fs::procfs::interrupt::IRQ_COUNTER, mm::{vm::{KernVmArea, KernVmAreaType, KernVmSpaceHal}, MmioMapper, KVMSPACE}, net::init_network, processor::processor::{current_processor_id, PROCESSORS}};
 
 use super::{mmio::MmioManager, pci::{PciDeviceClass, PciManager}, plic::{scan_plic_device, PLIC}, serial::scan_char_device, DevId, Device, DeviceMajor};
 
@@ -141,10 +141,10 @@ impl DeviceManager {
         // }
         // self.mmio = Some(mmio);
 
-        if let Some(sdio_blk) = scan_sdio_blk(device_tree) {
-            log::info!("find a sdio block device");
-            self.devices.insert(sdio_blk.dev_id(), sdio_blk);
-        }
+        // if let Some(sdio_blk) = scan_sdio_blk(device_tree) {
+        //     log::info!("find a sdio block device");
+        //     self.devices.insert(sdio_blk.dev_id(), sdio_blk);
+        // }
 
         // let plic = scan_plic_device(device_tree);
         // if let Some(plic) = plic {
