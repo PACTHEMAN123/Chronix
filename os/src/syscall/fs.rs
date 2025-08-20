@@ -57,7 +57,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
             .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_mut();
     let ret = file.read(buf).await?;
-    log::info!("[sys_read] fd {fd} len {len} ret {ret}");
+    // log::info!("[sys_read] fd {fd} len {len} ret {ret}");
     // let start = buf & !(Constant::PAGE_SIZE - 1);
     // let end = buf + len;
     // let mut ret = 0;

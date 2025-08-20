@@ -14,7 +14,8 @@ fn run_cmd(cmd: &str) {
             "/sdcard/riscv/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
-                "PATH=/:/bin",
+                "PATH=/usr/bin:/bin",
+                "LD_LIBRARAY_PATH=/lib:/usr/lib",
                 "HOME=/home/chronix",
             ],
         );
@@ -24,7 +25,8 @@ fn run_cmd(cmd: &str) {
             "/sdcard/loongarch/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
-                "PATH=/:/bin",
+                "PATH=/usr/bin:/bin",
+                "LD_LIBRARAY_PATH=/lib:/usr/lib",
                 "HOME=/home/chronix",
             ],
         );
@@ -63,8 +65,10 @@ fn main() -> i32 {
             "/sdcard/riscv/musl/busybox",
             &["busybox", "sh"],
             &[
-                "PATH=/:/bin",
                 "TERM=screen",
+                "PATH=/usr/bin:/bin",
+                "LD_LIBRARAY_PATH=/lib:/usr/lib",
+                "HOME=/home/chronix"
             ],
         );
         #[cfg(target_arch="loongarch64")]
@@ -72,8 +76,10 @@ fn main() -> i32 {
             "/sdcard/loongarch/musl/busybox",
             &["busybox", "sh"],
             &[
-                "PATH=/:/bin",
                 "TERM=screen",
+                "PATH=/usr/bin:/bin",
+                "LD_LIBRARAY_PATH=/lib:/usr/lib",
+                "HOME=/home/chronix"
             ],
         );
         println!("[secondproc] execve busybox fail");

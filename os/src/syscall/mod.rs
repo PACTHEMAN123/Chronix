@@ -558,11 +558,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     };
     match result {
         Ok(ret ) => {
-            log::warn!("return {}", ret);
             ret
         }
         Err(err) => {
-            log::warn!("return {}", -err.code());
             // log::info!("syscall {:?} failed with error {:?}", syscall_id, err);
             -err.code() 
         }
