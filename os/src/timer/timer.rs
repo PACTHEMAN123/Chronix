@@ -268,7 +268,7 @@ impl TimerEvent for RealITimer {
     }
 }
 
-pub type TimerId = usize;
+pub type TimerId = u32;
 
 pub struct PosixTimer {
     /// tcb in PosixTimer

@@ -343,7 +343,7 @@ pub const SIGEV_THREAD: i32 = 2;   // create a kernel thread to run function , n
 #[derive(Copy, Clone)]
 pub union Sigval {
     pub sival_int: i32,
-    pub sival_ptr: usize,
+    pub sival_ptr: u32,
 }
 
 #[repr(C)]

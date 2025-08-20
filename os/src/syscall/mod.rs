@@ -293,7 +293,7 @@ pub use signal::*;
 pub use sche::*;
 pub use reboot::*;
 pub use self::sys_error::SysError;
-use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, syscall::{fd::sys_allocfd, mm::{sys_process_vm_readv, sys_process_vm_writev}}, task::current_task, timer::ffi::{TimeVal, Tms}, utils::{timer::TimerGuard, SendWrapper}};
+use crate::{fs::RenameFlags, mm::{UserPtr, UserPtrRaw}, signal::{SigAction, SigSet}, syscall::{fd::sys_allocfd, mm::{sys_process_vm_readv, sys_process_vm_writev}}, task::current_task, timer::{ffi::{TimeVal, Tms}, timer::TimerId}, utils::{timer::TimerGuard, SendWrapper}};
 /// The result of a syscall, either Ok(return value) or Err(error code)
 pub type SysResult = Result<isize, SysError>;
 
@@ -392,10 +392,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as _, args[1] as _, args[2] as _),
         SYSCALL_DELETE_MODULE => sys_temp(syscall_id),
         SYSCALL_TIMER_CREATE => sys_timer_create(args[0], args[1], args[2]),
-        SYSCALL_TIMER_DELETE => sys_timer_delete(args[0]),
-        SYSCALL_TIMER_GETTIME => sys_timer_gettime(args[0], args[1]),
-        SYSCALL_TIMER_SETTIME => sys_timer_settime(args[0], args[1], args[2], args[3]),
-        SYSCALL_TIMER_GETOVERRUN => sys_timer_getoverrun(args[0]),
+        SYSCALL_TIMER_DELETE => sys_timer_delete(args[0] as TimerId),
+        SYSCALL_TIMER_GETTIME => sys_timer_gettime(args[0] as TimerId, args[1]),
+        SYSCALL_TIMER_SETTIME => sys_timer_settime(args[0] as TimerId, args[1], args[2], args[3]),
+        SYSCALL_TIMER_GETOVERRUN => sys_timer_getoverrun(args[0] as TimerId),
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0].into(),args[1].into()).await,
         SYSCALL_GETITIMER => sys_getitimer(args[0], args[1]),
         SYSCALL_SETITIMER => sys_setitimer(args[0],args[1],args[2]),
@@ -471,7 +471,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_EXEC => sys_execve(args[0] , args[1], args[2]).await,
         SYSCALL_BRK => sys_brk(VirtAddr::from(args[0])),
         SYSCALL_MUNMAP => sys_munmap(VirtAddr::from(args[0]), args[1]),
-        SYSCALL_MMAP => sys_mmap(VirtAddr::from(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]),
+        SYSCALL_MMAP => {
+            let res = sys_mmap(VirtAddr::from(args[0]), args[1], args[2] as i32, args[3] as i32, args[4], args[5]);
+            // if let Ok(addr) = res {
+            //     log::warn!("mmap ret: {:#x}", addr);
+            // } else if let Err(err) = res {
+            //     log::warn!("mmap ret: {:?}", err);
+            // }
+            res
+        },
         SYSCALL_FADVISE64 => sys_fadvise(args[0], args[1], args[2], args[3] as i32),
         SYSCALL_MREMAP => sys_mremap(VirtAddr::from(args[0]), args[1], args[2], args[3] as i32, args[4]),
         SYSCALL_FANOTIFY_INIT => sys_fanotify_init(args[0] as u32, args[1] as u32),

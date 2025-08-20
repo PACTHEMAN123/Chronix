@@ -220,6 +220,7 @@ impl File for TtyFile {
         // unsafe {
         //     buf.as_mut_ptr().write_volatile(ch);
         // }
+        // log::info!("tty read");
         
         let termios = self.meta.lock().termios;
         if termios.is_icrnl() {

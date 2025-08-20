@@ -254,7 +254,7 @@ impl dyn Dentry {
     pub fn follow(self: Arc<Self>, task: Arc<TaskControlBlock>, dirfd: isize, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
         const MAX_LINK_DEPTH: usize = 40;
         let mut current = self.clone();
-        log::info!("before follow, path {}", self.path());
+        // log::info!("before follow, path {}", self.path());
 
         for _ in 0..MAX_LINK_DEPTH {
             if current.state() == DentryState::NEGATIVE {

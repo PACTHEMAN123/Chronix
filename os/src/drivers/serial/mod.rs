@@ -84,6 +84,7 @@ impl Serial {
 #[async_trait]
 impl CharDevice for Serial {
     async fn read(&self, buf: &mut [u8]) -> usize {
+        // log::info!("CharDevice read");
         while !self.poll_in().await {
             suspend_now().await
         }

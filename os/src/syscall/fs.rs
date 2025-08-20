@@ -67,7 +67,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     task.set_interruptable();
     task.set_wake_up_sigs(!current_mask);
     let result = Select2Futures::new(read_future, intr_future).await;
-    log::warn!("task {} wake up in reading", task.tid());
+    // log::warn!("task {} wake up in reading", task.tid());
     task.set_running();
     match result {
         SelectOutput::Output1(read_ret) => {
@@ -208,7 +208,7 @@ pub fn sys_openat(dirfd: isize, pathname: *const u8, flags: i32, _mode: u32) -> 
             &mut task.get_vm_space().lock()
     )?;
     // log::warn!("path {:?}", path);
-    log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
+    // log::info!("task {} trying to open {}, oflags: {:?}, atflags: {:?}, dirfd {}", task.tid(), path, open_flags, at_flags, dirfd);
     let dentry = at_helper(task.clone(), dirfd, pathname, at_flags)?;
     if open_flags.contains(OpenFlags::O_CREAT) {
         // log::warn!("[sys_openat]: O_CREAT met");
@@ -296,7 +296,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: *const u8, stat_buf: usize, flags: i3
     // debug_assert!(dentry.is_negative() == false);
     inode.clone().access()?;
     let stat = inode.getattr();
-    log::info!("[sys_fstatat]: {} size {}", dentry.path(), stat.st_size);
+    // log::info!("[sys_fstatat]: {} size {}", dentry.path(), stat.st_size);
     let stat_ptr = UserPtrRaw::new(stat_buf as *const Kstat)
         .ensure_write(&mut task.get_vm_space().lock())
         .ok_or(SysError::EFAULT)?;
@@ -1633,7 +1633,7 @@ pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: 
     let dentry = if path != "" {
         if path.starts_with("/") {
             let fpath = rel_path_to_abs(path, &"").unwrap();
-            println!("fpath: {}", fpath);
+            // println!("fpath: {}", fpath);
             global_find_dentry(&fpath)?
         } else {
             // getting full path (absolute path)

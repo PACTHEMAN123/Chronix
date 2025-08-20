@@ -132,7 +132,7 @@ pub struct TaskControlBlock {
     pub itimers: Shared<[ITimer; 3]>,
     /// posix timers
     pub posix_timers: Shared<BTreeMap<TimerId, PosixTimer>>,
-    pub next_timer_id: AtomicUsize,
+    pub next_timer_id: AtomicU32,
     #[cfg(feature = "smp")]
     /// sche_entity of the task
     pub sche_entity: Shared<TaskLoadTracker>,
@@ -257,7 +257,7 @@ impl TaskControlBlock {
         rgid: i32,
         egid: i32,
         sgid: i32,
-        next_timer_id: usize
+        next_timer_id: u32
     );
     generate_state_methods!(
         Ready,
@@ -426,7 +426,7 @@ impl TaskControlBlock {
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
             posix_timers: new_shared(BTreeMap::new()),
-            next_timer_id: AtomicUsize::new(0),
+            next_timer_id: AtomicU32::new(0),
             robust: UPSafeCell::new(UserPtrRaw::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
@@ -606,7 +606,7 @@ impl TaskControlBlock {
             elf,
             itimers,
             posix_timers: new_shared(BTreeMap::new()),
-            next_timer_id: AtomicUsize::new(0),
+            next_timer_id: AtomicU32::new(0),
             robust: UPSafeCell::new(UserPtrRaw::new(null_mut())),
             #[cfg(feature = "smp")]
             sche_entity: new_shared(TaskLoadTracker::new()),
