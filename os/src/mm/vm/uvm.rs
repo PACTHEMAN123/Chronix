@@ -90,7 +90,7 @@ impl UserVmSpace {
                 } else {
                     None
                 };
-
+                println!("mapelf: {:#x} {:#x} {:?}", map_area.range_va.start.0, map_area.range_va.end.0, map_area.map_perm);
                 self.push_area(
                     map_area,
                     data

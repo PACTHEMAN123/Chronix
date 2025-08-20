@@ -2,12 +2,12 @@
 
 use core::{default, mem::MaybeUninit};
 
-use crate::{fs::{vfs::{dentry, inode::InodeMode}, AtFlags, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::{at_helper1, SysError}, task::task::TaskControlBlock};
+use crate::{fs::{vfs::{dentry, inode::InodeMode}, AtFlags, OpenFlags}, sync::mutex::SpinNoIrqLock, syscall::{at_helper1, SysError}, task::task::TaskControlBlock, utils::rel_path_to_abs};
 
 use super::{superblock, File, Inode, SuperBlock};
 
 use alloc::{
-    collections::btree_map::BTreeMap, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec
+    collections::btree_map::BTreeMap, format, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec
 };
 use log::{info, warn};
 
@@ -254,11 +254,11 @@ impl dyn Dentry {
     pub fn follow(self: Arc<Self>, task: Arc<TaskControlBlock>, dirfd: isize, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
         const MAX_LINK_DEPTH: usize = 40;
         let mut current = self.clone();
-        log::debug!("before follow, path {}", self.path());
+        log::info!("before follow, path {}", self.path());
 
         for _ in 0..MAX_LINK_DEPTH {
             if current.state() == DentryState::NEGATIVE {
-                log::debug!("reach a neg path {}, return", current.path());
+                log::warn!("reach a neg path {}, return", current.path());
                 return Ok(current)
             }
 
@@ -267,10 +267,19 @@ impl dyn Dentry {
             if mode.contains(InodeMode::LINK) {
                 // follow to the next
                 let path =  current.inode().unwrap().readlink()?;
-                let mut no_follow_flags = flags;
-                no_follow_flags.remove(AtFlags::AT_SYMLINK_FOLLOW);
-                no_follow_flags |= AtFlags::AT_SYMLINK_NOFOLLOW;
-                let new_dentry = at_helper1(task.clone(), dirfd, &path, no_follow_flags)?;
+                log::info!("path: {}", path);
+                // let mut no_follow_flags = flags;
+                // no_follow_flags.remove(AtFlags::AT_SYMLINK_FOLLOW);
+                // no_follow_flags |= AtFlags::AT_SYMLINK_NOFOLLOW;
+                // let new_dentry = at_helper1(task.clone(), dirfd, &path, no_follow_flags)?;
+                let new_path;
+                if path.starts_with("/") {
+                    new_path = path;
+                } else {
+                    let parent = current.parent().unwrap().path();
+                    new_path = rel_path_to_abs(&parent, &path).unwrap();
+                }
+                let new_dentry = global_find_dentry(&new_path).unwrap();
                 current = new_dentry;
             } else {
                 return Ok(current)

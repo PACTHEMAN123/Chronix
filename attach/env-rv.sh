@@ -1,11 +1,31 @@
-ln -s /riscv/glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1
-ln -s /riscv/glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64.so.1
-ln -s /riscv/glibc/lib/libc.so /lib/libc.so.6
-ln -s /riscv/glibc/lib/libm.so /lib/libm.so.6
-ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1
-ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64.so.1
-ln -s /attach/riscv/git /bin/git
-ln -s /attach/riscv/libz.so /lib/libz.so
-ln -s /attach/riscv/libz.so /lib/libz.so.1
-ln -s /attach/riscv/libpcre2-8.so /lib/libpcre2-8.so 
-ln -s /attach/riscv/libpcre2-8.so /lib/libpcre2-8.so.0 
+# ln -s /riscv/glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1
+# ln -s /riscv/glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64.so.1
+# ln -s /riscv/glibc/lib/libc.so /lib/libc.so.6
+# ln -s /riscv/glibc/lib/libm.so /lib/libm.so.6
+# ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1
+# ln -s /riscv/musl/lib/libc.so /lib/ld-musl-riscv64.so.1
+# ln -s /attach/riscv/git /bin/git
+# ln -s /attach/riscv/libz.so /lib/libz.so
+# ln -s /attach/riscv/libz.so.1 /lib/libz.so.1
+# ln -s /attach/riscv/libpcre2-8.so /lib/libpcre2-8.so 
+# ln -s /attach/riscv/libpcre2-8.so.0 /lib/libpcre2-8.so.0 
+# ln -s /attach/riscv/lib/libc.so /lib/libc.so
+# ln -s /attach/riscv/lib/libc.so.6 /lib/libc.so.6
+# ln -s /attach/riscv/lib/libm.so /lib/libm.so
+# ln -s /attach/riscv/lib/libm.so.6 /lib/libm.so.6
+# ln -s /attach/riscv/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1
+# ln -s /attach/riscv/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64.so.1
+# ln -s /attach/riscv/lib/libgmp.so /lib/libgmp.so
+# ln -s /attach/riscv/lib/libgmp.so.10 /lib/libgmp.so.10
+# ln -s /attach/riscv/lib/libmpc.so /lib/libmpc.so 
+# ln -s /attach/riscv/lib/libmpc.so.3 /lib/libmpc.so.3
+# ln -s /attach/riscv/lib/libmpfr.so /lib/libmpfr.so 
+# ln -s /attach/riscv/lib/libmpfr.so.6 /lib/libmpfr.so.6
+# ln -s /attach/riscv/lib/libmpfr.so.6.2.2 /lib/libmpfr.so.6.2.2
+# ln -s /attach/riscv/lib/libgcc_s.so /lib/libgcc_s.so
+# ln -s /attach/riscv/lib/libgcc_s.so.1 /lib/libgcc_s.so.1
+# ln -s /attach/riscv/lib/crt1.o /lib/crt1.o
+# ln -s /attach/riscv/lib/crti.o /lib/crti.o
+# ln -s /attach/riscv/lib/crtn.o /lib/crtn.o
+# ln -s attach/riscv/libexec/gcc/riscv64-linux-gnu/11.4.0/cc1 /bin/cc1
+# ln -s attach/riscv/libexec/gcc/riscv64-linux-gnu/11.4.0/cc1plus /bin/cc1plus

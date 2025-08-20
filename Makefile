@@ -59,7 +59,15 @@ test-la: kernel-la-test
 # replace the GDB to yours
 PHONY_TARGET += debug-rv
 debug-rv: kernel-rv
-	make -f Makefile.sub debug ARCH=riscv64 GDB=gdb-multiarch
+	make -f Makefile.sub debug ARCH=riscv64 GDB=riscv64-unknown-elf-gdb
+
+PHONY_TARGET += gdbserver-rv
+gdbserver-rv: kernel-rv
+	make -f Makefile.sub gdbserver ARCH=riscv64 GDB=riscv64-unknown-elf-gdb
+
+PHONY_TARGET += gdbclient-rv
+gdbclient-rv:
+	make -f Makefile.sub gdbclient ARCH=riscv64 GDB=riscv64-unknown-elf-gdb
 
 PHONY_TARGET += debug-la
 debug-la: kernel-la

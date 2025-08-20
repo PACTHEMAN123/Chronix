@@ -58,16 +58,16 @@ lazy_static! {
         //info!("trying to open initproc");
         
         #[cfg(all(target_arch = "riscv64", feature = "autotest"))]
-        let file = open_file("/riscv/autotest", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/sdcard/riscv/autotest", OpenFlags::O_WRONLY).unwrap();
 
         #[cfg(all(target_arch = "riscv64", not(feature = "autotest")))]
-        let file = open_file("/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/sdcard/riscv/initproc", OpenFlags::O_WRONLY).unwrap();
 
         #[cfg(all(target_arch = "loongarch64", feature = "autotest"))]
-        let file = open_file("/loongarch/autotest", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/sdcard/loongarch/autotest", OpenFlags::O_WRONLY).unwrap();
 
         #[cfg(all(target_arch = "loongarch64", not(feature = "autotest")))]
-        let file = open_file("/loongarch/initproc", OpenFlags::O_WRONLY).unwrap();
+        let file = open_file("/sdcard/loongarch/initproc", OpenFlags::O_WRONLY).unwrap();
         
 
         let reader = FileReader::new(file.clone()).unwrap();

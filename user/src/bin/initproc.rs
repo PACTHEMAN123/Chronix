@@ -11,7 +11,7 @@ fn run_cmd(cmd: &str) {
         // default use musl busybox
         #[cfg(target_arch="riscv64")]
         execve(
-            "/riscv/musl/busybox",
+            "/sdcard/riscv/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
                 "PATH=/:/bin",
@@ -21,7 +21,7 @@ fn run_cmd(cmd: &str) {
 
         #[cfg(target_arch="loongarch64")]
         execve(
-            "/loongarch/musl/busybox",
+            "/sdcard/loongarch/musl/busybox",
             &["busybox", "sh", "-c", cmd],
             &[
                 "PATH=/:/bin",
@@ -35,10 +35,10 @@ fn run_cmd(cmd: &str) {
 }
 
 fn init_env() {
-    #[cfg(target_arch="riscv64")]
-    run_cmd("/riscv/musl/busybox --install /bin");
-    #[cfg(target_arch="loongarch64")]
-    run_cmd("/loongarch/musl/busybox --install /bin");
+    // #[cfg(target_arch="riscv64")]
+    // run_cmd("/riscv/musl/busybox --install /bin");
+    // #[cfg(target_arch="loongarch64")]
+    // run_cmd("/loongarch/musl/busybox --install /bin");
     // run_cmd("rm /bin/sh");
 }
 
@@ -60,7 +60,7 @@ fn main() -> i32 {
         println!("into user mode initproc fork");
         #[cfg(target_arch="riscv64")]
         execve(
-            "/riscv/musl/busybox",
+            "/sdcard/riscv/musl/busybox",
             &["busybox", "sh"],
             &[
                 "PATH=/:/bin",
@@ -69,7 +69,7 @@ fn main() -> i32 {
         );
         #[cfg(target_arch="loongarch64")]
         execve(
-            "/loongarch/musl/busybox",
+            "/sdcard/loongarch/musl/busybox",
             &["busybox", "sh"],
             &[
                 "PATH=/:/bin",

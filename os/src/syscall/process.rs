@@ -49,6 +49,8 @@ bitflags! {
         const SIGHAND = 0x00000800;
         /// Set if a pidfd should be placed in parent.
         const PIDFD = 0x00001000;
+        /// Set if the parent wants the child to wake it up on mm_release
+        const VFORK = 0x00004000;
         /// Set if we want to have the same parent as the cloner.
         const PARENT = 0x00008000;
         /// Set to add to same thread group.
@@ -266,8 +268,9 @@ pub fn sys_fork() -> isize {
 
 /// clone a new process/thread/ using clone flags
 #[cfg(target_arch="riscv64")]
-pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
+pub async fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAddr, child_tid: VirtAddr) -> SysResult {
     // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
+    let signo = SigSet::from_bits_truncate(1 << ((flags & 0xff) - 1));
     let flags = CloneFlags::from_bits(flags & !0xff).ok_or(SysError::EINVAL)?;
     let task = current_task().unwrap();
     let new_task = task.fork(flags);
@@ -306,12 +309,15 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, tls: VirtAdd
         *new_task.get_trap_cx().tp() = tls.0;
     }
     spawn_user_task(new_task);
+    if flags.contains(CloneFlags::VFORK) {
+        suspend_now().await;
+    }
     Ok(new_tid as isize)
 }
 
 /// clone a new process/thread/ using clone flags
 #[cfg(target_arch="loongarch64")]
-pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: VirtAddr, tls: VirtAddr) -> SysResult {
+pub async fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: VirtAddr, tls: VirtAddr) -> SysResult {
     // info!("[sys_clone]: into clone, stack addr: {:#x}, parent tid: {:?}", stack.0, parent_tid);
     let flags = CloneFlags::from_bits(flags & !0xff).ok_or(SysError::EINVAL)?;
     let task = current_task().unwrap();
@@ -351,6 +357,9 @@ pub fn sys_clone(flags: u64, stack: VirtAddr, parent_tid: VirtAddr, child_tid: V
         *new_task.get_trap_cx().tp() = tls.0;
     }
     spawn_user_task(new_task);
+    if flags.contains(CloneFlags::VFORK) {
+        suspend_now().await;
+    }
     Ok(new_tid as isize)
 }
 
@@ -706,7 +715,7 @@ pub fn sys_setsid() -> SysResult {
 ///  long syscall(SYS_clone3, struct clone_args *cl_args, size_t size);
 ///  glibc provides no wrapper for clone3(), necessitating the
 /// use of syscall(2).
-pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
+pub async fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     let task = current_task().unwrap();
     // log::info!("[sys_clone3]: cl_args_ptr: {:x}, size: {}" , cl_args_ptr, size);
 
@@ -737,11 +746,11 @@ pub fn sys_clone3(cl_args_ptr: usize, size: usize) -> SysResult {
     // log::info!("[sys_clone3]: stack_size: {}, set_tid_size: {}, cgroup: {}" , cl_args.stack_size, cl_args.set_tid_size, cl_args.cgroup);
     #[cfg(target_arch="riscv64")]
     {
-        sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid)
+        sys_clone(flags, stack + cl_args.stack_size, parent_tid, tls, child_tid).await
     } 
     #[cfg(target_arch="loongarch64")] 
     {
-        sys_clone(flags, stack + cl_args.stack_size, parent_tid, child_tid, tls)
+        sys_clone(flags, stack + cl_args.stack_size, parent_tid, child_tid, tls).await
     }
 }
 

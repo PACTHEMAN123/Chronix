@@ -1596,7 +1596,6 @@ pub fn sys_readahead(fd: usize, _offset: usize, _count: usize) -> SysResult {
 /// warning: for supporting more "at" syscall, emptry path is allowed here,
 /// caller should check the path before calling at_helper if it doesnt expect empty path
 pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
-    let _sum_guard = SumGuard::new();
     if pathname.is_null() && !flags.contains(AtFlags::AT_EMPTY_PATH) {
         return Err(SysError::EFAULT);
     }
@@ -1610,7 +1609,9 @@ pub fn at_helper(task: Arc<TaskControlBlock>, dirfd: isize, pathname: *const u8,
 pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: AtFlags) -> Result<Arc<dyn Dentry>, SysError> {
     let dentry = if path != "" {
         if path.starts_with("/") {
-                global_find_dentry(&path)?
+            let fpath = rel_path_to_abs(path, &"").unwrap();
+            println!("fpath: {}", fpath);
+            global_find_dentry(&fpath)?
         } else {
             // getting full path (absolute path)
             let mut rel_path = path.to_string();
@@ -1647,12 +1648,12 @@ pub fn at_helper1(task: Arc<TaskControlBlock>, dirfd: isize, path: &str, flags: 
             }
 
             let fpath = rel_path_to_abs(&parent_dentry.path(), &rel_path).unwrap();
-
+            info!("ffpath: {}", fpath);
             global_find_dentry(&fpath)?
         }
     } else {
         if !flags.contains(AtFlags::AT_EMPTY_PATH) {
-                return Err(SysError::ENOENT);
+            return Err(SysError::ENOENT);
         }
         if dirfd as i32 == AtFlags::AT_FDCWD.bits() {
             task.with_cwd(|d| d.clone())

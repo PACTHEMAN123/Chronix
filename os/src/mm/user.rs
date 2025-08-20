@@ -111,7 +111,7 @@ impl<T> UserPtrRaw<T> {
 
 impl UserPtrRaw<u8> {
     pub fn cstr_slice(self, vm: &mut UserVmSpace) -> Result<UserSlice<u8, ReadMark>, SysError> {
-        const MAX_LEN: usize = 256;
+        const MAX_LEN: usize = 4096;
         let sum_guard = SumGuard::new();
         let mut cur = self.ptr;
         let mut len = 0;
@@ -131,6 +131,7 @@ impl UserPtrRaw<u8> {
                     });
                 }
                 if len > MAX_LEN {
+                    log::error!("string too long");
                     return Err(SysError::ENAMETOOLONG)
                 }
                 cur = unsafe { cur.add(1) };

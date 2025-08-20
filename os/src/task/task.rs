@@ -25,7 +25,7 @@ use crate::task::utils::user_stack_init;
 use crate::timer::get_current_time_duration;
 use crate::timer::recoder::TimeRecorder;
 use crate::timer::timer::{ITimer, PosixTimer, TimerId};
-use crate::utils::{suspend_forever, SendWrapper};
+use crate::utils::{get_waker, suspend_forever, SendWrapper};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::{Arc, Weak};
 use alloc::{fmt, format, task, vec};
@@ -88,6 +88,7 @@ pub struct TaskControlBlock {
     pub is_leader: bool,
     // ! mutable only in self context , only accessed by current task
     pub trap_context: UPSafeCell<TrapContext>,
+    pub vfork_waker: UPSafeCell<Option<Waker>>,
     /// waker for waiting on events
     pub waker: UPSafeCell<Option<Waker>>,
     /// address of task's thread ID
@@ -144,7 +145,7 @@ pub struct TaskControlBlock {
     pub suid: AtomicI32,
     pub rgid: AtomicI32,
     pub egid: AtomicI32,
-    pub sgid: AtomicI32,
+    pub sgid: AtomicI32
 }
 
 /// Hold a group of threads which belongs to the same process.
@@ -224,6 +225,7 @@ impl TaskControlBlock {
     generate_upsafecell_accessors!(
         //trap_cx_ppn: PhysPageNum,
         waker: Option<Waker>,
+        vfork_waker: Option<Waker>,
         tid_address: TidAddress,
         time_recorder: TimeRecorder
     );
@@ -403,6 +405,7 @@ impl TaskControlBlock {
                 )
             ),
             waker: UPSafeCell::new(None),
+            vfork_waker: UPSafeCell::new(None),
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicUsize::new(0),
@@ -569,12 +572,19 @@ impl TaskControlBlock {
         } else {
             new_shared(self.fd_table.lock().clone())
         };
+        let vfork_waker;
+        if flag.contains(CloneFlags::VFORK) {
+            vfork_waker = UPSafeCell::new(self.waker().clone());
+        } else {
+            vfork_waker = UPSafeCell::new(None);
+        }
         let task_control_block = Arc::new(TaskControlBlock {
             tid: tid_handle,
             leader,
             is_leader,
             trap_context: UPSafeCell::new(self.get_trap_cx().clone()),
             waker: UPSafeCell::new(None),
+            vfork_waker,
             tid_address: UPSafeCell::new(TidAddress::new()),
             time_recorder: UPSafeCell::new(TimeRecorder::new()),
             exit_code: AtomicUsize::new(0),
@@ -750,6 +760,9 @@ impl TaskControlBlock {
             _ => {}
         }
         let _ = self.exit_robust_list();
+        if let Some(waker) = self.vfork_waker().take() {
+            waker.wake();
+        }
     }
 
     pub fn do_exit(self: &Arc<Self>, code: usize) {

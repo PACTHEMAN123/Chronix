@@ -56,27 +56,61 @@ pub fn abs_path_to_parent(path: &str) -> Option<String> {
 /// to generate the absolute path
 /// parent path should be like: /a/b or /a/b/
 /// rel path should be like: c ./c
+// pub fn rel_path_to_abs(parent_path: &str, rel_path: &str) -> Option<String> {
+//     if !parent_path.starts_with('/') {
+//         log::error!("parent path should be absolute path!");
+//         // return None;
+//     }
+//     // parent path
+//     let mut abs_path = String::new();
+//     if parent_path.len() == 1 {
+//         // special case: '/'
+//         abs_path.push_str(parent_path);
+//     } else if parent_path.ends_with('/') {
+//         abs_path.push_str(parent_path);
+//     } else {
+//         abs_path.push_str(parent_path);
+//         abs_path.push('/');
+//     }
+//     // child path
+//     let rel_path = rel_path.trim_start_matches("./");
+//     if rel_path.is_empty() || rel_path == "." {
+//         return Some(abs_path.trim_end_matches('/').to_string());
+//     }
+//     abs_path.push_str(rel_path);
+//     Some(abs_path)
+// }
+
 pub fn rel_path_to_abs(parent_path: &str, rel_path: &str) -> Option<String> {
     if !parent_path.starts_with('/') {
         log::error!("parent path should be absolute path!");
-        // return None;
     }
-    // parent path
-    let mut abs_path = String::new();
-    if parent_path.len() == 1 {
-        // special case: '/'
-        abs_path.push_str(parent_path);
-    } else if parent_path.ends_with('/') {
-        abs_path.push_str(parent_path);
-    } else {
-        abs_path.push_str(parent_path);
-        abs_path.push('/');
+    let mut dirs: Vec<&str> = Vec::with_capacity(16);
+    for dir in parent_path.split("/") {
+        if dir == ".." {
+            if dirs.is_empty() {
+                log::error!("too many \"..\" in path");
+                return None;
+            }
+            dirs.pop();
+            dirs.pop();
+        } else if dir != "" && dir != "." {
+            dirs.push("/");
+            dirs.push(dir);
+        }
     }
-    // child path
-    let rel_path = rel_path.trim_start_matches("./");
-    if rel_path.is_empty() || rel_path == "." {
-        return Some(abs_path.trim_end_matches('/').to_string());
+    for dir in rel_path.split("/") {
+        if dir == ".." {
+            if dirs.is_empty() {
+                log::error!("too many \"..\" in path");
+                return None;
+            }
+            dirs.pop();
+            dirs.pop();
+        } else if dir != "" && dir != "." {
+            dirs.push("/");
+            dirs.push(dir);
+        }
     }
-    abs_path.push_str(rel_path);
-    Some(abs_path)
+    Some(dirs.iter().map(|s| *s).collect::<String>())
 }

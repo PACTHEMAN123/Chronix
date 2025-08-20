@@ -33,14 +33,14 @@ QEMU_ARGS += -smp $(CPU)
 endif
 
 ifeq ($(ARCH), riscv64)
-QEMU_ARGS += -drive file=sdcard-rv.img,if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x1
+QEMU_ARGS += -drive file=sdcard-rv.img,if=none,format=raw,id=x1
 QEMU_ARGS += -device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.1
 else ifeq ($(ARCH), loongarch64)
-QEMU_ARGS += -drive file=sdcard-la.img,if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-pci,drive=x0
-QEMU_ARGS += -drive file=$(DISK_IMG_COPY),if=none,format=raw,id=x1
+QEMU_ARGS += -drive file=sdcard-la.img,if=none,format=raw,id=x1
 QEMU_ARGS += -device virtio-blk-pci,drive=x1
 endif
 
@@ -89,7 +89,7 @@ debug: build
 
 # debug: using gdb server
 gdbserver: build
-	$(QEMU) $(QEMU_ARGS) -s -S
+	$(QEMU) $(QEMU_ARGS) $(QEMU_RUN_ARGS) -s -S
 
 # debug: using gdb cilent
 gdbclient:
