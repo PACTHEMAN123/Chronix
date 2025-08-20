@@ -300,13 +300,13 @@ pub type SysResult = Result<isize, SysError>;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
     use SyscallId::*;
-    // let num =  syscall_id as i32;
+    let num =  syscall_id as i32;
     let Some(syscall_id) = SyscallId::from_repr(syscall_id) else {
             log::warn!("Syscall number not included: {syscall_id}");
             return -SysError::ENOSYS.code();
     };
 
-    // log::warn!("task {}, id num{},  syscall: {:?}, args: {:x?}", current_task().unwrap().tid() ,num, syscall_id, args);
+    // log::warn!("task: {}, id: {},  syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , num, syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_SETXATTR => sys_temp(syscall_id),
@@ -413,7 +413,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_TKILL => sys_tkill(args[0] as isize, args[1] as i32),
         SYSCALL_TGKILL => sys_tgkill( args[0] as isize, args[1] as isize, args[2] as i32),
-        SYSCALL_SIGALTSTACK => sys_temp(syscall_id),
+        SYSCALL_SIGALTSTACK => sys_unimplement(syscall_id),
         SYSCALL_RT_SIGSUSPEND => sys_rt_sigsuspend(args[0]).await,
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(args[0] as i32, args[1] as *const SigAction, args[2] as *mut SigAction),
         SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1] as *const u32, args[2] as *mut SigSet),
@@ -569,6 +569,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
 
 /// do nothing
 pub fn sys_temp(syscall_id: SyscallId) -> SysResult {
-    log::warn!("[sys_temp]: syscall {:?} unimplement", syscall_id);
+    log::warn!("[sys_temp]: syscall {:?} ignore", syscall_id);
     Ok(0)
 }
+
+/// do nothing
+pub fn sys_unimplement(syscall_id: SyscallId) -> SysResult {
+    log::warn!("[sys_temp]: syscall {:?} unimplement", syscall_id);
+    Err(SysError::ENOSYS)
+}
+

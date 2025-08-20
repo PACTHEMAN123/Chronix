@@ -39,7 +39,8 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_timer_interrupt() {
-        register::ecfg::set_lie(LineBasedInterrupt::TIMER);
+        let lie = register::ecfg::read().lie();
+        register::ecfg::set_lie(lie | LineBasedInterrupt::TIMER);
     }
     
     unsafe fn is_interrupt_enabled() -> bool {
@@ -100,11 +101,10 @@ impl InstructionHal for Instruction {
     }
 
     unsafe fn enable_external_interrupt() {
+        let lie = register::ecfg::read().lie();
         register::ecfg::set_lie(
-            LineBasedInterrupt::HWI0 | LineBasedInterrupt::HWI1 |
-            LineBasedInterrupt::HWI2 | LineBasedInterrupt::HWI3 |
-            LineBasedInterrupt::HWI4 | LineBasedInterrupt::HWI5 |
-            LineBasedInterrupt::HWI6 | LineBasedInterrupt::HWI7 
+            lie | LineBasedInterrupt::HWI0 | LineBasedInterrupt::HWI1 | LineBasedInterrupt::HWI2 | LineBasedInterrupt::HWI3
+            | LineBasedInterrupt::HWI4 | LineBasedInterrupt::HWI5 | LineBasedInterrupt::HWI6 | LineBasedInterrupt::HWI7
         );
     }
 }

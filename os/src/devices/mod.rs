@@ -240,9 +240,9 @@ pub fn init() {
         fdt::Fdt::from_ptr(device_tree_addr as _).expect("parse DTB failed!")
     };
 
-    if let Some(bootargs) = device_tree.chosen().bootargs() {
-        println!("Bootargs: {:?}", bootargs);
-    }
+    // if let Some(bootargs) = device_tree.chosen().bootargs() {
+    //     println!("Bootargs: {:?}", bootargs);
+    // }
 
     // find all devices
     DEVICE_MANAGER.lock().map_devices(&device_tree);

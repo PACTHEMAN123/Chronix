@@ -54,8 +54,8 @@ pub fn get_serial(stdout: &FdtNode) -> Serial {
 
     #[cfg(target_arch="loongarch64")]
     let irq_number = {
-        let irq_nos = stdout.property("interrupts").unwrap().as_str().unwrap();
-        log::info!("irq no: {}", irq_nos);
+        // let irq_nos = stdout.property("interrupts").unwrap().as_str().unwrap();
+        // log::info!("irq no: {}", irq_nos);
         2
     };
 
