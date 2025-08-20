@@ -8,7 +8,7 @@ use strum::FromRepr;
 use virtio_drivers::PAGE_SIZE;
 use crate::{config::BLOCK_SIZE, drivers::BLOCK_DEVICE, fs::{
     fs::CNXFS, get_filesystem, pipefs::make_pipe, vfs::{dentry::{self, global_find_dentry, global_update_dentry}, file::{open_file, SeekFrom}, fstype::MountFlags, inode::{DirentFileType, InodeMode}, Dentry, DentryState, File}, AtFlags, Kstat, OpenFlags, RenameFlags, RwfFlags, SpliceFlags, StatFs, Xstat, XstatMask, BLKSSZGET
-}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned}};
+}, mm::{translate_uva_checked, vm::{PageFaultAccessType, UserVmSpaceHal}, UserPtrRaw, UserSliceRaw}, processor::context::SumGuard, task::{fs::{FdFlags, FdInfo}, signal::IntrBySignalFuture, task::TaskControlBlock}, timer::{ffi::TimeSpec, get_current_time_duration}, utils::{block_on, is_page_aligned, Select2Futures, SelectOutput}};
 use crate::utils::{
     path::*,
     string::*,
@@ -56,7 +56,30 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
             .ensure_write(&mut task.get_vm_space().lock())
             .ok_or(SysError::EFAULT)?;
     let buf = user_buf.to_mut();
-    let ret = file.read(buf).await?;
+    //let ret = file.read(buf).await?;
+
+    let read_future = file.read(buf);
+    let current_mask = task.sig_manager.lock().get_sigmask();
+    let intr_future = IntrBySignalFuture {
+        task: task.clone(),
+        mask: current_mask,
+    };
+    task.set_interruptable();
+    task.set_wake_up_sigs(!current_mask);
+    let result = Select2Futures::new(read_future, intr_future).await;
+    log::warn!("task {} wake up in reading", task.tid());
+    task.set_running();
+    match result {
+        SelectOutput::Output1(read_ret) => {
+           let read_size = read_ret?;
+           return Ok(read_size as isize)
+        }
+        SelectOutput::Output2(_) => {
+            log::info!("[sys_read]: read intr by signal");
+            return Err(SysError::EINTR);
+        }
+    }
+
     // log::info!("[sys_read] fd {fd} len {len} ret {ret}");
     // let start = buf & !(Constant::PAGE_SIZE - 1);
     // let end = buf + len;
@@ -76,7 +99,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult {
     //     }
     // }
     // log::info!("read size: {ret}");
-    return Ok(ret as isize);
+    // return Ok(ret as isize);
 }
 
 /// syscall: close

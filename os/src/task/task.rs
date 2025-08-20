@@ -124,6 +124,8 @@ pub struct TaskControlBlock {
     pub sig_manager: Shared<SigManager>,
     /// pointer to user context for signal handling.
     pub sig_ucontext_ptr: AtomicUsize, 
+    /// the signal stack
+    pub sig_stack: Shared<Option<SigStack>>,
     /// current working dentry
     pub cwd: Shared<Arc<dyn Dentry>>,
     /// Interval timers for the task.
@@ -419,6 +421,7 @@ impl TaskControlBlock {
             pgid: new_shared(pgid),
             sig_manager: new_shared(SigManager::new()),
             sig_ucontext_ptr: AtomicUsize::new(0),
+            sig_stack: new_shared(None),
             cwd: new_shared(root_dentry), 
             elf: new_shared(elf_file),
             itimers: new_shared([ITimer::ZERO; 3]),
@@ -598,6 +601,7 @@ impl TaskControlBlock {
             pgid,
             sig_manager,
             sig_ucontext_ptr: AtomicUsize::new(0),
+            sig_stack: new_shared(None),
             cwd,
             elf,
             itimers,
@@ -802,6 +806,7 @@ impl TaskControlBlock {
                 initproc.children.lock().extend(children.clone()); 
                 children.clear();
             });
+            log::warn!("do exit: clear fd table");
             self.with_mut_fd_table(|table|table.fd_table.clear());
             self.notify_parent();
         }

@@ -315,6 +315,7 @@ impl File for PipeFile {
 impl Drop for PipeFile {
     fn drop(&mut self) {
         if self.operate == true {
+            log::warn!("drop a pipe reader");
             let pipe = self.pipe.clone();
             let mut meta = pipe.pipe_meta.lock();
             meta.is_read_closed = true;
@@ -322,6 +323,7 @@ impl Drop for PipeFile {
                 waker.wake();
             }
         } else {
+            log::warn!("drop a pipe writer");
             let pipe = self.pipe.clone();
             let mut meta = pipe.pipe_meta.lock();
             meta.is_write_closed = true;

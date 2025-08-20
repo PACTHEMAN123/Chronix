@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use hal::instruction::{Instruction, InstructionHal};
 use hal::println;
+use hal::signal::SigStack;
 use hal::{
     trap::TrapContextHal,
     signal::*,
@@ -162,7 +163,8 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
                 }
             }
             SIG_ERR => {
-                todo!()
+                log::warn!("sig err, using default");
+                KSigAction::new(signo as usize, false)
             }
             _ => KSigAction {
                 sa: sig_action,
@@ -432,4 +434,42 @@ pub fn sys_tgkill(tgid: isize, tid: isize, signo: i32) -> SysResult {
     }else {
         return Err(SysError::ESRCH);
     }
+}
+
+pub const SS_ONSTACK: u32 = 1;
+pub const SS_DISABLE: u32 = 2;
+
+pub fn sys_signalstack(ss_ptr: usize, old_ss_ptr: usize) -> SysResult {
+    let task = current_task().unwrap().clone();
+    log::warn!("[sys_signalstack] {:#x} {:#x}", ss_ptr, old_ss_ptr);
+
+    let ss = task.get_signal_stack();
+    if old_ss_ptr != 0 {
+        let old_ss_ptr = UserPtrRaw::new(old_ss_ptr as *mut SigStack)
+        .ensure_write(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+        if let Some(stack) = ss {
+            log::warn!("return old signal stack");
+            old_ss_ptr.write(stack);
+        } else {
+            log::warn!("return disable stack info");
+            let no_stack = SigStack {
+                ss_flags: SS_DISABLE as i32,
+                ss_sp: 0,
+                ss_size: 0,
+            };
+            old_ss_ptr.write(no_stack);
+        }
+    }
+
+    if ss_ptr != 0 {
+        let ss_ptr = UserPtrRaw::new(ss_ptr as *const SigStack)
+        .ensure_read(&mut task.get_vm_space().lock())
+        .ok_or(SysError::EFAULT)?;
+        let stack = *ss_ptr.to_ref();
+        log::warn!("set new signal stack");
+        task.set_signal_stack(Some(stack));
+    }
+
+    Ok(0)
 }

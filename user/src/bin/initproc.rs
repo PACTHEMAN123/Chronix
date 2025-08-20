@@ -16,7 +16,7 @@ fn run_cmd(cmd: &str) {
             &[
                 "PATH=/usr/bin:/bin",
                 "LD_LIBRARAY_PATH=/lib:/usr/lib",
-                "HOME=/home/chronix",
+                "HOME=/home",
             ],
         );
 
@@ -27,7 +27,7 @@ fn run_cmd(cmd: &str) {
             &[
                 "PATH=/usr/bin:/bin",
                 "LD_LIBRARAY_PATH=/lib:/usr/lib",
-                "HOME=/home/chronix",
+                "HOME=/home",
             ],
         );
     } else {
@@ -68,7 +68,7 @@ fn main() -> i32 {
                 "TERM=screen",
                 "PATH=/usr/bin:/bin",
                 "LD_LIBRARAY_PATH=/lib:/usr/lib",
-                "HOME=/home/chronix"
+                "HOME=/home"
             ],
         );
         #[cfg(target_arch="loongarch64")]
@@ -79,7 +79,7 @@ fn main() -> i32 {
                 "TERM=screen",
                 "PATH=/usr/bin:/bin",
                 "LD_LIBRARAY_PATH=/lib:/usr/lib",
-                "HOME=/home/chronix"
+                "HOME=/home"
             ],
         );
         println!("[secondproc] execve busybox fail");

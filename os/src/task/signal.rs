@@ -4,7 +4,7 @@ use core::{future::Future, pin::Pin, task::{Context, Poll}};
 
 use alloc::sync::Arc;
 use fatfs::info;
-use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, UContext, UContextHal}, trap::TrapContextHal};
+use hal::{addr::VirtAddr, println, signal::{sigreturn_trampoline_addr, SigStack, UContext, UContextHal}, trap::TrapContextHal};
 
 use crate::{mm::{vm::UserVmSpaceHal, UserPtrRaw}, signal::{KSigAction, LinuxSigInfo, SigAction, SigActionFlag, SigHandler, SigInfo, SigSet, SIGCHLD, SIGKILL, SIGSTOP}, task::INITPROC_PID, trap::trap_return};
 
@@ -100,7 +100,10 @@ impl TaskControlBlock {
                 let sig_action = sig_manager.sig_handler[sig.si_signo];
                 // log::info!("[check_and_handle] task {} action {:?}", self.tid(), sig_action);
                 let sa_flags = SigActionFlag::from_bits_truncate(sig_action.sa.sa_flags);
-                
+                if sa_flags.contains(SigActionFlag::SA_ONSTACK) {
+                        log::warn!("using new signal stack");
+                        // todo
+                };
                 let trap_cx = self.trap_context.exclusive_access();
                 
                 if sa_flags.contains(SigActionFlag::SA_RESTART) && is_intr {
@@ -108,6 +111,8 @@ impl TaskControlBlock {
                     trap_cx.set_ret_nth(0, old_a0);
                     is_intr = false
                 }
+
+                
 
                 if sig_action.is_user {
                     let old_blocked_sigs = sig_manager.blocked_sigs; // save for later restore
@@ -120,6 +125,12 @@ impl TaskControlBlock {
                     // push the current Ucontext into user stack
                     // (todo) notice that user may provide signal stack
                     // but now we dont support this flag
+                    if sa_flags.contains(SigActionFlag::SA_ONSTACK) {
+                        log::warn!("using new signal stack");
+                        // todo
+                    };
+
+
                     let sp = *trap_cx.sp();
                     let mut new_sp = sp - size_of::<UContext>();
                     let ucontext = UContext::save_current_context(old_blocked_sigs.bits(), trap_cx);
@@ -175,6 +186,14 @@ impl TaskControlBlock {
                 break;
             }
         }
+    }
+
+    pub fn set_signal_stack(&self, ss: Option<SigStack>) {
+        *self.sig_stack.lock() = ss
+    }
+
+    pub fn get_signal_stack(&self) -> Option<SigStack> {
+        *self.sig_stack.lock()
     }
 }
 
