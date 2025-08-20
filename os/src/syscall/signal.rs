@@ -112,7 +112,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SysResult {
 
 /// syscall: rt_sigaction
 pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut SigAction) -> SysResult {
-    log::info!(
+    log::debug!(
         "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}, act size {}",
         signo,
         action as usize,
@@ -171,7 +171,7 @@ pub fn sys_rt_sigaction(signo: i32, action: *const SigAction, old_action: *mut S
                 is_user: true,
             },
         };
-        log::info!(
+        log::debug!(
                 "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}",
                 signo,
                 new_sigaction.sa.sa_handler as *const usize as usize,

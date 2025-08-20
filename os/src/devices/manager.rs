@@ -61,7 +61,7 @@ impl DeviceManager {
     /// map DevId to device, map IrqNo to device
     pub fn map_devices(&mut self, device_tree: &Fdt) {
 
-        log::info!("Device: {}", device_tree.root().model());
+        // log::info!("Device: {}", device_tree.root().model());
 
         // map char device
         let serial = scan_char_device(device_tree);

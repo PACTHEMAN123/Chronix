@@ -123,7 +123,7 @@ impl Uart {
             reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
 
             // // Enable FIFO
-            // reg.byte_add(FCR << self.reg_shift).write_volatile(0x01);
+            reg.byte_add(FCR << self.reg_shift).write_volatile(0x00);
 
             // No modem control
             reg.byte_add(MCR << self.reg_shift).write_volatile(0x00);

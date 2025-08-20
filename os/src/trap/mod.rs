@@ -131,6 +131,7 @@ pub async fn user_trap_handler() -> bool {
             yield_now().await;
         }
         TrapType::ExternalInterrupt => {
+            // println!("ExternalInterrupt");
             let manager = crate::devices::DEVICE_MANAGER.lock();
             manager.handle_irq();
         }
@@ -225,6 +226,7 @@ fn kernel_trap_handler() {
             set_next_trigger();
         }
         TrapType::ExternalInterrupt => {
+            // println!("ExternalInterrupt");
             let manager = crate::devices::DEVICE_MANAGER.lock();
             manager.handle_irq();
         }

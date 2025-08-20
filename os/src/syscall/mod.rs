@@ -306,7 +306,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
             return -SysError::ENOSYS.code();
     };
 
-    log::info!("task {}, id num{},  syscall: {:?}, args: {:x?}", current_task().unwrap().tid() ,num, syscall_id, args);
+    // log::warn!("task: {}, id: {},  syscall: {:?}, args: {:x?}", current_task().unwrap().tid() , num, syscall_id, args);
 
     let result = match syscall_id { 
         SYSCALL_SETXATTR => sys_temp(syscall_id),
@@ -569,6 +569,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> isize {
 
 /// do nothing
 pub fn sys_temp(syscall_id: SyscallId) -> SysResult {
-    log::warn!("[sys_temp]: syscall {:?} unimplement", syscall_id);
+    log::warn!("[sys_temp]: syscall {:?} ignore", syscall_id);
     Ok(0)
 }
+
+/// do nothing
+pub fn sys_unimplement(syscall_id: SyscallId) -> SysResult {
+    log::warn!("[sys_temp]: syscall {:?} unimplement", syscall_id);
+    Err(SysError::ENOSYS)
+}
+
